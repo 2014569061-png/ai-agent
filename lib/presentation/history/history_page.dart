@@ -1,0 +1,226 @@
+import 'package:flutter/material.dart';
+
+import '../../infrastructure/database/app_database.dart';
+import '../../infrastructure/database/database_provider.dart';
+
+/// 历史会话管理页'///
+/// Conversation history management.
+class HistoryPage extends StatefulWidget {
+
+  const HistoryPage({super.key});
+  @override
+  State<HistoryPage> createState() => _HistoryPageState();
+}
+
+class _HistoryPageState extends State<HistoryPage> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  List<Conversation> _conversations = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    final database = await DatabaseProvider.instance.database;
+    final conversations = await database.recentConversations();
+    if (!mounted) return;
+    setState(() {
+      _conversations = conversations;
+      _loading = false;
+    });
+  }
+
+  List<Conversation> get _filtered {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return _conversations;
+    return _conversations.where((c) => c.title.toLowerCase().contains(query)).toList();
+  }
+
+  Future<AppDatabase> _db() => DatabaseProvider.instance.database;
+
+  Future<void> _rename(Conversation conversation) async {
+    final controller = TextEditingController(text: conversation.title);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重命名会话'),
+        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: '标题')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('保存')),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null || result.isEmpty) return;
+    final db = await _db();
+    await db.saveConversation(conversation.copyWith(title: result, updatedAt: DateTime.now()));
+    await _reload();
+  }
+
+  Future<void> _togglePinned(Conversation conversation) async {
+    final db = await _db();
+    await db.saveConversation(conversation.copyWith(isPinned: !conversation.isPinned, updatedAt: DateTime.now()));
+    await _reload();
+  }
+
+  Future<void> _toggleFavorite(Conversation conversation) async {
+    final db = await _db();
+    await db.saveConversation(conversation.copyWith(isFavorite: !conversation.isFavorite, updatedAt: DateTime.now()));
+    await _reload();
+  }
+
+  Future<void> _delete(Conversation conversation) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除会话'),
+        content: Text('确定删除“${conversation.title}”吗？此操作不可撤销。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final db = await _db();
+    await db.deleteConversation(conversation.id);
+    await _reload();
+  }
+
+  Future<void> _newConversation() async {
+    final db = await _db();
+    final now = DateTime.now();
+    final conversation = Conversation(
+      id: 'conversation-${now.microsecondsSinceEpoch}',
+      title: '新会话',
+      agentId: null,
+      isPinned: false,
+      isFavorite: false,
+      tagsJson: '[]',
+      createdAt: now,
+      updatedAt: now,
+    );
+    await db.saveConversation(conversation);
+    if (mounted) Navigator.pop(context, conversation);
+  }
+
+  String _relativeTime(DateTime time) {
+    final diff = DateTime.now().difference(time);
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inHours < 1) return '${diff.inMinutes} 分钟';
+    if (diff.inDays < 1) return '${diff.inHours} 小时';
+    if (diff.inDays < 7) return '${diff.inDays} 天前';
+    return '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered;
+    return Scaffold(
+      appBar: AppBar(title: const Text('历史会话')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _newConversation,
+        icon: const Icon(Icons.add_comment_outlined),
+        label: const Text('新建会话'),
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value),
+              decoration: InputDecoration(
+                hintText: '搜索会话标题',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                isDense: true,
+              ),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : filtered.isEmpty
+                    ? Center(
+                        child: Text(
+                          _conversations.isEmpty ? '还没有会话，点击右下角新建' : '未找到匹配的会话',
+                          style: const TextStyle(color: Color(0xFF627D98)),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
+                        itemCount: filtered.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 4),
+                        itemBuilder: (context, index) {
+                          final conversation = filtered[index];
+                          return _conversationTile(conversation);
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _conversationTile(Conversation conversation) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: ListTile(
+        leading: Icon(
+          conversation.isPinned ? Icons.push_pin : Icons.chat_bubble_outline,
+          color: conversation.isPinned ? theme.colorScheme.primary : theme.colorScheme.outline,
+        ),
+        title: Row(
+          children: [
+            if (conversation.isFavorite) ...[
+              Icon(Icons.star, size: 16, color: Colors.amber.shade600),
+              const SizedBox(width: 6),
+            ],
+            Expanded(
+              child: Text(
+                conversation.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        subtitle: Text(_relativeTime(conversation.updatedAt)),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            switch (value) {
+              case 'pin':
+                _togglePinned(conversation);
+              case 'favorite':
+                _toggleFavorite(conversation);
+              case 'rename':
+                _rename(conversation);
+              case 'delete':
+                _delete(conversation);
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(value: 'pin', child: Text(conversation.isPinned ? '取消置顶' : '置顶')),
+            PopupMenuItem(value: 'favorite', child: Text(conversation.isFavorite ? '取消收藏' : '收藏')),
+            PopupMenuItem(value: 'rename', child: const Text('重命名')),
+            PopupMenuItem(value: 'delete', child: const Text('删除')),
+          ],
+        ),
+        onTap: () => Navigator.pop(context, conversation),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+}

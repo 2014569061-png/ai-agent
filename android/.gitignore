@@ -1,0 +1,18 @@
+gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.jar
+/.gradle
+/captures/
+/gradlew
+/gradlew.bat
+# Keep the wrapper scripts in the repository so Android builds work after cloning.
+!/gradlew
+!/gradlew.bat
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+
+# Remember to never publicly share your keystore.
+# See https://flutter.dev/to/reference-keystore
+key.properties
+**/*.keystore
+**/*.jks
