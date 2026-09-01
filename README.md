@@ -2,6 +2,14 @@
 
 移动端 AI Agent 聚合客户端的 MVP。
 
+## 下载安装（手机用户）
+
+1. 打开 [Releases](https://github.com/2014569061-png/ai-agent/releases) 页面
+2. 下载最新的 `app-release.apk` 到手机
+3. 点击安装；若提示"未知来源"，按提示到系统设置中允许该来源安装应用即可
+
+> 每次发版会自动发布新的 APK，版本号递增，可直接覆盖安装。
+
 ## 当前范围
 
 - Flutter + Riverpod
@@ -31,6 +39,17 @@ flutter build apk --release
 flutter build web --release
 ```
 
-Android 发布签名配置保存在本机的 `android/key.properties` 和
-`android/app/upload-keystore.jks`，这两个文件不会提交到仓库。克隆后未配置签名时，
+### 自动发版
+
+推送 tag（如 `v0.1.0`）会触发 GitHub Actions 自动构建签名 APK 并发布到
+[Releases](https://github.com/2014569061-png/ai-agent/releases)：
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+签名凭据存于 GitHub Secrets（`KEYSTORE_BASE64` / `STORE_PASSWORD` /
+`KEY_PASSWORD` / `KEY_ALIAS`），不入库。本地签名配置保存在 `android/key.properties`
+和 `android/app/upload-keystore.jks`（已被 gitignore 忽略）。克隆后未配置签名时，
 项目会自动回退到 debug 签名，仍可用于开发和本地测试。
