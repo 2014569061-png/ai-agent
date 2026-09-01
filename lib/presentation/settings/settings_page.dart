@@ -2,6 +2,7 @@ import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../domain/models.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/providers/provider_config.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
@@ -43,6 +44,7 @@ class _SettingsPageState extends State<SettingsPage> {
   List<ProviderConfig> _profiles = [];
   String _selectedId = 'default';
   ProviderType _type = ProviderType.openaiCompatible;
+  ReasoningEffort _reasoningEffort = ReasoningEffort.medium;
   bool _loading = true;
   bool _saving = false;
   bool _testing = false;
@@ -68,6 +70,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _baseUrl.text = config.baseUrl;
     _model.text = config.model;
     _apiKey.text = config.apiKey;
+    _reasoningEffort = config.reasoningEffort;
   }
 
   void _select(String? id) {
@@ -79,7 +82,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _save() async {
     setState(() => _saving = true);
     final id = _selectedId == 'default' && _profiles.isEmpty ? 'provider-${DateTime.now().millisecondsSinceEpoch}' : _selectedId;
-    await _store.save(ProviderConfig(id: id, name: _name.text.trim().isEmpty ? 'Provider' : _name.text.trim(), baseUrl: _baseUrl.text, model: _model.text, apiKey: _apiKey.text, type: _type));
+    await _store.save(ProviderConfig(id: id, name: _name.text.trim().isEmpty ? 'Provider' : _name.text.trim(), baseUrl: _baseUrl.text, model: _model.text, apiKey: _apiKey.text, type: _type, reasoningEffort: _reasoningEffort));
     await _store.saveToolKey('tavily', _tavilyKey.text);
     _profiles = await _store.loadAll();
     _selectedId = id;
@@ -95,6 +98,7 @@ class _SettingsPageState extends State<SettingsPage> {
         model: _model.text.trim(),
         apiKey: _apiKey.text.trim(),
         type: _type,
+        reasoningEffort: _reasoningEffort,
       );
 
   Future<String?> _runTestConnection() {
@@ -206,6 +210,22 @@ class _SettingsPageState extends State<SettingsPage> {
       TextField(controller: _apiKey, obscureText: true, decoration: const InputDecoration(labelText: AppStrings.apiKey, border: OutlineInputBorder())),
       const SizedBox(height: 12),
       TextField(controller: _tavilyKey, obscureText: true, decoration: const InputDecoration(labelText: AppStrings.tavilyApiKey, border: OutlineInputBorder())),
+      const SizedBox(height: 16),
+      // 思考程度：仅推理模型（OpenAI o1/o3/GPT-5、Claude 3.7+ thinking、Gemini 2.0 thinking）生效，其他模型忽略该参数。
+      Text('思考程度', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 6),
+      SegmentedButton<ReasoningEffort>(
+        segments: const [
+          ButtonSegment(value: ReasoningEffort.off, label: Text('关')),
+          ButtonSegment(value: ReasoningEffort.low, label: Text('低')),
+          ButtonSegment(value: ReasoningEffort.medium, label: Text('中')),
+          ButtonSegment(value: ReasoningEffort.high, label: Text('高')),
+        ],
+        selected: {_reasoningEffort},
+        onSelectionChanged: (selection) => setState(() => _reasoningEffort = selection.first),
+        showSelectedIcon: false,
+        style: ButtonStyle(visualDensity: VisualDensity.compact),
+      ),
       const SizedBox(height: 20),
       Row(children: [
         Expanded(child: FilledButton.icon(onPressed: _saving ? null : _save, icon: const Icon(Icons.save_outlined), label: Text(_saving ? AppStrings.saving : AppStrings.saveConfig))),

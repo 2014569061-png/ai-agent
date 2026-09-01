@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
+import '../../domain/models.dart';
 import 'provider_config.dart';
 
 /// Provider 配置存储：负责 Base URL / Model / API Key 的本地持久化。
@@ -90,6 +91,7 @@ class ProviderConfigStore {
         model: item['model'] as String? ?? _defaultModel,
         type: _parseType(item['type'] as String?),
         apiKey: await _readKey('provider.api_key.$id') ?? '',
+        reasoningEffort: _parseEffort(item['reasoningEffort'] as String?),
       ));
     }
     return result;
@@ -97,6 +99,9 @@ class ProviderConfigStore {
 
   ProviderType _parseType(String? name) =>
       ProviderType.values.firstWhere((t) => t.name == name, orElse: () => ProviderType.openaiCompatible);
+
+  ReasoningEffort _parseEffort(String? name) =>
+      ReasoningEffort.values.firstWhere((e) => e.name == name, orElse: () => ReasoningEffort.medium);
 
   Future<void> save(ProviderConfig config) async {
     final preferences = await SharedPreferences.getInstance();
@@ -108,6 +113,7 @@ class ProviderConfigStore {
       'baseUrl': item.baseUrl.trim(),
       'model': item.model.trim(),
       'type': item.type.name,
+      'reasoningEffort': item.reasoningEffort.name,
     }).toList()));
     await preferences.setString(_activeKey, config.id);
     await preferences.setString(_baseUrlKey, config.baseUrl.trim());

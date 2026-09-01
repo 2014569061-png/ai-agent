@@ -19,6 +19,7 @@ class AgentExecutor {
     double temperature = 0.7,
     int maxTokens = 2048,
     double topP = 1.0,
+    ReasoningEffort reasoningEffort = ReasoningEffort.off,
     Duration requestTimeout = const Duration(seconds: 90),
     AgentCancellationToken? cancellationToken,
     CancelToken? cancelToken,
@@ -45,6 +46,7 @@ class AgentExecutor {
         temperature: temperature,
         maxTokens: maxTokens,
         topP: topP,
+        reasoningEffort: reasoningEffort,
       );
       final textBuffer = StringBuffer();
       final pendingCalls = <ToolCall>[];

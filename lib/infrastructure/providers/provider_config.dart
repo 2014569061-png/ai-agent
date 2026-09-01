@@ -1,3 +1,5 @@
+import '../../domain/models.dart';
+
 enum ProviderType { openaiCompatible, anthropic, gemini }
 
 class ProviderConfig {
@@ -8,6 +10,7 @@ class ProviderConfig {
     required this.model,
     required this.apiKey,
     this.type = ProviderType.openaiCompatible,
+    this.reasoningEffort = ReasoningEffort.medium,
   });
 
   final String id;
@@ -16,6 +19,26 @@ class ProviderConfig {
   final String model;
   final String apiKey;
   final ProviderType type;
+  final ReasoningEffort reasoningEffort;
+
+  ProviderConfig copyWith({
+    String? id,
+    String? name,
+    String? baseUrl,
+    String? model,
+    String? apiKey,
+    ProviderType? type,
+    ReasoningEffort? reasoningEffort,
+  }) =>
+      ProviderConfig(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        baseUrl: baseUrl ?? this.baseUrl,
+        model: model ?? this.model,
+        apiKey: apiKey ?? this.apiKey,
+        type: type ?? this.type,
+        reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+      );
 
   bool get isConfigured {
     if (model.trim().isEmpty) return false;

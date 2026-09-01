@@ -57,12 +57,16 @@ class AnthropicProvider implements LlmProvider {
       }
     }
 
+    // 思考档位 → Anthropic thinking.budget_tokens。低=2048, 中=8192, 高=16384。
+    final thinking = _buildThinking(request.reasoningEffort);
+
     final payload = {
       'model': request.model,
       'max_tokens': request.maxTokens,
       'temperature': request.temperature,
       'top_p': request.topP,
       'stream': true,
+      if (thinking != null) 'thinking': thinking,
       if (system != null && system.trim().isNotEmpty) 'system': system.trim(),
       'messages': messages,
       if (request.tools.isNotEmpty)
@@ -220,6 +224,21 @@ class AnthropicProvider implements LlmProvider {
       return jsonDecode(data) as Map<String, dynamic>;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// 把 ReasoningEffort 映射为 Anthropic Messages API 的 `thinking` 块。
+  /// off 时返回 null（调用方不传该字段，保持默认行为）。
+  static Map<String, dynamic>? _buildThinking(ReasoningEffort effort) {
+    switch (effort) {
+      case ReasoningEffort.off:
+        return null;
+      case ReasoningEffort.low:
+        return {'type': 'enabled', 'budget_tokens': 2048};
+      case ReasoningEffort.medium:
+        return {'type': 'enabled', 'budget_tokens': 8192};
+      case ReasoningEffort.high:
+        return {'type': 'enabled', 'budget_tokens': 16384};
     }
   }
 }

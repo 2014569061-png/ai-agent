@@ -1,5 +1,12 @@
 enum MessageRole { system, user, assistant, tool }
 
+/// 模型推理/思考强度档位。各 Provider 映射不同：
+/// - OpenAI 兼容：低/中/高 -> reasoning_effort（仅 o1/o3/GPT-5 等支持）
+/// - Anthropic：低/中/高 -> thinking.budget_tokens
+/// - Gemini：低/中/高 -> generationConfig.thinkingConfig.thinkingBudget
+/// off 时不传任何参数，保持各模型默认行为（向后兼容）。
+enum ReasoningEffort { off, low, medium, high }
+
 enum RunStatus {
   created,
   sendingRequest,
@@ -104,6 +111,7 @@ class UnifiedRequest {
     this.temperature = 0.7,
     this.maxTokens = 2048,
     this.topP = 1.0,
+    this.reasoningEffort = ReasoningEffort.off,
   });
 
   final String model;
@@ -112,6 +120,7 @@ class UnifiedRequest {
   final double temperature;
   final int maxTokens;
   final double topP;
+  final ReasoningEffort reasoningEffort;
 }
 
 sealed class UnifiedEvent {

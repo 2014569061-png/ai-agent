@@ -51,6 +51,7 @@ class ChatState {
     this.activeModel = '',
     this.activeProviderName = '',
     this.activeProviderId = '',
+    this.activeReasoningEffort = ReasoningEffort.medium,
     this.providerConfigured = false,
   });
 
@@ -67,6 +68,7 @@ class ChatState {
   final String activeModel;
   final String activeProviderName;
   final String activeProviderId;
+  final ReasoningEffort activeReasoningEffort;
   final bool providerConfigured;
 
   ChatState copyWith({
@@ -83,6 +85,7 @@ class ChatState {
     String? activeModel,
     String? activeProviderName,
     String? activeProviderId,
+    ReasoningEffort? activeReasoningEffort,
     bool? providerConfigured,
   }) =>
       ChatState(
@@ -99,6 +102,7 @@ class ChatState {
         activeModel: activeModel ?? this.activeModel,
         activeProviderName: activeProviderName ?? this.activeProviderName,
         activeProviderId: activeProviderId ?? this.activeProviderId,
+        activeReasoningEffort: activeReasoningEffort ?? this.activeReasoningEffort,
         providerConfigured: providerConfigured ?? this.providerConfigured,
       );
 }
@@ -155,6 +159,7 @@ class ChatController extends Notifier<ChatState> {
         activeModel: config.model,
         activeProviderName: config.name,
         activeProviderId: config.id,
+        activeReasoningEffort: config.reasoningEffort,
         providerConfigured: config.isConfigured,
       );
     } catch (_) {
@@ -414,7 +419,7 @@ class ChatController extends Notifier<ChatState> {
     final registry = _buildRegistry(enabledTools, tavilyKey);
     await _mergeMcpTools(registry);
     final model = config.isConfigured ? config.model : 'demo-model';
-    await _runAgent(assistantIndex, model, config, registry, maxSteps, temperature, maxTokens, topP, approveTool);
+    await _runAgent(assistantIndex, model, config, registry, maxSteps, temperature, maxTokens, topP, config.reasoningEffort, approveTool);
   }
 
   Future<void> regenerate({required Future<bool> Function(ToolCall call, ToolRisk risk) approveTool}) async {
@@ -459,7 +464,7 @@ class ChatController extends Notifier<ChatState> {
     final registry = _buildRegistry(enabledTools, tavilyKey);
     await _mergeMcpTools(registry);
     final model = config.isConfigured ? config.model : 'demo-model';
-    await _runAgent(assistantIndex, model, config, registry, maxSteps, temperature, maxTokens, topP, approveTool);
+    await _runAgent(assistantIndex, model, config, registry, maxSteps, temperature, maxTokens, topP, config.reasoningEffort, approveTool);
   }
 
   Future<void> _runAgent(
@@ -471,6 +476,7 @@ class ChatController extends Notifier<ChatState> {
     double temperature,
     int maxTokens,
     double topP,
+    ReasoningEffort reasoningEffort,
     Future<bool> Function(ToolCall call, ToolRisk risk) approveTool,
   ) async {
     final provider = config.isConfigured ? _buildProvider(config) : DemoProvider();
@@ -503,6 +509,7 @@ class ChatController extends Notifier<ChatState> {
         temperature: temperature,
         maxTokens: maxTokens,
         topP: topP,
+        reasoningEffort: reasoningEffort,
         cancellationToken: cancellationToken,
         cancelToken: dioCancelToken,
       )) {
@@ -636,8 +643,14 @@ class ChatController extends Notifier<ChatState> {
       activeModel: config.model,
       activeProviderName: config.name,
       activeProviderId: config.id,
+      activeReasoningEffort: config.reasoningEffort,
       providerConfigured: config.isConfigured,
     );
+  }
+
+  /// 切换"思考程度"档位（已保存到 ProviderConfig），更新 state 以便 UI 立即反映。
+  void setReasoningEffort(ReasoningEffort effort) {
+    state = state.copyWith(activeReasoningEffort: effort);
   }
 
   // --- 鐘舵€佽緟'---

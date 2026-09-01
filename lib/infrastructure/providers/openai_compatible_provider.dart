@@ -72,6 +72,9 @@ class OpenAiCompatibleProvider implements LlmProvider {
       'stream': true,
       if (request.tools.isNotEmpty)
         'tools': request.tools.map((tool) => tool.toOpenAiSchema()).toList(),
+      // 思考程度：仅 o1/o3/GPT-5 等推理模型支持；其他模型会忽略或 400。
+      if (request.reasoningEffort != ReasoningEffort.off)
+        'reasoning_effort': request.reasoningEffort.name,
       if (_requestsUsage) 'stream_options': {'include_usage': true},
     };
 

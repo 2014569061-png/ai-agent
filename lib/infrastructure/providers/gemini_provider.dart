@@ -57,6 +57,9 @@ class GeminiProvider implements LlmProvider {
       }
     }
 
+    // 思考档位 → Gemini thinkingConfig.thinkingBudget。低=0, 中=8192, 高=32768。
+    final thinkingBudget = _thinkingBudgetFor(request.reasoningEffort);
+
     final payload = {
       'contents': contents,
       if (system != null && system.trim().isNotEmpty)
@@ -65,6 +68,7 @@ class GeminiProvider implements LlmProvider {
         'temperature': request.temperature,
         'maxOutputTokens': request.maxTokens,
         'topP': request.topP,
+        if (thinkingBudget != null) 'thinkingConfig': {'thinkingBudget': thinkingBudget},
       },
       if (request.tools.isNotEmpty)
         'tools': [
@@ -220,6 +224,21 @@ class GeminiProvider implements LlmProvider {
       return jsonDecode(data) as Map<String, dynamic>;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// 把 ReasoningEffort 映射为 Gemini thinkingBudget。
+  /// off 时返回 null（不传 thinkingConfig）。
+  static int? _thinkingBudgetFor(ReasoningEffort effort) {
+    switch (effort) {
+      case ReasoningEffort.off:
+        return null;
+      case ReasoningEffort.low:
+        return 0;
+      case ReasoningEffort.medium:
+        return 8192;
+      case ReasoningEffort.high:
+        return 32768;
     }
   }
 }

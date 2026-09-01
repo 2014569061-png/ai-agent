@@ -48,3 +48,6 @@ app.*.map.json
 .widget_preview/
 android/key.properties
 android/app/upload-keystore.jks
+
+# Windows 本地 PowerShell 7 包装脚本（Flutter 3.24+ 需要 pwsh，本地用 PowerShell 5.1 替代）
+pwsh.cmd
