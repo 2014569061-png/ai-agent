@@ -353,13 +353,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final imageParts = message.parts.where((part) => part.type == 'image').toList();
     final hasText = message.parts.any((part) => part.type == 'text' && part.value.trim().isNotEmpty);
     final body = isUser
-        ? SelectableText(message.text, style: const TextStyle(color: Colors.white, height: 1.35))
+        ? SelectableText(message.text, style: const TextStyle(color: Colors.white, height: 1.3))
         : MarkdownBody(
             data: message.text,
             selectable: true,
             shrinkWrap: true,
             builders: {'pre': CodeBlockBuilder()},
-            styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(p: TextStyle(color: assistantTextColor, height: 1.4)),
+            styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+              p: TextStyle(color: assistantTextColor, height: 1.32),
+              blockSpacing: 3,
+              listIndent: 18,
+            ),
           );
     // 图片附件渲染为缩略图，文本部分独立成行（避免 base64 字符串被当作文本显示）。
     final content = imageParts.isEmpty
@@ -371,9 +375,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ],
             if (hasText) body,
           ]);
-    return Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start, children: [
-      if (!isUser) ...[CircleAvatar(radius: 14, backgroundColor: isTool ? theme.colorScheme.secondary : theme.colorScheme.primary, child: Icon(isTool ? Icons.handyman_outlined : Icons.auto_awesome, size: 15, color: Colors.white)), const SizedBox(width: 6)],
-      ConstrainedBox(constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * (MediaQuery.sizeOf(context).width < 640 ? .88 : .68)), child: IntrinsicWidth(child: DecoratedBox(decoration: BoxDecoration(color: isUser ? theme.colorScheme.primary : isTool ? theme.colorScheme.surfaceContainerHighest : theme.colorScheme.surface, borderRadius: BorderRadius.circular(14), border: isUser ? null : Border.all(color: theme.colorScheme.outlineVariant)), child: Padding(padding: const EdgeInsets.fromLTRB(12, 8, 10, 8), child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+    return Padding(padding: const EdgeInsets.only(bottom: 6), child: Row(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start, children: [
+      if (!isUser) ...[CircleAvatar(radius: 13, backgroundColor: isTool ? theme.colorScheme.secondary : theme.colorScheme.primary, child: Icon(isTool ? Icons.handyman_outlined : Icons.auto_awesome, size: 14, color: Colors.white)), const SizedBox(width: 6)],
+      ConstrainedBox(constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * (MediaQuery.sizeOf(context).width < 640 ? .88 : .68)), child: IntrinsicWidth(child: DecoratedBox(decoration: BoxDecoration(color: isUser ? theme.colorScheme.primary : isTool ? theme.colorScheme.surfaceContainerHighest : theme.colorScheme.surface, borderRadius: BorderRadius.circular(12), border: isUser ? null : Border.all(color: theme.colorScheme.outlineVariant)), child: Padding(padding: const EdgeInsets.fromLTRB(10, 6, 8, 6), child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
         Align(alignment: Alignment.centerLeft, child: content),
         if (!isUser && _hasMeta(message))
           Align(
