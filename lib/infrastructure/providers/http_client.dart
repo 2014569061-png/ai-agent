@@ -4,9 +4,17 @@ import 'package:dio/dio.dart';
 
 /// 共享 HTTP 客户端工厂。
 ///
-/// 统一为三个 LLM Provider 提供带重试能力的 [Dio] 实例。
-Dio buildHttpClient({int maxRetries = 3}) {
-  final dio = Dio();
+/// 统一为三个 LLM Provider 提供带重试能力的 [Dio] 实例，并设置默认连接与
+/// 接收超时，避免无响应的上游让 Agent 卡在"运行中"。
+Dio buildHttpClient({
+  int maxRetries = 3,
+  Duration connectTimeout = const Duration(seconds: 15),
+  Duration receiveTimeout = const Duration(seconds: 120),
+}) {
+  final dio = Dio(BaseOptions(
+    connectTimeout: connectTimeout,
+    receiveTimeout: receiveTimeout,
+  ));
   dio.interceptors.add(RetryInterceptor(dio: dio, maxRetries: maxRetries));
   return dio;
 }

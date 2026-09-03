@@ -118,6 +118,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
           final parsed = _parseSseLine(line.trim());
           if (parsed == null) continue;
           if (parsed.text != null && parsed.text!.isNotEmpty) yield TextDeltaEvent(parsed.text!);
+          if (parsed.reasoning != null && parsed.reasoning!.isNotEmpty) yield ReasoningDeltaEvent(parsed.reasoning!);
           collect(parsed);
           if (parsed.usage != null) yield parsed.usage!;
         }
@@ -125,6 +126,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
       final parsed = _parseSseLine(buffer.trim());
       if (parsed != null) {
         if (parsed.text != null && parsed.text!.isNotEmpty) yield TextDeltaEvent(parsed.text!);
+        if (parsed.reasoning != null && parsed.reasoning!.isNotEmpty) yield ReasoningDeltaEvent(parsed.reasoning!);
         collect(parsed);
         if (parsed.usage != null) yield parsed.usage!;
       }
@@ -152,13 +154,15 @@ class OpenAiCompatibleProvider implements LlmProvider {
   ///
   /// Keeping this conversion public makes the wire format independently
   /// testable without issuing a network request.
-  Map<String, dynamic> toProviderMessage(ChatMessage message) => {
+  Map<String, dynamic> toProviderMessage(ChatMessage message) {
+    final hasMultimodal =
+        message.parts.any((p) => p.type != 'text' && p.value.isNotEmpty);
+    if (!hasMultimodal) {
+      return {
         'role': message.role.name,
-        'content': message.parts.any((part) => part.type == 'image')
-            ? message.parts.map((part) => part.type == 'image'
-                ? {'type': 'image_url', 'image_url': {'url': part.value}}
-                : {'type': 'text', 'text': part.value}).toList()
-            : (message.toolCalls.isNotEmpty && message.text.isEmpty ? null : message.text),
+        'content': (message.toolCalls.isNotEmpty && message.text.isEmpty)
+            ? null
+            : message.text,
         if (message.toolCalls.isNotEmpty)
           'tool_calls': message.toolCalls
               .map((call) => {
@@ -172,6 +176,77 @@ class OpenAiCompatibleProvider implements LlmProvider {
               .toList(),
         if (message.toolCallId != null) 'tool_call_id': message.toolCallId,
       };
+    }
+
+    // 多模态内容：图片/音频/视频统一归一为 data URL（对齐 Anthropic/Gemini），
+    // 避免上层因部分 provider 要求 base64 而行为不一致。文本统一由下方循环
+    // 逐 part 输出，避免重复（message.text 会把非文本 part 折叠成 "[图片]"）。
+    final content = <Map<String, dynamic>>[];
+    for (final part in message.parts) {
+      if (part.type == 'text') {
+        if (part.value.isNotEmpty) {
+          content.add({'type': 'text', 'text': part.value});
+        }
+        continue;
+      }
+      if (part.value.isEmpty) continue;
+      if (part.type == 'image') {
+        content.add({
+          'type': 'image_url',
+          'image_url': {
+            'url': _toDataUrl(part.value, part.mimeType ?? 'image/png'),
+          },
+        });
+      } else if (part.type == 'audio') {
+        content.add({
+          'type': 'input_audio',
+          'input_audio': {
+            'data': _stripDataUrl(part.value),
+            'format': _audioFormat(part.mimeType),
+          },
+        });
+      } else if (part.type == 'video') {
+        // OpenAI 尚未开放视频输入；转成 base64 data URL 交给支持视频的上游。
+        content.add({
+          'type': 'video_url',
+          'video_url': {'url': _toDataUrl(part.value, part.mimeType ?? 'video/mp4')},
+        });
+      } else {
+        content.add({'type': 'text', 'text': part.value});
+      }
+    }
+    return {
+      'role': message.role.name,
+      'content': content,
+      if (message.toolCallId != null) 'tool_call_id': message.toolCallId,
+    };
+  }
+
+  /// 把带 `data:<mime>;base64,` 前缀的 value 转成可直接交给上游的 data URL；
+  /// 已是 http(s) 外链则原样返回。
+  String _toDataUrl(String value, String mimeType) {
+    if (value.startsWith('data:') || value.startsWith('http://') ||
+        value.startsWith('https://')) {
+      return value;
+    }
+    return 'data:$mimeType;base64,$value';
+  }
+
+  /// 去掉 `data:<mime>;base64,` 前缀，返回纯 base64 载荷。
+  String _stripDataUrl(String value) {
+    final comma = value.indexOf(',');
+    if (value.startsWith('data:') && comma != -1) {
+      return value.substring(comma + 1);
+    }
+    return value;
+  }
+
+  /// 从 mime type 推断音频格式（OpenAI input_audio.format 仅支持 wav/mp3）。
+  String _audioFormat(String? mimeType) {
+    final mime = mimeType ?? '';
+    if (mime.contains('wav')) return 'wav';
+    return 'mp3';
+  }
 
   _SseChunk? _parseSseLine(String line) {
     if (!line.startsWith('data:')) return null;
@@ -192,10 +267,13 @@ class OpenAiCompatibleProvider implements LlmProvider {
       if (choices.isEmpty) return null;
       final delta = choices.first['delta'] as Map<String, dynamic>? ?? const {};
       final content = delta['content'] as String?;
+      // 推理模型的思考增量：DeepSeek-R1 用 reasoning_content，OpenAI o 系列部分用 reasoning。
+      final reasoning = (delta['reasoning_content'] as String?) ?? (delta['reasoning'] as String?);
       final toolCalls = delta['tool_calls'] as List<dynamic>?;
       if (toolCalls != null && toolCalls.isNotEmpty) {
         return _SseChunk(
           text: content,
+          reasoning: reasoning,
           tools: toolCalls.map((item) {
             final tool = item as Map<String, dynamic>;
             final function = tool['function'] as Map<String, dynamic>? ?? const {};
@@ -203,7 +281,9 @@ class OpenAiCompatibleProvider implements LlmProvider {
           }).toList(growable: false),
         );
       }
-      if (content != null && content.isNotEmpty) return _SseChunk(text: content);
+      if ((content != null && content.isNotEmpty) || (reasoning != null && reasoning.isNotEmpty)) {
+        return _SseChunk(text: content, reasoning: reasoning);
+      }
     } catch (_) {
       return null;
     }
@@ -212,9 +292,10 @@ class OpenAiCompatibleProvider implements LlmProvider {
 }
 
 class _SseChunk {
-  const _SseChunk({this.text, this.tools = const [], this.usage});
+  const _SseChunk({this.text, this.reasoning, this.tools = const [], this.usage});
 
   final String? text;
+  final String? reasoning;
   final List<_ToolFragment> tools;
   final UsageEvent? usage;
 }

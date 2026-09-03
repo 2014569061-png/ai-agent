@@ -31,7 +31,7 @@ void main() {
     await controller.send(
       text: '你好',
       attachments: const [],
-      approveTool: (call, risk) async => true,
+      approveTool: (call, risk) async => ToolApproval.allowOnce,
     );
 
     final state = container.read(chatControllerProvider);
@@ -117,14 +117,14 @@ void main() {
     await pumpEventQueue();
     expect(container.read(chatControllerProvider).loading, isFalse);
 
-    await controller.send(text: '你好', attachments: const [], approveTool: (call, risk) async => true);
+    await controller.send(text: '你好', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
     expect(state.messages.length, 2);
     expect(state.messages.last.text, contains('错误'));
     // 兜底后仍可继续发送（running 已复位）。
-    await controller.send(text: '再试一次', attachments: const [], approveTool: (call, risk) async => true);
+    await controller.send(text: '再试一次', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
     expect(container.read(chatControllerProvider).messages.length, 4);
   });
 
@@ -144,7 +144,7 @@ void main() {
     final controller = container.read(chatControllerProvider.notifier);
     await pumpEventQueue();
 
-    final future = controller.send(text: '长文本', attachments: const [], approveTool: (call, risk) async => true);
+    final future = controller.send(text: '长文本', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
     // 等流真正开始（DemoProvider 每字符延迟 12ms）。
     await Future<void>.delayed(const Duration(milliseconds: 60));
     expect(container.read(chatControllerProvider).running, isTrue);
@@ -174,10 +174,10 @@ void main() {
     final controller = container.read(chatControllerProvider.notifier);
     await pumpEventQueue();
 
-    await controller.send(text: '你好', attachments: const [], approveTool: (call, risk) async => true);
+    await controller.send(text: '你好', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
     expect(container.read(chatControllerProvider).messages.length, 2);
 
-    await controller.regenerate(approveTool: (call, risk) async => true);
+    await controller.regenerate(approveTool: (call, risk) async => ToolApproval.allowOnce);
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);

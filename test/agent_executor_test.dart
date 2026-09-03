@@ -45,7 +45,7 @@ void main() {
       model: 'test',
       approveTool: (call, risk) async {
         asked = true;
-        return false;
+        return ToolApproval.reject;
       },
     )) {
       if (event is AgentStatusEvent) statuses.add(event.status);
