@@ -1,10 +1,5 @@
 enum MessageRole { system, user, assistant, tool }
 
-/// 模型推理/思考强度档位。各 Provider 映射不同：
-/// - OpenAI 兼容：低/中/高 -> reasoning_effort（仅 o1/o3/GPT-5 等支持）
-/// - Anthropic：低/中/高 -> thinking.budget_tokens
-/// - Gemini：低/中/高 -> generationConfig.thinkingConfig.thinkingBudget
-/// off 时不传任何参数，保持各模型默认行为（向后兼容）。
 enum ReasoningEffort { off, low, medium, high }
 
 enum RunStatus {
@@ -20,14 +15,45 @@ enum RunStatus {
 
 enum ToolRisk { safe, requiresConfirmation, dangerous }
 
+/// 工具审批决策：拒绝 / 仅本次 / 本会话内 / 始终允许（全局信任）。
+enum ToolApproval { reject, allowOnce, allowSession, allowAlways }
+
 class MessagePart {
-  const MessagePart.text(this.value) : type = 'text', mimeType = null;
+  const MessagePart.text(this.value)
+      : type = 'text',
+        mimeType = null;
   const MessagePart.file(this.value, {this.mimeType}) : type = 'file';
   const MessagePart.image(this.value, {this.mimeType}) : type = 'image';
+  const MessagePart.audio(this.value, {this.mimeType}) : type = 'audio';
+  const MessagePart.video(this.value, {this.mimeType}) : type = 'video';
 
   final String type;
   final String value;
   final String? mimeType;
+}
+
+class PlanStep {
+  const PlanStep(
+      {required this.id, required this.description, this.status = 'pending'});
+  final String id;
+  final String description;
+  final String status;
+
+  PlanStep copyWith({String? description, String? status}) => PlanStep(
+      id: id,
+      description: description ?? this.description,
+      status: status ?? this.status);
+}
+
+class PlanState {
+  const PlanState({required this.steps, this.status = 'draft'});
+  final List<PlanStep> steps;
+  final String status;
+
+  PlanState copyWith({List<PlanStep>? steps, String? status}) =>
+      PlanState(steps: steps ?? this.steps, status: status ?? this.status);
+
+  bool get isConfirmed => status != 'draft' && status != 'cancelled';
 }
 
 class ChatMessage {
@@ -39,6 +65,8 @@ class ChatMessage {
     this.modelName,
     this.usage,
     this.elapsed,
+    this.ttft,
+    this.reasoning,
   });
 
   final MessageRole role;
@@ -48,17 +76,18 @@ class ChatMessage {
   final String? modelName;
   final Usage? usage;
   final Duration? elapsed;
+  final Duration? ttft;
+  final String? reasoning;
 
-  /// 纯文本视图：图片/文件附件以占位符呈现，避免把 base64 data URI
-  /// 当作文本拼进 UI、导出或复制内容（历史 bug：导入图片显示一长串乱码）。
   String get text => parts.map((part) {
         if (part.type == 'image') return '[图片]';
         if (part.type == 'file') return '[文件]';
+        if (part.type == 'audio') return '[音频]';
+        if (part.type == 'video') return '[视频]';
         return part.value;
       }).join();
 }
 
-/// 一次请求的 Token 用量统计。
 class Usage {
   const Usage({this.promptTokens = 0, this.completionTokens = 0});
 
@@ -132,6 +161,11 @@ class TextDeltaEvent extends UnifiedEvent {
   final String text;
 }
 
+class ReasoningDeltaEvent extends UnifiedEvent {
+  const ReasoningDeltaEvent(this.text);
+  final String text;
+}
+
 class ToolCallEvent extends UnifiedEvent {
   const ToolCallEvent(this.call);
   final ToolCall call;
@@ -142,7 +176,8 @@ class CompletedEvent extends UnifiedEvent {
 }
 
 class UsageEvent extends UnifiedEvent {
-  const UsageEvent({required this.promptTokens, required this.completionTokens});
+  const UsageEvent(
+      {required this.promptTokens, required this.completionTokens});
   final int promptTokens;
   final int completionTokens;
 }

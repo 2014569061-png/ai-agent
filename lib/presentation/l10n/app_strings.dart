@@ -130,4 +130,42 @@ abstract final class AppStrings {
   static const lightMode = '浅色模式';
   static const darkMode = '深色模式';
   static const systemMode = '跟随系统';
+
+  // --- 记忆 ---
+  static const memory = '记忆';
+  static const memoryEntry = '记忆管理';
+  static const memoryHint = '长期记忆会跨会话注入，让 Agent 记住关于你的事实；数据仅存本机。';
+  static const noMemories = '还没有记忆。可在对话中让 Agent「记住」某件事，或点击下方按钮手动添加。';
+  static const addMemory = '添加记忆';
+  static const editMemory = '编辑记忆';
+  static const memoryContent = '记忆内容';
+  static const memoryCategory = '分类';
+  static const memoryImportance = '权重';
+  static const memoryImportanceHint = '权重越高，注入时排序越靠前';
+  static const memoryEnabled = '启用记忆注入';
+  static const memoryEnabledHint = '关闭后不再把记忆注入到对话';
+
+  // --- ASR / 拍照 / 分享 / 锁屏 / 更新 / 引导 ---
+  static const voiceInput = '语音输入';
+  static const voiceListening = '正在聆听…松开结束';
+  static const voiceError = '语音识别不可用';
+  static const takePhoto = '拍照';
+  static const fromGallery = '相册';
+  static const appLock = '应用锁（生物识别）';
+  static const appLockHint = '启动或从后台返回时用指纹/面容解锁';
+  static const crashReport = '崩溃上报（匿名）';
+  static const crashReportHint = '仅上报匿名崩溃堆栈，不含聊天内容与密钥';
+  static const checkUpdate = '检查更新';
+  static const updateAvailable = '发现新版本';
+  static const updateAvailableMsg = '发现新版本';
+  static const updateNow = '更新';
+  static const updateLater = '稍后';
+  static const downloading = '下载中…';
+  static const isLatestVersion = '已是最新版本';
+  static const onboardingStep1 = '填入模型服务';
+  static const onboardingStep2 = '选择你的模型';
+  static const onboardingStep3 = '让 Agent 用工具';
+  static const onboardingStep4 = '隐私，本地优先';
+  static const skip = '跳过';
+  static const startUsing = '开始使用';
 }

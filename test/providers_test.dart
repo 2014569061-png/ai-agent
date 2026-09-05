@@ -6,7 +6,8 @@ import 'package:mobile_agent/infrastructure/providers/gemini_provider.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 
 void main() {
-  const config = ProviderConfig(baseUrl: 'https://example.com', model: 'm', apiKey: 'k');
+  const config =
+      ProviderConfig(baseUrl: 'https://example.com', model: 'm', apiKey: 'k');
 
   group('AnthropicProvider', () {
     test('converts a user text message into content blocks', () {
@@ -26,11 +27,18 @@ void main() {
       final result = provider.toAnthropicMessage(ChatMessage(
         role: MessageRole.assistant,
         parts: const [],
-        toolCalls: [ToolCall(id: 'call-1', name: 'calculator', arguments: {'a': 1})],
+        toolCalls: [
+          ToolCall(id: 'call-1', name: 'calculator', arguments: {'a': 1})
+        ],
       ));
       expect(result['role'], 'assistant');
       expect(result['content'], [
-        {'type': 'tool_use', 'id': 'call-1', 'name': 'calculator', 'input': {'a': 1}},
+        {
+          'type': 'tool_use',
+          'id': 'call-1',
+          'name': 'calculator',
+          'input': {'a': 1}
+        },
       ]);
     });
 
@@ -63,10 +71,12 @@ void main() {
   group('GeminiProvider', () {
     test('converts a user message into parts', () {
       final provider = GeminiProvider(config: config);
-      final result = provider.toGeminiMessage(ChatMessage(
-        role: MessageRole.user,
-        parts: const [MessagePart.text('你好')],
-      ), const {});
+      final result = provider.toGeminiMessage(
+          ChatMessage(
+            role: MessageRole.user,
+            parts: const [MessagePart.text('你好')],
+          ),
+          const {});
       expect(result['role'], 'user');
       expect(result['parts'], [
         {'text': '你好'},
@@ -75,29 +85,43 @@ void main() {
 
     test('converts assistant tool calls into functionCall parts', () {
       final provider = GeminiProvider(config: config);
-      final result = provider.toGeminiMessage(ChatMessage(
-        role: MessageRole.assistant,
-        parts: const [],
-        toolCalls: [ToolCall(id: 'call-1', name: 'calculator', arguments: {'a': 1})],
-      ), const {});
+      final result = provider.toGeminiMessage(
+          ChatMessage(
+            role: MessageRole.assistant,
+            parts: const [],
+            toolCalls: [
+              ToolCall(id: 'call-1', name: 'calculator', arguments: {'a': 1})
+            ],
+          ),
+          const {});
       expect(result['role'], 'model');
       expect(result['parts'], [
         {
-          'functionCall': {'name': 'calculator', 'args': {'a': 1}},
+          'functionCall': {
+            'name': 'calculator',
+            'args': {'a': 1}
+          },
         },
       ]);
     });
 
-    test('converts tool results into functionResponse parts with resolved name', () {
+    test('converts tool results into functionResponse parts with resolved name',
+        () {
       final provider = GeminiProvider(config: config);
       final result = provider.toGeminiMessage(
-        ChatMessage(role: MessageRole.tool, toolCallId: 'call-1', parts: const [MessagePart.text('3')]),
+        ChatMessage(
+            role: MessageRole.tool,
+            toolCallId: 'call-1',
+            parts: const [MessagePart.text('3')]),
         const {'call-1': 'calculator'},
       );
       expect(result['role'], 'function');
       expect(result['parts'], [
         {
-          'functionResponse': {'name': 'calculator', 'response': {'result': '3'}},
+          'functionResponse': {
+            'name': 'calculator',
+            'response': {'result': '3'}
+          },
         },
       ]);
     });
@@ -117,17 +141,22 @@ void main() {
 
   group('ProviderConfig.isConfigured', () {
     test('local model without api key is considered configured', () {
-      const local = ProviderConfig(baseUrl: 'http://localhost:11434/v1', model: 'llama3.2', apiKey: '');
+      const local = ProviderConfig(
+          baseUrl: 'http://localhost:11434/v1', model: 'llama3.2', apiKey: '');
       expect(local.isConfigured, isTrue);
     });
 
     test('cloud provider without api key is not configured', () {
-      const cloud = ProviderConfig(baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '');
+      const cloud = ProviderConfig(
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-4o-mini',
+          apiKey: '');
       expect(cloud.isConfigured, isFalse);
     });
 
     test('empty model is never configured', () {
-      const empty = ProviderConfig(baseUrl: 'http://localhost:11434/v1', model: '', apiKey: '');
+      const empty = ProviderConfig(
+          baseUrl: 'http://localhost:11434/v1', model: '', apiKey: '');
       expect(empty.isConfigured, isFalse);
     });
   });

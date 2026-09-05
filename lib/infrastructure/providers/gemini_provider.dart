@@ -13,7 +13,8 @@ import 'provider_config.dart';
 /// 认证走 `?key=` 查询参数、系统提示词为顶层 `systemInstruction`、图片用
 /// `inlineData`。流式解析从 `candidates[].content.parts[]` 中取文本与函数调用。
 class GeminiProvider implements LlmProvider {
-  GeminiProvider({required this.config, Dio? dio}) : _dio = dio ?? buildHttpClient();
+  GeminiProvider({required this.config, Dio? dio})
+      : _dio = dio ?? buildHttpClient();
 
   final ProviderConfig config;
   final Dio _dio;
@@ -36,7 +37,8 @@ class GeminiProvider implements LlmProvider {
   }
 
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) async* {
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
     // 先收集 assistant 工具调用的 id → name 映射，供工具结果回填函数名。
     final toolNames = <String, String>{};
     for (final message in request.messages) {
@@ -58,17 +60,24 @@ class GeminiProvider implements LlmProvider {
     }
 
     // 思考档位 → Gemini thinkingConfig.thinkingBudget。低=0, 中=8192, 高=32768。
-    final thinkingBudget = _thinkingBudgetFor(request.reasoningEffort);
+    final thinkingBudget = _supportsThinking(request.model)
+        ? _thinkingBudgetFor(request.reasoningEffort)
+        : null;
 
     final payload = {
       'contents': contents,
       if (system != null && system.trim().isNotEmpty)
-        'systemInstruction': {'parts': [{'text': system.trim()}]},
+        'systemInstruction': {
+          'parts': [
+            {'text': system.trim()}
+          ]
+        },
       'generationConfig': {
         'temperature': request.temperature,
         'maxOutputTokens': request.maxTokens,
         'topP': request.topP,
-        if (thinkingBudget != null) 'thinkingConfig': {'thinkingBudget': thinkingBudget},
+        if (thinkingBudget != null)
+          'thinkingConfig': {'thinkingBudget': thinkingBudget},
       },
       if (request.tools.isNotEmpty)
         'tools': [
@@ -76,7 +85,8 @@ class GeminiProvider implements LlmProvider {
         ],
     };
 
-    final url = '$_base/v1beta/models/${Uri.encodeComponent(request.model)}:streamGenerateContent'
+    final url =
+        '$_base/v1beta/models/${Uri.encodeComponent(request.model)}:streamGenerateContent'
         '?alt=sse&key=${Uri.encodeQueryComponent(config.apiKey)}';
 
     try {
@@ -99,12 +109,13 @@ class GeminiProvider implements LlmProvider {
       }
 
       var buffer = '';
+      final decoder = utf8.decoder;
       final pendingCalls = <ToolCall>[];
       var promptTokens = 0;
       var completionTokens = 0;
 
       await for (final chunk in stream) {
-        buffer += utf8.decode(chunk, allowMalformed: true);
+        buffer += decoder.convert(chunk);
         final lines = buffer.split('\n');
         buffer = lines.removeLast();
         for (final line in lines) {
@@ -112,17 +123,27 @@ class GeminiProvider implements LlmProvider {
           if (json == null) continue;
           final usage = json['usageMetadata'];
           if (usage is Map<String, dynamic>) {
-            promptTokens = (usage['promptTokenCount'] as num?)?.toInt() ?? promptTokens;
-            completionTokens = (usage['candidatesTokenCount'] as num?)?.toInt() ?? completionTokens;
+            promptTokens =
+                (usage['promptTokenCount'] as num?)?.toInt() ?? promptTokens;
+            completionTokens =
+                (usage['candidatesTokenCount'] as num?)?.toInt() ??
+                    completionTokens;
           }
           final candidates = json['candidates'] as List<dynamic>? ?? const [];
-          for (final candidate in candidates.whereType<Map<String, dynamic>>()) {
-            final content = candidate['content'] as Map<String, dynamic>? ?? const {};
+          for (final candidate
+              in candidates.whereType<Map<String, dynamic>>()) {
+            final content =
+                candidate['content'] as Map<String, dynamic>? ?? const {};
             final parts = content['parts'] as List<dynamic>? ?? const [];
             for (final part in parts.whereType<Map<String, dynamic>>()) {
               final text = part['text'] as String?;
+              // Gemini thinking parts use thought=true and carry their text in part.text.
               if (text != null && text.isNotEmpty) {
-                yield TextDeltaEvent(text);
+                if (part['thought'] == true) {
+                  yield ReasoningDeltaEvent(text);
+                } else {
+                  yield TextDeltaEvent(text);
+                }
               }
               final functionCall = part['functionCall'];
               if (functionCall is Map<String, dynamic>) {
@@ -137,24 +158,29 @@ class GeminiProvider implements LlmProvider {
           }
         }
       }
+      buffer += decoder.convert(const <int>[]);
       final trailing = _parseSseLine(buffer.trim());
       if (trailing != null) {
         final usage = trailing['usageMetadata'];
         if (usage is Map<String, dynamic>) {
-          promptTokens = (usage['promptTokenCount'] as num?)?.toInt() ?? promptTokens;
-          completionTokens = (usage['candidatesTokenCount'] as num?)?.toInt() ?? completionTokens;
+          promptTokens =
+              (usage['promptTokenCount'] as num?)?.toInt() ?? promptTokens;
+          completionTokens = (usage['candidatesTokenCount'] as num?)?.toInt() ??
+              completionTokens;
         }
       }
 
       for (final call in pendingCalls) {
         yield ToolCallEvent(call);
       }
-      yield UsageEvent(promptTokens: promptTokens, completionTokens: completionTokens);
+      yield UsageEvent(
+          promptTokens: promptTokens, completionTokens: completionTokens);
       yield const CompletedEvent();
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;
-      final message = error.response?.data?.toString() ?? error.message ?? '网络请求失败';
+      final message =
+          error.response?.data?.toString() ?? error.message ?? '网络请求失败';
       yield ProviderErrorEvent(message);
     } catch (error) {
       yield ProviderErrorEvent(error.toString());
@@ -162,7 +188,8 @@ class GeminiProvider implements LlmProvider {
   }
 
   /// 将统一消息转换为 Gemini `contents` 中的一条。
-  Map<String, dynamic> toGeminiMessage(ChatMessage message, Map<String, String> toolNames) {
+  Map<String, dynamic> toGeminiMessage(
+      ChatMessage message, Map<String, String> toolNames) {
     if (message.role == MessageRole.tool) {
       return {
         'role': 'function',
@@ -212,7 +239,9 @@ class GeminiProvider implements LlmProvider {
 
   String _stripDataUrl(String value) {
     final comma = value.indexOf(',');
-    if (value.startsWith('data:') && comma >= 0) return value.substring(comma + 1);
+    if (value.startsWith('data:') && comma >= 0) {
+      return value.substring(comma + 1);
+    }
     return value;
   }
 
@@ -229,6 +258,11 @@ class GeminiProvider implements LlmProvider {
 
   /// 把 ReasoningEffort 映射为 Gemini thinkingBudget。
   /// off 时返回 null（不传 thinkingConfig）。
+  static bool _supportsThinking(String model) {
+    final lower = model.toLowerCase();
+    return lower.contains('2.5') || lower.contains('thinking');
+  }
+
   static int? _thinkingBudgetFor(ReasoningEffort effort) {
     switch (effort) {
       case ReasoningEffort.off:

@@ -18,16 +18,18 @@ if (hasReleaseKey) {
 
 android {
     namespace = "com.nexusagent.app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications 需要 Java 8+ API 脱糖。
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
-        // TODO: 正式包名（发布后不可更改）。当前为默认值 com.nexusagent.app，
+        // TODO: 正式包名（发布后不可修改）。当前为默认值 com.nexusagent.app。
         // 如需更换请在首次上架前修改并重新出包。
         applicationId = "com.nexusagent.app"
         // You can update the following values to match your application needs.
@@ -40,6 +42,12 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // [体积优化] 仅打包现代 Android 设备使用的 ARM64 ABI，减少原生库体积
+        ndk {
+            abiFilters.clear()
+            abiFilters.add("arm64-v8a")
+        }
     }
 
     signingConfigs {
@@ -55,6 +63,10 @@ android {
 
     buildTypes {
         release {
+            // [体积优化] 开启 R8 代码压缩与资源收缩，删除未使用的原生代码与资源
+            isMinifyEnabled = true
+            isShrinkResources = true
+
             // 优先使用正式签名（key.properties）；缺失时回退 debug 签名。
             signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
@@ -69,4 +81,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

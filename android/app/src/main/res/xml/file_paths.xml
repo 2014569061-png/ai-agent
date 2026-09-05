@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- 应用内更新 APK 下载到应用私有目录后，通过 FileProvider 暴露安装。 -->
+    <files-path name="files" path="."/>
+    <external-files-path name="external_files" path="."/>
+    <cache-path name="cache" path="."/>
+</paths>

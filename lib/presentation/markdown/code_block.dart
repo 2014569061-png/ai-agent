@@ -22,16 +22,78 @@ class SimpleSyntaxHighlighter implements SyntaxHighlighter {
   final Color numberColor;
 
   static const Set<String> _keywords = {
-    'abstract', 'as', 'assert', 'async', 'await', 'break', 'case', 'catch',
-    'class', 'const', 'continue', 'default', 'do', 'else', 'enum', 'export',
-    'extends', 'extension', 'final', 'finally', 'for', 'func', 'function',
-    'get', 'if', 'implements', 'import', 'in', 'interface', 'is', 'late',
-    'let', 'mixin', 'new', 'null', 'on', 'operator', 'package', 'private',
-    'protected', 'public', 'return', 'sealed', 'set', 'static', 'super',
-    'switch', 'this', 'throw', 'try', 'type', 'typedef', 'var', 'void',
-    'while', 'with', 'yield', 'true', 'false', 'int', 'double', 'String',
-    'bool', 'num', 'dynamic', 'Object', 'List', 'Map', 'Set', 'Future',
-    'Stream', 'unknown',
+    'abstract',
+    'as',
+    'assert',
+    'async',
+    'await',
+    'break',
+    'case',
+    'catch',
+    'class',
+    'const',
+    'continue',
+    'default',
+    'do',
+    'else',
+    'enum',
+    'export',
+    'extends',
+    'extension',
+    'final',
+    'finally',
+    'for',
+    'func',
+    'function',
+    'get',
+    'if',
+    'implements',
+    'import',
+    'in',
+    'interface',
+    'is',
+    'late',
+    'let',
+    'mixin',
+    'new',
+    'null',
+    'on',
+    'operator',
+    'package',
+    'private',
+    'protected',
+    'public',
+    'return',
+    'sealed',
+    'set',
+    'static',
+    'super',
+    'switch',
+    'this',
+    'throw',
+    'try',
+    'type',
+    'typedef',
+    'var',
+    'void',
+    'while',
+    'with',
+    'yield',
+    'true',
+    'false',
+    'int',
+    'double',
+    'String',
+    'bool',
+    'num',
+    'dynamic',
+    'Object',
+    'List',
+    'Map',
+    'Set',
+    'Future',
+    'Stream',
+    'unknown',
   };
 
   // 分组顺序：1 行注释 / 2 块注释 / 3 字符串 / 4 数字 / 5 标识符
@@ -112,7 +174,8 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
 
 /// 代码块卡片：标题栏（语言名 + 复制）+ 横向滚动的高亮代码。
 class CodeBlockWidget extends StatelessWidget {
-  const CodeBlockWidget({super.key, required this.language, required this.code});
+  const CodeBlockWidget(
+      {super.key, required this.language, required this.code});
 
   final String? language;
   final String code;
@@ -122,7 +185,8 @@ class CodeBlockWidget extends StatelessWidget {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
     final background = dark ? const Color(0xFF1B2230) : const Color(0xFFF6F8FA);
-    final headerBackground = dark ? const Color(0xFF222A3A) : const Color(0xFFEEF1F4);
+    final headerBackground =
+        dark ? const Color(0xFF222A3A) : const Color(0xFFEEF1F4);
     final border = dark ? const Color(0xFF2C3547) : const Color(0xFFE2E8F0);
     final headerText = dark ? const Color(0xFFA6B2C6) : const Color(0xFF64748B);
     final codeColor = dark ? const Color(0xFFE6EDF3) : const Color(0xFF24292F);
@@ -171,13 +235,15 @@ class CodeBlockWidget extends StatelessWidget {
                     FloatingToast.show(context, '代码已复制');
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.copy, size: 14, color: headerText),
                         const SizedBox(width: 4),
-                        Text('复制', style: TextStyle(fontSize: 12, color: headerText)),
+                        Text('复制',
+                            style: TextStyle(fontSize: 12, color: headerText)),
                       ],
                     ),
                   ),

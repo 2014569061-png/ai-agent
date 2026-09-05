@@ -14,13 +14,15 @@ import 'provider_config.dart';
 /// `message_start / content_block_start / content_block_delta / message_delta`
 /// 事件类型累积文本与工具调用。
 class AnthropicProvider implements LlmProvider {
-  AnthropicProvider({required this.config, Dio? dio}) : _dio = dio ?? buildHttpClient();
+  AnthropicProvider({required this.config, Dio? dio})
+      : _dio = dio ?? buildHttpClient();
 
   static const _apiVersion = '2023-06-01';
   final ProviderConfig config;
   final Dio _dio;
 
-  String get _endpoint => '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/v1/messages';
+  String get _endpoint =>
+      '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/v1/messages';
 
   Map<String, dynamic> get _headers => {
         'x-api-key': config.apiKey,
@@ -46,7 +48,8 @@ class AnthropicProvider implements LlmProvider {
   }
 
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) async* {
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
     String? system;
     final messages = <Map<String, dynamic>>[];
     for (final message in request.messages) {
@@ -63,8 +66,11 @@ class AnthropicProvider implements LlmProvider {
     final payload = {
       'model': request.model,
       'max_tokens': request.maxTokens,
-      'temperature': request.temperature,
-      'top_p': request.topP,
+      // Anthropic rejects temperature/top_p when extended thinking is enabled.
+      if (thinking == null) ...{
+        'temperature': request.temperature,
+        'top_p': request.topP,
+      },
       'stream': true,
       if (thinking != null) 'thinking': thinking,
       if (system != null && system.trim().isNotEmpty) 'system': system.trim(),
@@ -87,12 +93,13 @@ class AnthropicProvider implements LlmProvider {
       }
 
       var buffer = '';
+      final decoder = utf8.decoder;
       final toolAccumulators = <int, _AnthropicToolAcc>{};
       var inputTokens = 0;
       var outputTokens = 0;
 
       await for (final chunk in stream) {
-        buffer += utf8.decode(chunk, allowMalformed: true);
+        buffer += decoder.convert(chunk);
         final lines = buffer.split('\n');
         buffer = lines.removeLast();
         for (final line in lines) {
@@ -100,11 +107,13 @@ class AnthropicProvider implements LlmProvider {
           if (json == null) continue;
           final type = json['type'] as String?;
           if (type == 'message_start') {
-            final message = json['message'] as Map<String, dynamic>? ?? const {};
+            final message =
+                json['message'] as Map<String, dynamic>? ?? const {};
             final usage = message['usage'] as Map<String, dynamic>? ?? const {};
             inputTokens = (usage['input_tokens'] as num?)?.toInt() ?? 0;
           } else if (type == 'content_block_start') {
-            final block = json['content_block'] as Map<String, dynamic>? ?? const {};
+            final block =
+                json['content_block'] as Map<String, dynamic>? ?? const {};
             if (block['type'] == 'tool_use') {
               final index = json['index'] as int? ?? 0;
               toolAccumulators[index] = _AnthropicToolAcc(
@@ -118,8 +127,14 @@ class AnthropicProvider implements LlmProvider {
             if (delta['type'] == 'text_delta') {
               final text = delta['text'] as String? ?? '';
               if (text.isNotEmpty) yield TextDeltaEvent(text);
+            } else if (delta['type'] == 'thinking_delta') {
+              final thinking = delta['thinking'] as String? ?? '';
+              if (thinking.isNotEmpty) yield ReasoningDeltaEvent(thinking);
             } else if (delta['type'] == 'input_json_delta') {
-              toolAccumulators.putIfAbsent(index, _AnthropicToolAcc.new).arguments.write(delta['partial_json'] ?? '');
+              toolAccumulators
+                  .putIfAbsent(index, _AnthropicToolAcc.new)
+                  .arguments
+                  .write(delta['partial_json'] ?? '');
             }
           } else if (type == 'message_delta') {
             final usage = json['usage'] as Map<String, dynamic>? ?? const {};
@@ -127,6 +142,7 @@ class AnthropicProvider implements LlmProvider {
           }
         }
       }
+      buffer += decoder.convert(const <int>[]);
       final trailing = _parseSseLine(buffer.trim());
       if (trailing != null && trailing['type'] == 'message_delta') {
         final usage = trailing['usage'] as Map<String, dynamic>? ?? const {};
@@ -150,12 +166,14 @@ class AnthropicProvider implements LlmProvider {
           arguments: args,
         ));
       }
-      yield UsageEvent(promptTokens: inputTokens, completionTokens: outputTokens);
+      yield UsageEvent(
+          promptTokens: inputTokens, completionTokens: outputTokens);
       yield const CompletedEvent();
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;
-      final message = error.response?.data?.toString() ?? error.message ?? '网络请求失败';
+      final message =
+          error.response?.data?.toString() ?? error.message ?? '网络请求失败';
       yield ProviderErrorEvent(message);
     } catch (error) {
       yield ProviderErrorEvent(error.toString());
@@ -168,19 +186,34 @@ class AnthropicProvider implements LlmProvider {
       return {
         'role': 'user',
         'content': [
-          {'type': 'tool_result', 'tool_use_id': message.toolCallId, 'content': message.text},
+          {
+            'type': 'tool_result',
+            'tool_use_id': message.toolCallId,
+            'content': message.text
+          },
         ],
       };
     }
     if (message.role == MessageRole.assistant) {
       final blocks = <Map<String, dynamic>>[];
-      if (message.text.isNotEmpty) blocks.add({'type': 'text', 'text': message.text});
+      if (message.text.isNotEmpty) {
+        blocks.add({'type': 'text', 'text': message.text});
+      }
       for (final call in message.toolCalls) {
-        blocks.add({'type': 'tool_use', 'id': call.id, 'name': call.name, 'input': call.arguments});
+        blocks.add({
+          'type': 'tool_use',
+          'id': call.id,
+          'name': call.name,
+          'input': call.arguments
+        });
       }
       return {
         'role': 'assistant',
-        'content': blocks.isEmpty ? [const {'type': 'text', 'text': ''}] : blocks,
+        'content': blocks.isEmpty
+            ? [
+                const {'type': 'text', 'text': ''}
+              ]
+            : blocks,
       };
     }
     final content = <Map<String, dynamic>>[];
@@ -200,7 +233,11 @@ class AnthropicProvider implements LlmProvider {
     }
     return {
       'role': 'user',
-      'content': content.isEmpty ? [const {'type': 'text', 'text': ''}] : content,
+      'content': content.isEmpty
+          ? [
+              const {'type': 'text', 'text': ''}
+            ]
+          : content,
     };
   }
 
@@ -212,7 +249,9 @@ class AnthropicProvider implements LlmProvider {
 
   String _stripDataUrl(String value) {
     final comma = value.indexOf(',');
-    if (value.startsWith('data:') && comma >= 0) return value.substring(comma + 1);
+    if (value.startsWith('data:') && comma >= 0) {
+      return value.substring(comma + 1);
+    }
     return value;
   }
 

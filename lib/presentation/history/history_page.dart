@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
+import '../../application/mojibake_repair.dart';
+import '../widgets/empty_state_view.dart';
+import '../widgets/immersive_sheet.dart';
+import '../widgets/section_card.dart';
 
 /// 历史会话管理页'///
 /// Conversation history management.
 class HistoryPage extends StatefulWidget {
+  final ValueChanged<Conversation>? onConversationSelected;
 
-  const HistoryPage({super.key});
+  const HistoryPage({super.key, this.onConversationSelected});
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
@@ -29,7 +34,11 @@ class _HistoryPageState extends State<HistoryPage> {
     final conversations = await database.recentConversations();
     if (!mounted) return;
     setState(() {
-      _conversations = conversations;
+      _conversations = conversations
+          .map((conversation) => conversation.copyWith(
+                title: MojibakeRepair.repair(conversation.title),
+              ))
+          .toList();
       _loading = false;
     });
   }
@@ -37,52 +46,67 @@ class _HistoryPageState extends State<HistoryPage> {
   List<Conversation> get _filtered {
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return _conversations;
-    return _conversations.where((c) => c.title.toLowerCase().contains(query)).toList();
+    return _conversations
+        .where((c) => c.title.toLowerCase().contains(query))
+        .toList();
   }
 
   Future<AppDatabase> _db() => DatabaseProvider.instance.database;
 
   Future<void> _rename(Conversation conversation) async {
     final controller = TextEditingController(text: conversation.title);
-    final result = await showDialog<String>(
+    final result = await showImmersiveDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('重命名会话'),
-        content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(labelText: '标题')),
+        content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(labelText: '标题')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('保存')),
+          TextButton(
+              onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('保存')),
         ],
       ),
     );
     controller.dispose();
     if (result == null || result.isEmpty) return;
     final db = await _db();
-    await db.saveConversation(conversation.copyWith(title: result, updatedAt: DateTime.now()));
+    await db.saveConversation(
+        conversation.copyWith(title: result, updatedAt: DateTime.now()));
     await _reload();
   }
 
   Future<void> _togglePinned(Conversation conversation) async {
     final db = await _db();
-    await db.saveConversation(conversation.copyWith(isPinned: !conversation.isPinned, updatedAt: DateTime.now()));
+    await db.saveConversation(conversation.copyWith(
+        isPinned: !conversation.isPinned, updatedAt: DateTime.now()));
     await _reload();
   }
 
   Future<void> _toggleFavorite(Conversation conversation) async {
     final db = await _db();
-    await db.saveConversation(conversation.copyWith(isFavorite: !conversation.isFavorite, updatedAt: DateTime.now()));
+    await db.saveConversation(conversation.copyWith(
+        isFavorite: !conversation.isFavorite, updatedAt: DateTime.now()));
     await _reload();
   }
 
   Future<void> _delete(Conversation conversation) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showImmersiveDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('删除会话'),
         content: Text('确定删除“${conversation.title}”吗？此操作不可撤销。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('删除')),
         ],
       ),
     );
@@ -138,7 +162,6 @@ class _HistoryPageState extends State<HistoryPage> {
               decoration: InputDecoration(
                 hintText: '搜索会话标题',
                 prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 isDense: true,
               ),
             ),
@@ -147,11 +170,10 @@ class _HistoryPageState extends State<HistoryPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : filtered.isEmpty
-                    ? Center(
-                        child: Text(
-                          _conversations.isEmpty ? '还没有会话，点击右下角新建' : '未找到匹配的会话',
-                          style: const TextStyle(color: Color(0xFF627D98)),
-                        ),
+                    ? EmptyStateView(
+                        icon: Icons.forum_outlined,
+                        title: _conversations.isEmpty ? '还没有会话' : '未找到匹配的会话',
+                        message: _conversations.isEmpty ? '点击右下角新建会话' : null,
                       )
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
@@ -170,12 +192,14 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Widget _conversationTile(Conversation conversation) {
     final theme = Theme.of(context);
-    return Card(
+    return SectionCard(
       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: ListTile(
         leading: Icon(
           conversation.isPinned ? Icons.push_pin : Icons.chat_bubble_outline,
-          color: conversation.isPinned ? theme.colorScheme.primary : theme.colorScheme.outline,
+          color: conversation.isPinned
+              ? theme.colorScheme.primary
+              : theme.colorScheme.outline,
         ),
         title: Row(
           children: [
@@ -193,29 +217,65 @@ class _HistoryPageState extends State<HistoryPage> {
           ],
         ),
         subtitle: Text(_relativeTime(conversation.updatedAt)),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            switch (value) {
-              case 'pin':
-                _togglePinned(conversation);
-              case 'favorite':
-                _toggleFavorite(conversation);
-              case 'rename':
-                _rename(conversation);
-              case 'delete':
-                _delete(conversation);
-            }
-          },
-          itemBuilder: (context) => [
-            PopupMenuItem(value: 'pin', child: Text(conversation.isPinned ? '取消置顶' : '置顶')),
-            PopupMenuItem(value: 'favorite', child: Text(conversation.isFavorite ? '取消收藏' : '收藏')),
-            PopupMenuItem(value: 'rename', child: const Text('重命名')),
-            PopupMenuItem(value: 'delete', child: const Text('删除')),
-          ],
+        trailing: IconButton(
+          icon: const Icon(Icons.more_vert),
+          tooltip: '更多操作',
+          onPressed: () => _showConversationActions(conversation),
         ),
-        onTap: () => Navigator.pop(context, conversation),
+        onTap: () {
+          final callback = widget.onConversationSelected;
+          if (callback != null) {
+            callback(conversation);
+          } else {
+            Navigator.pop(context, conversation);
+          }
+        },
       ),
     );
+  }
+
+  /// 会话行操作菜单：与全应用一致的沉浸式毛玻璃面板。
+  Future<void> _showConversationActions(Conversation conversation) async {
+    final action = await showImmersiveSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.push_pin_outlined),
+              title: Text(conversation.isPinned ? '取消置顶' : '置顶'),
+              onTap: () => Navigator.pop(sheetContext, 'pin'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.star_outline),
+              title: Text(conversation.isFavorite ? '取消收藏' : '收藏'),
+              onTap: () => Navigator.pop(sheetContext, 'favorite'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('重命名'),
+              onTap: () => Navigator.pop(sheetContext, 'rename'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('删除'),
+              onTap: () => Navigator.pop(sheetContext, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    switch (action) {
+      case 'pin':
+        _togglePinned(conversation);
+      case 'favorite':
+        _toggleFavorite(conversation);
+      case 'rename':
+        _rename(conversation);
+      case 'delete':
+        _delete(conversation);
+    }
   }
 
   @override

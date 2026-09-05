@@ -29,7 +29,8 @@ class ProxyProvider implements LlmProvider {
   final OpenAiCompatibleProvider _inner;
 
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) =>
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+          {CancelToken? cancelToken}) =>
       _inner.stream(request, cancelToken: cancelToken);
 
   /// 测试到后端（含托管 Key 鉴权）的连接。

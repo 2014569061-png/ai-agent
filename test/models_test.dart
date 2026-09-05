@@ -10,7 +10,8 @@ void main() {
           const MessagePart.text('看这张图'),
           const MessagePart.image('data:image/png;base64,aGVsbG8='),
           const MessagePart.text('顺便分析'),
-          const MessagePart.file('data:text/plain;base64,aGVsbG8=', mimeType: 'text/plain'),
+          const MessagePart.file('data:text/plain;base64,aGVsbG8=',
+              mimeType: 'text/plain'),
         ],
       );
 
@@ -24,7 +25,9 @@ void main() {
     });
 
     test('纯文本消息不受影响', () {
-      final message = ChatMessage(role: MessageRole.assistant, parts: [const MessagePart.text('你好，世界')]);
+      final message = ChatMessage(
+          role: MessageRole.assistant,
+          parts: [const MessagePart.text('你好，世界')]);
       expect(message.text, '你好，世界');
     });
 

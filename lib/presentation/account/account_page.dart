@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../application/account_services.dart';
-import '../../application/billing_api.dart';
 import '../../application/providers.dart';
 
 /// 账号页：注册/登录、会话状态、设备管理、2FA、注销（§4.4）。
@@ -31,7 +29,10 @@ class _AccountPageState extends ConsumerState<AccountPage> {
   }
 
   Future<void> _submit() async {
-    setState(() { _busy = true; _error = null; });
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
     final api = ref.read(billingApiProvider);
     final account = ref.read(accountServiceProvider);
     final entitlement = ref.read(entitlementServiceProvider);
@@ -62,9 +63,18 @@ class _AccountPageState extends ConsumerState<AccountPage> {
         await account.saveSession(session);
         await entitlement.grantManagedKey(session.apiKey);
       }
-      if (mounted) setState(() { _busy = false; });
+      if (mounted) {
+        setState(() {
+          _busy = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _busy = false; _error = e.toString(); });
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = e.toString();
+        });
+      }
     }
   }
 
@@ -100,18 +110,34 @@ class _AccountPageState extends ConsumerState<AccountPage> {
           onSelectionChanged: (s) => setState(() => _isLogin = s.first),
         ),
         const SizedBox(height: 16),
-        TextField(controller: _email, decoration: const InputDecoration(labelText: '邮箱', border: OutlineInputBorder())),
+        TextField(
+            controller: _email,
+            decoration: const InputDecoration(labelText: '邮箱')),
         const SizedBox(height: 12),
-        TextField(controller: _phone, decoration: const InputDecoration(labelText: '手机号（可选）', border: OutlineInputBorder())),
+        TextField(
+            controller: _phone,
+            decoration: const InputDecoration(labelText: '手机号（可选）')),
         const SizedBox(height: 12),
-        TextField(controller: _password, obscureText: true, decoration: const InputDecoration(labelText: '密码（≥6位）', border: OutlineInputBorder())),
+        TextField(
+            controller: _password,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: '密码（≥6位）')),
         const SizedBox(height: 12),
-        TextField(controller: _code, decoration: const InputDecoration(labelText: 'TOTP 二次校验码（如已开启2FA）', border: OutlineInputBorder())),
+        TextField(
+            controller: _code,
+            decoration:
+                const InputDecoration(labelText: 'TOTP 二次校验码（如已开启2FA）')),
         const SizedBox(height: 20),
-        FilledButton(onPressed: _busy ? null : _submit, child: Text(_isLogin ? '登录' : '注册并获取托管 Key')),
-        if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(_error!, style: const TextStyle(color: Colors.red))),
+        FilledButton(
+            onPressed: _busy ? null : _submit,
+            child: Text(_isLogin ? '登录' : '注册并获取托管 Key')),
+        if (_error != null)
+          Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(_error!, style: const TextStyle(color: Colors.red))),
         const SizedBox(height: 12),
-        const Text('注册即自动获得托管 Key，成为 Pro 用户；请求经 NEXUS 中转，仅用于计费不存储对话。', style: TextStyle(fontSize: 12, color: Colors.grey)),
+        const Text('注册即自动获得托管 Key，成为 Pro 用户；请求经 NEXUS 中转，仅用于计费不存储对话。',
+            style: TextStyle(fontSize: 12, color: Colors.grey)),
       ],
     );
   }
@@ -120,7 +146,10 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const ListTile(leading: Icon(Icons.verified_user), title: Text('Pro 会员'), subtitle: Text('已启用内置额度（托管 Key）')),
+        const ListTile(
+            leading: Icon(Icons.verified_user),
+            title: Text('Pro 会员'),
+            subtitle: Text('已启用内置额度（托管 Key）')),
         const Divider(),
         ListTile(
           leading: const Icon(Icons.logout),

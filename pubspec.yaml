@@ -1,7 +1,7 @@
 name: mobile_agent
 description: A mobile-first multi-provider AI Agent client.
 publish_to: "none"
-version: 0.1.0+1
+version: 0.6.0+60
 
 environment:
   sdk: ^3.5.0
@@ -21,18 +21,45 @@ dependencies:
   file_picker: ^10.3.3
   flutter_markdown: ^0.7.7+1
   markdown: ^7.3.1
-  syncfusion_flutter_pdf: ^28.2.12
   mcp_dart: 2.4.1
   flutter_localizations:
     sdk: flutter
   intl: ^0.20.3
+  speech_to_text: ^7.4.0
+  image_picker: ^1.2.3
+  share_plus: ^12.0.2
+  receive_sharing_intent: 1.8.1
+  local_auth: ^3.0.2
+  sentry_flutter: 9.28.0
+  package_info_plus: ^9.0.1
+  # P1~P3 鏂板渚濊禆锛堣瑙?NEXUS_寮€鍙戞湡鎶€鏈柟妗坃P1-P3.md 搂10锛?
+  flutter_foreground_task: ^11.0.1
+  flutter_local_notifications: ^18.0.1
+  cryptography: ^2.7.0
+  flutter_tts: ^4.2.0
+  super_clipboard: 0.9.1
+  record: 6.1.0
+  just_audio: ^0.9.46
+  video_player: ^2.9.5
+  workmanager: ^0.10.9
+  home_widget: ^0.7.0
+  flutter_math_fork: ^0.7.3
+  url_launcher: ^6.3.1
+  cross_file: ^0.3.4+2
+  app_links: ^6.4.0
+  permission_handler: ^13.0.1
+  archive: ^4.2.0
+  crypto: ^3.0.7
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
   drift_dev: ^2.22.1
   build_runner: ^2.4.14
+  flutter_secure_storage_platform_interface: ^1.1.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/branding/nexus_mark.png
 

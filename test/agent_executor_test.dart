@@ -37,11 +37,14 @@ void main() {
 
   test('requires approval before a risky tool executes', () async {
     final registry = ToolRegistry()..register(_RiskyTool());
-    final executor = AgentExecutor(provider: _ToolRequestProvider(), tools: registry);
+    final executor =
+        AgentExecutor(provider: _ToolRequestProvider(), tools: registry);
     var asked = false;
     final statuses = <RunStatus>[];
     await for (final event in executor.run(
-      history: [ChatMessage(role: MessageRole.user, parts: [MessagePart.text('run')])],
+      history: [
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('run')])
+      ],
       model: 'test',
       approveTool: (call, risk) async {
         asked = true;
@@ -67,7 +70,8 @@ void main() {
         role: MessageRole.user,
         parts: const [
           MessagePart.text('看这张图'),
-          MessagePart.image('data:image/png;base64,AAAA', mimeType: 'image/png'),
+          MessagePart.image('data:image/png;base64,AAAA',
+              mimeType: 'image/png'),
         ],
       ),
     );
@@ -84,12 +88,16 @@ void main() {
 
   test('serializes assistant tool calls for the next agent turn', () {
     final provider = OpenAiCompatibleProvider(
-      config: const ProviderConfig(baseUrl: 'https://example.com/v1', model: 'test', apiKey: 'key'),
+      config: const ProviderConfig(
+          baseUrl: 'https://example.com/v1', model: 'test', apiKey: 'key'),
     );
     final payload = provider.toProviderMessage(ChatMessage(
       role: MessageRole.assistant,
       parts: const [],
-      toolCalls: [ToolCall(id: 'call-1', name: 'calculator', arguments: {'expression': '2+2'})],
+      toolCalls: [
+        ToolCall(
+            id: 'call-1', name: 'calculator', arguments: {'expression': '2+2'})
+      ],
     ));
     expect(payload['content'], isNull);
     expect(payload['tool_calls'], [
@@ -120,41 +128,59 @@ void main() {
     expect(result, isNull);
   });
 
-  test('executes multiple tool calls and preserves assistant call context', () async {
+  test('executes multiple tool calls and preserves assistant call context',
+      () async {
     final registry = ToolRegistry()..register(CalculatorTool());
     final provider = _MultiToolProvider();
     final executor = AgentExecutor(provider: provider, tools: registry);
     var requested = 0;
     await for (final event in executor.run(
-      history: [ChatMessage(role: MessageRole.user, parts: [MessagePart.text('calculate')])],
+      history: [
+        ChatMessage(
+            role: MessageRole.user, parts: [MessagePart.text('calculate')])
+      ],
       model: 'test',
     )) {
       if (event is ToolRequestedEvent) requested++;
     }
     expect(requested, 2);
     expect(provider.requests, hasLength(2));
-    expect(provider.requests[1].messages.any((message) => message.toolCalls.length == 2), isTrue);
+    expect(
+        provider.requests[1].messages
+            .any((message) => message.toolCalls.length == 2),
+        isTrue);
   });
 
   test('core tools return deterministic safe results', () async {
     expect(await GetTimeTool().execute({}), isNotEmpty);
-    expect(await JsonQueryTool().execute({'json': '{"user":{"name":"Nexus"}}', 'path': 'user.name'}), '"Nexus"');
+    expect(
+        await JsonQueryTool().execute(
+            {'json': '{"user":{"name":"Nexus"}}', 'path': 'user.name'}),
+        '"Nexus"');
   });
 
-  test('http_request tool rejects cloud metadata and link-local addresses', () async {
+  test('http_request tool rejects cloud metadata and link-local addresses',
+      () async {
     final tool = HttpRequestTool();
-    expect(await tool.execute({'url': 'http://169.254.169.254/latest/meta-data/'}), contains('安全策略拒绝'));
-    expect(await tool.execute({'url': 'https://metadata.google.internal/'}), contains('安全策略拒绝'));
-    expect(await tool.execute({'url': 'http://169.254.0.1/'}), contains('安全策略拒绝'));
+    expect(
+        await tool.execute({'url': 'http://169.254.169.254/latest/meta-data/'}),
+        contains('安全策略拒绝'));
+    expect(await tool.execute({'url': 'https://metadata.google.internal/'}),
+        contains('安全策略拒绝'));
+    expect(
+        await tool.execute({'url': 'http://169.254.0.1/'}), contains('安全策略拒绝'));
     expect(await tool.execute({'url': 'ftp://example.com/x'}), 'URL 无效');
   });
 
-  test('forwards temperature, maxTokens and topP into the provider request', () async {
+  test('forwards temperature, maxTokens and topP into the provider request',
+      () async {
     final registry = ToolRegistry()..register(CalculatorTool());
     final provider = _RecordingProvider();
     final executor = AgentExecutor(provider: provider, tools: registry);
     await for (final _ in executor.run(
-      history: [ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])],
+      history: [
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])
+      ],
       model: 'test',
       temperature: 0.3,
       maxTokens: 512,
@@ -166,14 +192,17 @@ void main() {
     expect(request.topP, 0.8);
   });
 
-  test('tool execution failure yields a failed result without throwing', () async {
+  test('tool execution failure yields a failed result without throwing',
+      () async {
     final registry = ToolRegistry()..register(_ExplodingTool());
     final provider = _ToolThenTextProvider();
     final executor = AgentExecutor(provider: provider, tools: registry);
     String? toolResult;
     var requested = 0;
     await for (final event in executor.run(
-      history: [ChatMessage(role: MessageRole.user, parts: [MessagePart.text('run')])],
+      history: [
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('run')])
+      ],
       model: 'test',
     )) {
       if (event is ToolResultEvent) toolResult = event.result;
@@ -189,7 +218,9 @@ void main() {
     var promptTokens = 0;
     var completionTokens = 0;
     await for (final event in executor.run(
-      history: [ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])],
+      history: [
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])
+      ],
       model: 'test',
     )) {
       if (event is AgentUsageEvent) {
@@ -200,16 +231,103 @@ void main() {
     expect(promptTokens, 100);
     expect(completionTokens, 50);
   });
+
+  test('drops older turns once the context budget is exceeded', () async {
+    final registry = ToolRegistry()..register(CalculatorTool());
+    final provider = _RecordingProvider();
+    final executor = AgentExecutor(provider: provider, tools: registry);
+    await for (final _ in executor.run(
+      history: [
+        ChatMessage(
+            role: MessageRole.user,
+            parts: [MessagePart.text('old message that should be dropped')]),
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('new')]),
+      ],
+      model: 'test',
+      contextBudgetTokens: 12,
+    )) {}
+    final sent = provider.lastRequest!.messages;
+    expect(
+        sent.any((m) =>
+            m.role == MessageRole.user &&
+            m.text == 'old message that should be dropped'),
+        isFalse);
+    expect(sent.any((m) => m.text == 'new'), isTrue);
+  });
+
+  test('retries a failed request when nothing has been emitted yet',
+      () async {
+    final registry = ToolRegistry()..register(CalculatorTool());
+    final provider = _FlakyErrorProvider();
+    final executor = AgentExecutor(provider: provider, tools: registry);
+    final output = StringBuffer();
+    await for (final event in executor.run(
+      history: [
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])
+      ],
+      model: 'test',
+      maxRetries: 2,
+      retryBackoff: const Duration(milliseconds: 5),
+    )) {
+      if (event is TextEvent) output.write(event.text);
+    }
+    expect(output.toString(), '恢复成功');
+    expect(provider.calls, 2);
+  });
+
+  test('gives up after exhausting maxRetries', () async {
+    final registry = ToolRegistry()..register(CalculatorTool());
+    final provider = _FlakyErrorProvider(alwaysFail: true);
+    final executor = AgentExecutor(provider: provider, tools: registry);
+    var error = '';
+    await for (final event in executor.run(
+      history: [
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])
+      ],
+      model: 'test',
+      maxRetries: 2,
+      retryBackoff: const Duration(milliseconds: 5),
+    )) {
+      if (event is AgentErrorEvent) error = event.message;
+    }
+    expect(error, contains('持续失败'));
+    expect(provider.calls, 3);
+  });
+
+  test('does not retry after partial content has been streamed', () async {
+    final registry = ToolRegistry()..register(CalculatorTool());
+    final provider = _PartialThenErrorProvider();
+    final executor = AgentExecutor(provider: provider, tools: registry);
+    final output = StringBuffer();
+    var error = '';
+    await for (final event in executor.run(
+      history: [
+        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])
+      ],
+      model: 'test',
+      maxRetries: 2,
+      retryBackoff: const Duration(milliseconds: 5),
+    )) {
+      if (event is TextEvent) output.write(event.text);
+      if (event is AgentErrorEvent) error = event.message;
+    }
+    expect(provider.calls, 1);
+    expect(output.toString(), '部分');
+    expect(error, contains('上游挂了'));
+  });
 }
 
 class _MultiToolProvider implements LlmProvider {
   final requests = <UnifiedRequest>[];
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) async* {
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
     requests.add(request);
     if (requests.length == 1) {
-      yield const ToolCallEvent(ToolCall(id: 'a', name: 'calculator', arguments: {'a': 1, 'b': 2}));
-      yield const ToolCallEvent(ToolCall(id: 'b', name: 'calculator', arguments: {'a': 3, 'b': 4}));
+      yield const ToolCallEvent(
+          ToolCall(id: 'a', name: 'calculator', arguments: {'a': 1, 'b': 2}));
+      yield const ToolCallEvent(
+          ToolCall(id: 'b', name: 'calculator', arguments: {'a': 3, 'b': 4}));
     } else {
       yield const TextDeltaEvent('done');
     }
@@ -219,7 +337,8 @@ class _MultiToolProvider implements LlmProvider {
 
 class _ToolRequestProvider implements LlmProvider {
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) async* {
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
     yield const ToolCallEvent(ToolCall(id: '1', name: 'risky', arguments: {}));
     yield const CompletedEvent();
   }
@@ -248,19 +367,23 @@ class _ExplodingTool implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async => throw Exception('boom');
+  Future<String> execute(Map<String, dynamic> arguments) async =>
+      throw Exception('boom');
 }
 
 class _ToolThenTextProvider implements LlmProvider {
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) async* {
-    final hasToolResult = request.messages.any((m) => m.role == MessageRole.tool);
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
+    final hasToolResult =
+        request.messages.any((m) => m.role == MessageRole.tool);
     if (hasToolResult) {
       yield const TextDeltaEvent('继续完成');
       yield const CompletedEvent();
       return;
     }
-    yield const ToolCallEvent(ToolCall(id: '1', name: 'explode', arguments: {}));
+    yield const ToolCallEvent(
+        ToolCall(id: '1', name: 'explode', arguments: {}));
     yield const CompletedEvent();
   }
 }
@@ -269,7 +392,8 @@ class _RecordingProvider implements LlmProvider {
   UnifiedRequest? lastRequest;
 
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) async* {
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
     lastRequest = request;
     yield const TextDeltaEvent('ok');
     yield const CompletedEvent();
@@ -278,9 +402,40 @@ class _RecordingProvider implements LlmProvider {
 
 class _UsageProvider implements LlmProvider {
   @override
-  Stream<UnifiedEvent> stream(UnifiedRequest request, {CancelToken? cancelToken}) async* {
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
     yield const TextDeltaEvent('hello');
     yield const UsageEvent(promptTokens: 100, completionTokens: 50);
     yield const CompletedEvent();
+  }
+}
+
+class _FlakyErrorProvider implements LlmProvider {
+  _FlakyErrorProvider({this.alwaysFail = false});
+  final bool alwaysFail;
+  int calls = 0;
+
+  @override
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
+    calls++;
+    if (alwaysFail || calls == 1) {
+      yield ProviderErrorEvent('持续失败（第 $calls 次）');
+      return;
+    }
+    yield const TextDeltaEvent('恢复成功');
+    yield const CompletedEvent();
+  }
+}
+
+class _PartialThenErrorProvider implements LlmProvider {
+  int calls = 0;
+
+  @override
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
+    calls++;
+    yield const TextDeltaEvent('部分');
+    yield const ProviderErrorEvent('上游挂了');
   }
 }

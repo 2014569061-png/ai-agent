@@ -1,11 +1,11 @@
 {
-    "name": "mobile_agent",
-    "short_name": "mobile_agent",
+    "name": "NEXUS Agent",
+    "short_name": "NEXUS",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#080D17",
+    "theme_color": "#0A59F7",
+    "description": "本地优先的多模型 AI Agent 工作台",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

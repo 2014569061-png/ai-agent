@@ -63,7 +63,8 @@ class ProviderConfigStore {
   Future<ProviderConfig> load() async {
     final profiles = await loadAll();
     if (profiles.isNotEmpty) {
-      return profiles.firstWhere((p) => p.id == _activeId, orElse: () => profiles.first);
+      return profiles.firstWhere((p) => p.id == _activeId,
+          orElse: () => profiles.first);
     }
     final preferences = await SharedPreferences.getInstance();
     return ProviderConfig(
@@ -92,29 +93,37 @@ class ProviderConfigStore {
         type: _parseType(item['type'] as String?),
         apiKey: await _readKey('provider.api_key.$id') ?? '',
         reasoningEffort: _parseEffort(item['reasoningEffort'] as String?),
+        contextTokens: (item['contextTokens'] as num?)?.toInt() ??
+            ProviderConfig.defaultContextTokens,
       ));
     }
     return result;
   }
 
-  ProviderType _parseType(String? name) =>
-      ProviderType.values.firstWhere((t) => t.name == name, orElse: () => ProviderType.openaiCompatible);
+  Map<String, dynamic> _profileMeta(ProviderConfig item) => {
+        'id': item.id,
+        'name': item.name,
+        'baseUrl': item.baseUrl.trim(),
+        'model': item.model.trim(),
+        'type': item.type.name,
+        'reasoningEffort': item.reasoningEffort.name,
+        'contextTokens': item.contextTokens,
+      };
 
-  ReasoningEffort _parseEffort(String? name) =>
-      ReasoningEffort.values.firstWhere((e) => e.name == name, orElse: () => ReasoningEffort.medium);
+  ProviderType _parseType(String? name) =>
+      ProviderType.values.firstWhere((t) => t.name == name,
+          orElse: () => ProviderType.openaiCompatible);
+
+  ReasoningEffort _parseEffort(String? name) => ReasoningEffort.values
+      .firstWhere((e) => e.name == name, orElse: () => ReasoningEffort.medium);
 
   Future<void> save(ProviderConfig config) async {
     final preferences = await SharedPreferences.getInstance();
     final profiles = await loadAll();
     final updated = [...profiles.where((item) => item.id != config.id), config];
-    await preferences.setString(_profilesKey, jsonEncode(updated.map((item) => {
-      'id': item.id,
-      'name': item.name,
-      'baseUrl': item.baseUrl.trim(),
-      'model': item.model.trim(),
-      'type': item.type.name,
-      'reasoningEffort': item.reasoningEffort.name,
-    }).toList()));
+    await preferences.setString(
+        _profilesKey,
+        jsonEncode(updated.map(_profileMeta).toList()));
     await preferences.setString(_activeKey, config.id);
     await preferences.setString(_baseUrlKey, config.baseUrl.trim());
     await preferences.setString(_modelKey, config.model.trim());
@@ -122,9 +131,32 @@ class ProviderConfigStore {
     await _writeKey(_apiKeyKey, config.apiKey.trim());
   }
 
+  /// 保险箱恢复：整体重建 Provider 配置与密钥。与逐条 [save] 不同，
+  /// 这里以备份文件为准整表覆盖，activeId 指定恢复后激活的配置。
+  Future<void> restoreProfiles(List<ProviderConfig> configs,
+      {String? activeId}) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+        _profilesKey, jsonEncode(configs.map(_profileMeta).toList()));
+    for (final item in configs) {
+      await _writeKey('provider.api_key.${item.id}', item.apiKey.trim());
+    }
+    final active = activeId == null
+        ? configs.isEmpty
+            ? null
+            : configs.first
+        : configs.where((item) => item.id == activeId).firstOrNull;
+    if (active == null) return;
+    await preferences.setString(_activeKey, active.id);
+    await preferences.setString(_baseUrlKey, active.baseUrl.trim());
+    await preferences.setString(_modelKey, active.model.trim());
+    await _writeKey(_apiKeyKey, active.apiKey.trim());
+  }
+
   Future<void> clearKey() => _deleteKey(_apiKeyKey);
 
-  Future<String> readToolKey(String name) async => await _readKey('tool.api_key.$name') ?? '';
+  Future<String> readToolKey(String name) async =>
+      await _readKey('tool.api_key.$name') ?? '';
 
   Future<void> saveToolKey(String name, String value) async {
     await _writeKey('tool.api_key.$name', value.trim());

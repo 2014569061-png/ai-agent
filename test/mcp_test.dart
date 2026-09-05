@@ -75,7 +75,9 @@ void main() {
         description: '查询天气',
         inputSchema: mcp.JsonSchema.fromJsonValue({
           'type': 'object',
-          'properties': {'city': {'type': 'string'}},
+          'properties': {
+            'city': {'type': 'string'}
+          },
           'required': ['city'],
         }),
       );

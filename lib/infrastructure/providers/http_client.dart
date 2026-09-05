@@ -26,7 +26,10 @@ Dio buildHttpClient({
 /// - 5xx 与连接/超时错误最多重试 [maxRetries] 次，间隔 500ms·2^n；
 /// - 主动取消（[DioExceptionType.cancel]）不重试。
 class RetryInterceptor extends Interceptor {
-  RetryInterceptor({required this.dio, this.maxRetries = 3, this.baseDelay = const Duration(milliseconds: 500)});
+  RetryInterceptor(
+      {required this.dio,
+      this.maxRetries = 3,
+      this.baseDelay = const Duration(milliseconds: 500)});
 
   final Dio dio;
   final int maxRetries;
@@ -39,7 +42,8 @@ class RetryInterceptor extends Interceptor {
     // 主动取消或证书问题：不重试。
     if (err.type == DioExceptionType.cancel ||
         err.type == DioExceptionType.badCertificate ||
-        err.type == DioExceptionType.unknown && err.message?.contains('cancelled') == true) {
+        err.type == DioExceptionType.unknown &&
+            err.message?.contains('cancelled') == true) {
       handler.next(err);
       return;
     }

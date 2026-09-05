@@ -2,6 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'immersive_surface.dart';
+import '../theme/app_tokens.dart';
+
 /// 全局居中靠上的悬浮 Toast。
 ///
 /// 替代默认 [SnackBar]（从底部弹出）—— 用 [OverlayEntry] 自行定位：
@@ -55,15 +58,16 @@ class _ToastEntryController {
   bool _dismissed = false;
 
   void _show() {
-    final entry = OverlayEntry(builder: (context) => _ToastView(
-          message: message,
-          animationDuration: animationDuration,
-          topOffset: FloatingToast._topOffset,
-          maxWidth: FloatingToast._maxWidth,
-          horizontalPadding: FloatingToast._horizontalPadding,
-          onCreated: (c) => _animController = c,
-          onTap: _dismiss,
-        ));
+    final entry = OverlayEntry(
+        builder: (context) => _ToastView(
+              message: message,
+              animationDuration: animationDuration,
+              topOffset: FloatingToast._topOffset,
+              maxWidth: FloatingToast._maxWidth,
+              horizontalPadding: FloatingToast._horizontalPadding,
+              onCreated: (c) => _animController = c,
+              onTap: _dismiss,
+            ));
     _entry = entry;
     overlay.insert(entry);
 
@@ -137,6 +141,9 @@ class _ToastViewState extends State<_ToastView>
   @override
   Widget build(BuildContext context) {
     final topSafe = MediaQuery.of(context).padding.top;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor =
+        isDark ? const Color(0xFFF8FAFC) : const Color(0xFF172B4D);
     return Positioned(
       top: topSafe + widget.topOffset,
       left: 0,
@@ -147,24 +154,27 @@ class _ToastViewState extends State<_ToastView>
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: widget.maxWidth),
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
+              padding:
+                  EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
               child: Material(
                 color: Colors.transparent,
                 child: GestureDetector(
                   onTap: widget.onTap,
                   behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.78),
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 4)),
-                      ],
-                    ),
+                  child: ImmersiveSurface(
+                    level: ImmersiveMaterialLevel.thick,
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.capsuleRadius),
+                    showGlow: true,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     child: Text(
                       widget.message,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4),
+                      style: TextStyle(
+                          color: textColor,
+                          fontSize: 14,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,

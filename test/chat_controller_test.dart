@@ -9,6 +9,7 @@ import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config_store.dart';
+
 void main() {
   test('ChatController streams a demo response into state', () async {
     final db = AppDatabase(NativeDatabase.memory());
@@ -54,13 +55,19 @@ void main() {
       createdAt: now,
       updatedAt: now,
     ));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm1', conversationId: 'c1', role: 'user', content: '算一下 1+2', createdAt: now));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm1',
+        conversationId: 'c1',
+        role: 'user',
+        content: '算一下 1+2',
+        createdAt: now));
     await db.insertMessage(MessagesCompanion.insert(
       id: 'm2',
       conversationId: 'c1',
       role: 'assistant',
       content: '',
-      toolCallsJson: const Value('[{"id":"call-1","name":"calculator","arguments":{"a":1,"b":2},"risk":"safe"}]'),
+      toolCallsJson: const Value(
+          '[{"id":"call-1","name":"calculator","arguments":{"a":1,"b":2},"risk":"safe"}]'),
       createdAt: now,
     ));
     await db.insertMessage(MessagesCompanion.insert(
@@ -71,7 +78,12 @@ void main() {
       toolCallId: const Value('call-1'),
       createdAt: now,
     ));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm4', conversationId: 'c1', role: 'assistant', content: '结果是 3', createdAt: now));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm4',
+        conversationId: 'c1',
+        role: 'assistant',
+        content: '结果是 3',
+        createdAt: now));
 
     final container = ProviderContainer(
       overrides: [
@@ -98,14 +110,16 @@ void main() {
     expect(state.messages.last.text, '结果是 3');
   });
 
-  test('recovers to idle state with error text when provider request fails', () async {
+  test('recovers to idle state with error text when provider request fails',
+      () async {
     final db = AppDatabase(NativeDatabase.memory());
     final container = ProviderContainer(
       overrides: [
         databaseProvider.overrideWith((ref) async => db),
         // apiKey 非空 → isConfigured=true → 走真实 OpenAI 兼容 provider。
         // baseUrl 指向不可达端口 → 请求失败 → 必须恢复 running=false 并给出错误提示。
-        providerConfigStoreProvider.overrideWith((ref) => _FailingConfigStore()),
+        providerConfigStoreProvider
+            .overrideWith((ref) => _FailingConfigStore()),
       ],
     );
     addTearDown(() async {
@@ -117,14 +131,20 @@ void main() {
     await pumpEventQueue();
     expect(container.read(chatControllerProvider).loading, isFalse);
 
-    await controller.send(text: '你好', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
+    await controller.send(
+        text: '你好',
+        attachments: const [],
+        approveTool: (call, risk) async => ToolApproval.allowOnce);
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
     expect(state.messages.length, 2);
     expect(state.messages.last.text, contains('错误'));
     // 兜底后仍可继续发送（running 已复位）。
-    await controller.send(text: '再试一次', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
+    await controller.send(
+        text: '再试一次',
+        attachments: const [],
+        approveTool: (call, risk) async => ToolApproval.allowOnce);
     expect(container.read(chatControllerProvider).messages.length, 4);
   });
 
@@ -144,7 +164,10 @@ void main() {
     final controller = container.read(chatControllerProvider.notifier);
     await pumpEventQueue();
 
-    final future = controller.send(text: '长文本', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
+    final future = controller.send(
+        text: '长文本',
+        attachments: const [],
+        approveTool: (call, risk) async => ToolApproval.allowOnce);
     // 等流真正开始（DemoProvider 每字符延迟 12ms）。
     await Future<void>.delayed(const Duration(milliseconds: 60));
     expect(container.read(chatControllerProvider).running, isTrue);
@@ -174,10 +197,14 @@ void main() {
     final controller = container.read(chatControllerProvider.notifier);
     await pumpEventQueue();
 
-    await controller.send(text: '你好', attachments: const [], approveTool: (call, risk) async => ToolApproval.allowOnce);
+    await controller.send(
+        text: '你好',
+        attachments: const [],
+        approveTool: (call, risk) async => ToolApproval.allowOnce);
     expect(container.read(chatControllerProvider).messages.length, 2);
 
-    await controller.regenerate(approveTool: (call, risk) async => ToolApproval.allowOnce);
+    await controller.regenerate(
+        approveTool: (call, risk) async => ToolApproval.allowOnce);
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
@@ -185,13 +212,80 @@ void main() {
     expect(state.messages.last.text, contains('演示响应'));
   });
 
+  test('editAndResend replaces an earlier user message and regenerates',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    final container = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWith((ref) async => db),
+        providerConfigStoreProvider.overrideWith((ref) => _FakeConfigStore()),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await db.close();
+    });
+
+    final controller = container.read(chatControllerProvider.notifier);
+    await pumpEventQueue();
+
+    const approve = _allowOnce;
+    await controller.send(
+        text: '第一问', attachments: const [], approveTool: approve);
+    await controller.send(
+        text: '第二问', attachments: const [], approveTool: approve);
+    expect(container.read(chatControllerProvider).messages.length, 4);
+
+    await controller.editAndResend(
+        messageIndex: 0, newText: '  第一问修改版  ', approveTool: approve);
+
+    final state = container.read(chatControllerProvider);
+    expect(state.running, isFalse);
+    expect(state.messages.length, 2);
+    expect(state.messages.first.text, '第一问修改版');
+    expect(state.messages.last.text, contains('演示响应'));
+
+    // 库中只留下编辑后的用户消息与新生成的回复，第二轮被截断。
+    final rows = await db.messagesFor(state.conversationId!);
+    final userRows = rows.where((m) => m.role == 'user').toList();
+    expect(userRows, hasLength(1));
+    expect(userRows.single.content, '第一问修改版');
+    expect(rows.last.role, 'assistant');
+  });
+
   test('switchConversation loads the target conversation messages', () async {
     final db = AppDatabase(NativeDatabase.memory());
     final now = DateTime.now();
-    await db.saveConversation(Conversation(id: 'c1', title: '会话一', agentId: null, isPinned: false, isFavorite: false, tagsJson: '[]', createdAt: now, updatedAt: now));
-    await db.saveConversation(Conversation(id: 'c2', title: '会话二', agentId: null, isPinned: false, isFavorite: false, tagsJson: '[]', createdAt: now, updatedAt: now));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm1', conversationId: 'c1', role: 'user', content: '一的内容', createdAt: now));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm2', conversationId: 'c2', role: 'user', content: '二的内容', createdAt: now));
+    await db.saveConversation(Conversation(
+        id: 'c1',
+        title: '会话一',
+        agentId: null,
+        isPinned: false,
+        isFavorite: false,
+        tagsJson: '[]',
+        createdAt: now,
+        updatedAt: now));
+    await db.saveConversation(Conversation(
+        id: 'c2',
+        title: '会话二',
+        agentId: null,
+        isPinned: false,
+        isFavorite: false,
+        tagsJson: '[]',
+        createdAt: now,
+        updatedAt: now));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm1',
+        conversationId: 'c1',
+        role: 'user',
+        content: '一的内容',
+        createdAt: now));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm2',
+        conversationId: 'c2',
+        role: 'user',
+        content: '二的内容',
+        createdAt: now));
 
     final container = ProviderContainer(
       overrides: [
@@ -221,12 +315,46 @@ void main() {
   test('deleteTrailingAssistantAndTool removes only the last round', () async {
     final db = AppDatabase(NativeDatabase.memory());
     final now = DateTime.now();
-    await db.saveConversation(Conversation(id: 'c1', title: 't', agentId: null, isPinned: false, isFavorite: false, tagsJson: '[]', createdAt: now, updatedAt: now));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm1', conversationId: 'c1', role: 'user', content: '第一轮', createdAt: now.add(const Duration(minutes: 1))));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm2', conversationId: 'c1', role: 'assistant', content: '第一轮回答', createdAt: now.add(const Duration(minutes: 2))));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm3', conversationId: 'c1', role: 'tool', content: 'r', toolCallId: const Value('t1'), createdAt: now.add(const Duration(minutes: 3))));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm4', conversationId: 'c1', role: 'user', content: '第二轮', createdAt: now.add(const Duration(minutes: 4))));
-    await db.insertMessage(MessagesCompanion.insert(id: 'm5', conversationId: 'c1', role: 'assistant', content: '第二轮回答', createdAt: now.add(const Duration(minutes: 5))));
+    await db.saveConversation(Conversation(
+        id: 'c1',
+        title: 't',
+        agentId: null,
+        isPinned: false,
+        isFavorite: false,
+        tagsJson: '[]',
+        createdAt: now,
+        updatedAt: now));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm1',
+        conversationId: 'c1',
+        role: 'user',
+        content: '第一轮',
+        createdAt: now.add(const Duration(minutes: 1))));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm2',
+        conversationId: 'c1',
+        role: 'assistant',
+        content: '第一轮回答',
+        createdAt: now.add(const Duration(minutes: 2))));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm3',
+        conversationId: 'c1',
+        role: 'tool',
+        content: 'r',
+        toolCallId: const Value('t1'),
+        createdAt: now.add(const Duration(minutes: 3))));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm4',
+        conversationId: 'c1',
+        role: 'user',
+        content: '第二轮',
+        createdAt: now.add(const Duration(minutes: 4))));
+    await db.insertMessage(MessagesCompanion.insert(
+        id: 'm5',
+        conversationId: 'c1',
+        role: 'assistant',
+        content: '第二轮回答',
+        createdAt: now.add(const Duration(minutes: 5))));
 
     await db.deleteTrailingAssistantAndTool('c1');
 
@@ -247,10 +375,13 @@ class _FailingConfigStore extends _FakeConfigStore {
       );
 }
 
+Future<ToolApproval> _allowOnce(ToolCall call, ToolRisk risk) async =>
+    ToolApproval.allowOnce;
+
 class _FakeConfigStore extends ProviderConfigStore {
   @override
-  Future<ProviderConfig> load() async =>
-      const ProviderConfig(baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '');
+  Future<ProviderConfig> load() async => const ProviderConfig(
+      baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: '');
 
   @override
   Future<String> readToolKey(String name) async => '';

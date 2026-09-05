@@ -1,8 +1,11 @@
 import '../../domain/models.dart';
 
-enum ProviderType { openaiCompatible, anthropic, gemini }
+enum ProviderType { openaiCompatible, anthropic, gemini, proxy }
 
 class ProviderConfig {
+  /// 发送给模型的上下文 token 预算：超出时自动裁剪较早历史（见 ContextWindow）。
+  static const defaultContextTokens = 32000;
+
   const ProviderConfig({
     this.id = 'default',
     this.name = 'OpenAI',
@@ -11,6 +14,7 @@ class ProviderConfig {
     required this.apiKey,
     this.type = ProviderType.openaiCompatible,
     this.reasoningEffort = ReasoningEffort.medium,
+    this.contextTokens = defaultContextTokens,
   });
 
   final String id;
@@ -20,6 +24,7 @@ class ProviderConfig {
   final String apiKey;
   final ProviderType type;
   final ReasoningEffort reasoningEffort;
+  final int contextTokens;
 
   ProviderConfig copyWith({
     String? id,
@@ -29,6 +34,7 @@ class ProviderConfig {
     String? apiKey,
     ProviderType? type,
     ReasoningEffort? reasoningEffort,
+    int? contextTokens,
   }) =>
       ProviderConfig(
         id: id ?? this.id,
@@ -38,6 +44,7 @@ class ProviderConfig {
         apiKey: apiKey ?? this.apiKey,
         type: type ?? this.type,
         reasoningEffort: reasoningEffort ?? this.reasoningEffort,
+        contextTokens: contextTokens ?? this.contextTokens,
       );
 
   bool get isConfigured {
@@ -53,7 +60,10 @@ class ProviderConfig {
     final uri = Uri.tryParse(baseUrl);
     if (uri == null || !uri.hasAuthority) return false;
     final host = uri.host.toLowerCase().replaceAll('[', '').replaceAll(']', '');
-    if (host == 'localhost' || host == '127.0.0.1' || host == '::1' || host == '0.0.0.0') {
+    if (host == 'localhost' ||
+        host == '127.0.0.1' ||
+        host == '::1' ||
+        host == '0.0.0.0') {
       return true;
     }
     return host.startsWith('10.') ||
@@ -64,14 +74,21 @@ class ProviderConfig {
 }
 
 class ModelInfo {
-  const ModelInfo({required this.id, this.ownedBy, this.capabilities = const ModelCapabilities()});
+  const ModelInfo(
+      {required this.id,
+      this.ownedBy,
+      this.capabilities = const ModelCapabilities()});
   final String id;
   final String? ownedBy;
   final ModelCapabilities capabilities;
 }
 
 class ModelCapabilities {
-  const ModelCapabilities({this.streaming = true, this.tools = true, this.vision = false, this.jsonMode = true});
+  const ModelCapabilities(
+      {this.streaming = true,
+      this.tools = true,
+      this.vision = false,
+      this.jsonMode = true});
   final bool streaming;
   final bool tools;
   final bool vision;
@@ -80,8 +97,13 @@ class ModelCapabilities {
   static ModelCapabilities infer(String modelId) {
     final lower = modelId.toLowerCase();
     return ModelCapabilities(
-      vision: lower.contains('vision') || lower.contains('4o') || lower.contains('gemini') || lower.contains('claude-3'),
-      tools: !lower.contains('embedding') && !lower.contains('tts') && !lower.contains('whisper'),
+      vision: lower.contains('vision') ||
+          lower.contains('4o') ||
+          lower.contains('gemini') ||
+          lower.contains('claude-3'),
+      tools: !lower.contains('embedding') &&
+          !lower.contains('tts') &&
+          !lower.contains('whisper'),
     );
   }
 }

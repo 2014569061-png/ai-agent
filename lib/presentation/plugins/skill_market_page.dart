@@ -1,0 +1,296 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../application/providers.dart';
+import '../../infrastructure/database/app_database.dart';
+import '../../infrastructure/skills/skill_installer.dart';
+import '../../infrastructure/skills/skill_store.dart';
+import '../widgets/async_state_view.dart';
+import '../widgets/confirm_action.dart';
+import '../widgets/empty_state_view.dart';
+import '../widgets/floating_toast.dart';
+
+/// Skill 市场（v0.6）：通过 GitHub 地址安装纯指令 + 静态资源的 Skill 包。
+class SkillMarketPage extends ConsumerStatefulWidget {
+  const SkillMarketPage({super.key});
+
+  @override
+  ConsumerState<SkillMarketPage> createState() => _SkillMarketPageState();
+}
+
+class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
+  final _urlController = TextEditingController();
+  final _installer = SkillInstaller();
+  final _store = SkillStore();
+  bool _loading = true;
+  bool _previewing = false;
+  bool _installing = false;
+  Object? _error;
+  SkillPackPreview? _previewPack;
+  List<SkillPack> _installed = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final packs = await _store.all(db);
+      if (!mounted) return;
+      setState(() {
+        _installed = packs;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = error;
+      });
+    }
+  }
+
+  Future<void> _preview() async {
+    final input = _urlController.text;
+    if (input.trim().isEmpty) {
+      FloatingToast.show(context, '请输入 GitHub 仓库地址或 owner/repo');
+      return;
+    }
+    setState(() {
+      _previewing = true;
+      _previewPack = null;
+    });
+    try {
+      final preview = await _installer.fetchPreview(input);
+      if (!mounted) return;
+      setState(() {
+        _previewPack = preview;
+        _previewing = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _previewing = false);
+      FloatingToast.show(context, '解析失败：$error');
+    }
+  }
+
+  Future<void> _install() async {
+    final preview = _previewPack;
+    if (preview == null) return;
+    final confirmed = await showConfirmAction(
+      context,
+      title: '安装第三方 Skill？',
+      message:
+          '来自 ${preview.source.label}\n\n${preview.metadata.name}：${preview.metadata.description}\n\nSkill 只包含指令与静态资源，不含可执行代码。',
+      confirmLabel: '安装',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _installing = true);
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await _installer.install(db, preview);
+      setState(() {
+        _installing = false;
+        _previewPack = null;
+        _urlController.clear();
+      });
+      await _load();
+      if (mounted) FloatingToast.show(context, 'Skill 已安装');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _installing = false);
+      FloatingToast.show(context, '安装失败：$error');
+    }
+  }
+
+  Future<void> _update(SkillPack pack) async {
+    try {
+      final preview = await _installer.fetchPreview(pack.source);
+      final db = await ref.read(databaseProvider.future);
+      await _installer.install(db, preview);
+      await _load();
+      if (mounted) FloatingToast.show(context, 'Skill 已更新');
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '更新失败：$error');
+    }
+  }
+
+  Future<void> _toggle(SkillPack pack, bool enabled) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await _store.setEnabled(db, pack, enabled);
+      await _load();
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '操作失败：$error');
+    }
+  }
+
+  Future<void> _delete(SkillPack pack) async {
+    final confirmed = await showConfirmAction(
+      context,
+      title: '删除 Skill？',
+      message: '将移除“${pack.name}”及其本地文件。',
+      confirmLabel: '删除',
+    );
+    if (!confirmed || !mounted) return;
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await _store.delete(db, pack);
+      await _load();
+      if (mounted) FloatingToast.show(context, 'Skill 已删除');
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '删除失败：$error');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _urlController,
+                  decoration: const InputDecoration(
+                    hintText: 'GitHub 仓库地址或 owner/repo',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _preview(),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _previewing
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    )
+                  : ElevatedButton(
+                      onPressed: _preview,
+                      child: const Text('解析预览'),
+                    ),
+            ],
+          ),
+        ),
+        if (_previewPack != null) _buildPreviewCard(),
+        const Divider(height: 1),
+        Expanded(
+          child: AsyncStateView(
+            loading: _loading,
+            error: _error,
+            onRetry: _load,
+            child: _installed.isEmpty
+                ? const EmptyStateView(
+                    icon: Icons.extension_outlined,
+                    title: '暂无 Skill',
+                    message: '粘贴 GitHub 地址安装你的第一个 Skill',
+                  )
+                : ListView.builder(
+                    itemCount: _installed.length,
+                    itemBuilder: (context, index) {
+                      final pack = _installed[index];
+                      return ListTile(
+                        leading: const Icon(Icons.menu_book_outlined),
+                        title: Text(pack.name),
+                        subtitle: Text(
+                          '${pack.description}\n${pack.source} · v${pack.version}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              tooltip: '检查更新',
+                              icon: const Icon(Icons.refresh),
+                              onPressed: () => _update(pack),
+                            ),
+                            Switch(
+                              value: pack.enabled,
+                              onChanged: (v) => _toggle(pack, v),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _delete(pack),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPreviewCard() {
+    final preview = _previewPack!;
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${preview.metadata.name}  v${preview.metadata.version}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                _installing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : FilledButton(
+                        onPressed: () => _install(),
+                        child: const Text('安装'),
+                      ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(preview.metadata.description),
+            const SizedBox(height: 4),
+            Text(
+              '来源：${preview.source.label} · ${preview.fileList.length} 个文件 · ${(preview.totalBytes / 1024).toStringAsFixed(1)} KB',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              children: preview.metadata.tags
+                  .map((tag) => Chip(
+                      label: Text(tag), visualDensity: VisualDensity.compact))
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

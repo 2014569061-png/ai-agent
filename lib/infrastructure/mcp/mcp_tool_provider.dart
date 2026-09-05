@@ -61,7 +61,8 @@ class McpToolProvider {
   /// 避免设置页开关或删除后旧连接泄漏。
   Future<void> syncServers(List<McpServerConfig> enabled) async {
     final activeIds = enabled.map((server) => server.id).toSet();
-    final staleIds = _clients.keys.where((id) => !activeIds.contains(id)).toList();
+    final staleIds =
+        _clients.keys.where((id) => !activeIds.contains(id)).toList();
     for (final id in staleIds) {
       final client = _clients.remove(id);
       if (client != null) {

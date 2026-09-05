@@ -84,7 +84,8 @@ void main() {
       content: '今天天气很好，适合出去散步。',
     );
 
-    final block = await knowledgeService.buildInjectionBlock(db, '什么是 Flutter Widget');
+    final block =
+        await knowledgeService.buildInjectionBlock(db, '什么是 Flutter Widget');
     expect(block, isNotEmpty);
     expect(block, contains('Flutter 使用 Dart 语言'));
     expect(block.startsWith('## 知识库相关片段'), isTrue);

@@ -2,6 +2,27 @@
     <!-- 网络访问：LLM API、Tavily 搜索、MCP HTTP 服务器均依赖此权限。
          必须声明在主清单（release 包不含 debug/profile 源集的权限）。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 本地项目工作区读写权限 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+
+    <!-- 语音输入（ASR）录音。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- 拍照直传相机。 -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- 生物识别解锁。 -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- 应用内更新安装 APK（Android 8.0+ 需申请）。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- C2 前台服务：后台任务保持进程存活。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- C5 定时任务：拉起"忽略电池优化"授权弹窗（弹窗由用户手动确认）。 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- E3 本地通知（Android 13+ 需运行时申请 POST_NOTIFICATIONS）。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="NEXUS Agent"
         android:name="${applicationName}"
@@ -27,7 +48,58 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- 系统分享面板：接收文本。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
+            <!-- 系统分享面板：接收图片。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/*"/>
+            </intent-filter>
+            <!-- E2 主屏幕 Widget 点击唤起 App。 -->
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.LAUNCH"/>
+            </intent-filter>
+            <!-- E4 深度链接：nexus://new-chat / nexus://memory。 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="nexus"/>
+            </intent-filter>
         </activity>
+        <!-- 应用内更新安装 APK 用 FileProvider。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"/>
+        </provider>
+        <!-- C2 前台服务（flutter_foreground_task，服务名不可改）。 -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+        <!-- E2 主屏幕 Widget Provider + 后台接收器。 -->
+        <receiver android:name=".NexusWidgetProvider" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/nexus_widget_info"/>
+        </receiver>
+        <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.BACKGROUND"/>
+            </intent-filter>
+        </receiver>
+        <service android:name="es.antonborri.home_widget.HomeWidgetBackgroundService" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="true"/>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -43,6 +115,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- F6 反馈 mailto。 -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO"/>
+            <data android:scheme="mailto"/>
         </intent>
     </queries>
 </manifest>

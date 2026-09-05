@@ -46,7 +46,8 @@ class McpServerConfig {
         'enabled': enabled,
       };
 
-  factory McpServerConfig.fromJson(Map<String, dynamic> json) => McpServerConfig(
+  factory McpServerConfig.fromJson(Map<String, dynamic> json) =>
+      McpServerConfig(
         id: json['id'] as String? ?? '',
         name: json['name'] as String? ?? 'MCP Server',
         kind: McpServerKind.values.firstWhere(
@@ -55,7 +56,9 @@ class McpServerConfig {
         ),
         url: json['url'] as String?,
         command: json['command'] as String?,
-        args: (json['args'] as List<dynamic>? ?? const []).whereType<String>().toList(),
+        args: (json['args'] as List<dynamic>? ?? const [])
+            .whereType<String>()
+            .toList(),
         enabled: json['enabled'] as bool? ?? true,
       );
 

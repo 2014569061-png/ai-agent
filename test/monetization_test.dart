@@ -9,17 +9,30 @@ import 'package:mobile_agent/application/billing_api.dart';
 class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   final Map<String, String> _store = {};
   @override
-  Future<void> write({required String key, required String value, required Map<String, String> options}) async => _store[key] = value;
+  Future<void> write(
+          {required String key,
+          required String value,
+          required Map<String, String> options}) async =>
+      _store[key] = value;
   @override
-  Future<String?> read({required String key, required Map<String, String> options}) async => _store[key];
+  Future<String?> read(
+          {required String key, required Map<String, String> options}) async =>
+      _store[key];
   @override
-  Future<void> delete({required String key, required Map<String, String> options}) async => _store.remove(key);
+  Future<void> delete(
+          {required String key, required Map<String, String> options}) async =>
+      _store.remove(key);
   @override
-  Future<bool> containsKey({required String key, required Map<String, String> options}) async => _store.containsKey(key);
+  Future<bool> containsKey(
+          {required String key, required Map<String, String> options}) async =>
+      _store.containsKey(key);
   @override
-  Future<Map<String, String>> readAll({required Map<String, String> options}) async => Map.of(_store);
+  Future<Map<String, String>> readAll(
+          {required Map<String, String> options}) async =>
+      Map.of(_store);
   @override
-  Future<void> deleteAll({required Map<String, String> options}) async => _store.clear();
+  Future<void> deleteAll({required Map<String, String> options}) async =>
+      _store.clear();
 }
 
 void main() {
@@ -59,7 +72,8 @@ void main() {
 
   test('AccountService 会话持久化往返', () async {
     expect(await account.restoreSession(), isNull);
-    await account.saveSession(const AccountSession(userId: 7, apiKey: 'k', access: 'a', refresh: 'r'));
+    await account.saveSession(const AccountSession(
+        userId: 7, apiKey: 'k', access: 'a', refresh: 'r'));
     final s = await account.restoreSession();
     expect(s!.userId, 7);
     expect(s.access, 'a');

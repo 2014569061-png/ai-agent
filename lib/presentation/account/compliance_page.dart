@@ -40,7 +40,8 @@ class CompliancePage extends StatelessWidget {
   Widget _doc(ThemeData theme, String text) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Text(text, style: theme.textTheme.bodyMedium?.copyWith(height: 1.6)),
+      child:
+          Text(text, style: theme.textTheme.bodyMedium?.copyWith(height: 1.6)),
     );
   }
 }

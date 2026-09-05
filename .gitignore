@@ -43,6 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
+/android/.gradle/
+/android/local.properties
 
 # Widget Preview related
 .widget_preview/
@@ -51,3 +54,23 @@ android/app/upload-keystore.jks
 
 # Windows 本地 PowerShell 7 包装脚本（Flutter 3.24+ 需要 pwsh，本地用 PowerShell 5.1 替代）
 pwsh.cmd
+
+# 本地工具产物
+.mimosa/
+.playwright-cli/
+.workbuddy/
+
+# 桌面端生成产物
+macos/Flutter/ephemeral/
+windows/flutter/ephemeral/
+windows/flutter/generated_plugins.cmake
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+
+# drift/sqlite3 Web 运行资源与一次性开发脚本（本地磁盘保留，不入库）
+/web/drift_worker.js
+/web/sqlite3.wasm
+/scripts/
+
+# Flutter 本地工具状态
+.flutter_tool_state

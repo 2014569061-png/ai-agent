@@ -7,6 +7,8 @@ import 'package:drift/drift.dart' show Value;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'mojibake_repair.dart';
+
 import '../domain/models.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/files/document_extractor.dart';
@@ -14,6 +16,7 @@ import '../infrastructure/providers/anthropic_provider.dart';
 import '../infrastructure/providers/gemini_provider.dart';
 import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/providers/openai_compatible_provider.dart';
+import '../infrastructure/providers/proxy_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
 import '../infrastructure/tools/core_tools.dart';
 import '../infrastructure/tools/tool_registry.dart';
@@ -29,6 +32,8 @@ import 'memory_service.dart';
 import 'providers.dart';
 import 'task_service.dart';
 import 'workspace_service.dart';
+import '../infrastructure/plugins/plugin_store.dart';
+import '../infrastructure/skills/skill_store.dart';
 
 /// 单次工具调用的运行时展示状态类
 class ToolActivity {
@@ -140,6 +145,7 @@ class ChatState {
 
 /// Chat orchestration controller.
 class ChatController extends Notifier<ChatState> {
+  static int _messageSeq = 0;
   static const _maxAttachmentBytes = 8 * 1024 * 1024;
   static const _maxTextAttachmentChars = 100000;
   static const _documentExtractor = DocumentExtractor();
@@ -166,8 +172,7 @@ class ChatController extends Notifier<ChatState> {
       final config = await store.load();
       // Workspace is managed via state.currentWorkspacePath
       final database = await ref.read(databaseProvider.future);
-      // 历史脏数据修复：早期版本源码里中文被错误编码，
-      // 已在 IndexedDB 里留下乱码 agent 名字，这里就地修复。
+      // 历史脏数据修复：统一修复早期版本遗留的乱码文本。
       await _healMojibakeAgents(database);
       final conversations = await database.recentConversations();
       final conversation = conversations.isNotEmpty
@@ -190,8 +195,8 @@ class ChatController extends Notifier<ChatState> {
       state = state.copyWith(
         loading: false,
         conversationId: conversation.id,
-        conversationTitle: conversation.title,
-        agentName: activeAgent.name,
+        conversationTitle: MojibakeRepair.repair(conversation.title),
+        agentName: MojibakeRepair.repair(activeAgent.name),
         systemPrompt: activeAgent.systemPrompt,
         agentId: activeAgent.id,
         messages: restored.$1,
@@ -257,8 +262,10 @@ class ChatController extends Notifier<ChatState> {
         role: MessageRole.values.firstWhere((role) => role.name == message.role,
             orElse: () => MessageRole.assistant),
         toolCallId: message.toolCallId,
-        parts: [MessagePart.text(message.content)],
-        reasoning: message.reasoningContent,
+        parts: [MessagePart.text(MojibakeRepair.repair(message.content))],
+        reasoning: message.reasoningContent == null
+            ? null
+            : MojibakeRepair.repair(message.reasoningContent!),
       );
 
   /// Restore persisted messages and tool cards.
@@ -312,19 +319,23 @@ class ChatController extends Notifier<ChatState> {
     if (conversationId == null) return;
     final database = await ref.read(databaseProvider.future);
     await database.insertMessage(MessagesCompanion.insert(
-      id: 'message-${DateTime.now().microsecondsSinceEpoch}',
+      id: 'message-${DateTime.now().microsecondsSinceEpoch}-${_messageSeq++}',
       conversationId: conversationId,
       role: message.role.name,
-      content: message.parts.map((part) {
-        if (part.type == 'image') return '[图片附件]';
-        if (part.type == 'file') return '[文件附件]';
-        return part.value;
-      }).join(),
+      content: _contentForPersist(message),
       toolCallId: Value(message.toolCallId),
       reasoningContent: Value(message.reasoning),
       createdAt: DateTime.now(),
     ));
   }
+
+  /// 把消息部件序列化为 DB content 字段（非文本部件用占位标记）。
+  String _contentForPersist(ChatMessage message) =>
+      message.parts.map((part) {
+        if (part.type == 'image') return '[图片附件]';
+        if (part.type == 'file') return '[文件附件]';
+        return part.value;
+      }).join();
 
   /// Persist a tool call for restoring tool cards.
   Future<void> _persistToolCall(ToolCall call, ToolRisk risk) async {
@@ -332,7 +343,7 @@ class ChatController extends Notifier<ChatState> {
     if (conversationId == null) return;
     final database = await ref.read(databaseProvider.future);
     await database.insertMessage(MessagesCompanion.insert(
-      id: 'message-${DateTime.now().microsecondsSinceEpoch}',
+      id: 'message-${DateTime.now().microsecondsSinceEpoch}-${_messageSeq++}',
       conversationId: conversationId,
       role: 'assistant',
       content: '',
@@ -358,6 +369,11 @@ class ChatController extends Notifier<ChatState> {
         return GeminiProvider(config: config);
       case ProviderType.openaiCompatible:
         return OpenAiCompatibleProvider(config: config);
+      case ProviderType.proxy:
+        return ProxyProvider(
+            backendBaseUrl: config.baseUrl,
+            managedKey: config.apiKey,
+            model: config.model);
     }
   }
 
@@ -367,16 +383,20 @@ class ChatController extends Notifier<ChatState> {
     ProviderConfig config,
   ) {
     final registry = ToolRegistry();
-    if (enabledTools.contains('calculator'))
+    if (enabledTools.contains('calculator')) {
       registry.register(CalculatorTool());
+    }
     if (enabledTools.contains('get_time')) registry.register(GetTimeTool());
     if (enabledTools.contains('json_query')) registry.register(JsonQueryTool());
-    if (enabledTools.contains('http_request'))
+    if (enabledTools.contains('http_request')) {
       registry.register(HttpRequestTool());
-    if (enabledTools.contains('web_search'))
+    }
+    if (enabledTools.contains('web_search')) {
       registry.register(WebSearchTool(apiKey: tavilyKey));
-    if (enabledTools.contains('generate_image'))
+    }
+    if (enabledTools.contains('generate_image')) {
       registry.register(ImageGenTool(config: config));
+    }
 
     // 记忆写入：回调懒加载 DB，写入"手动来源"记忆。
     registry.register(RememberTool(onRemember: _onRemember));
@@ -421,6 +441,72 @@ class ChatController extends Notifier<ChatState> {
     } catch (_) {
       // MCP 服务不可达时静默降级，保留内置工具。
     }
+  }
+
+  /// 把已启用插件里的声明式 HTTP 工具并入 registry（与内置/MCP 工具重名时跳过）。
+  Future<void> _mergePluginTools(ToolRegistry registry) async {
+    try {
+      final database = await ref.read(databaseProvider.future);
+      final tools = await PluginStore().loadDeclarativeTools(database);
+      for (final tool in tools) {
+        if (registry.find(tool.manifest.name) == null) {
+          registry.register(tool);
+        }
+      }
+    } catch (_) {
+      // 插件解析失败不影响内置与 MCP 工具。
+    }
+  }
+
+  /// 加载 Provider/Agent 配置并构建工具注册表（发送 / 重新生成 / 编辑重发共用）。
+  Future<
+          ({
+            ProviderConfig config,
+            ToolRegistry registry,
+            String model,
+            int maxSteps,
+            double temperature,
+            int maxTokens,
+            double topP
+          })>
+      _prepareRun(AppDatabase database) async {
+    final store = ref.read(providerConfigStoreProvider);
+    final config = await store.load();
+    final tavilyKey = await store.readToolKey('tavily');
+    var enabledTools = <String>{'calculator', 'get_time', 'json_query'};
+    var maxSteps = 8;
+    var temperature = 0.7;
+    var maxTokens = 2048;
+    var topP = 1.0;
+    final agentId = state.agentId;
+    if (agentId != null) {
+      final agent = await database.findAgent(agentId);
+      if (agent != null) {
+        maxSteps = agent.maxSteps;
+        temperature = agent.temperature;
+        maxTokens = agent.maxTokens;
+        topP = agent.topP;
+        if (agent.enabledToolsJson.trim().isNotEmpty) {
+          final decoded = jsonDecode(agent.enabledToolsJson);
+          if (decoded is List) {
+            enabledTools = decoded.whereType<String>().toSet();
+          }
+        }
+      }
+    }
+    final registry = _buildRegistry(enabledTools, tavilyKey, config);
+    await _mergeMcpTools(registry);
+    await _mergePluginTools(registry);
+    final model = config.isConfigured ? config.model : 'demo-model';
+    return (
+      config: config,
+      registry: registry,
+      model: model,
+      maxSteps: maxSteps,
+      temperature: temperature,
+      maxTokens: maxTokens,
+      topP: topP,
+    );
   }
 
   // --- 鍙戦€佷笌閲嶆柊生成 ---
@@ -475,8 +561,9 @@ class ChatController extends Notifier<ChatState> {
     final userMessage = ChatMessage(role: MessageRole.user, parts: parts);
     final assistantIndex = state.messages.length + 1;
     var newTitle = state.conversationTitle;
-    if (newTitle == '新会话')
+    if (newTitle == '新会话') {
       newTitle = trimmed.length > 24 ? trimmed.substring(0, 24) : trimmed;
+    }
 
     state = state.copyWith(
       messages: [
@@ -491,49 +578,21 @@ class ChatController extends Notifier<ChatState> {
       activityLog: const [],
     );
 
-    await _persistMessage(userMessage);
+    // 持久化失败不阻断对话：吞掉异常，后续 _runAgent 内的兜底 catch 会恢复 running 状态。
     final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
-    if (conversationId != null) {
-      final current = await database.findConversation(conversationId);
-      if (current != null)
-        await database.saveConversation(
-            current.copyWith(title: newTitle, updatedAt: DateTime.now()));
-    }
-
-    String? activeWorkspace;
     try {
-      activeWorkspace =
-          await ref.read(workspaceServiceProvider).getActiveWorkspace();
-    } catch (_) {}
-    final store = ref.read(providerConfigStoreProvider);
-    final config = await store.load();
-    // Workspace is managed via state.currentWorkspacePath
-    final tavilyKey = await store.readToolKey('tavily');
-    var enabledTools = <String>{'calculator', 'get_time', 'json_query'};
-    var maxSteps = 8;
-    var temperature = 0.7;
-    var maxTokens = 2048;
-    var topP = 1.0;
-    final agentId = state.agentId;
-    if (agentId != null) {
-      final agent = await database.findAgent(agentId);
-      if (agent != null) {
-        maxSteps = agent.maxSteps;
-        temperature = agent.temperature;
-        maxTokens = agent.maxTokens;
-        topP = agent.topP;
-        if (agent.enabledToolsJson.trim().isNotEmpty) {
-          final decoded = jsonDecode(agent.enabledToolsJson);
-          if (decoded is List)
-            enabledTools = decoded.whereType<String>().toSet();
+      await _persistMessage(userMessage);
+      if (conversationId != null) {
+        final current = await database.findConversation(conversationId);
+        if (current != null) {
+          await database.saveConversation(
+              current.copyWith(title: newTitle, updatedAt: DateTime.now()));
         }
       }
-    }
+    } catch (_) {}
 
-    final registry = _buildRegistry(enabledTools, tavilyKey, config);
-    await _mergeMcpTools(registry);
-    final model = config.isConfigured ? config.model : 'demo-model';
+    final prep = await _prepareRun(database);
     _wasCancelled = false;
     // C2 断点恢复：注册一个"运行中"任务，App 被杀后可在启动时提示继续执行。
     String? runningTaskId;
@@ -544,15 +603,24 @@ class ChatController extends Notifier<ChatState> {
         requestJson: jsonEncode({
           'prompt': trimmed,
           'conversationId': conversationId,
-          'model': model,
-          'maxSteps': maxSteps,
+          'model': prep.model,
+          'maxSteps': prep.maxSteps,
         }),
       );
       runningTaskId = task.id;
     } catch (_) {} // 任务登记失败不阻断执行。
 
-    await _runAgent(assistantIndex, model, config, registry, maxSteps,
-        temperature, maxTokens, topP, config.reasoningEffort, approveTool,
+    await _runAgent(
+        assistantIndex,
+        prep.model,
+        prep.config,
+        prep.registry,
+        prep.maxSteps,
+        prep.temperature,
+        prep.maxTokens,
+        prep.topP,
+        prep.config.reasoningEffort,
+        approveTool,
         runningTaskId);
   }
 
@@ -561,7 +629,9 @@ class ChatController extends Notifier<ChatState> {
           approveTool}) async {
     if (state.running || state.loading) return;
     if (state.messages.isEmpty ||
-        state.messages.last.role != MessageRole.assistant) return;
+        state.messages.last.role != MessageRole.assistant) {
+      return;
+    }
 
     final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
@@ -580,41 +650,92 @@ class ChatController extends Notifier<ChatState> {
       activityLog: const [],
     );
 
-    String? activeWorkspace;
-    try {
-      activeWorkspace =
-          await ref.read(workspaceServiceProvider).getActiveWorkspace();
-    } catch (_) {}
-    final store = ref.read(providerConfigStoreProvider);
-    final config = await store.load();
-    // Workspace is managed via state.currentWorkspacePath
-    final tavilyKey = await store.readToolKey('tavily');
-    var enabledTools = <String>{'calculator', 'get_time', 'json_query'};
-    var maxSteps = 8;
-    var temperature = 0.7;
-    var maxTokens = 2048;
-    var topP = 1.0;
-    final agentId = state.agentId;
-    if (agentId != null) {
-      final agent = await database.findAgent(agentId);
-      if (agent != null) {
-        maxSteps = agent.maxSteps;
-        temperature = agent.temperature;
-        maxTokens = agent.maxTokens;
-        topP = agent.topP;
-        if (agent.enabledToolsJson.trim().isNotEmpty) {
-          final decoded = jsonDecode(agent.enabledToolsJson);
-          if (decoded is List)
-            enabledTools = decoded.whereType<String>().toSet();
-        }
+    final prep = await _prepareRun(database);
+    _wasCancelled = false;
+    await _runAgent(
+        assistantIndex,
+        prep.model,
+        prep.config,
+        prep.registry,
+        prep.maxSteps,
+        prep.temperature,
+        prep.maxTokens,
+        prep.topP,
+        prep.config.reasoningEffort,
+        approveTool,
+        null);
+  }
+
+  /// 编辑历史用户消息并重发：替换该条内容，删除其后的所有回复与工具记录，
+  /// 再基于编辑后的消息重新运行 Agent。
+  Future<void> editAndResend({
+    required int messageIndex,
+    required String newText,
+    required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
+        approveTool,
+  }) async {
+    if (state.running || state.loading) return;
+    if (messageIndex < 0 || messageIndex >= state.messages.length) return;
+    final target = state.messages[messageIndex];
+    if (target.role != MessageRole.user) return;
+    final trimmed = newText.trim();
+    if (trimmed.isEmpty) return;
+
+    final imageParts =
+        target.parts.where((part) => part.type != 'text').toList();
+    final editedMessage = ChatMessage(
+        role: MessageRole.user,
+        parts: [MessagePart.text(trimmed), ...imageParts]);
+
+    // state 中的用户消息与库中 role=user 的行按出现顺序一一对应，
+    // 以第 ordinal 条用户行作为锚点，更新内容并截断其后所有行。
+    final database = await ref.read(databaseProvider.future);
+    final conversationId = state.conversationId;
+    if (conversationId != null) {
+      var ordinal = 0;
+      for (var i = 0; i <= messageIndex; i++) {
+        if (state.messages[i].role == MessageRole.user) ordinal++;
+      }
+      final userRows = (await database.messagesFor(conversationId))
+          .where((row) => row.role == 'user')
+          .toList(growable: false);
+      if (userRows.length < ordinal) return;
+      final anchor = userRows[ordinal - 1];
+      try {
+        await database.editMessageAndTruncate(
+            conversationId, anchor.id, _contentForPersist(editedMessage));
+      } catch (_) {
+        // 持久化失败不阻断重发。
       }
     }
-    final registry = _buildRegistry(enabledTools, tavilyKey, config);
-    await _mergeMcpTools(registry);
-    final model = config.isConfigured ? config.model : 'demo-model';
+
+    final assistantIndex = messageIndex + 1;
+    state = state.copyWith(
+      messages: [
+        ...state.messages.sublist(0, messageIndex),
+        editedMessage,
+        // 与 send/regenerate 一致：占位助手消息由 _runAgent 按 assistantIndex 就地更新。
+        ChatMessage(
+            role: MessageRole.assistant, parts: [const MessagePart.text('')])
+      ],
+      running: true,
+      toolActivities: const [],
+      activityLog: const [],
+    );
+
+    final prep = await _prepareRun(database);
     _wasCancelled = false;
-    await _runAgent(assistantIndex, model, config, registry, maxSteps,
-        temperature, maxTokens, topP, config.reasoningEffort, approveTool,
+    await _runAgent(
+        assistantIndex,
+        prep.model,
+        prep.config,
+        prep.registry,
+        prep.maxSteps,
+        prep.temperature,
+        prep.maxTokens,
+        prep.topP,
+        prep.config.reasoningEffort,
+        approveTool,
         null);
   }
 
@@ -635,8 +756,7 @@ class ChatController extends Notifier<ChatState> {
   }
 
   /// C2 断点恢复：重新执行一个被中断的后台任务，并把结果写回会话。
-  Future<void> resumeTask(
-      String taskId,
+  Future<void> resumeTask(String taskId,
       {required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
           approveTool}) async {
     try {
@@ -751,22 +871,23 @@ class ChatController extends Notifier<ChatState> {
   }
 
   void _updatePlanStepStatus(String status) {
-    if (state.planState == null || !state.planState!.isConfirmed) return;
-    final steps = List<PlanStep>.from(state.planState!.steps);
-    int targetIdx = -1;
+    final plan = state.planState;
+    if (plan == null || !plan.isConfirmed) return;
 
+    final steps = List<PlanStep>.from(plan.steps);
+    var targetIdx = -1;
     if (status == 'running') {
-      targetIdx = steps.indexWhere((s) => s.status == 'pending');
+      targetIdx = steps.indexWhere((step) => step.status == 'pending');
     } else if (status == 'completed' || status == 'failed') {
-      targetIdx = steps.indexWhere((s) => s.status == 'running');
-      if (targetIdx == -1)
-        targetIdx = steps.indexWhere((s) => s.status == 'pending');
+      targetIdx = steps.indexWhere((step) => step.status == 'running');
+      if (targetIdx == -1) {
+        targetIdx = steps.indexWhere((step) => step.status == 'pending');
+      }
     }
 
     if (targetIdx != -1) {
       steps[targetIdx] = steps[targetIdx].copyWith(status: status);
-      state =
-          state.copyWith(planState: state.planState!.copyWith(steps: steps));
+      state = state.copyWith(planState: plan.copyWith(steps: steps));
     }
   }
 
@@ -832,6 +953,7 @@ class ChatController extends Notifier<ChatState> {
     final reasoning = StringBuffer();
     var usage = const Usage();
     final stopwatch = Stopwatch()..start();
+    Duration? ttft;
     // 流式节流：token 级更新合并为每 50ms 一次，降低高频重建整个消息列表
     // 的主线程压力；流结束时会做最终完整刷新，不丢失文本。
     const flushInterval = Duration(milliseconds: 50);
@@ -863,6 +985,10 @@ class ChatController extends Notifier<ChatState> {
       if (knowledgeBlock.isNotEmpty) {
         baseSystemPrompt = '$knowledgeBlock\n$baseSystemPrompt';
       }
+      final skillBlock = await SkillStore().buildInjectionBlock(database);
+      if (skillBlock.isNotEmpty) {
+        baseSystemPrompt = '$skillBlock\n$baseSystemPrompt';
+      }
     } catch (_) {}
 
     try {
@@ -880,15 +1006,18 @@ class ChatController extends Notifier<ChatState> {
         maxTokens: maxTokens,
         topP: topP,
         reasoningEffort: reasoningEffort,
+        contextBudgetTokens: config.contextTokens,
         cancellationToken: cancellationToken,
         cancelToken: dioCancelToken,
       )) {
         if (event is TextEvent) {
+          ttft ??= stopwatch.elapsed;
           answer.write(event.text);
           if (DateTime.now().difference(lastFlush) >= flushInterval) {
             flushAnswer();
           }
         } else if (event is ReasoningEvent) {
+          ttft ??= stopwatch.elapsed;
           reasoning.write(event.text);
           flushAnswer();
         } else if (event is AgentUsageEvent) {
@@ -909,6 +1038,7 @@ class ChatController extends Notifier<ChatState> {
           );
         } else if (event is AgentStatusEvent &&
             event.status == RunStatus.executingTool) {
+          _updatePlanStepStatus('running');
           state = state.copyWith(
             activityLog: [...state.activityLog, '等待确认'],
             toolActivities:
@@ -922,6 +1052,8 @@ class ChatController extends Notifier<ChatState> {
                 status: '等待确认'),
           );
         } else if (event is ToolResultEvent) {
+          _updatePlanStepStatus(
+              event.result.startsWith('工具执行失败') ? 'failed' : 'completed');
           await _persistMessage(ChatMessage(
               role: MessageRole.tool,
               toolCallId: event.call.id,
@@ -950,6 +1082,7 @@ class ChatController extends Notifier<ChatState> {
       modelName: config.isConfigured ? config.model : '演示模型',
       usage: usage.totalTokens > 0 ? usage : null,
       elapsed: stopwatch.elapsed,
+      ttft: ttft,
     );
     _cancellationToken = null;
     state = _withMessageAt(state, assistantIndex, assistantMessage)
@@ -963,8 +1096,8 @@ class ChatController extends Notifier<ChatState> {
       try {
         final taskDb = await ref.read(databaseProvider.future);
         final taskService = TaskService();
-        await taskService.updateStatus(taskDb, taskId,
-            _wasCancelled ? 'cancelled' : 'completed');
+        await taskService.updateStatus(
+            taskDb, taskId, _wasCancelled ? 'cancelled' : 'completed');
       } catch (_) {}
     }
   }
