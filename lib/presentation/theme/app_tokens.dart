@@ -24,11 +24,11 @@ abstract final class AppTokens {
 
   static double surfaceOpacity(ImmersiveMaterialLevel level, bool isDark) =>
       switch (level) {
-        ImmersiveMaterialLevel.ultraThin => isDark ? .20 : .35,
-        ImmersiveMaterialLevel.thin => isDark ? .35 : .45,
-        ImmersiveMaterialLevel.regular => isDark ? .50 : .60,
-        ImmersiveMaterialLevel.thick => isDark ? .65 : .75,
-        ImmersiveMaterialLevel.ultraThick => isDark ? .80 : .85,
+        ImmersiveMaterialLevel.ultraThin => isDark ? .10 : .15,
+        ImmersiveMaterialLevel.thin => isDark ? .15 : .25,
+        ImmersiveMaterialLevel.regular => isDark ? .25 : .35,
+        ImmersiveMaterialLevel.thick => isDark ? .40 : .50,
+        ImmersiveMaterialLevel.ultraThick => isDark ? .55 : .65,
       };
 
   // 动画时长 token

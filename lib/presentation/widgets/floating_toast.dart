@@ -19,7 +19,9 @@ extension _ToneStyle on ToastTone {
         ToastTone.danger => Icons.error_outline_rounded,
       };
   Color accent(bool isDark) => switch (this) {
-        ToastTone.neutral => isDark ? AppTheme.darkSemantic.onGlass : AppTheme.lightSemantic.onGlass,
+        ToastTone.neutral => isDark
+            ? AppTheme.darkSemantic.onGlass
+            : AppTheme.lightSemantic.onGlass,
         ToastTone.success => AppTheme.success,
         ToastTone.warning => AppTheme.warning,
         ToastTone.danger => AppTheme.danger,
@@ -49,7 +51,7 @@ class FloatingToast {
 
   static const _displayDuration = Duration(seconds: 3);
   static const _animationDuration = Duration(milliseconds: 220);
-  static const _topOffset = 88.0;
+  static const _topOffset = 128.0;
   static const _maxWidth = 480.0;
   static const _horizontalPadding = 24.0;
 
@@ -68,8 +70,9 @@ class FloatingToast {
     if (overlay == null) return;
 
     _current?._dismiss();
-    final isPersistent = persistent ?? (tone == ToastTone.warning || tone == ToastTone.danger);
-    
+    final isPersistent =
+        persistent ?? (tone == ToastTone.warning || tone == ToastTone.danger);
+
     final controller = _ToastEntryController(
       overlay: overlay,
       message: message,
@@ -91,7 +94,7 @@ class FloatingToast {
     VoidCallback? onFeedback,
   }) {
     final h = humanizeError(summary);
-    
+
     // 如果外部传入了已经 humanize 过的 summary，我们再次 humanize 可能得到不同的结果
     // 根据 spec: "自动 humanize + 自动「复制详情」chip + 常驻"
     // 以及接线要求："接线统一走 humanizeError(raw).summary 取人话文案、原始串进 rawDetail 供复制"
@@ -229,11 +232,13 @@ class _ToastViewState extends State<_ToastView>
       vsync: this,
       duration: widget.animationDuration,
     );
-    _fade = CurvedAnimation(parent: _controller, curve: AppTokens.curveStandard);
+    _fade =
+        CurvedAnimation(parent: _controller, curve: AppTokens.curveStandard);
     _slide = Tween(
       begin: const Offset(0, -.12),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _controller, curve: AppTokens.curveStandard));
+    ).animate(
+        CurvedAnimation(parent: _controller, curve: AppTokens.curveStandard));
 
     widget.onCreated(_controller);
     _controller.forward();
@@ -256,7 +261,8 @@ class _ToastViewState extends State<_ToastView>
   Widget build(BuildContext context) {
     final topSafe = MediaQuery.of(context).padding.top;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? AppTheme.darkSemantic.onGlass : AppTheme.lightSemantic.onGlass;
+    final textColor =
+        isDark ? AppTheme.darkSemantic.onGlass : AppTheme.lightSemantic.onGlass;
 
     return Positioned(
       top: topSafe + widget.topOffset,
@@ -270,7 +276,8 @@ class _ToastViewState extends State<_ToastView>
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: widget.maxWidth),
               child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
+                padding:
+                    EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
                 child: Material(
                   color: Colors.transparent,
                   child: Semantics(
@@ -278,17 +285,22 @@ class _ToastViewState extends State<_ToastView>
                     label: widget.message,
                     child: GestureDetector(
                       onTap: widget.persistent ? null : widget.onDismiss,
-                      behavior: widget.persistent ? HitTestBehavior.translucent : HitTestBehavior.opaque,
+                      behavior: widget.persistent
+                          ? HitTestBehavior.translucent
+                          : HitTestBehavior.opaque,
                       child: ImmersiveSurface(
                         level: ImmersiveMaterialLevel.thick,
-                        borderRadius: BorderRadius.circular(AppTokens.capsuleRadius),
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.capsuleRadius),
                         showGlow: true,
-                        padding: EdgeInsets.fromLTRB(16, 10, widget.persistent ? 8 : 16, 10),
+                        padding: EdgeInsets.fromLTRB(
+                            16, 10, widget.persistent ? 8 : 16, 10),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (widget.tone != ToastTone.neutral) ...[
-                              Icon(widget.tone.icon, size: 18, color: widget.tone.accent(isDark)),
+                              Icon(widget.tone.icon,
+                                  size: 18, color: widget.tone.accent(isDark)),
                               const SizedBox(width: 10),
                             ],
                             Flexible(

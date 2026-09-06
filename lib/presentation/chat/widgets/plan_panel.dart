@@ -62,13 +62,12 @@ class _PlanPanelState extends State<PlanPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final muted = isDark
-        ? AppTheme.darkSemantic.mutedOnGlass
-        : AppTheme.textSecondary;
+    final muted =
+        isDark ? AppTheme.darkSemantic.mutedOnGlass : AppTheme.textSecondary;
 
     // 右侧浮层卡片观感：受限宽度 + 统一玻璃材质与光晕阴影。
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
+      constraints: const BoxConstraints(maxWidth: 340, maxHeight: 360),
       child: ImmersiveSurface(
         level: ImmersiveMaterialLevel.ultraThick,
         showGlow: true,
@@ -76,7 +75,9 @@ class _PlanPanelState extends State<PlanPanel> {
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-          child: _expanded ? _buildExpanded(muted) : _buildCollapsed(muted),
+          child: _expanded
+              ? SingleChildScrollView(child: _buildExpanded(muted))
+              : _buildCollapsed(muted),
         ),
       ),
     );
@@ -221,8 +222,8 @@ class _PlanPanelState extends State<PlanPanel> {
                     backgroundColor: theme.brightness == Brightness.dark
                         ? AppTheme.darkBorder
                         : AppTheme.lightBorder,
-                    valueColor:
-                        const AlwaysStoppedAnimation<Color>(AppTheme.brandBright),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppTheme.brandBright),
                   ),
                 ),
               ),

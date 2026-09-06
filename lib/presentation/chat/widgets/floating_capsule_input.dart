@@ -102,15 +102,19 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
         isDark ? AppTheme.darkSemantic.textPrimary : AppTheme.textPrimary;
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
+    final bottomPadding = MediaQuery.viewInsetsOf(context).bottom > 0
+        ? 8.0
+        : MediaQuery.paddingOf(context).bottom + 8.0;
+
     final input = AnimatedPadding(
       duration: AppTokens.durationBase,
       curve: AppTokens.curveStandard,
-      padding: EdgeInsets.only(bottom: keyboardInset > 0 ? keyboardInset : 0),
+      padding: EdgeInsets.only(bottom: bottomPadding),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-        constraints: const BoxConstraints(minHeight: 82),
+        margin: const EdgeInsets.fromLTRB(12, 2, 12, 0),
+        constraints: const BoxConstraints(minHeight: 64),
         child: ImmersiveSurface(
-          level: ImmersiveMaterialLevel.ultraThick,
+          level: ImmersiveMaterialLevel.thick,
           borderRadius: BorderRadius.circular(22),
           child: Container(
             decoration: BoxDecoration(
@@ -119,142 +123,149 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
                   ? Border.all(color: _focusBorder, width: 1)
                   : null,
             ),
-        // 多行增高 / 发送后回落均在此做柔和的高度过渡（文档 10：180~220ms）。
-        child: AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 14, 12, 0),
-                child: TextField(
-                  focusNode: _focusNode,
-                  controller: widget.controller,
-                  minLines: 1,
-                  maxLines: 5,
-                  textInputAction: TextInputAction.newline,
-                  onTapOutside: (_) => _focusNode.unfocus(),
-                  decoration: const InputDecoration(
-                    hintText: '发送消息……',
-                    hintStyle:
-                        TextStyle(color: AppTheme.textSecondary, fontSize: 17),
-                    border: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    filled: false,
-                    contentPadding: EdgeInsets.symmetric(vertical: 8),
+            // 多行增高 / 发送后回落均在此做柔和的高度过渡（文档 10：180~220ms）。
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 10, 0),
+                    child: TextField(
+                      focusNode: _focusNode,
+                      controller: widget.controller,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.newline,
+                      onTapOutside: (_) => _focusNode.unfocus(),
+                      decoration: const InputDecoration(
+                        hintText: '发送消息……',
+                        hintStyle: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 16),
+                        border: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        filled: false,
+                        contentPadding: EdgeInsets.symmetric(vertical: 4),
+                      ),
+                      style: TextStyle(
+                          color: foreground, fontSize: 16, height: 1.3),
+                    ),
                   ),
-                  style:
-                      TextStyle(color: foreground, fontSize: 17, height: 1.35),
-                ),
-              ),
-              ImmersiveMotion.expand(
-                child: _showTools ? _toolsRow : const SizedBox.shrink(),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Row(
-                  children: [
-                    _ToolButton(
-                      icon: _showTools
-                          ? Icons.expand_less_rounded
-                          : Icons.add_rounded,
-                      tooltip: _showTools ? '收起工具' : '更多工具',
-                      onTap: () => setState(() => _showTools = !_showTools),
-                    ),
-                    if (widget.modelLabel != null &&
-                        widget.modelLabel!.trim().isNotEmpty)
-                      Flexible(
-                        child: _ContextPill(
-                          icon: Icons.auto_awesome_rounded,
-                          label: widget.modelLabel!,
-                          onTap: widget.onModelTap,
+                  ImmersiveMotion.expand(
+                    child: _showTools ? _toolsRow : const SizedBox.shrink(),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Row(
+                      children: [
+                        _ToolButton(
+                          icon: _showTools
+                              ? Icons.expand_less_rounded
+                              : Icons.add_rounded,
+                          tooltip: _showTools ? '收起工具' : '更多工具',
+                          onTap: () => setState(() => _showTools = !_showTools),
                         ),
-                      ),
-                    if (widget.workspaceLabel != null &&
-                        widget.workspaceLabel!.trim().isNotEmpty)
-                      Flexible(
-                        child: _ContextPill(
-                          icon: Icons.folder_open_outlined,
-                          label: widget.workspaceLabel!,
-                          onTap: widget.onWorkspaceTap,
-                        ),
-                      ),
-                    if (widget.onVoiceToggle != null)
-                      _ToolButton(
-                        icon: widget.isListening
-                            ? Icons.mic_rounded
-                            : Icons.mic_none_rounded,
-                        tooltip: widget.isListening ? '正在聆听，点击停止' : '语音输入',
-                        color:
-                            widget.isListening ? AppTheme.danger : null,
-                        onTap: widget.onVoiceToggle!,
-                      ),
-                    if (widget.planModeEnabled)
-                      _ToolButton(
-                        icon: Icons.front_hand_rounded,
-                        tooltip: '计划审批模式已开启',
-                        color: AppTheme.warning,
-                        onTap: widget.onPlanModeToggle,
-                      ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: (widget.isRunning || _canSend)
-                          ? () {
-                              HapticFeedback.mediumImpact();
-                              if (widget.isRunning) {
-                                widget.onStop();
-                              } else {
-                                widget.onSend();
-                              }
-                            }
-                          : null,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          gradient: widget.isRunning
-                              ? null
-                              : (_canSend
-                                  ? const LinearGradient(
-                                      colors: [AppTheme.brandGradientStart, AppTheme.brandGradientEnd],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    )
-                                  : null),
-                          color: widget.isRunning
-                              ? AppTheme.danger
-                              : (_canSend ? null : theme.colorScheme.surfaceContainerHighest),
-                          shape: BoxShape.circle,
-                          boxShadow: _canSend && !widget.isRunning
-                              ? [
-                                  BoxShadow(
-                                    color: AppTheme.brandGradientEnd.withValues(alpha: 0.4),
-                                    blurRadius: 12,
-                                    spreadRadius: 2,
-                                  )
-                                ]
+                        if (widget.modelLabel != null &&
+                            widget.modelLabel!.trim().isNotEmpty)
+                          Flexible(
+                            child: _ContextPill(
+                              icon: Icons.auto_awesome_rounded,
+                              label: widget.modelLabel!,
+                              onTap: widget.onModelTap,
+                            ),
+                          ),
+                        if (widget.workspaceLabel != null &&
+                            widget.workspaceLabel!.trim().isNotEmpty)
+                          Flexible(
+                            child: _ContextPill(
+                              icon: Icons.folder_open_outlined,
+                              label: widget.workspaceLabel!,
+                              onTap: widget.onWorkspaceTap,
+                            ),
+                          ),
+                        if (widget.onVoiceToggle != null)
+                          _ToolButton(
+                            icon: widget.isListening
+                                ? Icons.mic_rounded
+                                : Icons.mic_none_rounded,
+                            tooltip: widget.isListening ? '正在聆听，点击停止' : '语音输入',
+                            color: widget.isListening ? AppTheme.danger : null,
+                            onTap: widget.onVoiceToggle!,
+                          ),
+                        if (widget.planModeEnabled)
+                          _ToolButton(
+                            icon: Icons.front_hand_rounded,
+                            tooltip: '计划审批模式已开启',
+                            color: AppTheme.warning,
+                            onTap: widget.onPlanModeToggle,
+                          ),
+                        const Spacer(),
+                        GestureDetector(
+                          onTap: (widget.isRunning || _canSend)
+                              ? () {
+                                  HapticFeedback.mediumImpact();
+                                  if (widget.isRunning) {
+                                    widget.onStop();
+                                  } else {
+                                    widget.onSend();
+                                  }
+                                }
                               : null,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              gradient: widget.isRunning
+                                  ? null
+                                  : (_canSend
+                                      ? const LinearGradient(
+                                          colors: [
+                                            AppTheme.brandGradientStart,
+                                            AppTheme.brandGradientEnd
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        )
+                                      : null),
+                              color: widget.isRunning
+                                  ? AppTheme.danger
+                                  : (_canSend
+                                      ? null
+                                      : theme
+                                          .colorScheme.surfaceContainerHighest),
+                              shape: BoxShape.circle,
+                              boxShadow: _canSend && !widget.isRunning
+                                  ? [
+                                      BoxShadow(
+                                        color: AppTheme.brandGradientEnd
+                                            .withValues(alpha: 0.4),
+                                        blurRadius: 12,
+                                        spreadRadius: 2,
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            child: Icon(
+                                widget.isRunning
+                                    ? Icons.stop_rounded
+                                    : Icons.arrow_upward_rounded,
+                                color: _canSend || widget.isRunning
+                                    ? Colors.white
+                                    : theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.3),
+                                size: 20),
+                          ),
                         ),
-                        child: Icon(
-                            widget.isRunning
-                                ? Icons.stop_rounded
-                                : Icons.arrow_upward_rounded,
-                            color: _canSend || widget.isRunning 
-                                ? Colors.white
-                                : theme.colorScheme.onSurface.withValues(alpha: 0.3),
-                            size: 20),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          ), // AnimatedSize
-        ), // inner Container
+            ), // AnimatedSize
+          ), // inner Container
         ), // ImmersiveSurface
       ), // outer Container
     ); // AnimatedPadding
@@ -315,7 +326,8 @@ class _ToolButton extends StatelessWidget {
     final theme = Theme.of(context);
     return IconButton(
       tooltip: tooltip,
-      icon: Icon(icon, color: color ?? theme.colorScheme.onSurfaceVariant, size: 22),
+      icon: Icon(icon,
+          color: color ?? theme.colorScheme.onSurfaceVariant, size: 22),
       onPressed: () {
         HapticFeedback.lightImpact();
         onTap();

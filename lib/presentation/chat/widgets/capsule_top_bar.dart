@@ -33,9 +33,11 @@ class CapsuleTopBar extends StatelessWidget {
     final theme = Theme.of(context);
     final workspace = workspaceLabel?.trim();
     final model = modelLabel?.trim() ?? 'AI 助手';
-    final hasWorkspace = workspace != null && workspace.isNotEmpty && workspace != '无工作区';
+    final hasWorkspace =
+        workspace != null && workspace.isNotEmpty && workspace != '无工作区';
 
-    final contextRatio = (currentContextTokens / maxContextTokens).clamp(0.0, 1.0);
+    final contextRatio =
+        (currentContextTokens / maxContextTokens).clamp(0.0, 1.0);
     final percent = (contextRatio * 100).toStringAsFixed(0);
 
     return Padding(
@@ -79,7 +81,8 @@ class CapsuleTopBar extends StatelessWidget {
                         Icon(
                           Icons.keyboard_arrow_right_rounded,
                           size: 14,
-                          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurfaceVariant
+                              .withValues(alpha: 0.6),
                         ),
                       ],
                     ),
@@ -99,48 +102,52 @@ class CapsuleTopBar extends StatelessWidget {
 
             // 3. 右侧微型上下文占用胶囊 (HUD)
             if (currentContextTokens > 0)
-              GestureDetector(
-                onTap: onContextGaugeTap ?? onMenu,
-                child: Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: theme.brightness == Brightness.dark
-                        ? Colors.white.withValues(alpha: 0.08)
-                        : theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: contextRatio > 0.8
-                          ? AppTheme.danger
-                          : (contextRatio > 0.6
-                              ? AppTheme.warning
-                              : Colors.transparent),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: ImmersiveSurface(
+                  level: ImmersiveMaterialLevel.thin,
+                  borderRadius: BorderRadius.circular(12),
+                  child: GestureDetector(
+                    onTap: onContextGaugeTap ?? onMenu,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
                           color: contextRatio > 0.8
                               ? AppTheme.danger
-                              : AppTheme.success,
-                          shape: BoxShape.circle,
+                              : (contextRatio > 0.6
+                                  ? AppTheme.warning
+                                  : Colors.transparent),
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$percent% 上下文',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          fontFamily: 'monospace',
-                          color: theme.colorScheme.onSurface,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: contextRatio > 0.8
+                                  ? AppTheme.danger
+                                  : AppTheme.success,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '$percent% 上下文',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'monospace',
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -168,14 +175,14 @@ class _Action extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return ImmersiveSurface(
-      level: ImmersiveMaterialLevel.ultraThick,
-      borderRadius: BorderRadius.circular(12),
+      level: ImmersiveMaterialLevel.thin,
+      borderRadius: BorderRadius.circular(10),
       child: IconButton(
         tooltip: tooltip,
         onPressed: onTap,
-        icon: Icon(icon, size: 21, color: theme.colorScheme.onSurface),
+        icon: Icon(icon, size: 18, color: theme.colorScheme.onSurface),
         visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         padding: EdgeInsets.zero,
       ),
     );

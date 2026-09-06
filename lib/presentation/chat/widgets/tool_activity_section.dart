@@ -26,12 +26,17 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
 
   @override
   Widget build(BuildContext context) {
+    final topInset = MediaQuery.paddingOf(context).top;
+    final topBarBottom = topInset + 52;
     return Align(
       alignment: Alignment.topRight,
       child: Padding(
-        // 顶部右侧,位于渐变模糊条之下;面板展开时居中对称。
-        padding: const EdgeInsets.only(top: 58, right: 12, left: 12),
-        child: _open ? _panel(context) : _capsule(context),
+        // 紧贴顶栏下方，避免被顶部毛玻璃覆盖或与顶栏按钮重叠。
+        padding: EdgeInsets.only(top: topBarBottom + 6, right: 16, left: 16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: _open ? _panel(context) : _capsule(context),
+        ),
       ),
     );
   }
@@ -40,25 +45,25 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
     final theme = Theme.of(context);
     return ImmersiveSurface(
       level: ImmersiveMaterialLevel.thin,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () => setState(() => _open = true),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             if (widget.running)
               const SizedBox(
-                  width: 14,
-                  height: 14,
+                  width: 12,
+                  height: 12,
                   child: CircularProgressIndicator(strokeWidth: 2))
             else
               Icon(Icons.handyman_rounded,
-                  size: 16, color: theme.colorScheme.onSurface),
-            const SizedBox(width: 6),
+                  size: 14, color: theme.colorScheme.onSurface),
+            const SizedBox(width: 4),
             Text(
               '工具 ${widget.activities.length}',
-              style: theme.textTheme.labelMedium
+              style: theme.textTheme.labelSmall
                   ?.copyWith(color: theme.colorScheme.onSurface),
             ),
           ]),
@@ -70,7 +75,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
   Widget _panel(BuildContext context) {
     final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
-    final height = (size.height * 0.45).clamp(260.0, 480.0).toDouble();
+    final height = (size.height * 0.30).clamp(180.0, 320.0).toDouble();
     return ImmersiveSurface(
       level: ImmersiveMaterialLevel.thin,
       borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
@@ -113,8 +118,8 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
                 ' · 完成 ${widget.activities.where((a) => a.status == '已完成').length}'
                 '${runningCount > 0 ? ' · 执行中 $runningCount' : ''}'
                 '${pendingCount > 0 ? ' · 待确认 $pendingCount' : ''}',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.hintColor),
+                style:
+                    theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
               ),
             ),
           ),
@@ -160,8 +165,8 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
                         : theme.hintColor,
               ),
         title: Text(a.call.name,
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(fontFamily: 'monospace')),
+            style:
+                theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace')),
         subtitle: Text(argsBrief,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

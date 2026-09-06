@@ -66,12 +66,15 @@ class MessageBubble extends StatelessWidget {
               bottomRight: Radius.circular(16),
               topRight: Radius.circular(4),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             // 彩色玻璃：渐变自带透明度叠在高斯模糊上，保留蓝紫品牌色身份。
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [glass.userBubbleStart, glass.userBubbleEnd],
+              colors: [
+                glass.userBubbleStart.withValues(alpha: 0.7),
+                glass.userBubbleEnd.withValues(alpha: 0.7)
+              ],
             ),
             boxShadow: isDark
                 ? [
@@ -140,25 +143,19 @@ class MessageBubble extends StatelessWidget {
                       fontSize: 13,
                       fontWeight: FontWeight.w600),
                   listBullet: TextStyle(
-                      color: assistantTextColor,
-                      height: 1.45,
-                      fontSize: 13),
+                      color: assistantTextColor, height: 1.45, fontSize: 13),
                   code: TextStyle(
                       color: assistantTextColor,
                       fontSize: 12,
                       fontFamily: 'monospace'),
                   blockquote: TextStyle(
-                      color: assistantTextColor,
-                      height: 1.4,
-                      fontSize: 13),
+                      color: assistantTextColor, height: 1.4, fontSize: 13),
                   tableHead: TextStyle(
                       color: assistantTextColor,
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600),
                   tableBody: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 12.5,
-                      height: 1.35),
+                      color: assistantTextColor, fontSize: 12.5, height: 1.35),
                 ),
               );
 
@@ -186,7 +183,7 @@ class MessageBubble extends StatelessWidget {
             .toDouble();
         final desiredWidth = factor == ChatLayoutController.adaptive
             ? (screenWidth < 640
-                ? screenWidth * .85
+                ? screenWidth * .78
                 : math.min(screenWidth * .65, 720.0))
             : screenWidth * factor;
         final maxWidth = math.min(desiredWidth, availableWidth).toDouble();
@@ -203,7 +200,10 @@ class MessageBubble extends StatelessWidget {
                     child: Icon(Icons.handyman_outlined,
                         size: 14, color: theme.colorScheme.onSurfaceVariant))
               else
-                MascotAvatar(modelName: message.modelName ?? ''),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: MascotAvatar(modelName: message.modelName ?? ''),
+                ),
               const SizedBox(width: 8)
             ],
             GestureDetector(
@@ -225,11 +225,11 @@ class MessageBubble extends StatelessWidget {
                             ],
                           )
                         : ImmersiveSurface(
-                            level: ImmersiveMaterialLevel.ultraThick,
+                            level: ImmersiveMaterialLevel.thick,
                             borderRadius: BorderRadius.circular(16),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 12),
+                                  horizontal: 10, vertical: 8),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -257,8 +257,7 @@ class MessageBubble extends StatelessWidget {
                                             onPressed: () => Clipboard.setData(
                                                 ClipboardData(
                                                     text: message.text)),
-                                            icon: Icon(
-                                                Icons.copy_outlined,
+                                            icon: Icon(Icons.copy_outlined,
                                                 color: glass.textMuted),
                                             tooltip: '复制'),
                                         if (isLast &&
@@ -273,8 +272,7 @@ class MessageBubble extends StatelessWidget {
                                               constraints: const BoxConstraints(
                                                   minWidth: 28, minHeight: 28),
                                               onPressed: onRegenerate,
-                                              icon: Icon(
-                                                  Icons.refresh_rounded,
+                                              icon: Icon(Icons.refresh_rounded,
                                                   color: glass.textMuted),
                                               tooltip: '重新生成'),
                                       ],
