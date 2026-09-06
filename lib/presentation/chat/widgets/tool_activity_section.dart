@@ -100,7 +100,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
               ),
             ]),
           ),
-          Divider(height: 1, color: theme.dividerColor.withOpacity(.5)),
+          Divider(height: 1, color: theme.dividerColor.withValues(alpha: .5)),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -108,7 +108,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
               itemBuilder: (context, i) => _row(context, widget.activities[i]),
             ),
           ),
-          Divider(height: 1, color: theme.dividerColor.withOpacity(.5)),
+          Divider(height: 1, color: theme.dividerColor.withValues(alpha: .5)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             child: Align(

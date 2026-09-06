@@ -146,9 +146,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   ChatController get _chat => ref.read(chatControllerProvider.notifier);
 
-  @override
   final BackgroundService _backgroundService = BackgroundService();
 
+  @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -349,9 +349,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final state = ref.read(chatControllerProvider);
     if (state.messages.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: _buildMarkdown(state)));
-    if (mounted)
+    if (mounted) {
       FloatingToast.show(context, AppStrings.conversationCopied,
           tone: ToastTone.success);
+    }
   }
 
   Future<void> _exportConversation() async {
@@ -376,8 +377,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await SharePlus.instance
           .share(ShareParams(text: content, subject: state.conversationTitle));
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         FloatingToast.error(context, '分享失败', rawDetail: e.toString());
+      }
     }
   }
 
@@ -575,8 +577,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         FloatingToast.error(context, '无法获取图片', rawDetail: e.toString());
+      }
     }
   }
 
@@ -644,8 +647,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       setState(() => _attachments
           .add(PlatformFile(name: name, size: bytes.length, bytes: bytes)));
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         FloatingToast.error(context, '无法获取图片', rawDetail: e.toString());
+      }
     }
   }
 
@@ -809,8 +813,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         FloatingToast.show(context, '已粘贴图片', tone: ToastTone.success);
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         FloatingToast.error(context, '无法读取剪贴板，请手动选图', rawDetail: e.toString());
+      }
     }
   }
 
@@ -1173,9 +1178,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
                     final scrim = bg.mode == 'custom' || dark
                         ? (dark
-                            ? Colors.black.withOpacity(.18)
-                            : Colors.white.withOpacity(.10))
-                        : Colors.white.withOpacity(.06);
+                            ? Colors.black.withValues(alpha: .18)
+                            : Colors.white.withValues(alpha: .10))
+                        : Colors.white.withValues(alpha: .06);
                     return Stack(fit: StackFit.expand, children: [
                       image,
                       Container(color: scrim),

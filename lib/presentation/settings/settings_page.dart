@@ -9,11 +9,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../application/chat_controller.dart';
 import '../../domain/models.dart';
-import '../../infrastructure/background_service.dart';
 import 'update_sheet.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/providers/provider_config.dart';
@@ -120,12 +118,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           ? widthFactor
           : ChatLayoutController.customDefault;
 
-  @override
   final BackgroundService _backgroundService = BackgroundService();
   final UpdateService _updateService = UpdateService();
-  String _appVersion = '';
-  bool _checkingUpdate = false;
+  final String _appVersion = '';
 
+  @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -215,10 +212,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   }
 
   Future<void> _checkUpdate() async {
-    setState(() => _checkingUpdate = true);
     final result = await _updateService.checkUpdate();
     if (!mounted) return;
-    setState(() => _checkingUpdate = false);
     switch (result.status) {
       case UpdateCheckStatus.update:
         showImmersiveSheet(
@@ -726,11 +721,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           await _backgroundService.setCustomBackground(x.path);
                           if (mounted) setState(() {});
                         } catch (_) {
-                          if (mounted) {
-                            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                              const SnackBar(content: Text('选图失败,请重试')),
-                            );
-                          }
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                            const SnackBar(content: Text('选图失败,请重试')),
+                          );
                         }
                       }),
                 ]);

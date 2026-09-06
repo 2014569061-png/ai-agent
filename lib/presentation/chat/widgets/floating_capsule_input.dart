@@ -100,8 +100,6 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     final effect = ImmersiveEffectsController.resolve(context);
     final foreground =
         isDark ? AppTheme.darkSemantic.textPrimary : AppTheme.textPrimary;
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-
     final bottomPadding = MediaQuery.viewInsetsOf(context).bottom > 0
         ? 8.0
         : MediaQuery.paddingOf(context).bottom + 8.0;
