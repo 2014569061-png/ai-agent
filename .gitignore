@@ -74,3 +74,7 @@ windows/flutter/generated_plugin_registrant.h
 
 # Flutter 本地工具状态
 .flutter_tool_state
+.hotrun.stdin
+.hotrun.log
+.hotrun.err.log
+scripts/flutter_hot_daemon.ps1

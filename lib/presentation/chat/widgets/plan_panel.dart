@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
 import '../../theme/app_theme.dart';
+import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_sheet.dart';
+import '../../widgets/immersive_surface.dart';
 
 /// Zcode 风格的执行计划浮层卡片。
 ///
@@ -60,24 +62,22 @@ class _PlanPanelState extends State<PlanPanel> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final surface = isDark ? AppTheme.darkElevated : AppTheme.lightElevated;
-    final border = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final muted = isDark ? const Color(0xFF8A94A6) : const Color(0xFF64748B);
+    final muted = isDark
+        ? AppTheme.darkSemantic.mutedOnGlass
+        : AppTheme.textSecondary;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      // 右侧浮层卡片观感：受限宽度 + 阴影。
+    // 右侧浮层卡片观感：受限宽度 + 统一玻璃材质与光晕阴影。
+    return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 420),
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-        border: Border.all(color: border),
-        boxShadow: AppTheme.floatingShadow(isDark),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-        child: _expanded ? _buildExpanded(muted) : _buildCollapsed(muted),
+      child: ImmersiveSurface(
+        level: ImmersiveMaterialLevel.ultraThick,
+        showGlow: true,
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+          child: _expanded ? _buildExpanded(muted) : _buildCollapsed(muted),
+        ),
       ),
     );
   }
@@ -94,13 +94,13 @@ class _PlanPanelState extends State<PlanPanel> {
         child: Row(
           children: [
             const Icon(Icons.checklist_rounded,
-                size: 18, color: Color(0xFF1677FF)),
+                size: 18, color: AppTheme.brandBright),
             const SizedBox(width: 8),
             Expanded(
               child: Row(
                 children: [
                   const Icon(Icons.arrow_right_alt_rounded,
-                      size: 16, color: Color(0xFF1677FF)),
+                      size: 16, color: AppTheme.brandBright),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -110,7 +110,7 @@ class _PlanPanelState extends State<PlanPanel> {
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF1677FF),
+                        color: AppTheme.brandBright,
                       ),
                     ),
                   ),
@@ -149,7 +149,7 @@ class _PlanPanelState extends State<PlanPanel> {
           child: Row(
             children: [
               const Icon(Icons.checklist_rounded,
-                  size: 18, color: Color(0xFF1677FF)),
+                  size: 18, color: AppTheme.brandBright),
               const SizedBox(width: 8),
               Text(
                 '计划',
@@ -179,7 +179,7 @@ class _PlanPanelState extends State<PlanPanel> {
               width: double.infinity,
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: const Color(0xFF1677FF).withValues(alpha: 0.06),
+                color: AppTheme.brandBright.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
@@ -189,15 +189,15 @@ class _PlanPanelState extends State<PlanPanel> {
                       style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFF1677FF))),
+                          color: AppTheme.brandBright)),
                   const SizedBox(height: 2),
                   Text(
                     widget.goal!,
                     style: TextStyle(
                         fontSize: 13,
                         color: theme.brightness == Brightness.dark
-                            ? const Color(0xFFEDF1F8)
-                            : const Color(0xFF243B53)),
+                            ? AppTheme.darkSemantic.textPrimary
+                            : AppTheme.lightSemantic.textPrimary),
                   ),
                 ],
               ),
@@ -219,10 +219,10 @@ class _PlanPanelState extends State<PlanPanel> {
                     value: progress,
                     minHeight: 6,
                     backgroundColor: theme.brightness == Brightness.dark
-                        ? const Color(0xFF303746)
-                        : const Color(0xFFE2E8F0),
+                        ? AppTheme.darkBorder
+                        : AppTheme.lightBorder,
                     valueColor:
-                        const AlwaysStoppedAnimation<Color>(Color(0xFF1677FF)),
+                        const AlwaysStoppedAnimation<Color>(AppTheme.brandBright),
                   ),
                 ),
               ),
@@ -268,13 +268,13 @@ class _PlanPanelState extends State<PlanPanel> {
           child: Row(
             children: [
               const Icon(Icons.auto_awesome_rounded,
-                  size: 14, color: Color(0xFF1677FF)),
+                  size: 14, color: AppTheme.brandBright),
               const SizedBox(width: 6),
               const Text('智能体',
                   style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF627D98))),
+                      color: AppTheme.mutedOnGlassLight)),
             ],
           ),
         ),
@@ -292,13 +292,13 @@ class _PlanPanelState extends State<PlanPanel> {
     Color leadColor;
     if (isDone) {
       leadIcon = Icons.check_circle_rounded;
-      leadColor = const Color(0xFF16A34A);
+      leadColor = AppTheme.success;
     } else if (isFailed) {
       leadIcon = Icons.cancel_rounded;
-      leadColor = const Color(0xFFDC2626);
+      leadColor = AppTheme.danger;
     } else if (isCurrent) {
       leadIcon = Icons.arrow_right_alt_rounded;
-      leadColor = const Color(0xFF1677FF);
+      leadColor = AppTheme.brandBright;
     } else {
       leadIcon = Icons.radio_button_unchecked_rounded;
       leadColor = muted;
@@ -317,10 +317,10 @@ class _PlanPanelState extends State<PlanPanel> {
               style: TextStyle(
                 fontSize: 14,
                 color: isCurrent
-                    ? const Color(0xFF1677FF)
+                    ? AppTheme.brandBright
                     : (isDone
-                        ? const Color(0xFF16A34A)
-                        : (isFailed ? const Color(0xFFDC2626) : muted)),
+                        ? AppTheme.success
+                        : (isFailed ? AppTheme.danger : muted)),
                 fontWeight:
                     (isCurrent || isDone) ? FontWeight.w600 : FontWeight.normal,
                 decoration: isDone ? TextDecoration.lineThrough : null,

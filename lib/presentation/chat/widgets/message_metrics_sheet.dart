@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 import '../../../domain/models.dart';
 import '../../widgets/immersive_sheet.dart';
 
@@ -22,7 +23,7 @@ class MessageMetricsSheet extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.analytics_outlined, color: Color(0xFF1677FF)),
+                const Icon(Icons.analytics_outlined, color: AppTheme.brandBright),
                 const SizedBox(width: 8),
                 Text('执行指标',
                     style: theme.textTheme.titleLarge
@@ -208,7 +209,7 @@ class MessageStatusPill extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontFamily: 'monospace',
-                  color: const Color(0xFF10B981),
+                  color: AppTheme.success,
                   fontWeight: FontWeight.w600,
                 ),
               ),

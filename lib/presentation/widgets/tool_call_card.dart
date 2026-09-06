@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 import '../../application/chat_controller.dart';
 import '../../domain/models.dart';
@@ -24,25 +25,25 @@ class ToolCallCard extends StatelessWidget {
   String? get _summary => _humanizer.summaryOf(activity.call);
 
   static (Color, String, IconData) _riskStyle(ToolRisk risk) => switch (risk) {
-        ToolRisk.safe => (const Color(0xFF16A34A), '安全', Icons.shield_outlined),
+        ToolRisk.safe => (AppTheme.success, '安全', Icons.shield_outlined),
         ToolRisk.requiresConfirmation => (
-            const Color(0xFFF59E0B),
+            AppTheme.warning,
             '需确认',
             Icons.shield_outlined
           ),
         ToolRisk.dangerous => (
-            const Color(0xFFDC2626),
+            AppTheme.danger,
             '危险',
             Icons.warning_amber_rounded
           ),
       };
 
   static (Color, bool) _statusStyle(String status) => switch (status) {
-        '执行中' => (const Color(0xFF2563EB), true),
-        '等待确认' => (const Color(0xFFF59E0B), true),
-        '已完成' => (const Color(0xFF16A34A), false),
-        '执行失败' => (const Color(0xFFDC2626), false),
-        _ => (const Color(0xFF64748B), false),
+        '执行中' => (AppTheme.brandBright, true),
+        '等待确认' => (AppTheme.warning, true),
+        '已完成' => (AppTheme.success, false),
+        '执行失败' => (AppTheme.danger, false),
+        _ => (AppTheme.textSecondary, false),
       };
 
   String _prettyJson(Map<String, dynamic> value) {

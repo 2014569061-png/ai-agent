@@ -81,7 +81,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final count = widget.messages.length - _start;
     return ListView.builder(
       controller: widget.controller,
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      padding: const EdgeInsets.fromLTRB(16, 92, 16, 10),
       itemCount: count,
       itemBuilder: (context, localIndex) {
         final index = _start + localIndex;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 import '../../../application/chat_controller.dart';
 import '../../../domain/models.dart';
@@ -98,7 +99,7 @@ class SessionContextSheet extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               secondary: Icon(Icons.checklist_rounded,
                   color: state.planMode
-                      ? const Color(0xFFF59E0B)
+                      ? AppTheme.warning
                       : theme.colorScheme.outline),
               title: const Text('计划审批模式',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),

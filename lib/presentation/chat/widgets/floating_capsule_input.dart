@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_tokens.dart';
@@ -18,6 +19,7 @@ class FloatingCapsuleInput extends StatefulWidget {
   final VoidCallback onMcpMenu;
   final VoidCallback onPlanModeToggle;
   final VoidCallback onTerminalPreview;
+  final VoidCallback onEnvSetup;
   final bool planModeEnabled;
   final VoidCallback? onVoiceToggle;
   final bool isListening;
@@ -40,6 +42,7 @@ class FloatingCapsuleInput extends StatefulWidget {
     required this.onMcpMenu,
     required this.onPlanModeToggle,
     required this.onTerminalPreview,
+    required this.onEnvSetup,
     required this.planModeEnabled,
     this.onVoiceToggle,
     this.isListening = false,
@@ -56,7 +59,7 @@ class FloatingCapsuleInput extends StatefulWidget {
 
 class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     with SingleTickerProviderStateMixin {
-  static const _focusBorder = Color(0xFF2F81F7);
+  static const _focusBorder = AppTheme.brandBright;
 
   bool _showTools = false;
   bool _focused = false;
@@ -96,7 +99,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     final isDark = theme.brightness == Brightness.dark;
     final effect = ImmersiveEffectsController.resolve(context);
     final foreground =
-        isDark ? const Color(0xFFEDF1F8) : const Color(0xFF1E293B);
+        isDark ? AppTheme.darkSemantic.textPrimary : AppTheme.textPrimary;
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     final input = AnimatedPadding(
@@ -135,7 +138,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
                   decoration: const InputDecoration(
                     hintText: '发送消息……',
                     hintStyle:
-                        TextStyle(color: Color(0xFF6F7B8F), fontSize: 17),
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 17),
                     border: InputBorder.none,
                     focusedBorder: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -185,14 +188,14 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
                             : Icons.mic_none_rounded,
                         tooltip: widget.isListening ? '正在聆听，点击停止' : '语音输入',
                         color:
-                            widget.isListening ? const Color(0xFFDC2626) : null,
+                            widget.isListening ? AppTheme.danger : null,
                         onTap: widget.onVoiceToggle!,
                       ),
                     if (widget.planModeEnabled)
                       _ToolButton(
                         icon: Icons.front_hand_rounded,
                         tooltip: '计划审批模式已开启',
-                        color: const Color(0xFFF59E0B),
+                        color: AppTheme.warning,
                         onTap: widget.onPlanModeToggle,
                       ),
                     const Spacer(),
@@ -216,19 +219,19 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
                               ? null
                               : (_canSend
                                   ? const LinearGradient(
-                                      colors: [Color(0xFF4C8DFF), Color(0xFF9333EA)],
+                                      colors: [AppTheme.brandGradientStart, AppTheme.brandGradientEnd],
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
                                     )
                                   : null),
                           color: widget.isRunning
-                              ? const Color(0xFFDC2626)
+                              ? AppTheme.danger
                               : (_canSend ? null : theme.colorScheme.surfaceContainerHighest),
                           shape: BoxShape.circle,
                           boxShadow: _canSend && !widget.isRunning
                               ? [
                                   BoxShadow(
-                                    color: const Color(0xFF9333EA).withValues(alpha: 0.4),
+                                    color: AppTheme.brandGradientEnd.withValues(alpha: 0.4),
                                     blurRadius: 12,
                                     spreadRadius: 2,
                                   )
@@ -280,12 +283,16 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
                     ? Icons.front_hand_rounded
                     : Icons.pan_tool_alt_rounded,
                 tooltip: widget.planModeEnabled ? '关闭计划模式' : '开启计划模式',
-                color: widget.planModeEnabled ? const Color(0xFFF59E0B) : null,
+                color: widget.planModeEnabled ? AppTheme.warning : null,
                 onTap: widget.onPlanModeToggle),
             _ToolButton(
                 icon: Icons.terminal_rounded,
                 tooltip: '终端预览',
                 onTap: widget.onTerminalPreview),
+            _ToolButton(
+                icon: Icons.build_circle_outlined,
+                tooltip: '开发环境',
+                onTap: widget.onEnvSetup),
           ],
         ),
       );

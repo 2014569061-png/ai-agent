@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
-import 'web_preview_dialog.dart';
 import '../widgets/immersive_sheet.dart';
 
+/// G1 工作区文件树:目录导航模式(进入子目录 / 后退 / 前进),
+/// 替代旧版"递归平铺 + 网页预览"。
 class FileTreeSheet extends StatefulWidget {
   const FileTreeSheet({super.key, required this.workspacePath});
+
   final String workspacePath;
 
   @override
@@ -16,52 +18,73 @@ class FileTreeSheet extends StatefulWidget {
 }
 
 class _FileTreeSheetState extends State<FileTreeSheet> {
+  late String _currentDir;
+  final List<String> _back = [];
+  final List<String> _forward = [];
   List<FileSystemEntity> _entities = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _currentDir = widget.workspacePath;
     _loadDirectory();
+  }
+
+  String get _currentLabel {
+    final rel = p.relative(_currentDir, from: widget.workspacePath);
+    return rel == '.' ? widget.workspacePath : rel;
   }
 
   Future<void> _loadDirectory() async {
     setState(() => _loading = true);
-    final dir = Directory(widget.workspacePath);
-    if (await dir.exists()) {
-      try {
-        final list =
-            await dir.list(recursive: true, followLinks: false).toList();
-        // 过滤隐藏文件与临时目录
-        final filtered = list.where((e) {
-          final rel = p.relative(e.path, from: widget.workspacePath);
-          return !rel.startsWith('.') &&
-              !rel.contains('/.') &&
-              !rel.contains('\\.') &&
-              !rel.contains('build');
-        }).toList();
-
-        // 排序：目录在前，按名称升序
-        filtered.sort((a, b) {
-          final aIsDir = a is Directory;
-          final bIsDir = b is Directory;
-          if (aIsDir && !bIsDir) return -1;
-          if (!aIsDir && bIsDir) return 1;
-          return a.path.compareTo(b.path);
-        });
-
-        if (mounted) {
-          setState(() {
-            _entities = filtered;
-            _loading = false;
-          });
-        }
-      } catch (e) {
-        if (mounted) setState(() => _loading = false);
-      }
-    } else {
+    final dir = Directory(_currentDir);
+    if (!dir.existsSync()) {
       if (mounted) setState(() => _loading = false);
+      return;
     }
+    try {
+      final list = await dir.list(followLinks: false).toList();
+      // 过滤隐藏项与构建目录
+      final filtered = list.where((e) {
+        final name = p.basename(e.path);
+        return !name.startsWith('.') && name != 'build';
+      }).toList();
+
+      filtered.sort((a, b) {
+        final aIsDir = a is Directory;
+        final bIsDir = b is Directory;
+        if (aIsDir && !bIsDir) return -1;
+        if (!aIsDir && bIsDir) return 1;
+        return p.basename(a.path).toLowerCase().compareTo(
+            p.basename(b.path).toLowerCase());
+      });
+
+      if (mounted) setState(() => _entities = filtered);
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  void _openDir(String path) {
+    if (path == _currentDir) return;
+    _back.add(_currentDir);
+    _forward.clear();
+    _currentDir = path;
+    _loadDirectory();
+  }
+
+  void _goBack() {
+    if (_back.isEmpty) return;
+    _forward.add(_currentDir);
+    _currentDir = _back.removeLast();
+    _loadDirectory();
+  }
+
+  void _goForward() {
+    if (_forward.isEmpty) return;
+    _back.add(_currentDir);
+    _currentDir = _forward.removeLast();
+    _loadDirectory();
   }
 
   void _viewFile(File file) async {
@@ -113,7 +136,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
     final projectName = p.basename(widget.workspacePath);
 
     return Container(
-      // 外壳由 showImmersiveSheet 的 ImmersiveSurface 提供毛玻璃，这里不再铺不透明底色。
+      // 外壳由 showImmersiveSheet 的 ImmersiveSurface 提供毛玻璃,这里不再铺不透明底色。
       padding: const EdgeInsets.only(top: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -146,7 +169,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        widget.workspacePath,
+                        _currentLabel,
                         style: TextStyle(
                             fontSize: 11,
                             color: theme.colorScheme.onSurfaceVariant),
@@ -155,23 +178,19 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                     ],
                   ),
                 ),
-                FilledButton.tonalIcon(
-                  icon: const Icon(Icons.phone_iphone_rounded, size: 18),
-                  label: const Text('网页预览'),
-                  onPressed: () {
-                    final indexPath =
-                        p.join(widget.workspacePath, 'index.html');
-                    showImmersiveDialog(
-                      context: context,
-                      builder: (_) => WebPreviewDialog(
-                          indexPath: indexPath,
-                          workspacePath: widget.workspacePath),
-                    );
-                  },
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                  tooltip: '后退',
+                  onPressed: _back.isEmpty ? null : _goBack,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
+                  tooltip: '前进',
+                  onPressed: _forward.isEmpty ? null : _goForward,
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 20),
-                  tooltip: '刷新文件树',
+                  tooltip: '刷新当前目录',
                   onPressed: _loadDirectory,
                 ),
               ],
@@ -187,12 +206,12 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.create_new_folder_outlined,
+                            Icon(Icons.folder_open_outlined,
                                 size: 48,
                                 color: theme.colorScheme.onSurfaceVariant
                                     .withValues(alpha: 0.5)),
                             const SizedBox(height: 10),
-                            Text('工作区暂无文件\n可直接让 AI 在此创建项目或写代码',
+                            Text('此目录为空',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                     color: theme.colorScheme.onSurfaceVariant)),
@@ -204,28 +223,33 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                         itemBuilder: (context, index) {
                           final entity = _entities[index];
                           final isDir = entity is Directory;
-                          final relPath = p.relative(entity.path,
-                              from: widget.workspacePath);
+                          final name = p.basename(entity.path);
 
                           return ListTile(
                             dense: true,
                             leading: Icon(
-                              isDir ? Icons.folder : _getFileIcon(entity.path),
+                              isDir
+                                  ? Icons.folder_rounded
+                                  : _getFileIcon(entity.path),
                               size: 20,
                               color: isDir
                                   ? Colors.amber[700]
                                   : theme.colorScheme.primary,
                             ),
                             title: Text(
-                              relPath,
+                              isDir ? '$name/' : name,
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight:
                                     isDir ? FontWeight.w600 : FontWeight.normal,
                               ),
                             ),
-                            onTap:
-                                isDir ? null : () => _viewFile(entity as File),
+                            trailing: isDir
+                                ? const Icon(Icons.chevron_right, size: 18)
+                                : null,
+                            onTap: isDir
+                                ? () => _openDir(entity.path)
+                                : () => _viewFile(entity as File),
                           );
                         },
                       ),
@@ -251,6 +275,8 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
         return Icons.javascript;
       case '.py':
         return Icons.code;
+      case '.go':
+        return Icons.terminal;
       case '.md':
       case '.txt':
         return Icons.description;

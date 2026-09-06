@@ -26,6 +26,7 @@ import '../infrastructure/tools/image_gen_tool.dart';
 import '../infrastructure/tools/workspace_tools.dart';
 import '../infrastructure/tools/command_tool.dart';
 import 'agent_executor.dart';
+import 'error_humanizer.dart';
 import 'headless_executor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
@@ -71,6 +72,7 @@ class ChatState {
     this.activeModel = '',
     this.activeProviderName = '',
     this.activeProviderId = '',
+    this.contextTokens = 128000,
     this.activeReasoningEffort = ReasoningEffort.medium,
     this.providerConfigured = false,
     this.planMode = false,
@@ -91,6 +93,9 @@ class ChatState {
   final String activeModel;
   final String activeProviderName;
   final String activeProviderId;
+
+  /// G1 激活 Provider 的上下文窗口(供 HUD 与执行预算同源显示)。
+  final int contextTokens;
   final ReasoningEffort activeReasoningEffort;
   final bool providerConfigured;
   final bool planMode;
@@ -111,6 +116,7 @@ class ChatState {
     String? activeModel,
     String? activeProviderName,
     String? activeProviderId,
+    int? contextTokens,
     ReasoningEffort? activeReasoningEffort,
     bool? providerConfigured,
     bool? planMode,
@@ -132,6 +138,7 @@ class ChatState {
         activeModel: activeModel ?? this.activeModel,
         activeProviderName: activeProviderName ?? this.activeProviderName,
         activeProviderId: activeProviderId ?? this.activeProviderId,
+        contextTokens: contextTokens ?? this.contextTokens,
         activeReasoningEffort:
             activeReasoningEffort ?? this.activeReasoningEffort,
         providerConfigured: providerConfigured ?? this.providerConfigured,
@@ -204,6 +211,7 @@ class ChatController extends Notifier<ChatState> {
         activeModel: config.model,
         activeProviderName: config.name,
         activeProviderId: config.id,
+        contextTokens: config.contextTokens,
         activeReasoningEffort: config.reasoningEffort,
         providerConfigured: config.isConfigured,
         currentWorkspacePath: activeWorkspace,
@@ -1025,7 +1033,7 @@ class ChatController extends Notifier<ChatState> {
               promptTokens: event.promptTokens,
               completionTokens: event.completionTokens);
         } else if (event is AgentErrorEvent) {
-          answer.write('\n\n错误：${event.message}');
+          answer.write('\n\n${formatErrorForMessage(event.message)}');
         } else if (event is ToolRequestedEvent) {
           final risk = _riskFor(registry, event.call.name);
           await _persistToolCall(event.call, risk);
@@ -1071,7 +1079,7 @@ class ChatController extends Notifier<ChatState> {
     } catch (error) {
       // 兜底：任何未预期异常（DB 写入失败、附件解析、审批回调等）都不能让
       // UI 永久停留在"运行中"。写入错误信息并恢复可交互状态。
-      answer.write('\n\n错误：$error');
+      answer.write('\n\n${formatErrorForMessage(error.toString())}');
     } finally {
       stopwatch.stop();
     }
@@ -1185,6 +1193,7 @@ class ChatController extends Notifier<ChatState> {
       activeModel: config.model,
       activeProviderName: config.name,
       activeProviderId: config.id,
+      contextTokens: config.contextTokens,
       activeReasoningEffort: config.reasoningEffort,
       providerConfigured: config.isConfigured,
       currentWorkspacePath: activeWorkspace,

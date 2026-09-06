@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 import '../../widgets/brand_mark.dart';
 
@@ -16,10 +17,10 @@ class MascotAvatar extends StatelessWidget {
         width: 36,
         height: 36,
         decoration: BoxDecoration(
-          color: const Color(0xFF1677FF).withValues(alpha: 0.1),
+          color: AppTheme.brandBright.withValues(alpha: 0.1),
           shape: BoxShape.circle,
           border:
-              Border.all(color: const Color(0xFF1677FF).withValues(alpha: 0.3)),
+              Border.all(color: AppTheme.brandBright.withValues(alpha: 0.3)),
         ),
         child: const Center(child: BrandMark(size: 22)),
       ),

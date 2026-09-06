@@ -1,11 +1,20 @@
+import 'dart:io';
+
 import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/immersive_dropdown.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../application/chat_controller.dart';
 import '../../domain/models.dart';
+import '../../infrastructure/background_service.dart';
+import 'update_sheet.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/providers/provider_config.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
@@ -31,6 +40,7 @@ import '../../infrastructure/observability/sentry_service.dart';
 import '../../infrastructure/system/battery_optimization.dart';
 import '../../infrastructure/update/update_service.dart';
 import '../onboarding/onboarding_page.dart';
+import '../../infrastructure/background_service.dart';
 
 class _ProviderTemplate {
   const _ProviderTemplate(this.name, this.baseUrl, this.model,
@@ -41,13 +51,13 @@ class _ProviderTemplate {
   final ProviderType type;
 }
 
-class SettingsPage extends StatefulWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage>
+class _SettingsPageState extends ConsumerState<SettingsPage>
     with WidgetsBindingObserver {
   static const _adaptiveWidth = 'adaptive';
   static const _compactWidth = 'compact';
@@ -95,7 +105,6 @@ class _SettingsPageState extends State<SettingsPage>
   bool _appLockEnabled = false;
   bool _appLockSupported = false;
   bool _crashReportEnabled = false;
-  bool _planMode = false;
   bool _ignoringBattery = true;
 
   String _widthOption(double widthFactor) {
@@ -112,6 +121,11 @@ class _SettingsPageState extends State<SettingsPage>
           : ChatLayoutController.customDefault;
 
   @override
+  final BackgroundService _backgroundService = BackgroundService();
+  final UpdateService _updateService = UpdateService();
+  String _appVersion = '';
+  bool _checkingUpdate = false;
+
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -139,8 +153,15 @@ class _SettingsPageState extends State<SettingsPage>
     _appLockEnabled = await _appLock.isEnabled();
     _appLockSupported = await _appLock.canUseBiometrics();
     _crashReportEnabled = await SentryService.isEnabled();
-    _planMode =
-        (await SharedPreferences.getInstance()).getBool('plan_mode') ?? false;
+    // 计划模式已迁移到 chatControllerProvider 单一数据源；这里只做旧值的只读迁移。
+    final legacyPrefs = await SharedPreferences.getInstance();
+    final legacyPlanMode = legacyPrefs.getBool('plan_mode');
+    if (legacyPlanMode != null) {
+      ref
+          .read(chatControllerProvider.notifier)
+          .setPlanMode(legacyPlanMode);
+      await legacyPrefs.remove('plan_mode');
+    }
     if (!kIsWeb) {
       try {
         _ignoringBattery = await BatteryOptimization.isIgnoring();
@@ -182,9 +203,7 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Future<void> _togglePlanMode(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('plan_mode', value);
-    if (mounted) setState(() => _planMode = value);
+    ref.read(chatControllerProvider.notifier).setPlanMode(value);
   }
 
   Future<void> _requestBatteryExemption() async {
@@ -196,37 +215,22 @@ class _SettingsPageState extends State<SettingsPage>
   }
 
   Future<void> _checkUpdate() async {
-    FloatingToast.show(context, '正在检查更新…');
-    final info = await UpdateService().checkUpdate();
+    setState(() => _checkingUpdate = true);
+    final result = await _updateService.checkUpdate();
     if (!mounted) return;
-    if (info == null) {
-      FloatingToast.show(context, AppStrings.isLatestVersion);
-      return;
+    setState(() => _checkingUpdate = false);
+    switch (result.status) {
+      case UpdateCheckStatus.update:
+        showImmersiveSheet(
+          context: context,
+          builder: (_) => UpdateSheet(info: result.info!),
+        );
+      case UpdateCheckStatus.upToDate:
+        FloatingToast.show(
+            context, '当前已是最新版本 v${result.currentVersion ?? _appVersion}');
+      case UpdateCheckStatus.failed:
+        FloatingToast.show(context, result.error ?? '检测失败');
     }
-    final shouldUpdate = await showImmersiveDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text(AppStrings.updateAvailable),
-        content: Text('发现新版本 v${info.version}\n\n${info.notes}'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text(AppStrings.updateLater)),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text(AppStrings.updateNow)),
-        ],
-      ),
-    );
-    if (shouldUpdate != true || !mounted) return;
-    final url = info.apkUrl;
-    if (url == null) {
-      FloatingToast.show(context, '未找到 APK 下载地址，请前往 Releases 页面下载');
-      return;
-    }
-    FloatingToast.show(context, AppStrings.downloading);
-    final ok = await UpdateService().downloadAndInstall(url);
-    if (mounted && !ok) FloatingToast.show(context, '安装失败，请前往 Releases 页面手动下载');
   }
 
   void _select(String? id) {
@@ -346,8 +350,8 @@ class _SettingsPageState extends State<SettingsPage>
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    DropdownButtonFormField<String>(
-                      initialValue: null,
+                    ImmersiveDropdown<String>(
+                      labelText: AppStrings.quickApplyTemplate,
                       items: _templates
                           .map((template) => DropdownMenuItem(
                               value: template.name, child: Text(template.name)))
@@ -364,12 +368,10 @@ class _SettingsPageState extends State<SettingsPage>
                           _models = [];
                         });
                       },
-                      decoration: const InputDecoration(
-                          labelText: AppStrings.quickApplyTemplate,
-                          border: InputBorder.none),
                     ),
                     const SizedBox(height: 16),
-                    DropdownButtonFormField<ProviderType>(
+                    ImmersiveDropdown<ProviderType>(
+                      labelText: AppStrings.protocolType,
                       initialValue: _type,
                       items: const [
                         DropdownMenuItem(
@@ -384,23 +386,18 @@ class _SettingsPageState extends State<SettingsPage>
                       onChanged: (value) {
                         if (value != null) setState(() => _type = value);
                       },
-                      decoration: const InputDecoration(
-                          labelText: AppStrings.protocolType,
-                          border: InputBorder.none),
                     ),
                     const SizedBox(height: 16),
                     if (_profiles.isNotEmpty) ...[
-                      DropdownButtonFormField<String>(
+                      ImmersiveDropdown<String>(
+                          labelText: AppStrings.savedProviders,
                           initialValue: _selectedId,
                           items: _profiles
                               .map<DropdownMenuItem<String>>((p) =>
                                   DropdownMenuItem<String>(
                                       value: p.id, child: Text(p.name)))
                               .toList(),
-                          onChanged: _select,
-                          decoration: const InputDecoration(
-                              labelText: AppStrings.savedProviders,
-                              border: InputBorder.none)),
+                          onChanged: _select),
                       const SizedBox(height: 16),
                     ],
                     TextField(
@@ -436,7 +433,8 @@ class _SettingsPageState extends State<SettingsPage>
                     ]),
                     if (_models.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
+                      ImmersiveDropdown<String>(
+                          labelText: '从列表选择',
                           initialValue:
                               _models.any((item) => item.id == _model.text)
                                   ? _model.text
@@ -452,9 +450,7 @@ class _SettingsPageState extends State<SettingsPage>
                             if (value != null) {
                               setState(() => _model.text = value);
                             }
-                          },
-                          decoration: const InputDecoration(
-                              labelText: '从列表选择', border: InputBorder.none)),
+                          }),
                       const SizedBox(height: 8),
                       if (_models.any((item) => item.id == _model.text))
                         Builder(builder: (context) {
@@ -604,8 +600,8 @@ class _SettingsPageState extends State<SettingsPage>
                 secondary: const Icon(Icons.checklist),
                 title: const Text('计划模式'),
                 subtitle: const Text('先输出执行计划，确认后才调用工具'),
-                value: _planMode,
-                onChanged: _togglePlanMode,
+                value: ref.watch(chatControllerProvider).planMode,
+                onChanged: (value) => _togglePlanMode(value),
               ),
               const Divider(height: 1),
               ListTile(
@@ -658,6 +654,89 @@ class _SettingsPageState extends State<SettingsPage>
               ),
             ]),
           ),
+          const _SectionHeader(
+              icon: Icons.wallpaper_outlined, title: '聊天背景'),
+          SectionCard(
+            child: FutureBuilder<BackgroundConfig>(
+              future: _backgroundService.load(),
+              builder: (context, snapshot) {
+                final current = snapshot.data ??
+                    const BackgroundConfig(mode: 'default');
+                Widget option(String mode, String title, String subtitle,
+                    {Widget? leading, VoidCallback? onTap}) {
+                  final selected = current.mode == mode;
+                  return ListTile(
+                    leading: leading ??
+                        Icon(
+                          selected
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          color: selected
+                              ? Theme.of(context).colorScheme.primary
+                              : Theme.of(context).hintColor,
+                        ),
+                    title: Text(title),
+                    subtitle: Text(subtitle),
+                    onTap: onTap ??
+                        () async {
+                          await _backgroundService.setMode(mode);
+                          if (mounted) setState(() {});
+                        },
+                  );
+                }
+
+                return Column(children: [
+                  option('default', '默认(跟随主题)',
+                      '浅色纯白渐变 / 深色纯黑,与顶栏最统一'),
+                  option('clouds', '云朵栈桥', '内置插画背景',
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Image.asset(BackgroundService.cloudsAsset,
+                              fit: BoxFit.cover),
+                        ),
+                      )),
+                  option(
+                      current.mode == 'custom' ? 'custom' : 'custom_pick',
+                      '自定义图片',
+                      current.mode == 'custom'
+                          ? '使用相册选择的图片(点此重新选择)'
+                          : '从相册选择一张图片',
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: (current.mode == 'custom' &&
+                                  current.customPath != null)
+                              ? Image.file(File(current.customPath!),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) =>
+                                      const Icon(Icons.broken_image_outlined))
+                              : const Icon(Icons.image_outlined),
+                        ),
+                      ),
+                      onTap: () async {
+                        try {
+                          final x = await ImagePicker()
+                              .pickImage(source: ImageSource.gallery);
+                          if (x == null) return;
+                          await _backgroundService.setCustomBackground(x.path);
+                          if (mounted) setState(() {});
+                        } catch (_) {
+                          if (mounted) {
+                            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                              const SnackBar(content: Text('选图失败,请重试')),
+                            );
+                          }
+                        }
+                      }),
+                ]);
+              },
+            ),
+          ),
           const _SectionHeader(icon: Icons.tune_outlined, title: '界面与其他'),
           SectionCard(
             child: Column(children: [
@@ -685,11 +764,10 @@ class _SettingsPageState extends State<SettingsPage>
                       children: [
                         const Text('对话气泡宽度', style: TextStyle(fontSize: 16)),
                         const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
+                        ImmersiveDropdown<String>(
                           key: ValueKey(_widthOption(widthFactor)),
+                          labelText: '宽度模式',
                           initialValue: _widthOption(widthFactor),
-                          decoration: const InputDecoration(
-                              labelText: '宽度模式', border: InputBorder.none),
                           items: const [
                             DropdownMenuItem(
                                 value: _adaptiveWidth, child: Text('自适应')),
@@ -867,11 +945,9 @@ class _SettingsPageState extends State<SettingsPage>
           title: const Text(AppStrings.addMcpServer),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              DropdownButtonFormField<McpServerKind>(
+              ImmersiveDropdown<McpServerKind>(
+                labelText: AppStrings.connectionMethod,
                 initialValue: kind,
-                decoration: const InputDecoration(
-                    labelText: AppStrings.connectionMethod,
-                    border: InputBorder.none),
                 items: [
                   const DropdownMenuItem(
                       value: McpServerKind.http,

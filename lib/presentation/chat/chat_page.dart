@@ -1,9 +1,12 @@
 import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -38,6 +41,8 @@ import '../workspace/file_tree_sheet.dart';
 import '../workspace/terminal_sheet.dart';
 
 import 'widgets/floating_capsule_input.dart';
+import 'widgets/environment_sheet.dart';
+import '../../../infrastructure/background_service.dart';
 import 'widgets/runtime_tool_banner.dart';
 import 'widgets/session_context_sheet.dart';
 import 'widgets/capsule_top_bar.dart';
@@ -96,6 +101,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  // G1 开发环境引导:检测/安装 Termux、授权、Go 工具链。
+  void _openEnvSetup() {
+    showImmersiveSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.85,
+        child: const EnvironmentSheet(),
+      ),
+    );
+  }
+
   void _openTerminal() {
     final ws = ref.read(chatControllerProvider).currentWorkspacePath;
     if (ws == null || ws.isEmpty) {
@@ -128,6 +146,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   ChatController get _chat => ref.read(chatControllerProvider.notifier);
 
   @override
+  final BackgroundService _backgroundService = BackgroundService();
+
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
@@ -144,6 +164,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     Future.microtask(_checkRecoverableTask);
     // E4 深度链接：冷启动预填 prompt / 打开记忆页。
     _consumeDeepLink();
+    // G1 聊天背景:加载持久化配置到全局通知器。
+    _backgroundService.load().then((c) {
+      BackgroundService.bgNotifier.value = c;
+    });
   }
 
   void _onScroll() {
@@ -274,9 +298,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         _chat.newConversation();
         setState(() => _attachments.add(
             PlatformFile(name: '分享图片.jpg', size: bytes.length, bytes: bytes)));
-        FloatingToast.show(context, '已接收图片，可点击发送');
-      } catch (_) {
-        FloatingToast.show(context, '图片分享解析失败');
+        FloatingToast.show(context, '已接收图片，可点击发送', tone: ToastTone.success);
+      } catch (e) {
+        FloatingToast.error(context, '图片分享解析失败', rawDetail: e.toString());
       }
       return;
     }
@@ -324,7 +348,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final state = ref.read(chatControllerProvider);
     if (state.messages.isEmpty) return;
     await Clipboard.setData(ClipboardData(text: _buildMarkdown(state)));
-    if (mounted) FloatingToast.show(context, AppStrings.conversationCopied);
+    if (mounted) FloatingToast.show(context, AppStrings.conversationCopied, tone: ToastTone.success);
   }
 
   Future<void> _exportConversation() async {
@@ -335,8 +359,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         await exportConversationMarkdown(state.conversationTitle, content);
     await Clipboard.setData(ClipboardData(text: content));
     if (!mounted) return;
-    FloatingToast.show(context,
-        kIsWeb || path.isEmpty ? AppStrings.copiedToClipboard : '已导出到 $path');
+    FloatingToast.show(context, kIsWeb || path.isEmpty ? AppStrings.copiedToClipboard : '已导出到 $path', tone: ToastTone.success);
   }
 
   /// 出站分享：把整段对话以 Markdown 文本分享到系统分享面板。
@@ -347,8 +370,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       await SharePlus.instance
           .share(ShareParams(text: content, subject: state.conversationTitle));
-    } catch (_) {
-      if (mounted) FloatingToast.show(context, '分享失败');
+    } catch (e) {
+      if (mounted) FloatingToast.error(context, '分享失败', rawDetail: e.toString());
     }
   }
 
@@ -545,8 +568,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
               name: xfile.name, size: bytes.length, bytes: bytes)));
         }
       }
-    } catch (_) {
-      if (mounted) FloatingToast.show(context, '无法获取图片');
+    } catch (e) {
+      if (mounted) FloatingToast.error(context, '无法获取图片', rawDetail: e.toString());
     }
   }
 
@@ -613,8 +636,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final name = xfile.name;
       setState(() => _attachments
           .add(PlatformFile(name: name, size: bytes.length, bytes: bytes)));
-    } catch (_) {
-      if (mounted) FloatingToast.show(context, '无法获取图片');
+    } catch (e) {
+      if (mounted) FloatingToast.error(context, '无法获取图片', rawDetail: e.toString());
     }
   }
 
@@ -628,7 +651,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       final available = await _speech.initialize();
       if (!available) {
-        if (mounted) FloatingToast.show(context, AppStrings.voiceError);
+        if (mounted) FloatingToast.error(context, AppStrings.voiceError);
         return;
       }
       if (mounted) setState(() => _listening = true);
@@ -644,10 +667,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
           }
         },
       );
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() => _listening = false);
-        FloatingToast.show(context, AppStrings.voiceError);
+        FloatingToast.error(context, AppStrings.voiceError, rawDetail: e.toString());
       }
     }
   }
@@ -750,7 +773,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     try {
       final clipboard = SystemClipboard.instance;
       if (clipboard == null) {
-        if (mounted) FloatingToast.show(context, '剪贴板不可用');
+        if (mounted) FloatingToast.error(context, '剪贴板不可用');
         return;
       }
       final reader = await clipboard.read();
@@ -763,21 +786,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
         format = Formats.jpeg;
         ext = 'jpg';
       } else {
-        if (mounted) FloatingToast.show(context, '剪贴板没有图片');
+        if (mounted) FloatingToast.error(context, '剪贴板没有图片');
         return;
       }
       final bytes = await _readClipboardFile(reader, format);
       if (bytes == null) {
-        if (mounted) FloatingToast.show(context, '无法读取剪贴板图片');
+        if (mounted) FloatingToast.error(context, '无法读取剪贴板图片');
         return;
       }
       if (mounted) {
         setState(() => _attachments.add(PlatformFile(
             name: '剪贴板图片.$ext', size: bytes.length, bytes: bytes)));
-        FloatingToast.show(context, '已粘贴图片');
+        FloatingToast.show(context, '已粘贴图片', tone: ToastTone.success);
       }
-    } catch (_) {
-      if (mounted) FloatingToast.show(context, '无法读取剪贴板，请手动选图');
+    } catch (e) {
+      if (mounted) FloatingToast.error(context, '无法读取剪贴板，请手动选图', rawDetail: e.toString());
     }
   }
 
@@ -812,14 +835,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
         if (!mounted) return;
         setState(() => _attachments.add(PlatformFile(
             name: '录音.m4a', size: bytes.length, path: path, bytes: bytes)));
-        FloatingToast.show(context, '录音已添加');
+        FloatingToast.show(context, '录音已添加', tone: ToastTone.success);
       }
       if (mounted) setState(() {});
       return;
     }
     try {
       if (!await _recorder.hasPermission()) {
-        if (mounted) FloatingToast.show(context, '未获得麦克风权限');
+        if (mounted) FloatingToast.error(context, '未获得麦克风权限');
         return;
       }
       final dir = await getTemporaryDirectory();
@@ -834,7 +857,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
     } catch (_) {
       _recording = false;
-      if (mounted) FloatingToast.show(context, '录音不可用');
+      if (mounted) FloatingToast.error(context, '录音不可用');
     }
   }
 
@@ -929,12 +952,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (result == null || !mounted) return;
     if (result.mode == PromptApplyMode.systemPrompt) {
       _chat.setSystemPrompt(result.content);
-      FloatingToast.show(context, AppStrings.applyAsSystemPrompt);
+      FloatingToast.show(context, AppStrings.applyAsSystemPrompt, tone: ToastTone.success);
     } else {
       _controller.text = result.content;
       _controller.selection =
           TextSelection.collapsed(offset: result.content.length);
-      FloatingToast.show(context, AppStrings.insertedToInput);
+      FloatingToast.show(context, AppStrings.insertedToInput, tone: ToastTone.success);
     }
   }
 
@@ -962,7 +985,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
               const SizedBox(height: 4),
               const Text(
                   '仅推理模型（OpenAI o1/o3/GPT-5、Claude thinking、Gemini 2.0 thinking）生效，其他模型忽略。',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF627D98))),
+                  style: TextStyle(fontSize: 12, color: AppTheme.mutedOnGlassLight)),
               const SizedBox(height: 16),
               Wrap(
                   spacing: 10,
@@ -1006,7 +1029,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final state = ref.read(chatControllerProvider);
     final needsWorkspace =
         !(state.currentWorkspacePath?.trim().isNotEmpty ?? false) &&
-            (text == '解读项目' || text == '修复问题');
+            (text == '解读项目' || text == '修复问题' || text == '解读工作区');
     if (needsWorkspace) {
       _pickWorkspaceAndFill(text);
       return;
@@ -1029,7 +1052,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final state = ref.read(chatControllerProvider);
     final ws = state.currentWorkspacePath;
     final hasWorkspace = ws != null && ws.isNotEmpty;
-    final suggestions = const ['解读项目', '修复问题', '头脑风暴'];
+    final suggestions = const ['解读项目', '修复问题', '头脑风暴', '解读工作区'];
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     return ChatEmptyState(
       suggestions: suggestions,
@@ -1070,6 +1093,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           backgroundColor: Colors.transparent, // Background handled by stack
           drawer: ChatCatalogDrawer(
             currentWorkspacePath: state.currentWorkspacePath,
+            contextTokens: state.contextTokens,
             activeModel: state.activeModel,
             activeProviderName: state.activeProviderName,
             messages: state.messages,
@@ -1089,7 +1113,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
           body: Stack(
             children: [
-              // Cosmic Gradient Background
+              // G1 聊天背景:自定义图 > 默认云朵图 > 渐变兜底;轻微 scrim 保消息可读。
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
@@ -1111,34 +1135,39 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   ),
                 ),
               ),
+              Positioned.fill(
+                child: ValueListenableBuilder<BackgroundConfig>(
+                  valueListenable: BackgroundService.bgNotifier,
+                  builder: (context, bg, _) {
+                    final dark = Theme.of(context).brightness == Brightness.dark;
+                    final Widget? image = switch (bg.mode) {
+                      'clouds' => Image.asset(BackgroundService.cloudsAsset,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      'custom' when bg.customPath != null => Image.file(
+                          File(bg.customPath!),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      _ => null,
+                    };
+                    if (image == null) return const SizedBox.shrink();
+                    // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
+                    final scrim = bg.mode == 'custom' || dark
+                        ? (dark ? Colors.black.withOpacity(.18) : Colors.white.withOpacity(.10))
+                        : Colors.white.withOpacity(.06);
+                    return Stack(fit: StackFit.expand, children: [
+                      image,
+                      Container(color: scrim),
+                    ]);
+                  },
+                ),
+              ),
               SafeArea(
                 bottom: false,
             child: LayoutBuilder(builder: (context, constraints) {
               // 横屏 / 平板等宽屏下限制正文最大宽度，避免输入框与卡片过宽（文档 9）。
               final wide = constraints.maxWidth > 700;
               Widget column = Column(children: [
-                CapsuleTopBar(
-                  workspaceLabel: state.currentWorkspacePath == null ||
-                          state.currentWorkspacePath!.isEmpty
-                      ? null
-                      : p.basename(state.currentWorkspacePath!),
-                  modelLabel: state.activeModel.isNotEmpty
-                      ? state.activeModel
-                      : (state.activeProviderName.isEmpty
-                          ? null
-                          : state.activeProviderName),
-                  statusActive: state.running,
-                  currentContextTokens: state.messages.reversed
-                          .where((m) => m.usage != null)
-                          .map((m) =>
-                              m.usage!.promptTokens + m.usage!.completionTokens)
-                          .firstOrNull ??
-                      0,
-                  onMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                  onNewChat: () => _chat.newConversation(),
-                  onContextGaugeTap: () =>
-                      _scaffoldKey.currentState?.openDrawer(),
-                ),
                 // Removed obsolete ActionChips
                 if (state.planState != null &&
                     state.planState!.status != 'cancelled')
@@ -1149,11 +1178,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         : state.planState!.steps.first.description,
                     onApprove: () => _chat.respondToPlan(true),
                     onCancel: () => _chat.respondToPlan(false),
-                  ),
-                if (state.toolActivities.isNotEmpty)
-                  ToolActivitySection(
-                    activities: state.toolActivities,
-                    running: state.running,
                   ),
                 if (state.activityLog.isNotEmpty)
                   Padding(
@@ -1181,6 +1205,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               },
                               onRegenerate: _regenerate,
                             ),
+
                       if (_showScrollToBottom)
                         Positioned(
                           right: 16,
@@ -1282,6 +1307,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                           .setPlanMode(!state.planMode);
                     },
                     onTerminalPreview: _openTerminal,
+                    onEnvSetup: _openEnvSetup,
                     planModeEnabled: state.planMode,
                     onVoiceToggle: _toggleVoice,
                     isListening: _listening,
@@ -1311,6 +1337,64 @@ class _ChatPageState extends ConsumerState<ChatPage>
               }
               return column;
             }),
+          ),
+        // G1 工具执行明细悬浮胶囊:悬浮于聊天之上,不内联挤压消息流。
+                      // G1 顶部渐变模糊条:消息从其下滚动穿过时渐隐(ZCode 顶栏样式)。
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: MediaQuery.paddingOf(context).top + 68,
+                        child: ClipRect(
+                          child: BackdropFilter(
+                            filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [
+                                    Theme.of(context).colorScheme.surface.withOpacity(.85),
+                                    Theme.of(context).colorScheme.surface.withOpacity(.40),
+                                    Theme.of(context).colorScheme.surface.withOpacity(0),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: MediaQuery.paddingOf(context).top + 4,
+                        left: 12,
+                        right: 12,
+                        child: CapsuleTopBar(
+                          maxContextTokens: state.contextTokens,
+                          workspaceLabel: state.currentWorkspacePath == null ||
+                                  state.currentWorkspacePath!.isEmpty
+                              ? null
+                              : p.basename(state.currentWorkspacePath!),
+                          modelLabel: state.activeModel.isNotEmpty
+                              ? state.activeModel
+                              : (state.activeProviderName.isEmpty
+                                  ? null
+                                  : state.activeProviderName),
+                          statusActive: state.running,
+                          currentContextTokens: state.messages.reversed
+                                  .where((m) => m.usage != null)
+                                  .map((m) => m.usage!.promptTokens + m.usage!.completionTokens)
+                                  .firstOrNull ??
+                              0,
+                          onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                          onNewChat: () => _chat.newConversation(),
+                          onContextGaugeTap: () => _scaffoldKey.currentState?.openDrawer(),
+                        ),
+                      ),
+
+        if (state.toolActivities.isNotEmpty)
+          ToolActivityCapsule(
+            activities: state.toolActivities,
+            running: state.running,
           ),
         ], // Stack children
         ), // Stack

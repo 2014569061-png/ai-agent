@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../application/chat_controller.dart';
 import '../../theme/app_tokens.dart';
-import '../../../presentation/widgets/tool_call_card.dart';
+import '../../widgets/immersive_surface.dart';
 
-/// 工具执行明细折叠卡：运行时默认展开当前执行中的工具卡片。
-class ToolActivitySection extends StatelessWidget {
-  const ToolActivitySection({
+/// G1 工具执行明细悬浮胶囊:收起为底部居中小胶囊,展开为固定高度、内部可滚动
+/// 的毛玻璃浮动面板。列表为 ZCode 进程面板式细行(状态图标 + 工具名),点击行
+/// 展开参数与输出详情。悬浮于聊天 Stack 顶层,不内联挤压消息流。
+class ToolActivityCapsule extends StatefulWidget {
+  const ToolActivityCapsule({
     super.key,
     required this.activities,
     required this.running,
@@ -16,29 +18,179 @@ class ToolActivitySection extends StatelessWidget {
   final bool running;
 
   @override
+  State<ToolActivityCapsule> createState() => _ToolActivityCapsuleState();
+}
+
+class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
+  bool _open = false;
+
+  @override
   Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topRight,
+      child: Padding(
+        // 顶部右侧,位于渐变模糊条之下;面板展开时居中对称。
+        padding: const EdgeInsets.only(top: 58, right: 12, left: 12),
+        child: _open ? _panel(context) : _capsule(context),
+      ),
+    );
+  }
+
+  Widget _capsule(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
-      child: Card(
-        elevation: 0,
-        color: theme.colorScheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTokens.smallControlRadius)),
-        child: ExpansionTile(
-          title: Text(
-            '工具执行明细 (${activities.length})',
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          childrenPadding: const EdgeInsets.only(bottom: 8.0),
-          children: activities
-              .map((activity) => ToolCallCard(
-                    activity: activity,
-                    initiallyExpanded: running && activity.status == '执行中',
-                  ))
-              .toList(),
+    return ImmersiveSurface(
+      level: ImmersiveMaterialLevel.thin,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: () => setState(() => _open = true),
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (widget.running)
+              const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              Icon(Icons.handyman_rounded,
+                  size: 16, color: theme.colorScheme.onSurface),
+            const SizedBox(width: 6),
+            Text(
+              '工具 ${widget.activities.length}',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: theme.colorScheme.onSurface),
+            ),
+          ]),
         ),
+      ),
+    );
+  }
+
+  Widget _panel(BuildContext context) {
+    final theme = Theme.of(context);
+    final size = MediaQuery.of(context).size;
+    final height = (size.height * 0.45).clamp(260.0, 480.0).toDouble();
+    return ImmersiveSurface(
+      level: ImmersiveMaterialLevel.thin,
+      borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+      child: SizedBox(
+        width: double.infinity,
+        height: height,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+            child: Row(children: [
+              Expanded(
+                child: Text(
+                  '工具执行明细 (${widget.activities.length})',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.close_rounded, size: 20),
+                onPressed: () => setState(() => _open = false),
+              ),
+            ]),
+          ),
+          Divider(height: 1, color: theme.dividerColor.withOpacity(.5)),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: widget.activities.length,
+              itemBuilder: (context, i) => _row(context, widget.activities[i]),
+            ),
+          ),
+          Divider(height: 1, color: theme.dividerColor.withOpacity(.5)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '共 ${widget.activities.length}'
+                ' · 完成 ${widget.activities.where((a) => a.status == '已完成').length}'
+                '${runningCount > 0 ? ' · 执行中 $runningCount' : ''}'
+                '${pendingCount > 0 ? ' · 待确认 $pendingCount' : ''}',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.hintColor),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  int get runningCount =>
+      widget.activities.where((a) => a.status == '执行中').length;
+  int get pendingCount =>
+      widget.activities.where((a) => a.status == '等待确认').length;
+
+  Widget _row(BuildContext context, ToolActivity a) {
+    final theme = Theme.of(context);
+    final running = a.status == '执行中';
+    final done = a.status == '已完成';
+    final pending = a.status == '等待确认';
+    final args = a.call.arguments.toString();
+    final argsBrief = args.length > 48 ? '${args.substring(0, 48)}…' : args;
+    return Theme(
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+        minTileHeight: 40,
+        leading: running
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : Icon(
+                done
+                    ? Icons.check_circle_outline
+                    : pending
+                        ? Icons.error_outline
+                        : Icons.radio_button_unchecked,
+                size: 18,
+                color: done
+                    ? Colors.green
+                    : pending
+                        ? Colors.orange
+                        : theme.hintColor,
+              ),
+        title: Text(a.call.name,
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(fontFamily: 'monospace')),
+        subtitle: Text(argsBrief,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+        trailing: pending
+            ? Text('待确认',
+                style:
+                    theme.textTheme.labelSmall?.copyWith(color: Colors.orange))
+            : null,
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text('参数: $args',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontFamily: 'monospace')),
+          ),
+          const SizedBox(height: 4),
+          if (a.result != null && a.result!.isNotEmpty)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '输出: ${a.result}',
+                maxLines: 6,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontFamily: 'monospace'),
+              ),
+            ),
+        ],
       ),
     );
   }

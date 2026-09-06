@@ -7,6 +7,7 @@ import '../../infrastructure/database/app_database.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/immersive_dropdown.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
 import '../widgets/floating_toast.dart';
@@ -102,9 +103,9 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
               const SizedBox(height: 12),
               Row(children: [
                 Expanded(
-                  child: DropdownButtonFormField<int>(
+                  child: ImmersiveDropdown<int>(
+                    labelText: '时',
                     initialValue: hour,
-                    decoration: const InputDecoration(labelText: '时'),
                     items: [
                       for (var i = 0; i < 24; i++)
                         DropdownMenuItem(value: i, child: Text('$i 时'))
@@ -114,9 +115,9 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButtonFormField<int>(
+                  child: ImmersiveDropdown<int>(
+                    labelText: '分',
                     initialValue: minute,
-                    decoration: const InputDecoration(labelText: '分'),
                     items: [
                       for (var i = 0; i < 60; i += 5)
                         DropdownMenuItem(value: i, child: Text('$i 分'))

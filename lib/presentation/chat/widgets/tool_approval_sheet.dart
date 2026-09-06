@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 import '../../../domain/models.dart';
 import '../../l10n/app_strings.dart';
@@ -18,7 +19,7 @@ class ToolApprovalSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final danger = risk == ToolRisk.dangerous;
     final riskColor =
-        danger ? const Color(0xFFDC2626) : const Color(0xFFF59E0B);
+        danger ? AppTheme.danger : AppTheme.warning;
     final riskLabel =
         danger ? AppStrings.dangerOperation : AppStrings.requiresConfirmation;
     final humanizer = const ToolHumanizer();

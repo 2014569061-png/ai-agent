@@ -22,8 +22,9 @@ void main() {
     final light = AppTheme.light();
     expect(light.cardTheme.shape, isNotNull);
     expect(light.inputDecorationTheme.border, isNotNull);
-    expect(light.dialogTheme.shape, isNotNull);
-    expect(light.bottomSheetTheme.shape, isNotNull);
+    // P0.2 起弹层表面由 ImmersiveSurface 提供：dialogTheme 透明化、bottomSheetTheme 已删除。
+    expect(light.dialogTheme.backgroundColor, Colors.transparent);
+    expect(light.dialogTheme.titleTextStyle, isNotNull);
     expect(light.navigationBarTheme.height, 68);
   });
 

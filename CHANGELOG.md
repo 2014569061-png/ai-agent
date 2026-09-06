@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### 体验修复
+- **工具执行明细折叠卡材质统一**：外壳由原生 Card/ExpansionTile（实心灰面层，体系外）迁移至 `ImmersiveSurface` 玻璃 + `ImmersiveMotion.expand` 展开动效，与顶栏/工具卡同材质语言，消除视觉割裂
+
 ## [0.6.0] - 2026-09-05（体验与 Skill 生态版）
 
 ### 产品定位

@@ -62,6 +62,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // 调试包装在独立包名（com.nexusagent.app.debug）下，与正式签名包并存，
+            // 热重载调试不影响已安装的正式版，也不会被误分享。
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             // [体积优化] 开启 R8 代码压缩与资源收缩，删除未使用的原生代码与资源
             isMinifyEnabled = true

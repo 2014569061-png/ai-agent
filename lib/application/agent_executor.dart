@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart' show CancelToken;
 
@@ -33,14 +34,26 @@ class AgentExecutor {
     Future<bool> Function(List<ToolCall> calls, String planText)? confirmPlan,
   }) async* {
     var messages = List<ChatMessage>.of(history);
-    if (systemPrompt != null &&
-        systemPrompt.trim().isNotEmpty &&
+    // G1:Android 上 terminal 工具的 go/bash 等经 Termux 桥在本机执行,具备完整
+    // Go 工具链。显式告知模型本机可编译,避免其基于常识让用户"去 Windows 编译"。
+    var systemText = systemPrompt?.trim() ?? '';
+    if (systemText.isNotEmpty &&
+        Platform.isAndroid &&
+        tools.manifests.any((t) => t.name == 'terminal')) {
+      systemText += '\n\n[运行环境说明] 当前运行在 Android 手机上,terminal 工具中的 '
+          'go/gofmt/bash/sh/curl/jq/make/zig 会自动转交本机 Termux 沙箱执行(内置完整 Go '
+          '工具链与网络)。因此:Go 程序可以直接在本机编写并运行 go vet / go test 验证,'
+          '用 GOOS=windows GOARCH=amd64 go build -o <名字>.exe . 交叉编译出 Windows exe,'
+          '产物直接落在工作区目录。编译或测试报错时直接修改代码重试;'
+          '绝对不要让用户"到 Windows 电脑上手动编译",也不要声称本环境无法构建。';
+    }
+    if (systemText.isNotEmpty &&
         !messages.any((m) => m.role == MessageRole.system)) {
       messages.insert(
           0,
           ChatMessage(
               role: MessageRole.system,
-              parts: [MessagePart.text(systemPrompt.trim())]));
+              parts: [MessagePart.text(systemText)]));
     }
     // 上下文预算：每步请求前裁剪一次，同时约束初始历史与多步工具循环
     // 中持续追加的工具结果。

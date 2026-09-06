@@ -3,6 +3,14 @@ import 'package:flutter/material.dart';
 abstract final class AppTheme {
   static const brand = Color(0xFF0A59F7);
   static const brandBright = Color(0xFF1677FF);
+
+  /// 品牌渐变对（蓝→紫）：录音胶囊、空态艺术、品牌光晕共用；用户气泡的带透明版在 AppSemanticColors。
+  static const brandGradientStart = Color(0xFF4C8DFF);
+  static const brandGradientEnd = Color(0xFF9333EA);
+
+  /// 玻璃表面弱化文字（mutedOnGlass）的顶层 const 版本，供 const 表达式直接引用。
+  static const mutedOnGlassLight = Color(0xFF627D98);
+  static const mutedOnGlassDark = Color(0xFF8A94A6);
   static const background = Color(0xFFF6F8FB);
   static const darkBackground = Color(0xFF080D17);
   static const textPrimary = Color(0xFF1E293B);
@@ -156,36 +164,15 @@ abstract final class AppTheme {
         labelStyle: TextStyle(
             color: isDark ? foreground : const Color(0xFF174A7E), height: 1.35),
       ),
+      // 弹层表面统一由 showImmersiveDialog / showImmersiveSheet 的 ImmersiveSurface 提供，
+      // dialogTheme 只保留文字样式，背景保持透明避免出现不透明兜底面。
       dialogTheme: DialogThemeData(
-        backgroundColor: surface,
+        backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusModal)),
-        elevation: 12,
-        shadowColor: Colors.black.withValues(alpha: isDark ? .5 : .16),
+        elevation: 0,
+        shadowColor: Colors.transparent,
         titleTextStyle: TextStyle(
             color: foreground, fontSize: 20, fontWeight: FontWeight.w700),
-      ),
-      bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: surface,
-        modalBackgroundColor: surface,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.vertical(top: Radius.circular(radiusModal))),
-        showDragHandle: true,
-        dragHandleColor: border,
-      ),
-      popupMenuTheme: PopupMenuThemeData(
-        color: surface,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusSmall),
-          side: BorderSide(color: border),
-        ),
-        elevation: 10,
-        menuPadding: const EdgeInsets.symmetric(vertical: 6),
-        textStyle: TextStyle(color: foreground, fontSize: 14),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surface,
@@ -265,6 +252,12 @@ class AppSemanticColors {
     required this.success,
     required this.focusGlow,
     required this.glowBright,
+    required this.brandAccent,
+    required this.userBubbleStart,
+    required this.userBubbleEnd,
+    required this.userBubbleGlow,
+    required this.onGlass,
+    required this.mutedOnGlass,
   });
 
   final Color canvas;
@@ -283,6 +276,22 @@ class AppSemanticColors {
   final Color focusGlow;
   final Color glowBright;
 
+  /// 品牌强调蓝（计划卡片、抽屉图标、选中态描边）。
+  final Color brandAccent;
+
+  /// 用户气泡彩色玻璃：渐变起止（自带透明度，叠在 BackdropFilter 上）。
+  final Color userBubbleStart;
+  final Color userBubbleEnd;
+
+  /// 用户气泡光晕（浅色主题下透明，即无光晕）。
+  final Color userBubbleGlow;
+
+  /// 彩色玻璃表面上的正文颜色。
+  final Color onGlass;
+
+  /// 玻璃表面上的弱化文字/署名（比 textMuted 更贴玻璃材质的一档）。
+  final Color mutedOnGlass;
+
   static const light = AppSemanticColors(
     canvas: AppTheme.background,
     surface: AppTheme.lightElevated,
@@ -299,6 +308,12 @@ class AppSemanticColors {
     success: AppTheme.success,
     focusGlow: AppTheme.lightGlow,
     glowBright: Color(0x331A6BFF),
+    brandAccent: AppTheme.brandBright,
+    userBubbleStart: Color(0x9EFFFFFF),
+    userBubbleEnd: Color(0x80C7D7FE),
+    userBubbleGlow: Color(0x00000000),
+    onGlass: AppTheme.textPrimary,
+    mutedOnGlass: AppTheme.mutedOnGlassLight,
   );
 
   static const dark = AppSemanticColors(
@@ -317,5 +332,11 @@ class AppSemanticColors {
     success: AppTheme.success,
     focusGlow: AppTheme.darkGlow,
     glowBright: Color(0x663E86FF),
+    brandAccent: Color(0xFF4C8DFF),
+    userBubbleStart: Color(0x8C4C8DFF),
+    userBubbleEnd: Color(0x8C9333EA),
+    userBubbleGlow: Color(0x4D9333EA),
+    onGlass: Colors.white,
+    mutedOnGlass: AppTheme.mutedOnGlassDark,
   );
 }

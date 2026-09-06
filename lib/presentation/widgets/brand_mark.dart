@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 /// NEXUS Agent 统一品牌标志。
 ///
@@ -41,12 +42,12 @@ class BrandMark extends StatelessWidget {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF4C8DFF).withValues(alpha: .28),
+            color: AppTheme.brandGradientStart.withValues(alpha: .28),
             blurRadius: size * .42,
             spreadRadius: size * .06,
           ),
           BoxShadow(
-            color: const Color(0xFF9333EA).withValues(alpha: .22),
+            color: AppTheme.brandGradientEnd.withValues(alpha: .22),
             blurRadius: size * .55,
             spreadRadius: size * .08,
           ),

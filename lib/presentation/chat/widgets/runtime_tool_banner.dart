@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 import '../../../application/chat_controller.dart';
 import '../../../infrastructure/tools/tool_humanizer.dart';
@@ -25,9 +26,9 @@ class RuntimeToolBanner extends StatelessWidget {
   }
 
   static (Color, IconData) _style(String status) => switch (status) {
-        '执行中' => (const Color(0xFF2563EB), Icons.hourglass_top_rounded),
-        '等待确认' => (const Color(0xFFF59E0B), Icons.gpp_maybe_outlined),
-        _ => (const Color(0xFF64748B), Icons.settings_ethernet_rounded),
+        '执行中' => (AppTheme.brandBright, Icons.hourglass_top_rounded),
+        '等待确认' => (AppTheme.warning, Icons.gpp_maybe_outlined),
+        _ => (AppTheme.textSecondary, Icons.settings_ethernet_rounded),
       };
 
   @override

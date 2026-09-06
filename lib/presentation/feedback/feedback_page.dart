@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/floating_toast.dart';
+import '../widgets/immersive_dropdown.dart';
 
 /// 应用内反馈渠道（F6）：内置表单 + mailto 兜底（无后端时）。
 class FeedbackPage extends StatefulWidget {
@@ -52,9 +53,9 @@ class _FeedbackPageState extends State<FeedbackPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('意见反馈')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        DropdownButtonFormField<String>(
+        ImmersiveDropdown<String>(
+          labelText: '问题类型',
           initialValue: _type.text,
-          decoration: const InputDecoration(labelText: '问题类型'),
           items: const [
             DropdownMenuItem(value: '功能建议', child: Text('功能建议')),
             DropdownMenuItem(value: 'Bug 反馈', child: Text('Bug 反馈')),

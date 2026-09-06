@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
-import '../../theme/app_tokens.dart';
 import '../../widgets/brand_mark.dart';
-import '../../widgets/immersive_surface.dart';
 
 /// 对话页空态：品牌图标 + 动态问候语 + 三个独立快捷操作卡片。
 /// 键盘弹出时收敛为仅问候语（文档 9），短屏压缩间距并缩小品牌图标。
@@ -23,12 +21,6 @@ class ChatEmptyState extends StatelessWidget {
   /// 键盘弹出时隐藏品牌图标与快捷卡片，仅保留问候语（文档 9）。
   final bool keyboardVisible;
 
-  /// 文档 3.3 层级颜色 / 6.2 卡片规格。
-  static const cardBackground = Color(0xFF131C2B);
-  static const cardBorder = Color(0x1AFFFFFF); // 白 10%
-  static const brandBlue = Color(0xFF2F81F7);
-  static const textPrimary = Color(0xFFF2F5FA);
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -43,17 +35,16 @@ class ChatEmptyState extends StatelessWidget {
                 : '晚上好，想先做点什么？';
 
     final shortScreen = MediaQuery.sizeOf(context).height < 620;
-    final cardHeight = shortScreen ? 64.0 : 76.0;
 
     final greetingText = Text(
       greeting,
       textAlign: TextAlign.center,
       style: theme.textTheme.headlineMedium?.copyWith(
-        fontSize: 34,
+        fontSize: 22,
         height: 1.2,
         letterSpacing: -0.5,
-        fontWeight: FontWeight.w800,
-        color: theme.colorScheme.onSurface,
+        fontWeight: FontWeight.w600,
+        color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
       ),
     );
 
@@ -61,33 +52,48 @@ class ChatEmptyState extends StatelessWidget {
       key: const ValueKey('full'),
       mainAxisSize: MainAxisSize.min,
       children: [
-        // 首页品牌图标：带有微弱光晕效果（尺寸 72dp）
-        SizedBox(height: shortScreen ? 12 : 32),
-        SizedBox(
-          width: shortScreen ? 72 : 88,
-          height: shortScreen ? 72 : 88,
+        SizedBox(height: shortScreen ? 12 : 24),
+        const SizedBox(
+          width: 56,
+          height: 56,
           child: BrandMark(
-            size: shortScreen ? 72 : 88,
+            size: 56,
             withGlow: true,
           ),
         ),
-        SizedBox(height: shortScreen ? 24 : 36),
+        SizedBox(height: shortScreen ? 16 : 24),
         greetingText,
-        SizedBox(height: shortScreen ? 28 : 44),
-        ...suggestions.map(
-          (text) => Padding(
-            padding: EdgeInsets.only(bottom: shortScreen ? 8 : 10),
-            child: _QuickActionCard(
-              label: text,
-              height: cardHeight,
-              onTap: () => onSuggestionTap(text),
-            ),
+        const SizedBox(height: 8),
+        Text(
+          '直接输入需求，或试试这些',
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontSize: 13,
+            color: colors.textMuted,
           ),
         ),
+        SizedBox(height: shortScreen ? 20 : 32),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            mainAxisExtent: 44,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+          ),
+          itemCount: suggestions.length,
+          itemBuilder: (context, index) {
+            final text = suggestions[index];
+            return _SuggestionChip(
+              label: text,
+              onTap: () => onSuggestionTap(text),
+            );
+          },
+        ),
         if (!hasWorkspace) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 16),
           Text(
-            '解读项目和修复问题会先引导你选择工作区',
+            '解读和修复等操作会先引导你选择工作区',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: colors.textMuted,
@@ -143,82 +149,57 @@ class ChatEmptyState extends StatelessWidget {
   }
 }
 
-/// 品牌图标：视觉识别用，不承担点击；光晕控制在图标 1.2~1.4 倍且低透明度。
-/// 独立横向快捷操作卡片：圆角 16、图标统一品牌蓝、右侧箭头、按压有亮度反馈。
-class _QuickActionCard extends StatelessWidget {
-  const _QuickActionCard({
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({
     required this.label,
     required this.onTap,
-    this.height = 60,
   });
 
   final String label;
   final VoidCallback onTap;
-  final double height;
 
   IconData get _icon => switch (label) {
         '解读项目' => Icons.account_tree_outlined,
         '修复问题' => Icons.build_outlined,
         '头脑风暴' => Icons.lightbulb_outline_rounded,
+        '解读工作区' => Icons.description_outlined,
         _ => Icons.auto_awesome_outlined,
       };
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ImmersiveSurface(
-      level: ImmersiveMaterialLevel.ultraThick,
-      borderRadius: BorderRadius.circular(16),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            height: height,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF4C8DFF), Color(0xFF9333EA)],
-                    ),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF4C8DFF).withValues(alpha: 0.3),
-                        blurRadius: 12,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                  child: Icon(_icon, color: Colors.white, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color:
-                      theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
-                ),
-              ],
-            ),
+    final isDark = theme.brightness == Brightness.dark;
+    
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: isDark ? 0.08 : 0.55),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+            width: 1,
           ),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(_icon, size: 18, color: theme.colorScheme.onSurface),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ],
         ),
       ),
     );

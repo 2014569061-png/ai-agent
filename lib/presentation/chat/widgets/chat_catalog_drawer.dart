@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
@@ -31,8 +32,12 @@ class ChatCatalogDrawer extends StatefulWidget {
   final VoidCallback? onMore;
   final VoidCallback? onOpenHistory;
 
+  /// 激活 Provider 的上下文窗口,HUD 与实际执行预算同源。
+  final int contextTokens;
+
   const ChatCatalogDrawer({
     super.key,
+    required this.contextTokens,
     required this.currentWorkspacePath,
     required this.activeModel,
     required this.activeProviderName,
@@ -99,7 +104,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
         ? (latestUsage.promptTokens + latestUsage.completionTokens)
         : 0;
 
-    const maxContextLimit = 128000; // 默认 128k 窗口基准
+    final maxContextLimit = widget.contextTokens; // G1 与 Provider 设置同源
     final contextRatio =
         (currentContextTokens / maxContextLimit).clamp(0.0, 1.0);
 
@@ -156,7 +161,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
                         backgroundColor: isDark
-                            ? const Color(0xFF2563EB)
+                            ? AppTheme.brandBright
                             : theme.colorScheme.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -209,7 +214,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              '上下文窗口 (128k)',
+                              '上下文窗口 (${(widget.contextTokens / 1000).toStringAsFixed(0)}k)',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -223,10 +228,10 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                                 fontFamily: 'monospace',
                                 fontWeight: FontWeight.w700,
                                 color: contextRatio > 0.8
-                                    ? const Color(0xFFEF4444)
+                                    ? AppTheme.danger
                                     : (contextRatio > 0.6
-                                        ? const Color(0xFFF59E0B)
-                                        : const Color(0xFF10B981)),
+                                        ? AppTheme.warning
+                                        : AppTheme.success),
                               ),
                             ),
                           ],
@@ -241,8 +246,8 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                                 ? Colors.white.withValues(alpha: 0.1)
                                 : Colors.black.withValues(alpha: 0.06),
                             color: contextRatio > 0.8
-                                ? const Color(0xFFEF4444)
-                                : const Color(0xFF3B82F6),
+                                ? AppTheme.danger
+                                : AppTheme.brandBright,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -402,7 +407,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                           : Icons.pan_tool_alt_rounded,
                       size: 20,
                       color: widget.planModeEnabled
-                          ? const Color(0xFFF59E0B)
+                          ? AppTheme.warning
                           : null,
                     ),
                     onPressed: () {

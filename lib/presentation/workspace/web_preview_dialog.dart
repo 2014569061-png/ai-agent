@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../widgets/immersive_dropdown.dart';
 import 'phone_preview_view.dart';
 
 /// 在电脑上以手机视口比例预览网页项目。
@@ -531,12 +532,10 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
   Widget _buildControlContent(ThemeData theme, {bool compact = false}) {
     final colors = theme.colorScheme;
     final viewport = _viewportSize;
-    final deviceField = DropdownButtonFormField<_DevicePreset>(
+    final deviceField = ImmersiveDropdown<_DevicePreset>(
+      labelText: '设备尺寸',
+      prefixIcon: const Icon(Icons.devices_other_rounded, size: 19),
       initialValue: _device,
-      decoration: const InputDecoration(
-        labelText: '设备尺寸',
-        prefixIcon: Icon(Icons.devices_other_rounded, size: 19),
-      ),
       items: _devices
           .map(
             (device) => DropdownMenuItem<_DevicePreset>(

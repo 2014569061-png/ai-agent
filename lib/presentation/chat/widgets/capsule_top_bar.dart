@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../theme/app_theme.dart';
 
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_surface.dart';
@@ -110,9 +111,9 @@ class CapsuleTopBar extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: contextRatio > 0.8
-                          ? const Color(0xFFEF4444)
+                          ? AppTheme.danger
                           : (contextRatio > 0.6
-                              ? const Color(0xFFF59E0B)
+                              ? AppTheme.warning
                               : Colors.transparent),
                     ),
                   ),
@@ -124,8 +125,8 @@ class CapsuleTopBar extends StatelessWidget {
                         height: 7,
                         decoration: BoxDecoration(
                           color: contextRatio > 0.8
-                              ? const Color(0xFFEF4444)
-                              : const Color(0xFF10B981),
+                              ? AppTheme.danger
+                              : AppTheme.success,
                           shape: BoxShape.circle,
                         ),
                       ),

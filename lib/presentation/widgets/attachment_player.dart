@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
 
@@ -83,7 +84,7 @@ class _AttachmentPlayerState extends State<AttachmentPlayer> {
   Widget build(BuildContext context) {
     if (_error != null) {
       return Text('[$_error]',
-          style: const TextStyle(fontSize: 12, color: Color(0xFF9AA5B1)));
+          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary));
     }
     final icon =
         _isVideo ? Icons.play_circle_outline : Icons.volume_up_outlined;

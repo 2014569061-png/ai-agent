@@ -4,7 +4,6 @@ import '../../../domain/models.dart';
 import '../../../infrastructure/providers/provider_config.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
-import '../../widgets/immersive_surface.dart';
 
 class ModelPickerSelection {
   const ModelPickerSelection({
@@ -288,12 +287,16 @@ class _ModelTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.semanticOf(context);
-    return ImmersiveSurface(
-      level: selected
-          ? ImmersiveMaterialLevel.ultraThin
-          : ImmersiveMaterialLevel.ultraThick,
-      borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+    // 外壳 showImmersiveSheet 的 ultraThick 是唯一玻璃面，这里只做选中态着色，避免双层玻璃叠加发浑。
+    return Container(
       margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+        color: selected ? colors.focusGlow : Colors.transparent,
+        border: Border.all(
+          color: selected ? colors.brandAccent : Colors.transparent,
+        ),
+      ),
       child: Material(
         color: Colors.transparent,
         child: ListTile(
