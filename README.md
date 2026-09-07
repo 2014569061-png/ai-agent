@@ -1,6 +1,6 @@
 # NEXUS Agent
 
-面向移动端的多模型 AI Agent 客户端，当前版本为 **v0.7.1**（Android versionCode `71`）。
+面向移动端的多模型 AI Agent 客户端，当前版本为 **v0.7.2**（Android versionCode `72`）。
 
 ## 核心能力
 

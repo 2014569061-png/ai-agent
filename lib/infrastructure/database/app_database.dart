@@ -335,6 +335,22 @@ class AppDatabase extends _$AppDatabase {
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async => m.createAll(),
         onUpgrade: (m, from, to) async {
+          Future<bool> hasTable(String tableName) async {
+            final rows = await customSelect(
+              'SELECT name FROM sqlite_master '
+              'WHERE type = \'table\' AND name = ?',
+              variables: [Variable<String>(tableName)],
+            ).get();
+            return rows.isNotEmpty;
+          }
+
+          Future<bool> hasColumn(String tableName, String columnName) async {
+            final rows = await customSelect(
+              'PRAGMA table_info($tableName)',
+            ).get();
+            return rows.any((row) => row.data['name'] == columnName);
+          }
+
           if (from < 2) {
             await m.addColumn(conversations, conversations.isPinned);
             await m.addColumn(conversations, conversations.isFavorite);
@@ -387,16 +403,31 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(skillPacks);
           }
           if (from < 12) {
-            await m.createTable(runRecords);
-            await m.createTable(runEvents);
-            await m.createTable(logRecords);
+            // The generated RunRecords table already contains columns added
+            // by later migrations. Guard table creation for interrupted or
+            // partially completed upgrades.
+            if (!await hasTable('run_records')) {
+              await m.createTable(runRecords);
+            }
+            if (!await hasTable('run_events')) {
+              await m.createTable(runEvents);
+            }
+            if (!await hasTable('log_records')) {
+              await m.createTable(logRecords);
+            }
           }
           if (from < 13) {
-            await m.addColumn(runRecords, runRecords.totalDurationMs);
-            await m.addColumn(runRecords, runRecords.retryCount);
+            if (!await hasColumn('run_records', 'total_duration_ms')) {
+              await m.addColumn(runRecords, runRecords.totalDurationMs);
+            }
+            if (!await hasColumn('run_records', 'retry_count')) {
+              await m.addColumn(runRecords, runRecords.retryCount);
+            }
           }
           if (from < 14) {
-            await m.addColumn(runRecords, runRecords.firstTokenDurationMs);
+            if (!await hasColumn('run_records', 'first_token_duration_ms')) {
+              await m.addColumn(runRecords, runRecords.firstTokenDurationMs);
+            }
             await customStatement(
               'CREATE UNIQUE INDEX IF NOT EXISTS idx_run_events_run_sequence '
               'ON run_events (run_id, sequence_no)',

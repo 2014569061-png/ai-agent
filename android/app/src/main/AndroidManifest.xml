@@ -123,6 +123,15 @@
             <action android:name="android.intent.action.SENDTO"/>
             <data android:scheme="mailto"/>
         </intent>
+        <!-- 允许在启动系统 APK 安装器前检查可处理的安装 Activity。 -->
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE"/>
+            <data android:mimeType="application/vnd.android.package-archive"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="application/vnd.android.package-archive"/>
+        </intent>
         <!-- G1 Termux 桥：Android 11+ 包可见性，否则显式 Intent 无法解析 Termux 服务。 -->
         <package android:name="com.termux"/>
     </queries>

@@ -1,9 +1,12 @@
 package com.nexusagent.app
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
@@ -48,25 +51,9 @@ class MainActivity : FlutterFragmentActivity() {
                     "installApk" -> {
                         val path = call.argument<String>("path")
                         if (path == null) {
-                            result.error("INVALID_PATH", "path is null", null)
+                            result.error("INVALID_PATH", "更新文件路径为空", null)
                         } else {
-                            try {
-                                val file = File(path)
-                                val uri = FileProvider.getUriForFile(
-                                    this,
-                                    "$packageName.fileprovider",
-                                    file
-                                )
-                                val intent = Intent(Intent.ACTION_VIEW).apply {
-                                    setDataAndType(uri, "application/vnd.android.package-archive")
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                startActivity(intent)
-                                result.success(true)
-                            } catch (e: Exception) {
-                                result.error("INSTALL_FAILED", e.message, null)
-                            }
+                            installApk(path, result)
                         }
                     }
                     else -> result.notImplemented()
@@ -140,5 +127,78 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun installApk(path: String, result: MethodChannel.Result) {
+        val file = File(path)
+        if (!file.exists() || !file.isFile || file.length() < 4L) {
+            result.error("INVALID_APK", "更新文件不存在或不完整", null)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            try {
+                startActivity(
+                    Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                )
+                result.success(mapOf("status" to "permission_required"))
+            } catch (e: ActivityNotFoundException) {
+                result.error(
+                    "UNKNOWN_SOURCES_SETTINGS_UNAVAILABLE",
+                    "无法打开安装未知应用设置",
+                    null
+                )
+            } catch (e: Exception) {
+                result.error(
+                    "UNKNOWN_SOURCES_SETTINGS_UNAVAILABLE",
+                    e.message ?: "无法打开安装未知应用设置",
+                    null
+                )
+            }
+            return
+        }
+
+        val uri = try {
+            FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        } catch (e: IllegalArgumentException) {
+            result.error("INVALID_APK", "无法读取更新文件", null)
+            return
+        }
+
+        val installIntent = createInstallIntent(uri, Intent.ACTION_INSTALL_PACKAGE)
+        val fallbackIntent = createInstallIntent(uri, Intent.ACTION_VIEW)
+        val intent = when {
+            installIntent.resolveActivity(packageManager) != null -> installIntent
+            fallbackIntent.resolveActivity(packageManager) != null -> fallbackIntent
+            else -> null
+        }
+        if (intent == null) {
+            result.error("NO_INSTALLER", "系统没有可用的 APK 安装器", null)
+            return
+        }
+
+        try {
+            startActivity(intent)
+            result.success(mapOf("status" to "started"))
+        } catch (e: SecurityException) {
+            result.error("INSTALL_PERMISSION_DENIED", "系统拒绝读取更新文件", null)
+        } catch (e: ActivityNotFoundException) {
+            result.error("NO_INSTALLER", "系统没有可用的 APK 安装器", null)
+        } catch (e: Exception) {
+            result.error("INSTALL_FAILED", e.message ?: "系统安装器启动失败", null)
+        }
+    }
+
+    private fun createInstallIntent(uri: Uri, action: String): Intent {
+        return Intent(action).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            clipData = ClipData.newRawUri("NEXUS update", uri)
+        }
     }
 }

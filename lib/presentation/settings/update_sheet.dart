@@ -25,15 +25,19 @@ class _UpdateSheetState extends State<UpdateSheet> {
       _error = null;
       _progress = 0;
     });
-    final ok = await UpdateService().downloadAndInstall(widget.info.apkUrl!,
-        onProgress: (p) => setState(() => _progress = p));
+    final result = await UpdateService().downloadAndInstallDetailed(
+      widget.info.apkUrl!,
+      onProgress: (p) {
+        if (mounted) setState(() => _progress = p);
+      },
+    );
     if (!mounted) return;
     setState(() {
       _downloading = false;
-      if (ok) {
+      if (result.success) {
         _launched = true; // 已拉起系统安装器,用户确认后安装
       } else {
-        _error = '下载或拉起安装失败,请重试';
+        _error = result.message ?? '下载或安装失败，请重试';
       }
     });
   }
