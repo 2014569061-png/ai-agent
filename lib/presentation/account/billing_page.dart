@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/billing_api.dart';
 import '../../application/providers.dart';
+import '../theme/app_theme.dart';
 import '../widgets/section_card.dart';
+import '../widgets/section_header.dart';
 
 /// 充值页（§4.3）：余额卡片 + 充值档位 + 下单/轮询。
 class BillingPage extends ConsumerStatefulWidget {
@@ -99,8 +101,10 @@ class _BillingPageState extends ConsumerState<BillingPage> {
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('当前余额',
-                          style: TextStyle(fontSize: 13, color: Colors.grey)),
+                      Text('当前余额',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.semanticOf(context).textMuted)),
                       const SizedBox(height: 4),
                       Text('¥${(_balance?.balanceCents ?? 0) / 100}',
                           style: const TextStyle(
@@ -126,8 +130,7 @@ class _BillingPageState extends ConsumerState<BillingPage> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text('选择充值档位', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
+            const SectionHeader(title: '选择充值档位'),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -157,8 +160,8 @@ class _BillingPageState extends ConsumerState<BillingPage> {
             if (_error != null)
               Padding(
                   padding: const EdgeInsets.only(top: 16),
-                  child:
-                      Text(_error!, style: const TextStyle(color: Colors.red))),
+                  child: Text(_error!,
+                      style: const TextStyle(color: AppTheme.danger))),
             if (_busy)
               const Padding(
                   padding: EdgeInsets.only(top: 24),

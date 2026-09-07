@@ -15,6 +15,9 @@ enum RunStatus {
 
 enum ToolRisk { safe, requiresConfirmation, dangerous }
 
+/// Session-level policy for deciding whether a tool call needs a user prompt.
+enum ApprovalMode { ask, autoSafe, fullAccess }
+
 /// 工具审批决策：拒绝 / 仅本次 / 本会话内 / 始终允许（全局信任）。
 enum ToolApproval { reject, allowOnce, allowSession, allowAlways }
 
@@ -89,10 +92,15 @@ class ChatMessage {
 }
 
 class Usage {
-  const Usage({this.promptTokens = 0, this.completionTokens = 0});
+  const Usage({
+    this.promptTokens = 0,
+    this.completionTokens = 0,
+    this.cachedTokens = 0,
+  });
 
   final int promptTokens;
   final int completionTokens;
+  final int cachedTokens;
 
   int get totalTokens => promptTokens + completionTokens;
 }
@@ -177,9 +185,12 @@ class CompletedEvent extends UnifiedEvent {
 
 class UsageEvent extends UnifiedEvent {
   const UsageEvent(
-      {required this.promptTokens, required this.completionTokens});
+      {required this.promptTokens,
+      required this.completionTokens,
+      this.cachedTokens = 0});
   final int promptTokens;
   final int completionTokens;
+  final int cachedTokens;
 }
 
 class ProviderErrorEvent extends UnifiedEvent {

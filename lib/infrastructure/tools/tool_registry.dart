@@ -5,6 +5,10 @@ abstract interface class AgentTool {
   Future<String> execute(Map<String, dynamic> arguments);
 }
 
+abstract interface class ToolExecutionMetadata {
+  Map<String, dynamic> get lastMetadata;
+}
+
 class ToolRegistry {
   final Map<String, AgentTool> _tools = {};
 

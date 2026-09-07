@@ -113,6 +113,17 @@ class GeminiProvider implements LlmProvider {
       final pendingCalls = <ToolCall>[];
       var promptTokens = 0;
       var completionTokens = 0;
+      var cachedTokens = 0;
+
+      void updateUsage(Map<String, dynamic> usage) {
+        final prompt = _asInt(usage['promptTokenCount']);
+        if (prompt != null) promptTokens = prompt;
+        final completion = _asInt(usage['candidatesTokenCount']);
+        if (completion != null) completionTokens = completion;
+        final cached = _asInt(usage['cachedContentTokenCount']) ??
+            _asInt(usage['cached_content_token_count']);
+        if (cached != null) cachedTokens = cached;
+      }
 
       await for (final chunk in stream) {
         buffer += decoder.convert(chunk);
@@ -123,11 +134,7 @@ class GeminiProvider implements LlmProvider {
           if (json == null) continue;
           final usage = json['usageMetadata'];
           if (usage is Map<String, dynamic>) {
-            promptTokens =
-                (usage['promptTokenCount'] as num?)?.toInt() ?? promptTokens;
-            completionTokens =
-                (usage['candidatesTokenCount'] as num?)?.toInt() ??
-                    completionTokens;
+            updateUsage(usage);
           }
           final candidates = json['candidates'] as List<dynamic>? ?? const [];
           for (final candidate
@@ -163,10 +170,7 @@ class GeminiProvider implements LlmProvider {
       if (trailing != null) {
         final usage = trailing['usageMetadata'];
         if (usage is Map<String, dynamic>) {
-          promptTokens =
-              (usage['promptTokenCount'] as num?)?.toInt() ?? promptTokens;
-          completionTokens = (usage['candidatesTokenCount'] as num?)?.toInt() ??
-              completionTokens;
+          updateUsage(usage);
         }
       }
 
@@ -174,7 +178,9 @@ class GeminiProvider implements LlmProvider {
         yield ToolCallEvent(call);
       }
       yield UsageEvent(
-          promptTokens: promptTokens, completionTokens: completionTokens);
+          promptTokens: promptTokens,
+          completionTokens: completionTokens,
+          cachedTokens: cachedTokens);
       yield const CompletedEvent();
     } on DioException catch (error) {
       // 主动取消时静默结束。
@@ -255,6 +261,9 @@ class GeminiProvider implements LlmProvider {
       return null;
     }
   }
+
+  static int? _asInt(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse('$value');
 
   /// 把 ReasoningEffort 映射为 Gemini thinkingBudget。
   /// off 时返回 null（不传 thinkingConfig）。

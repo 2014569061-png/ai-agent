@@ -23,7 +23,8 @@ class MessageMetricsSheet extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.analytics_outlined, color: AppTheme.brandBright),
+                const Icon(Icons.analytics_outlined,
+                    color: AppTheme.brandBright),
                 const SizedBox(width: 8),
                 Text('执行指标',
                     style: theme.textTheme.titleLarge
@@ -145,9 +146,10 @@ class MessageStatusPill extends StatelessWidget {
     if (elapsed == null && usage == null) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
-    final speed = (usage != null && elapsed != null && elapsed.inMilliseconds > 0)
-        ? (usage.completionTokens / (elapsed.inMilliseconds / 1000))
-        : 0.0;
+    final speed =
+        (usage != null && elapsed != null && elapsed.inMilliseconds > 0)
+            ? (usage.completionTokens / (elapsed.inMilliseconds / 1000))
+            : 0.0;
 
     return GestureDetector(
       onTap: () {
@@ -162,7 +164,8 @@ class MessageStatusPill extends StatelessWidget {
         decoration: BoxDecoration(
           color: theme.brightness == Brightness.dark
               ? Colors.white.withValues(alpha: 0.06)
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.8),
+              : theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: theme.brightness == Brightness.dark
@@ -174,6 +177,7 @@ class MessageStatusPill extends StatelessWidget {
         child: Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
           spacing: 6,
+          runSpacing: 4,
           children: [
             if (elapsed != null) ...[
               Icon(Icons.timer_outlined,
@@ -193,7 +197,9 @@ class MessageStatusPill extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 11, color: theme.colorScheme.outline)),
               Text(
-                '首字 ${ttft.inMilliseconds}ms',
+                ttft.inMilliseconds >= 1000
+                    ? '首字 ${(ttft.inMilliseconds / 1000).toStringAsFixed(1)}s'
+                    : '首字 ${ttft.inMilliseconds}ms',
                 style: TextStyle(
                   fontSize: 11,
                   color: theme.colorScheme.onSurfaceVariant,

@@ -56,8 +56,10 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
         final bIsDir = b is Directory;
         if (aIsDir && !bIsDir) return -1;
         if (!aIsDir && bIsDir) return 1;
-        return p.basename(a.path).toLowerCase().compareTo(
-            p.basename(b.path).toLowerCase());
+        return p
+            .basename(a.path)
+            .toLowerCase()
+            .compareTo(p.basename(b.path).toLowerCase());
       });
 
       if (mounted) setState(() => _entities = filtered);

@@ -12,6 +12,7 @@ class ChatMessageList extends StatefulWidget {
     required this.running,
     required this.onLongPress,
     required this.onRegenerate,
+    this.trailingWidgets = const [],
   });
 
   final List<ChatMessage> messages;
@@ -19,6 +20,7 @@ class ChatMessageList extends StatefulWidget {
   final bool running;
   final ValueChanged<int> onLongPress;
   final VoidCallback onRegenerate;
+  final List<Widget> trailingWidgets;
 
   @override
   State<ChatMessageList> createState() => _ChatMessageListState();
@@ -79,11 +81,15 @@ class _ChatMessageListState extends State<ChatMessageList> {
   @override
   Widget build(BuildContext context) {
     final count = widget.messages.length - _start;
+    final totalCount = count + widget.trailingWidgets.length;
     return ListView.builder(
       controller: widget.controller,
-      padding: const EdgeInsets.fromLTRB(16, 92, 16, 10),
-      itemCount: count,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      itemCount: totalCount,
       itemBuilder: (context, localIndex) {
+        if (localIndex >= count) {
+          return widget.trailingWidgets[localIndex - count];
+        }
         final index = _start + localIndex;
         final message = widget.messages[index];
         return MessageBubble(

@@ -111,7 +111,8 @@ class ToolCallCard extends StatelessWidget {
                               color: statusColor, shape: BoxShape.circle)),
                   const SizedBox(width: 6),
                   activity.status == '执行中'
-                      ? _NeonSweepingText(text: activity.status, baseColor: statusColor)
+                      ? _NeonSweepingText(
+                          text: activity.status, baseColor: statusColor)
                       : Text(activity.status,
                           style: TextStyle(
                               fontSize: 12,

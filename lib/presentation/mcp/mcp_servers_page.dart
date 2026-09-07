@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../application/mcp_service.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/immersive_sheet.dart';
+import '../widgets/section_card.dart';
 
 /// 独立的 MCP 服务器管理页，供设置页和深链接复用。
 class McpServersPage extends StatefulWidget {
@@ -66,22 +68,31 @@ class _McpServersPageState extends State<McpServersPage> {
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('MCP 服务器')),
         body: _servers.isEmpty
-            ? const Center(child: Text('尚未配置 MCP 服务器'))
-            : ListView.builder(
+            ? const EmptyStateView(
+                icon: Icons.dns_outlined,
+                title: '尚未配置 MCP 服务器',
+                message: '点击右下角按钮添加你的第一个 MCP 服务。',
+              )
+            : ListView.separated(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 itemCount: _servers.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final server = _servers[index];
-                  return SwitchListTile(
-                    secondary: Icon(server.kind == McpServerKind.http
-                        ? Icons.dns_outlined
-                        : Icons.terminal),
-                    title: Text(server.name),
-                    subtitle: Text(server.url ?? server.command ?? ''),
-                    value: server.enabled,
-                    onChanged: (enabled) async {
-                      await _service.toggleServer(server.id, enabled);
-                      await _reload();
-                    },
+                  return SectionCard(
+                    child: SwitchListTile(
+                      secondary: Icon(server.kind == McpServerKind.http
+                          ? Icons.dns_outlined
+                          : Icons.terminal),
+                      title: Text(server.name),
+                      subtitle: Text(server.url ?? server.command ?? ''),
+                      value: server.enabled,
+                      onChanged: (enabled) async {
+                        await _service.toggleServer(server.id, enabled);
+                        await _reload();
+                      },
+                    ),
                   );
                 },
               ),

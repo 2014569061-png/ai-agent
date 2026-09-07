@@ -26,7 +26,8 @@ class GlassChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
         onTap: onPressed,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 36), // 视觉 36；语义目标 >=44 由外层 padding 补足
+          constraints: const BoxConstraints(
+              minHeight: 36), // 视觉 36；语义目标 >=44 由外层 padding 补足
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             child: Row(mainAxisSize: MainAxisSize.min, children: [

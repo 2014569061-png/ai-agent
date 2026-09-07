@@ -104,7 +104,7 @@ class _NavItem extends StatelessWidget {
                     width: 52,
                     height: 36,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(18),
                       gradient: RadialGradient(
                         colors: [
                           color.focusGlow.withValues(alpha: .9),

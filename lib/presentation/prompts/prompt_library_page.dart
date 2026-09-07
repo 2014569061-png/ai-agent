@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
+import '../theme/app_theme.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
 
@@ -78,7 +80,7 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
       builder: (context) => AlertDialog(
         title: Text(existing == null ? '新建 Prompt' : '编辑 Prompt'),
         content: SizedBox(
-          width: 420,
+          width: double.maxFinite,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -174,7 +176,8 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
               Text(template.name,
                   style: Theme.of(context).textTheme.titleLarge),
               Text('分类：${template.category}',
-                  style: const TextStyle(color: Color(0xFF627D98))),
+                  style: TextStyle(
+                      color: AppTheme.semanticOf(context).mutedOnGlass)),
               const SizedBox(height: 16),
               ListTile(
                 leading: const Icon(Icons.smart_toy_outlined),
@@ -261,9 +264,11 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : filtered.isEmpty
-                    ? const Center(
-                        child: Text('还没有 Prompt 模板，点击右下角新建。',
-                            style: TextStyle(color: Color(0xFF627D98))))
+                    ? const EmptyStateView(
+                        icon: Icons.lightbulb_outline,
+                        title: '暂无 Prompt 模板',
+                        message: '点击右下角按钮新建你的第一个 Prompt 模板。',
+                      )
                     : ListView.separated(
                         padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
                         itemCount: filtered.length,
@@ -339,7 +344,7 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
                       TextButton(
                         onPressed: () => _delete(template),
                         child: const Text('删除',
-                            style: TextStyle(color: Colors.red)),
+                            style: TextStyle(color: AppTheme.danger)),
                       ),
                     ],
                   ),

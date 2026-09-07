@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
+import '../theme/app_theme.dart';
+import '../widgets/section_card.dart';
+import '../widgets/immersive_list_tile.dart';
 
 /// 账号页：注册/登录、会话状态、设备管理、2FA、注销（§4.4）。
 class AccountPage extends ConsumerStatefulWidget {
@@ -134,10 +137,12 @@ class _AccountPageState extends ConsumerState<AccountPage> {
         if (_error != null)
           Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: Text(_error!, style: const TextStyle(color: Colors.red))),
+              child: Text(_error!,
+                  style: const TextStyle(color: AppTheme.danger))),
         const SizedBox(height: 12),
-        const Text('注册即自动获得托管 Key，成为 Pro 用户；请求经 NEXUS 中转，仅用于计费不存储对话。',
-            style: TextStyle(fontSize: 12, color: Colors.grey)),
+        Text('注册即自动获得托管 Key，成为 Pro 用户；请求经 NEXUS 中转，仅用于计费不存储对话。',
+            style: TextStyle(
+                fontSize: 12, color: AppTheme.semanticOf(context).textMuted)),
       ],
     );
   }
@@ -146,15 +151,24 @@ class _AccountPageState extends ConsumerState<AccountPage> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const ListTile(
-            leading: Icon(Icons.verified_user),
-            title: Text('Pro 会员'),
-            subtitle: Text('已启用内置额度（托管 Key）')),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.logout),
-          title: const Text('退出登录'),
-          onTap: _logout,
+        SectionCard(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ImmersiveListTile(
+                icon: Icons.verified_user,
+                title: 'Pro 会员',
+                subtitle: '已启用内置额度（托管 Key）',
+                showDivider: true,
+              ),
+              ImmersiveListTile(
+                icon: Icons.logout,
+                title: '退出登录',
+                danger: true,
+                onTap: _logout,
+              ),
+            ],
+          ),
         ),
       ],
     );

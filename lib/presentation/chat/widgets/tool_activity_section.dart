@@ -4,6 +4,7 @@ import '../../../application/chat_controller.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_surface.dart';
 
+
 /// G1 工具执行明细悬浮胶囊:收起为底部居中小胶囊,展开为固定高度、内部可滚动
 /// 的毛玻璃浮动面板。列表为 ZCode 进程面板式细行(状态图标 + 工具名),点击行
 /// 展开参数与输出详情。悬浮于聊天 Stack 顶层,不内联挤压消息流。
@@ -26,13 +27,10 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
 
   @override
   Widget build(BuildContext context) {
-    final topInset = MediaQuery.paddingOf(context).top;
-    final topBarBottom = topInset + 52;
     return Align(
       alignment: Alignment.topRight,
       child: Padding(
-        // 紧贴顶栏下方，避免被顶部毛玻璃覆盖或与顶栏按钮重叠。
-        padding: EdgeInsets.only(top: topBarBottom + 6, right: 16, left: 16),
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: _open ? _panel(context) : _capsule(context),

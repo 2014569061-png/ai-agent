@@ -6818,6 +6818,1881 @@ class AccountMetaCompanion extends UpdateCompanion<AccountMetaData> {
   }
 }
 
+class $RunRecordsTable extends RunRecords
+    with TableInfo<$RunRecordsTable, RunRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunRecordsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+      'run_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _conversationIdMeta =
+      const VerificationMeta('conversationId');
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+      'conversation_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _modelMeta = const VerificationMeta('model');
+  @override
+  late final GeneratedColumn<String> model = GeneratedColumn<String>(
+      'model', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('unknown'));
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('running'));
+  static const VerificationMeta _startedAtMeta =
+      const VerificationMeta('startedAt');
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+      'started_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _endedAtMeta =
+      const VerificationMeta('endedAt');
+  @override
+  late final GeneratedColumn<DateTime> endedAt = GeneratedColumn<DateTime>(
+      'ended_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _inputTokensMeta =
+      const VerificationMeta('inputTokens');
+  @override
+  late final GeneratedColumn<int> inputTokens = GeneratedColumn<int>(
+      'input_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _outputTokensMeta =
+      const VerificationMeta('outputTokens');
+  @override
+  late final GeneratedColumn<int> outputTokens = GeneratedColumn<int>(
+      'output_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _cachedTokensMeta =
+      const VerificationMeta('cachedTokens');
+  @override
+  late final GeneratedColumn<int> cachedTokens = GeneratedColumn<int>(
+      'cached_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _estimatedCostCentsMeta =
+      const VerificationMeta('estimatedCostCents');
+  @override
+  late final GeneratedColumn<int> estimatedCostCents = GeneratedColumn<int>(
+      'estimated_cost_cents', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _eventCountMeta =
+      const VerificationMeta('eventCount');
+  @override
+  late final GeneratedColumn<int> eventCount = GeneratedColumn<int>(
+      'event_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _totalDurationMsMeta =
+      const VerificationMeta('totalDurationMs');
+  @override
+  late final GeneratedColumn<int> totalDurationMs = GeneratedColumn<int>(
+      'total_duration_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _retryCountMeta =
+      const VerificationMeta('retryCount');
+  @override
+  late final GeneratedColumn<int> retryCount = GeneratedColumn<int>(
+      'retry_count', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _firstTokenDurationMsMeta =
+      const VerificationMeta('firstTokenDurationMs');
+  @override
+  late final GeneratedColumn<int> firstTokenDurationMs = GeneratedColumn<int>(
+      'first_token_duration_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        runId,
+        conversationId,
+        model,
+        status,
+        startedAt,
+        endedAt,
+        inputTokens,
+        outputTokens,
+        cachedTokens,
+        estimatedCostCents,
+        eventCount,
+        totalDurationMs,
+        retryCount,
+        firstTokenDurationMs
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'run_records';
+  @override
+  VerificationContext validateIntegrity(Insertable<RunRecord> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('run_id')) {
+      context.handle(
+          _runIdMeta, runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta));
+    } else if (isInserting) {
+      context.missing(_runIdMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+          _conversationIdMeta,
+          conversationId.isAcceptableOrUnknown(
+              data['conversation_id']!, _conversationIdMeta));
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('model')) {
+      context.handle(
+          _modelMeta, model.isAcceptableOrUnknown(data['model']!, _modelMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(_startedAtMeta,
+          startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta));
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    if (data.containsKey('ended_at')) {
+      context.handle(_endedAtMeta,
+          endedAt.isAcceptableOrUnknown(data['ended_at']!, _endedAtMeta));
+    }
+    if (data.containsKey('input_tokens')) {
+      context.handle(
+          _inputTokensMeta,
+          inputTokens.isAcceptableOrUnknown(
+              data['input_tokens']!, _inputTokensMeta));
+    }
+    if (data.containsKey('output_tokens')) {
+      context.handle(
+          _outputTokensMeta,
+          outputTokens.isAcceptableOrUnknown(
+              data['output_tokens']!, _outputTokensMeta));
+    }
+    if (data.containsKey('cached_tokens')) {
+      context.handle(
+          _cachedTokensMeta,
+          cachedTokens.isAcceptableOrUnknown(
+              data['cached_tokens']!, _cachedTokensMeta));
+    }
+    if (data.containsKey('estimated_cost_cents')) {
+      context.handle(
+          _estimatedCostCentsMeta,
+          estimatedCostCents.isAcceptableOrUnknown(
+              data['estimated_cost_cents']!, _estimatedCostCentsMeta));
+    }
+    if (data.containsKey('event_count')) {
+      context.handle(
+          _eventCountMeta,
+          eventCount.isAcceptableOrUnknown(
+              data['event_count']!, _eventCountMeta));
+    }
+    if (data.containsKey('total_duration_ms')) {
+      context.handle(
+          _totalDurationMsMeta,
+          totalDurationMs.isAcceptableOrUnknown(
+              data['total_duration_ms']!, _totalDurationMsMeta));
+    }
+    if (data.containsKey('retry_count')) {
+      context.handle(
+          _retryCountMeta,
+          retryCount.isAcceptableOrUnknown(
+              data['retry_count']!, _retryCountMeta));
+    }
+    if (data.containsKey('first_token_duration_ms')) {
+      context.handle(
+          _firstTokenDurationMsMeta,
+          firstTokenDurationMs.isAcceptableOrUnknown(
+              data['first_token_duration_ms']!, _firstTokenDurationMsMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {runId};
+  @override
+  RunRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunRecord(
+      runId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}run_id'])!,
+      conversationId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}conversation_id'])!,
+      model: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}model'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      startedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}started_at'])!,
+      endedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}ended_at']),
+      inputTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}input_tokens'])!,
+      outputTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}output_tokens'])!,
+      cachedTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}cached_tokens'])!,
+      estimatedCostCents: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}estimated_cost_cents']),
+      eventCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}event_count'])!,
+      totalDurationMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}total_duration_ms']),
+      retryCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}retry_count'])!,
+      firstTokenDurationMs: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}first_token_duration_ms']),
+    );
+  }
+
+  @override
+  $RunRecordsTable createAlias(String alias) {
+    return $RunRecordsTable(attachedDatabase, alias);
+  }
+}
+
+class RunRecord extends DataClass implements Insertable<RunRecord> {
+  final String runId;
+  final String conversationId;
+  final String model;
+  final String status;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+  final int inputTokens;
+  final int outputTokens;
+  final int cachedTokens;
+  final int? estimatedCostCents;
+  final int eventCount;
+  final int? totalDurationMs;
+  final int retryCount;
+  final int? firstTokenDurationMs;
+  const RunRecord(
+      {required this.runId,
+      required this.conversationId,
+      required this.model,
+      required this.status,
+      required this.startedAt,
+      this.endedAt,
+      required this.inputTokens,
+      required this.outputTokens,
+      required this.cachedTokens,
+      this.estimatedCostCents,
+      required this.eventCount,
+      this.totalDurationMs,
+      required this.retryCount,
+      this.firstTokenDurationMs});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['run_id'] = Variable<String>(runId);
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['model'] = Variable<String>(model);
+    map['status'] = Variable<String>(status);
+    map['started_at'] = Variable<DateTime>(startedAt);
+    if (!nullToAbsent || endedAt != null) {
+      map['ended_at'] = Variable<DateTime>(endedAt);
+    }
+    map['input_tokens'] = Variable<int>(inputTokens);
+    map['output_tokens'] = Variable<int>(outputTokens);
+    map['cached_tokens'] = Variable<int>(cachedTokens);
+    if (!nullToAbsent || estimatedCostCents != null) {
+      map['estimated_cost_cents'] = Variable<int>(estimatedCostCents);
+    }
+    map['event_count'] = Variable<int>(eventCount);
+    if (!nullToAbsent || totalDurationMs != null) {
+      map['total_duration_ms'] = Variable<int>(totalDurationMs);
+    }
+    map['retry_count'] = Variable<int>(retryCount);
+    if (!nullToAbsent || firstTokenDurationMs != null) {
+      map['first_token_duration_ms'] = Variable<int>(firstTokenDurationMs);
+    }
+    return map;
+  }
+
+  RunRecordsCompanion toCompanion(bool nullToAbsent) {
+    return RunRecordsCompanion(
+      runId: Value(runId),
+      conversationId: Value(conversationId),
+      model: Value(model),
+      status: Value(status),
+      startedAt: Value(startedAt),
+      endedAt: endedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endedAt),
+      inputTokens: Value(inputTokens),
+      outputTokens: Value(outputTokens),
+      cachedTokens: Value(cachedTokens),
+      estimatedCostCents: estimatedCostCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(estimatedCostCents),
+      eventCount: Value(eventCount),
+      totalDurationMs: totalDurationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(totalDurationMs),
+      retryCount: Value(retryCount),
+      firstTokenDurationMs: firstTokenDurationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(firstTokenDurationMs),
+    );
+  }
+
+  factory RunRecord.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunRecord(
+      runId: serializer.fromJson<String>(json['runId']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      model: serializer.fromJson<String>(json['model']),
+      status: serializer.fromJson<String>(json['status']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+      endedAt: serializer.fromJson<DateTime?>(json['endedAt']),
+      inputTokens: serializer.fromJson<int>(json['inputTokens']),
+      outputTokens: serializer.fromJson<int>(json['outputTokens']),
+      cachedTokens: serializer.fromJson<int>(json['cachedTokens']),
+      estimatedCostCents: serializer.fromJson<int?>(json['estimatedCostCents']),
+      eventCount: serializer.fromJson<int>(json['eventCount']),
+      totalDurationMs: serializer.fromJson<int?>(json['totalDurationMs']),
+      retryCount: serializer.fromJson<int>(json['retryCount']),
+      firstTokenDurationMs:
+          serializer.fromJson<int?>(json['firstTokenDurationMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'runId': serializer.toJson<String>(runId),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'model': serializer.toJson<String>(model),
+      'status': serializer.toJson<String>(status),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+      'endedAt': serializer.toJson<DateTime?>(endedAt),
+      'inputTokens': serializer.toJson<int>(inputTokens),
+      'outputTokens': serializer.toJson<int>(outputTokens),
+      'cachedTokens': serializer.toJson<int>(cachedTokens),
+      'estimatedCostCents': serializer.toJson<int?>(estimatedCostCents),
+      'eventCount': serializer.toJson<int>(eventCount),
+      'totalDurationMs': serializer.toJson<int?>(totalDurationMs),
+      'retryCount': serializer.toJson<int>(retryCount),
+      'firstTokenDurationMs': serializer.toJson<int?>(firstTokenDurationMs),
+    };
+  }
+
+  RunRecord copyWith(
+          {String? runId,
+          String? conversationId,
+          String? model,
+          String? status,
+          DateTime? startedAt,
+          Value<DateTime?> endedAt = const Value.absent(),
+          int? inputTokens,
+          int? outputTokens,
+          int? cachedTokens,
+          Value<int?> estimatedCostCents = const Value.absent(),
+          int? eventCount,
+          Value<int?> totalDurationMs = const Value.absent(),
+          int? retryCount,
+          Value<int?> firstTokenDurationMs = const Value.absent()}) =>
+      RunRecord(
+        runId: runId ?? this.runId,
+        conversationId: conversationId ?? this.conversationId,
+        model: model ?? this.model,
+        status: status ?? this.status,
+        startedAt: startedAt ?? this.startedAt,
+        endedAt: endedAt.present ? endedAt.value : this.endedAt,
+        inputTokens: inputTokens ?? this.inputTokens,
+        outputTokens: outputTokens ?? this.outputTokens,
+        cachedTokens: cachedTokens ?? this.cachedTokens,
+        estimatedCostCents: estimatedCostCents.present
+            ? estimatedCostCents.value
+            : this.estimatedCostCents,
+        eventCount: eventCount ?? this.eventCount,
+        totalDurationMs: totalDurationMs.present
+            ? totalDurationMs.value
+            : this.totalDurationMs,
+        retryCount: retryCount ?? this.retryCount,
+        firstTokenDurationMs: firstTokenDurationMs.present
+            ? firstTokenDurationMs.value
+            : this.firstTokenDurationMs,
+      );
+  RunRecord copyWithCompanion(RunRecordsCompanion data) {
+    return RunRecord(
+      runId: data.runId.present ? data.runId.value : this.runId,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      model: data.model.present ? data.model.value : this.model,
+      status: data.status.present ? data.status.value : this.status,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
+      inputTokens:
+          data.inputTokens.present ? data.inputTokens.value : this.inputTokens,
+      outputTokens: data.outputTokens.present
+          ? data.outputTokens.value
+          : this.outputTokens,
+      cachedTokens: data.cachedTokens.present
+          ? data.cachedTokens.value
+          : this.cachedTokens,
+      estimatedCostCents: data.estimatedCostCents.present
+          ? data.estimatedCostCents.value
+          : this.estimatedCostCents,
+      eventCount:
+          data.eventCount.present ? data.eventCount.value : this.eventCount,
+      totalDurationMs: data.totalDurationMs.present
+          ? data.totalDurationMs.value
+          : this.totalDurationMs,
+      retryCount:
+          data.retryCount.present ? data.retryCount.value : this.retryCount,
+      firstTokenDurationMs: data.firstTokenDurationMs.present
+          ? data.firstTokenDurationMs.value
+          : this.firstTokenDurationMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunRecord(')
+          ..write('runId: $runId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('model: $model, ')
+          ..write('status: $status, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('inputTokens: $inputTokens, ')
+          ..write('outputTokens: $outputTokens, ')
+          ..write('cachedTokens: $cachedTokens, ')
+          ..write('estimatedCostCents: $estimatedCostCents, ')
+          ..write('eventCount: $eventCount, ')
+          ..write('totalDurationMs: $totalDurationMs, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('firstTokenDurationMs: $firstTokenDurationMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      runId,
+      conversationId,
+      model,
+      status,
+      startedAt,
+      endedAt,
+      inputTokens,
+      outputTokens,
+      cachedTokens,
+      estimatedCostCents,
+      eventCount,
+      totalDurationMs,
+      retryCount,
+      firstTokenDurationMs);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunRecord &&
+          other.runId == this.runId &&
+          other.conversationId == this.conversationId &&
+          other.model == this.model &&
+          other.status == this.status &&
+          other.startedAt == this.startedAt &&
+          other.endedAt == this.endedAt &&
+          other.inputTokens == this.inputTokens &&
+          other.outputTokens == this.outputTokens &&
+          other.cachedTokens == this.cachedTokens &&
+          other.estimatedCostCents == this.estimatedCostCents &&
+          other.eventCount == this.eventCount &&
+          other.totalDurationMs == this.totalDurationMs &&
+          other.retryCount == this.retryCount &&
+          other.firstTokenDurationMs == this.firstTokenDurationMs);
+}
+
+class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
+  final Value<String> runId;
+  final Value<String> conversationId;
+  final Value<String> model;
+  final Value<String> status;
+  final Value<DateTime> startedAt;
+  final Value<DateTime?> endedAt;
+  final Value<int> inputTokens;
+  final Value<int> outputTokens;
+  final Value<int> cachedTokens;
+  final Value<int?> estimatedCostCents;
+  final Value<int> eventCount;
+  final Value<int?> totalDurationMs;
+  final Value<int> retryCount;
+  final Value<int?> firstTokenDurationMs;
+  final Value<int> rowid;
+  const RunRecordsCompanion({
+    this.runId = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.model = const Value.absent(),
+    this.status = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.endedAt = const Value.absent(),
+    this.inputTokens = const Value.absent(),
+    this.outputTokens = const Value.absent(),
+    this.cachedTokens = const Value.absent(),
+    this.estimatedCostCents = const Value.absent(),
+    this.eventCount = const Value.absent(),
+    this.totalDurationMs = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.firstTokenDurationMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RunRecordsCompanion.insert({
+    required String runId,
+    required String conversationId,
+    this.model = const Value.absent(),
+    this.status = const Value.absent(),
+    required DateTime startedAt,
+    this.endedAt = const Value.absent(),
+    this.inputTokens = const Value.absent(),
+    this.outputTokens = const Value.absent(),
+    this.cachedTokens = const Value.absent(),
+    this.estimatedCostCents = const Value.absent(),
+    this.eventCount = const Value.absent(),
+    this.totalDurationMs = const Value.absent(),
+    this.retryCount = const Value.absent(),
+    this.firstTokenDurationMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : runId = Value(runId),
+        conversationId = Value(conversationId),
+        startedAt = Value(startedAt);
+  static Insertable<RunRecord> custom({
+    Expression<String>? runId,
+    Expression<String>? conversationId,
+    Expression<String>? model,
+    Expression<String>? status,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? endedAt,
+    Expression<int>? inputTokens,
+    Expression<int>? outputTokens,
+    Expression<int>? cachedTokens,
+    Expression<int>? estimatedCostCents,
+    Expression<int>? eventCount,
+    Expression<int>? totalDurationMs,
+    Expression<int>? retryCount,
+    Expression<int>? firstTokenDurationMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (runId != null) 'run_id': runId,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (model != null) 'model': model,
+      if (status != null) 'status': status,
+      if (startedAt != null) 'started_at': startedAt,
+      if (endedAt != null) 'ended_at': endedAt,
+      if (inputTokens != null) 'input_tokens': inputTokens,
+      if (outputTokens != null) 'output_tokens': outputTokens,
+      if (cachedTokens != null) 'cached_tokens': cachedTokens,
+      if (estimatedCostCents != null)
+        'estimated_cost_cents': estimatedCostCents,
+      if (eventCount != null) 'event_count': eventCount,
+      if (totalDurationMs != null) 'total_duration_ms': totalDurationMs,
+      if (retryCount != null) 'retry_count': retryCount,
+      if (firstTokenDurationMs != null)
+        'first_token_duration_ms': firstTokenDurationMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RunRecordsCompanion copyWith(
+      {Value<String>? runId,
+      Value<String>? conversationId,
+      Value<String>? model,
+      Value<String>? status,
+      Value<DateTime>? startedAt,
+      Value<DateTime?>? endedAt,
+      Value<int>? inputTokens,
+      Value<int>? outputTokens,
+      Value<int>? cachedTokens,
+      Value<int?>? estimatedCostCents,
+      Value<int>? eventCount,
+      Value<int?>? totalDurationMs,
+      Value<int>? retryCount,
+      Value<int?>? firstTokenDurationMs,
+      Value<int>? rowid}) {
+    return RunRecordsCompanion(
+      runId: runId ?? this.runId,
+      conversationId: conversationId ?? this.conversationId,
+      model: model ?? this.model,
+      status: status ?? this.status,
+      startedAt: startedAt ?? this.startedAt,
+      endedAt: endedAt ?? this.endedAt,
+      inputTokens: inputTokens ?? this.inputTokens,
+      outputTokens: outputTokens ?? this.outputTokens,
+      cachedTokens: cachedTokens ?? this.cachedTokens,
+      estimatedCostCents: estimatedCostCents ?? this.estimatedCostCents,
+      eventCount: eventCount ?? this.eventCount,
+      totalDurationMs: totalDurationMs ?? this.totalDurationMs,
+      retryCount: retryCount ?? this.retryCount,
+      firstTokenDurationMs: firstTokenDurationMs ?? this.firstTokenDurationMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (model.present) {
+      map['model'] = Variable<String>(model.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (endedAt.present) {
+      map['ended_at'] = Variable<DateTime>(endedAt.value);
+    }
+    if (inputTokens.present) {
+      map['input_tokens'] = Variable<int>(inputTokens.value);
+    }
+    if (outputTokens.present) {
+      map['output_tokens'] = Variable<int>(outputTokens.value);
+    }
+    if (cachedTokens.present) {
+      map['cached_tokens'] = Variable<int>(cachedTokens.value);
+    }
+    if (estimatedCostCents.present) {
+      map['estimated_cost_cents'] = Variable<int>(estimatedCostCents.value);
+    }
+    if (eventCount.present) {
+      map['event_count'] = Variable<int>(eventCount.value);
+    }
+    if (totalDurationMs.present) {
+      map['total_duration_ms'] = Variable<int>(totalDurationMs.value);
+    }
+    if (retryCount.present) {
+      map['retry_count'] = Variable<int>(retryCount.value);
+    }
+    if (firstTokenDurationMs.present) {
+      map['first_token_duration_ms'] =
+          Variable<int>(firstTokenDurationMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunRecordsCompanion(')
+          ..write('runId: $runId, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('model: $model, ')
+          ..write('status: $status, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('inputTokens: $inputTokens, ')
+          ..write('outputTokens: $outputTokens, ')
+          ..write('cachedTokens: $cachedTokens, ')
+          ..write('estimatedCostCents: $estimatedCostCents, ')
+          ..write('eventCount: $eventCount, ')
+          ..write('totalDurationMs: $totalDurationMs, ')
+          ..write('retryCount: $retryCount, ')
+          ..write('firstTokenDurationMs: $firstTokenDurationMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RunEventsTable extends RunEvents
+    with TableInfo<$RunEventsTable, RunEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _eventIdMeta =
+      const VerificationMeta('eventId');
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+      'event_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+      'run_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sequenceNoMeta =
+      const VerificationMeta('sequenceNo');
+  @override
+  late final GeneratedColumn<int> sequenceNo = GeneratedColumn<int>(
+      'sequence_no', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+      'type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _startedAtMeta =
+      const VerificationMeta('startedAt');
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+      'started_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _endedAtMeta =
+      const VerificationMeta('endedAt');
+  @override
+  late final GeneratedColumn<DateTime> endedAt = GeneratedColumn<DateTime>(
+      'ended_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _durationMsMeta =
+      const VerificationMeta('durationMs');
+  @override
+  late final GeneratedColumn<int> durationMs = GeneratedColumn<int>(
+      'duration_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _inputSummaryMeta =
+      const VerificationMeta('inputSummary');
+  @override
+  late final GeneratedColumn<String> inputSummary = GeneratedColumn<String>(
+      'input_summary', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _outputSummaryMeta =
+      const VerificationMeta('outputSummary');
+  @override
+  late final GeneratedColumn<String> outputSummary = GeneratedColumn<String>(
+      'output_summary', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _metadataJsonMeta =
+      const VerificationMeta('metadataJson');
+  @override
+  late final GeneratedColumn<String> metadataJson = GeneratedColumn<String>(
+      'metadata_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('{}'));
+  @override
+  List<GeneratedColumn> get $columns => [
+        eventId,
+        runId,
+        sequenceNo,
+        type,
+        status,
+        name,
+        startedAt,
+        endedAt,
+        durationMs,
+        inputSummary,
+        outputSummary,
+        metadataJson
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'run_events';
+  @override
+  VerificationContext validateIntegrity(Insertable<RunEvent> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('event_id')) {
+      context.handle(_eventIdMeta,
+          eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta));
+    } else if (isInserting) {
+      context.missing(_eventIdMeta);
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+          _runIdMeta, runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta));
+    } else if (isInserting) {
+      context.missing(_runIdMeta);
+    }
+    if (data.containsKey('sequence_no')) {
+      context.handle(
+          _sequenceNoMeta,
+          sequenceNo.isAcceptableOrUnknown(
+              data['sequence_no']!, _sequenceNoMeta));
+    } else if (isInserting) {
+      context.missing(_sequenceNoMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+          _typeMeta, type.isAcceptableOrUnknown(data['type']!, _typeMeta));
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(_startedAtMeta,
+          startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta));
+    } else if (isInserting) {
+      context.missing(_startedAtMeta);
+    }
+    if (data.containsKey('ended_at')) {
+      context.handle(_endedAtMeta,
+          endedAt.isAcceptableOrUnknown(data['ended_at']!, _endedAtMeta));
+    }
+    if (data.containsKey('duration_ms')) {
+      context.handle(
+          _durationMsMeta,
+          durationMs.isAcceptableOrUnknown(
+              data['duration_ms']!, _durationMsMeta));
+    }
+    if (data.containsKey('input_summary')) {
+      context.handle(
+          _inputSummaryMeta,
+          inputSummary.isAcceptableOrUnknown(
+              data['input_summary']!, _inputSummaryMeta));
+    }
+    if (data.containsKey('output_summary')) {
+      context.handle(
+          _outputSummaryMeta,
+          outputSummary.isAcceptableOrUnknown(
+              data['output_summary']!, _outputSummaryMeta));
+    }
+    if (data.containsKey('metadata_json')) {
+      context.handle(
+          _metadataJsonMeta,
+          metadataJson.isAcceptableOrUnknown(
+              data['metadata_json']!, _metadataJsonMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {eventId};
+  @override
+  RunEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunEvent(
+      eventId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}event_id'])!,
+      runId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}run_id'])!,
+      sequenceNo: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sequence_no'])!,
+      type: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      startedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}started_at'])!,
+      endedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}ended_at']),
+      durationMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}duration_ms']),
+      inputSummary: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}input_summary']),
+      outputSummary: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}output_summary']),
+      metadataJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}metadata_json'])!,
+    );
+  }
+
+  @override
+  $RunEventsTable createAlias(String alias) {
+    return $RunEventsTable(attachedDatabase, alias);
+  }
+}
+
+class RunEvent extends DataClass implements Insertable<RunEvent> {
+  final String eventId;
+  final String runId;
+  final int sequenceNo;
+  final String type;
+  final String status;
+  final String name;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+  final int? durationMs;
+  final String? inputSummary;
+  final String? outputSummary;
+  final String metadataJson;
+  const RunEvent(
+      {required this.eventId,
+      required this.runId,
+      required this.sequenceNo,
+      required this.type,
+      required this.status,
+      required this.name,
+      required this.startedAt,
+      this.endedAt,
+      this.durationMs,
+      this.inputSummary,
+      this.outputSummary,
+      required this.metadataJson});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['event_id'] = Variable<String>(eventId);
+    map['run_id'] = Variable<String>(runId);
+    map['sequence_no'] = Variable<int>(sequenceNo);
+    map['type'] = Variable<String>(type);
+    map['status'] = Variable<String>(status);
+    map['name'] = Variable<String>(name);
+    map['started_at'] = Variable<DateTime>(startedAt);
+    if (!nullToAbsent || endedAt != null) {
+      map['ended_at'] = Variable<DateTime>(endedAt);
+    }
+    if (!nullToAbsent || durationMs != null) {
+      map['duration_ms'] = Variable<int>(durationMs);
+    }
+    if (!nullToAbsent || inputSummary != null) {
+      map['input_summary'] = Variable<String>(inputSummary);
+    }
+    if (!nullToAbsent || outputSummary != null) {
+      map['output_summary'] = Variable<String>(outputSummary);
+    }
+    map['metadata_json'] = Variable<String>(metadataJson);
+    return map;
+  }
+
+  RunEventsCompanion toCompanion(bool nullToAbsent) {
+    return RunEventsCompanion(
+      eventId: Value(eventId),
+      runId: Value(runId),
+      sequenceNo: Value(sequenceNo),
+      type: Value(type),
+      status: Value(status),
+      name: Value(name),
+      startedAt: Value(startedAt),
+      endedAt: endedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endedAt),
+      durationMs: durationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(durationMs),
+      inputSummary: inputSummary == null && nullToAbsent
+          ? const Value.absent()
+          : Value(inputSummary),
+      outputSummary: outputSummary == null && nullToAbsent
+          ? const Value.absent()
+          : Value(outputSummary),
+      metadataJson: Value(metadataJson),
+    );
+  }
+
+  factory RunEvent.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunEvent(
+      eventId: serializer.fromJson<String>(json['eventId']),
+      runId: serializer.fromJson<String>(json['runId']),
+      sequenceNo: serializer.fromJson<int>(json['sequenceNo']),
+      type: serializer.fromJson<String>(json['type']),
+      status: serializer.fromJson<String>(json['status']),
+      name: serializer.fromJson<String>(json['name']),
+      startedAt: serializer.fromJson<DateTime>(json['startedAt']),
+      endedAt: serializer.fromJson<DateTime?>(json['endedAt']),
+      durationMs: serializer.fromJson<int?>(json['durationMs']),
+      inputSummary: serializer.fromJson<String?>(json['inputSummary']),
+      outputSummary: serializer.fromJson<String?>(json['outputSummary']),
+      metadataJson: serializer.fromJson<String>(json['metadataJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'eventId': serializer.toJson<String>(eventId),
+      'runId': serializer.toJson<String>(runId),
+      'sequenceNo': serializer.toJson<int>(sequenceNo),
+      'type': serializer.toJson<String>(type),
+      'status': serializer.toJson<String>(status),
+      'name': serializer.toJson<String>(name),
+      'startedAt': serializer.toJson<DateTime>(startedAt),
+      'endedAt': serializer.toJson<DateTime?>(endedAt),
+      'durationMs': serializer.toJson<int?>(durationMs),
+      'inputSummary': serializer.toJson<String?>(inputSummary),
+      'outputSummary': serializer.toJson<String?>(outputSummary),
+      'metadataJson': serializer.toJson<String>(metadataJson),
+    };
+  }
+
+  RunEvent copyWith(
+          {String? eventId,
+          String? runId,
+          int? sequenceNo,
+          String? type,
+          String? status,
+          String? name,
+          DateTime? startedAt,
+          Value<DateTime?> endedAt = const Value.absent(),
+          Value<int?> durationMs = const Value.absent(),
+          Value<String?> inputSummary = const Value.absent(),
+          Value<String?> outputSummary = const Value.absent(),
+          String? metadataJson}) =>
+      RunEvent(
+        eventId: eventId ?? this.eventId,
+        runId: runId ?? this.runId,
+        sequenceNo: sequenceNo ?? this.sequenceNo,
+        type: type ?? this.type,
+        status: status ?? this.status,
+        name: name ?? this.name,
+        startedAt: startedAt ?? this.startedAt,
+        endedAt: endedAt.present ? endedAt.value : this.endedAt,
+        durationMs: durationMs.present ? durationMs.value : this.durationMs,
+        inputSummary:
+            inputSummary.present ? inputSummary.value : this.inputSummary,
+        outputSummary:
+            outputSummary.present ? outputSummary.value : this.outputSummary,
+        metadataJson: metadataJson ?? this.metadataJson,
+      );
+  RunEvent copyWithCompanion(RunEventsCompanion data) {
+    return RunEvent(
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      sequenceNo:
+          data.sequenceNo.present ? data.sequenceNo.value : this.sequenceNo,
+      type: data.type.present ? data.type.value : this.type,
+      status: data.status.present ? data.status.value : this.status,
+      name: data.name.present ? data.name.value : this.name,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
+      durationMs:
+          data.durationMs.present ? data.durationMs.value : this.durationMs,
+      inputSummary: data.inputSummary.present
+          ? data.inputSummary.value
+          : this.inputSummary,
+      outputSummary: data.outputSummary.present
+          ? data.outputSummary.value
+          : this.outputSummary,
+      metadataJson: data.metadataJson.present
+          ? data.metadataJson.value
+          : this.metadataJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunEvent(')
+          ..write('eventId: $eventId, ')
+          ..write('runId: $runId, ')
+          ..write('sequenceNo: $sequenceNo, ')
+          ..write('type: $type, ')
+          ..write('status: $status, ')
+          ..write('name: $name, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('inputSummary: $inputSummary, ')
+          ..write('outputSummary: $outputSummary, ')
+          ..write('metadataJson: $metadataJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      eventId,
+      runId,
+      sequenceNo,
+      type,
+      status,
+      name,
+      startedAt,
+      endedAt,
+      durationMs,
+      inputSummary,
+      outputSummary,
+      metadataJson);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunEvent &&
+          other.eventId == this.eventId &&
+          other.runId == this.runId &&
+          other.sequenceNo == this.sequenceNo &&
+          other.type == this.type &&
+          other.status == this.status &&
+          other.name == this.name &&
+          other.startedAt == this.startedAt &&
+          other.endedAt == this.endedAt &&
+          other.durationMs == this.durationMs &&
+          other.inputSummary == this.inputSummary &&
+          other.outputSummary == this.outputSummary &&
+          other.metadataJson == this.metadataJson);
+}
+
+class RunEventsCompanion extends UpdateCompanion<RunEvent> {
+  final Value<String> eventId;
+  final Value<String> runId;
+  final Value<int> sequenceNo;
+  final Value<String> type;
+  final Value<String> status;
+  final Value<String> name;
+  final Value<DateTime> startedAt;
+  final Value<DateTime?> endedAt;
+  final Value<int?> durationMs;
+  final Value<String?> inputSummary;
+  final Value<String?> outputSummary;
+  final Value<String> metadataJson;
+  final Value<int> rowid;
+  const RunEventsCompanion({
+    this.eventId = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.sequenceNo = const Value.absent(),
+    this.type = const Value.absent(),
+    this.status = const Value.absent(),
+    this.name = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.endedAt = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.inputSummary = const Value.absent(),
+    this.outputSummary = const Value.absent(),
+    this.metadataJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RunEventsCompanion.insert({
+    required String eventId,
+    required String runId,
+    required int sequenceNo,
+    required String type,
+    required String status,
+    required String name,
+    required DateTime startedAt,
+    this.endedAt = const Value.absent(),
+    this.durationMs = const Value.absent(),
+    this.inputSummary = const Value.absent(),
+    this.outputSummary = const Value.absent(),
+    this.metadataJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : eventId = Value(eventId),
+        runId = Value(runId),
+        sequenceNo = Value(sequenceNo),
+        type = Value(type),
+        status = Value(status),
+        name = Value(name),
+        startedAt = Value(startedAt);
+  static Insertable<RunEvent> custom({
+    Expression<String>? eventId,
+    Expression<String>? runId,
+    Expression<int>? sequenceNo,
+    Expression<String>? type,
+    Expression<String>? status,
+    Expression<String>? name,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? endedAt,
+    Expression<int>? durationMs,
+    Expression<String>? inputSummary,
+    Expression<String>? outputSummary,
+    Expression<String>? metadataJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (eventId != null) 'event_id': eventId,
+      if (runId != null) 'run_id': runId,
+      if (sequenceNo != null) 'sequence_no': sequenceNo,
+      if (type != null) 'type': type,
+      if (status != null) 'status': status,
+      if (name != null) 'name': name,
+      if (startedAt != null) 'started_at': startedAt,
+      if (endedAt != null) 'ended_at': endedAt,
+      if (durationMs != null) 'duration_ms': durationMs,
+      if (inputSummary != null) 'input_summary': inputSummary,
+      if (outputSummary != null) 'output_summary': outputSummary,
+      if (metadataJson != null) 'metadata_json': metadataJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RunEventsCompanion copyWith(
+      {Value<String>? eventId,
+      Value<String>? runId,
+      Value<int>? sequenceNo,
+      Value<String>? type,
+      Value<String>? status,
+      Value<String>? name,
+      Value<DateTime>? startedAt,
+      Value<DateTime?>? endedAt,
+      Value<int?>? durationMs,
+      Value<String?>? inputSummary,
+      Value<String?>? outputSummary,
+      Value<String>? metadataJson,
+      Value<int>? rowid}) {
+    return RunEventsCompanion(
+      eventId: eventId ?? this.eventId,
+      runId: runId ?? this.runId,
+      sequenceNo: sequenceNo ?? this.sequenceNo,
+      type: type ?? this.type,
+      status: status ?? this.status,
+      name: name ?? this.name,
+      startedAt: startedAt ?? this.startedAt,
+      endedAt: endedAt ?? this.endedAt,
+      durationMs: durationMs ?? this.durationMs,
+      inputSummary: inputSummary ?? this.inputSummary,
+      outputSummary: outputSummary ?? this.outputSummary,
+      metadataJson: metadataJson ?? this.metadataJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (sequenceNo.present) {
+      map['sequence_no'] = Variable<int>(sequenceNo.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (endedAt.present) {
+      map['ended_at'] = Variable<DateTime>(endedAt.value);
+    }
+    if (durationMs.present) {
+      map['duration_ms'] = Variable<int>(durationMs.value);
+    }
+    if (inputSummary.present) {
+      map['input_summary'] = Variable<String>(inputSummary.value);
+    }
+    if (outputSummary.present) {
+      map['output_summary'] = Variable<String>(outputSummary.value);
+    }
+    if (metadataJson.present) {
+      map['metadata_json'] = Variable<String>(metadataJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunEventsCompanion(')
+          ..write('eventId: $eventId, ')
+          ..write('runId: $runId, ')
+          ..write('sequenceNo: $sequenceNo, ')
+          ..write('type: $type, ')
+          ..write('status: $status, ')
+          ..write('name: $name, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt, ')
+          ..write('durationMs: $durationMs, ')
+          ..write('inputSummary: $inputSummary, ')
+          ..write('outputSummary: $outputSummary, ')
+          ..write('metadataJson: $metadataJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $LogRecordsTable extends LogRecords
+    with TableInfo<$LogRecordsTable, LogRecord> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LogRecordsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _logIdMeta = const VerificationMeta('logId');
+  @override
+  late final GeneratedColumn<String> logId = GeneratedColumn<String>(
+      'log_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+      'run_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _eventIdMeta =
+      const VerificationMeta('eventId');
+  @override
+  late final GeneratedColumn<String> eventId = GeneratedColumn<String>(
+      'event_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _levelMeta = const VerificationMeta('level');
+  @override
+  late final GeneratedColumn<String> level = GeneratedColumn<String>(
+      'level', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _categoryMeta =
+      const VerificationMeta('category');
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+      'category', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _messageMeta =
+      const VerificationMeta('message');
+  @override
+  late final GeneratedColumn<String> message = GeneratedColumn<String>(
+      'message', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _detailJsonMeta =
+      const VerificationMeta('detailJson');
+  @override
+  late final GeneratedColumn<String> detailJson = GeneratedColumn<String>(
+      'detail_json', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _errorCodeMeta =
+      const VerificationMeta('errorCode');
+  @override
+  late final GeneratedColumn<String> errorCode = GeneratedColumn<String>(
+      'error_code', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _stackTraceMeta =
+      const VerificationMeta('stackTrace');
+  @override
+  late final GeneratedColumn<String> stackTrace = GeneratedColumn<String>(
+      'stack_trace', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _retryableMeta =
+      const VerificationMeta('retryable');
+  @override
+  late final GeneratedColumn<bool> retryable = GeneratedColumn<bool>(
+      'retryable', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("retryable" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  @override
+  List<GeneratedColumn> get $columns => [
+        logId,
+        runId,
+        eventId,
+        level,
+        category,
+        message,
+        detailJson,
+        errorCode,
+        stackTrace,
+        createdAt,
+        retryable
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'log_records';
+  @override
+  VerificationContext validateIntegrity(Insertable<LogRecord> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('log_id')) {
+      context.handle(
+          _logIdMeta, logId.isAcceptableOrUnknown(data['log_id']!, _logIdMeta));
+    } else if (isInserting) {
+      context.missing(_logIdMeta);
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+          _runIdMeta, runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta));
+    }
+    if (data.containsKey('event_id')) {
+      context.handle(_eventIdMeta,
+          eventId.isAcceptableOrUnknown(data['event_id']!, _eventIdMeta));
+    }
+    if (data.containsKey('level')) {
+      context.handle(
+          _levelMeta, level.isAcceptableOrUnknown(data['level']!, _levelMeta));
+    } else if (isInserting) {
+      context.missing(_levelMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(_categoryMeta,
+          category.isAcceptableOrUnknown(data['category']!, _categoryMeta));
+    } else if (isInserting) {
+      context.missing(_categoryMeta);
+    }
+    if (data.containsKey('message')) {
+      context.handle(_messageMeta,
+          message.isAcceptableOrUnknown(data['message']!, _messageMeta));
+    } else if (isInserting) {
+      context.missing(_messageMeta);
+    }
+    if (data.containsKey('detail_json')) {
+      context.handle(
+          _detailJsonMeta,
+          detailJson.isAcceptableOrUnknown(
+              data['detail_json']!, _detailJsonMeta));
+    }
+    if (data.containsKey('error_code')) {
+      context.handle(_errorCodeMeta,
+          errorCode.isAcceptableOrUnknown(data['error_code']!, _errorCodeMeta));
+    }
+    if (data.containsKey('stack_trace')) {
+      context.handle(
+          _stackTraceMeta,
+          stackTrace.isAcceptableOrUnknown(
+              data['stack_trace']!, _stackTraceMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('retryable')) {
+      context.handle(_retryableMeta,
+          retryable.isAcceptableOrUnknown(data['retryable']!, _retryableMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {logId};
+  @override
+  LogRecord map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LogRecord(
+      logId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}log_id'])!,
+      runId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}run_id']),
+      eventId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}event_id']),
+      level: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}level'])!,
+      category: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}category'])!,
+      message: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}message'])!,
+      detailJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}detail_json']),
+      errorCode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}error_code']),
+      stackTrace: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}stack_trace']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      retryable: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}retryable'])!,
+    );
+  }
+
+  @override
+  $LogRecordsTable createAlias(String alias) {
+    return $LogRecordsTable(attachedDatabase, alias);
+  }
+}
+
+class LogRecord extends DataClass implements Insertable<LogRecord> {
+  final String logId;
+  final String? runId;
+  final String? eventId;
+  final String level;
+  final String category;
+  final String message;
+  final String? detailJson;
+  final String? errorCode;
+  final String? stackTrace;
+  final DateTime createdAt;
+  final bool retryable;
+  const LogRecord(
+      {required this.logId,
+      this.runId,
+      this.eventId,
+      required this.level,
+      required this.category,
+      required this.message,
+      this.detailJson,
+      this.errorCode,
+      this.stackTrace,
+      required this.createdAt,
+      required this.retryable});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['log_id'] = Variable<String>(logId);
+    if (!nullToAbsent || runId != null) {
+      map['run_id'] = Variable<String>(runId);
+    }
+    if (!nullToAbsent || eventId != null) {
+      map['event_id'] = Variable<String>(eventId);
+    }
+    map['level'] = Variable<String>(level);
+    map['category'] = Variable<String>(category);
+    map['message'] = Variable<String>(message);
+    if (!nullToAbsent || detailJson != null) {
+      map['detail_json'] = Variable<String>(detailJson);
+    }
+    if (!nullToAbsent || errorCode != null) {
+      map['error_code'] = Variable<String>(errorCode);
+    }
+    if (!nullToAbsent || stackTrace != null) {
+      map['stack_trace'] = Variable<String>(stackTrace);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['retryable'] = Variable<bool>(retryable);
+    return map;
+  }
+
+  LogRecordsCompanion toCompanion(bool nullToAbsent) {
+    return LogRecordsCompanion(
+      logId: Value(logId),
+      runId:
+          runId == null && nullToAbsent ? const Value.absent() : Value(runId),
+      eventId: eventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(eventId),
+      level: Value(level),
+      category: Value(category),
+      message: Value(message),
+      detailJson: detailJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(detailJson),
+      errorCode: errorCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorCode),
+      stackTrace: stackTrace == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stackTrace),
+      createdAt: Value(createdAt),
+      retryable: Value(retryable),
+    );
+  }
+
+  factory LogRecord.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LogRecord(
+      logId: serializer.fromJson<String>(json['logId']),
+      runId: serializer.fromJson<String?>(json['runId']),
+      eventId: serializer.fromJson<String?>(json['eventId']),
+      level: serializer.fromJson<String>(json['level']),
+      category: serializer.fromJson<String>(json['category']),
+      message: serializer.fromJson<String>(json['message']),
+      detailJson: serializer.fromJson<String?>(json['detailJson']),
+      errorCode: serializer.fromJson<String?>(json['errorCode']),
+      stackTrace: serializer.fromJson<String?>(json['stackTrace']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      retryable: serializer.fromJson<bool>(json['retryable']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'logId': serializer.toJson<String>(logId),
+      'runId': serializer.toJson<String?>(runId),
+      'eventId': serializer.toJson<String?>(eventId),
+      'level': serializer.toJson<String>(level),
+      'category': serializer.toJson<String>(category),
+      'message': serializer.toJson<String>(message),
+      'detailJson': serializer.toJson<String?>(detailJson),
+      'errorCode': serializer.toJson<String?>(errorCode),
+      'stackTrace': serializer.toJson<String?>(stackTrace),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'retryable': serializer.toJson<bool>(retryable),
+    };
+  }
+
+  LogRecord copyWith(
+          {String? logId,
+          Value<String?> runId = const Value.absent(),
+          Value<String?> eventId = const Value.absent(),
+          String? level,
+          String? category,
+          String? message,
+          Value<String?> detailJson = const Value.absent(),
+          Value<String?> errorCode = const Value.absent(),
+          Value<String?> stackTrace = const Value.absent(),
+          DateTime? createdAt,
+          bool? retryable}) =>
+      LogRecord(
+        logId: logId ?? this.logId,
+        runId: runId.present ? runId.value : this.runId,
+        eventId: eventId.present ? eventId.value : this.eventId,
+        level: level ?? this.level,
+        category: category ?? this.category,
+        message: message ?? this.message,
+        detailJson: detailJson.present ? detailJson.value : this.detailJson,
+        errorCode: errorCode.present ? errorCode.value : this.errorCode,
+        stackTrace: stackTrace.present ? stackTrace.value : this.stackTrace,
+        createdAt: createdAt ?? this.createdAt,
+        retryable: retryable ?? this.retryable,
+      );
+  LogRecord copyWithCompanion(LogRecordsCompanion data) {
+    return LogRecord(
+      logId: data.logId.present ? data.logId.value : this.logId,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      eventId: data.eventId.present ? data.eventId.value : this.eventId,
+      level: data.level.present ? data.level.value : this.level,
+      category: data.category.present ? data.category.value : this.category,
+      message: data.message.present ? data.message.value : this.message,
+      detailJson:
+          data.detailJson.present ? data.detailJson.value : this.detailJson,
+      errorCode: data.errorCode.present ? data.errorCode.value : this.errorCode,
+      stackTrace:
+          data.stackTrace.present ? data.stackTrace.value : this.stackTrace,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      retryable: data.retryable.present ? data.retryable.value : this.retryable,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LogRecord(')
+          ..write('logId: $logId, ')
+          ..write('runId: $runId, ')
+          ..write('eventId: $eventId, ')
+          ..write('level: $level, ')
+          ..write('category: $category, ')
+          ..write('message: $message, ')
+          ..write('detailJson: $detailJson, ')
+          ..write('errorCode: $errorCode, ')
+          ..write('stackTrace: $stackTrace, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('retryable: $retryable')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(logId, runId, eventId, level, category,
+      message, detailJson, errorCode, stackTrace, createdAt, retryable);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LogRecord &&
+          other.logId == this.logId &&
+          other.runId == this.runId &&
+          other.eventId == this.eventId &&
+          other.level == this.level &&
+          other.category == this.category &&
+          other.message == this.message &&
+          other.detailJson == this.detailJson &&
+          other.errorCode == this.errorCode &&
+          other.stackTrace == this.stackTrace &&
+          other.createdAt == this.createdAt &&
+          other.retryable == this.retryable);
+}
+
+class LogRecordsCompanion extends UpdateCompanion<LogRecord> {
+  final Value<String> logId;
+  final Value<String?> runId;
+  final Value<String?> eventId;
+  final Value<String> level;
+  final Value<String> category;
+  final Value<String> message;
+  final Value<String?> detailJson;
+  final Value<String?> errorCode;
+  final Value<String?> stackTrace;
+  final Value<DateTime> createdAt;
+  final Value<bool> retryable;
+  final Value<int> rowid;
+  const LogRecordsCompanion({
+    this.logId = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    this.level = const Value.absent(),
+    this.category = const Value.absent(),
+    this.message = const Value.absent(),
+    this.detailJson = const Value.absent(),
+    this.errorCode = const Value.absent(),
+    this.stackTrace = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.retryable = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LogRecordsCompanion.insert({
+    required String logId,
+    this.runId = const Value.absent(),
+    this.eventId = const Value.absent(),
+    required String level,
+    required String category,
+    required String message,
+    this.detailJson = const Value.absent(),
+    this.errorCode = const Value.absent(),
+    this.stackTrace = const Value.absent(),
+    required DateTime createdAt,
+    this.retryable = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : logId = Value(logId),
+        level = Value(level),
+        category = Value(category),
+        message = Value(message),
+        createdAt = Value(createdAt);
+  static Insertable<LogRecord> custom({
+    Expression<String>? logId,
+    Expression<String>? runId,
+    Expression<String>? eventId,
+    Expression<String>? level,
+    Expression<String>? category,
+    Expression<String>? message,
+    Expression<String>? detailJson,
+    Expression<String>? errorCode,
+    Expression<String>? stackTrace,
+    Expression<DateTime>? createdAt,
+    Expression<bool>? retryable,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (logId != null) 'log_id': logId,
+      if (runId != null) 'run_id': runId,
+      if (eventId != null) 'event_id': eventId,
+      if (level != null) 'level': level,
+      if (category != null) 'category': category,
+      if (message != null) 'message': message,
+      if (detailJson != null) 'detail_json': detailJson,
+      if (errorCode != null) 'error_code': errorCode,
+      if (stackTrace != null) 'stack_trace': stackTrace,
+      if (createdAt != null) 'created_at': createdAt,
+      if (retryable != null) 'retryable': retryable,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LogRecordsCompanion copyWith(
+      {Value<String>? logId,
+      Value<String?>? runId,
+      Value<String?>? eventId,
+      Value<String>? level,
+      Value<String>? category,
+      Value<String>? message,
+      Value<String?>? detailJson,
+      Value<String?>? errorCode,
+      Value<String?>? stackTrace,
+      Value<DateTime>? createdAt,
+      Value<bool>? retryable,
+      Value<int>? rowid}) {
+    return LogRecordsCompanion(
+      logId: logId ?? this.logId,
+      runId: runId ?? this.runId,
+      eventId: eventId ?? this.eventId,
+      level: level ?? this.level,
+      category: category ?? this.category,
+      message: message ?? this.message,
+      detailJson: detailJson ?? this.detailJson,
+      errorCode: errorCode ?? this.errorCode,
+      stackTrace: stackTrace ?? this.stackTrace,
+      createdAt: createdAt ?? this.createdAt,
+      retryable: retryable ?? this.retryable,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (logId.present) {
+      map['log_id'] = Variable<String>(logId.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (eventId.present) {
+      map['event_id'] = Variable<String>(eventId.value);
+    }
+    if (level.present) {
+      map['level'] = Variable<String>(level.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (message.present) {
+      map['message'] = Variable<String>(message.value);
+    }
+    if (detailJson.present) {
+      map['detail_json'] = Variable<String>(detailJson.value);
+    }
+    if (errorCode.present) {
+      map['error_code'] = Variable<String>(errorCode.value);
+    }
+    if (stackTrace.present) {
+      map['stack_trace'] = Variable<String>(stackTrace.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (retryable.present) {
+      map['retryable'] = Variable<bool>(retryable.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LogRecordsCompanion(')
+          ..write('logId: $logId, ')
+          ..write('runId: $runId, ')
+          ..write('eventId: $eventId, ')
+          ..write('level: $level, ')
+          ..write('category: $category, ')
+          ..write('message: $message, ')
+          ..write('detailJson: $detailJson, ')
+          ..write('errorCode: $errorCode, ')
+          ..write('stackTrace: $stackTrace, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('retryable: $retryable, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6839,8 +8714,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SkillPacksTable skillPacks = $SkillPacksTable(this);
   late final $McpServersTable mcpServers = $McpServersTable(this);
   late final $AccountMetaTable accountMeta = $AccountMetaTable(this);
+  late final $RunRecordsTable runRecords = $RunRecordsTable(this);
+  late final $RunEventsTable runEvents = $RunEventsTable(this);
+  late final $LogRecordsTable logRecords = $LogRecordsTable(this);
   late final Index idxMessagesConversation = Index('idx_messages_conversation',
       'CREATE INDEX idx_messages_conversation ON messages (conversation_id)');
+  late final Index idxRunEventsRunSequence = Index(
+      'idx_run_events_run_sequence',
+      'CREATE UNIQUE INDEX idx_run_events_run_sequence ON run_events (run_id, sequence_no)');
+  late final Index idxLogRecordsRunCreated = Index(
+      'idx_log_records_run_created',
+      'CREATE INDEX idx_log_records_run_created ON log_records (run_id, created_at)');
+  late final Index idxLogRecordsLevelCreated = Index(
+      'idx_log_records_level_created',
+      'CREATE INDEX idx_log_records_level_created ON log_records (level, created_at)');
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6862,7 +8749,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         skillPacks,
         mcpServers,
         accountMeta,
-        idxMessagesConversation
+        runRecords,
+        runEvents,
+        logRecords,
+        idxMessagesConversation,
+        idxRunEventsRunSequence,
+        idxLogRecordsRunCreated,
+        idxLogRecordsLevelCreated
       ];
 }
 
@@ -10275,6 +12168,844 @@ typedef $$AccountMetaTableProcessedTableManager = ProcessedTableManager<
     ),
     AccountMetaData,
     PrefetchHooks Function()>;
+typedef $$RunRecordsTableCreateCompanionBuilder = RunRecordsCompanion Function({
+  required String runId,
+  required String conversationId,
+  Value<String> model,
+  Value<String> status,
+  required DateTime startedAt,
+  Value<DateTime?> endedAt,
+  Value<int> inputTokens,
+  Value<int> outputTokens,
+  Value<int> cachedTokens,
+  Value<int?> estimatedCostCents,
+  Value<int> eventCount,
+  Value<int?> totalDurationMs,
+  Value<int> retryCount,
+  Value<int?> firstTokenDurationMs,
+  Value<int> rowid,
+});
+typedef $$RunRecordsTableUpdateCompanionBuilder = RunRecordsCompanion Function({
+  Value<String> runId,
+  Value<String> conversationId,
+  Value<String> model,
+  Value<String> status,
+  Value<DateTime> startedAt,
+  Value<DateTime?> endedAt,
+  Value<int> inputTokens,
+  Value<int> outputTokens,
+  Value<int> cachedTokens,
+  Value<int?> estimatedCostCents,
+  Value<int> eventCount,
+  Value<int?> totalDurationMs,
+  Value<int> retryCount,
+  Value<int?> firstTokenDurationMs,
+  Value<int> rowid,
+});
+
+class $$RunRecordsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunRecordsTable> {
+  $$RunRecordsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get conversationId => $composableBuilder(
+      column: $table.conversationId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get model => $composableBuilder(
+      column: $table.model, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get endedAt => $composableBuilder(
+      column: $table.endedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get inputTokens => $composableBuilder(
+      column: $table.inputTokens, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get outputTokens => $composableBuilder(
+      column: $table.outputTokens, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get cachedTokens => $composableBuilder(
+      column: $table.cachedTokens, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get estimatedCostCents => $composableBuilder(
+      column: $table.estimatedCostCents,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get eventCount => $composableBuilder(
+      column: $table.eventCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get totalDurationMs => $composableBuilder(
+      column: $table.totalDurationMs,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get retryCount => $composableBuilder(
+      column: $table.retryCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get firstTokenDurationMs => $composableBuilder(
+      column: $table.firstTokenDurationMs,
+      builder: (column) => ColumnFilters(column));
+}
+
+class $$RunRecordsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunRecordsTable> {
+  $$RunRecordsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+      column: $table.conversationId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get model => $composableBuilder(
+      column: $table.model, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get endedAt => $composableBuilder(
+      column: $table.endedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get inputTokens => $composableBuilder(
+      column: $table.inputTokens, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get outputTokens => $composableBuilder(
+      column: $table.outputTokens,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get cachedTokens => $composableBuilder(
+      column: $table.cachedTokens,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get estimatedCostCents => $composableBuilder(
+      column: $table.estimatedCostCents,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get eventCount => $composableBuilder(
+      column: $table.eventCount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get totalDurationMs => $composableBuilder(
+      column: $table.totalDurationMs,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get retryCount => $composableBuilder(
+      column: $table.retryCount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get firstTokenDurationMs => $composableBuilder(
+      column: $table.firstTokenDurationMs,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$RunRecordsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunRecordsTable> {
+  $$RunRecordsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+      column: $table.conversationId, builder: (column) => column);
+
+  GeneratedColumn<String> get model =>
+      $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endedAt =>
+      $composableBuilder(column: $table.endedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get inputTokens => $composableBuilder(
+      column: $table.inputTokens, builder: (column) => column);
+
+  GeneratedColumn<int> get outputTokens => $composableBuilder(
+      column: $table.outputTokens, builder: (column) => column);
+
+  GeneratedColumn<int> get cachedTokens => $composableBuilder(
+      column: $table.cachedTokens, builder: (column) => column);
+
+  GeneratedColumn<int> get estimatedCostCents => $composableBuilder(
+      column: $table.estimatedCostCents, builder: (column) => column);
+
+  GeneratedColumn<int> get eventCount => $composableBuilder(
+      column: $table.eventCount, builder: (column) => column);
+
+  GeneratedColumn<int> get totalDurationMs => $composableBuilder(
+      column: $table.totalDurationMs, builder: (column) => column);
+
+  GeneratedColumn<int> get retryCount => $composableBuilder(
+      column: $table.retryCount, builder: (column) => column);
+
+  GeneratedColumn<int> get firstTokenDurationMs => $composableBuilder(
+      column: $table.firstTokenDurationMs, builder: (column) => column);
+}
+
+class $$RunRecordsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $RunRecordsTable,
+    RunRecord,
+    $$RunRecordsTableFilterComposer,
+    $$RunRecordsTableOrderingComposer,
+    $$RunRecordsTableAnnotationComposer,
+    $$RunRecordsTableCreateCompanionBuilder,
+    $$RunRecordsTableUpdateCompanionBuilder,
+    (RunRecord, BaseReferences<_$AppDatabase, $RunRecordsTable, RunRecord>),
+    RunRecord,
+    PrefetchHooks Function()> {
+  $$RunRecordsTableTableManager(_$AppDatabase db, $RunRecordsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunRecordsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunRecordsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RunRecordsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> runId = const Value.absent(),
+            Value<String> conversationId = const Value.absent(),
+            Value<String> model = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<DateTime> startedAt = const Value.absent(),
+            Value<DateTime?> endedAt = const Value.absent(),
+            Value<int> inputTokens = const Value.absent(),
+            Value<int> outputTokens = const Value.absent(),
+            Value<int> cachedTokens = const Value.absent(),
+            Value<int?> estimatedCostCents = const Value.absent(),
+            Value<int> eventCount = const Value.absent(),
+            Value<int?> totalDurationMs = const Value.absent(),
+            Value<int> retryCount = const Value.absent(),
+            Value<int?> firstTokenDurationMs = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RunRecordsCompanion(
+            runId: runId,
+            conversationId: conversationId,
+            model: model,
+            status: status,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cachedTokens: cachedTokens,
+            estimatedCostCents: estimatedCostCents,
+            eventCount: eventCount,
+            totalDurationMs: totalDurationMs,
+            retryCount: retryCount,
+            firstTokenDurationMs: firstTokenDurationMs,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String runId,
+            required String conversationId,
+            Value<String> model = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            required DateTime startedAt,
+            Value<DateTime?> endedAt = const Value.absent(),
+            Value<int> inputTokens = const Value.absent(),
+            Value<int> outputTokens = const Value.absent(),
+            Value<int> cachedTokens = const Value.absent(),
+            Value<int?> estimatedCostCents = const Value.absent(),
+            Value<int> eventCount = const Value.absent(),
+            Value<int?> totalDurationMs = const Value.absent(),
+            Value<int> retryCount = const Value.absent(),
+            Value<int?> firstTokenDurationMs = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RunRecordsCompanion.insert(
+            runId: runId,
+            conversationId: conversationId,
+            model: model,
+            status: status,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cachedTokens: cachedTokens,
+            estimatedCostCents: estimatedCostCents,
+            eventCount: eventCount,
+            totalDurationMs: totalDurationMs,
+            retryCount: retryCount,
+            firstTokenDurationMs: firstTokenDurationMs,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$RunRecordsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $RunRecordsTable,
+    RunRecord,
+    $$RunRecordsTableFilterComposer,
+    $$RunRecordsTableOrderingComposer,
+    $$RunRecordsTableAnnotationComposer,
+    $$RunRecordsTableCreateCompanionBuilder,
+    $$RunRecordsTableUpdateCompanionBuilder,
+    (RunRecord, BaseReferences<_$AppDatabase, $RunRecordsTable, RunRecord>),
+    RunRecord,
+    PrefetchHooks Function()>;
+typedef $$RunEventsTableCreateCompanionBuilder = RunEventsCompanion Function({
+  required String eventId,
+  required String runId,
+  required int sequenceNo,
+  required String type,
+  required String status,
+  required String name,
+  required DateTime startedAt,
+  Value<DateTime?> endedAt,
+  Value<int?> durationMs,
+  Value<String?> inputSummary,
+  Value<String?> outputSummary,
+  Value<String> metadataJson,
+  Value<int> rowid,
+});
+typedef $$RunEventsTableUpdateCompanionBuilder = RunEventsCompanion Function({
+  Value<String> eventId,
+  Value<String> runId,
+  Value<int> sequenceNo,
+  Value<String> type,
+  Value<String> status,
+  Value<String> name,
+  Value<DateTime> startedAt,
+  Value<DateTime?> endedAt,
+  Value<int?> durationMs,
+  Value<String?> inputSummary,
+  Value<String?> outputSummary,
+  Value<String> metadataJson,
+  Value<int> rowid,
+});
+
+class $$RunEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunEventsTable> {
+  $$RunEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get eventId => $composableBuilder(
+      column: $table.eventId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sequenceNo => $composableBuilder(
+      column: $table.sequenceNo, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get type => $composableBuilder(
+      column: $table.type, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get endedAt => $composableBuilder(
+      column: $table.endedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get durationMs => $composableBuilder(
+      column: $table.durationMs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get inputSummary => $composableBuilder(
+      column: $table.inputSummary, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get outputSummary => $composableBuilder(
+      column: $table.outputSummary, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get metadataJson => $composableBuilder(
+      column: $table.metadataJson, builder: (column) => ColumnFilters(column));
+}
+
+class $$RunEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunEventsTable> {
+  $$RunEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get eventId => $composableBuilder(
+      column: $table.eventId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sequenceNo => $composableBuilder(
+      column: $table.sequenceNo, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get type => $composableBuilder(
+      column: $table.type, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get endedAt => $composableBuilder(
+      column: $table.endedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get durationMs => $composableBuilder(
+      column: $table.durationMs, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get inputSummary => $composableBuilder(
+      column: $table.inputSummary,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get outputSummary => $composableBuilder(
+      column: $table.outputSummary,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get metadataJson => $composableBuilder(
+      column: $table.metadataJson,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$RunEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunEventsTable> {
+  $$RunEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<int> get sequenceNo => $composableBuilder(
+      column: $table.sequenceNo, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endedAt =>
+      $composableBuilder(column: $table.endedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get durationMs => $composableBuilder(
+      column: $table.durationMs, builder: (column) => column);
+
+  GeneratedColumn<String> get inputSummary => $composableBuilder(
+      column: $table.inputSummary, builder: (column) => column);
+
+  GeneratedColumn<String> get outputSummary => $composableBuilder(
+      column: $table.outputSummary, builder: (column) => column);
+
+  GeneratedColumn<String> get metadataJson => $composableBuilder(
+      column: $table.metadataJson, builder: (column) => column);
+}
+
+class $$RunEventsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $RunEventsTable,
+    RunEvent,
+    $$RunEventsTableFilterComposer,
+    $$RunEventsTableOrderingComposer,
+    $$RunEventsTableAnnotationComposer,
+    $$RunEventsTableCreateCompanionBuilder,
+    $$RunEventsTableUpdateCompanionBuilder,
+    (RunEvent, BaseReferences<_$AppDatabase, $RunEventsTable, RunEvent>),
+    RunEvent,
+    PrefetchHooks Function()> {
+  $$RunEventsTableTableManager(_$AppDatabase db, $RunEventsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RunEventsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> eventId = const Value.absent(),
+            Value<String> runId = const Value.absent(),
+            Value<int> sequenceNo = const Value.absent(),
+            Value<String> type = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<DateTime> startedAt = const Value.absent(),
+            Value<DateTime?> endedAt = const Value.absent(),
+            Value<int?> durationMs = const Value.absent(),
+            Value<String?> inputSummary = const Value.absent(),
+            Value<String?> outputSummary = const Value.absent(),
+            Value<String> metadataJson = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RunEventsCompanion(
+            eventId: eventId,
+            runId: runId,
+            sequenceNo: sequenceNo,
+            type: type,
+            status: status,
+            name: name,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationMs: durationMs,
+            inputSummary: inputSummary,
+            outputSummary: outputSummary,
+            metadataJson: metadataJson,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String eventId,
+            required String runId,
+            required int sequenceNo,
+            required String type,
+            required String status,
+            required String name,
+            required DateTime startedAt,
+            Value<DateTime?> endedAt = const Value.absent(),
+            Value<int?> durationMs = const Value.absent(),
+            Value<String?> inputSummary = const Value.absent(),
+            Value<String?> outputSummary = const Value.absent(),
+            Value<String> metadataJson = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RunEventsCompanion.insert(
+            eventId: eventId,
+            runId: runId,
+            sequenceNo: sequenceNo,
+            type: type,
+            status: status,
+            name: name,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationMs: durationMs,
+            inputSummary: inputSummary,
+            outputSummary: outputSummary,
+            metadataJson: metadataJson,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$RunEventsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $RunEventsTable,
+    RunEvent,
+    $$RunEventsTableFilterComposer,
+    $$RunEventsTableOrderingComposer,
+    $$RunEventsTableAnnotationComposer,
+    $$RunEventsTableCreateCompanionBuilder,
+    $$RunEventsTableUpdateCompanionBuilder,
+    (RunEvent, BaseReferences<_$AppDatabase, $RunEventsTable, RunEvent>),
+    RunEvent,
+    PrefetchHooks Function()>;
+typedef $$LogRecordsTableCreateCompanionBuilder = LogRecordsCompanion Function({
+  required String logId,
+  Value<String?> runId,
+  Value<String?> eventId,
+  required String level,
+  required String category,
+  required String message,
+  Value<String?> detailJson,
+  Value<String?> errorCode,
+  Value<String?> stackTrace,
+  required DateTime createdAt,
+  Value<bool> retryable,
+  Value<int> rowid,
+});
+typedef $$LogRecordsTableUpdateCompanionBuilder = LogRecordsCompanion Function({
+  Value<String> logId,
+  Value<String?> runId,
+  Value<String?> eventId,
+  Value<String> level,
+  Value<String> category,
+  Value<String> message,
+  Value<String?> detailJson,
+  Value<String?> errorCode,
+  Value<String?> stackTrace,
+  Value<DateTime> createdAt,
+  Value<bool> retryable,
+  Value<int> rowid,
+});
+
+class $$LogRecordsTableFilterComposer
+    extends Composer<_$AppDatabase, $LogRecordsTable> {
+  $$LogRecordsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get logId => $composableBuilder(
+      column: $table.logId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get eventId => $composableBuilder(
+      column: $table.eventId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get level => $composableBuilder(
+      column: $table.level, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get category => $composableBuilder(
+      column: $table.category, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get message => $composableBuilder(
+      column: $table.message, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get detailJson => $composableBuilder(
+      column: $table.detailJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get errorCode => $composableBuilder(
+      column: $table.errorCode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get stackTrace => $composableBuilder(
+      column: $table.stackTrace, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get retryable => $composableBuilder(
+      column: $table.retryable, builder: (column) => ColumnFilters(column));
+}
+
+class $$LogRecordsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LogRecordsTable> {
+  $$LogRecordsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get logId => $composableBuilder(
+      column: $table.logId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get eventId => $composableBuilder(
+      column: $table.eventId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get level => $composableBuilder(
+      column: $table.level, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get category => $composableBuilder(
+      column: $table.category, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get message => $composableBuilder(
+      column: $table.message, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get detailJson => $composableBuilder(
+      column: $table.detailJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get errorCode => $composableBuilder(
+      column: $table.errorCode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get stackTrace => $composableBuilder(
+      column: $table.stackTrace, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get retryable => $composableBuilder(
+      column: $table.retryable, builder: (column) => ColumnOrderings(column));
+}
+
+class $$LogRecordsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LogRecordsTable> {
+  $$LogRecordsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get logId =>
+      $composableBuilder(column: $table.logId, builder: (column) => column);
+
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<String> get eventId =>
+      $composableBuilder(column: $table.eventId, builder: (column) => column);
+
+  GeneratedColumn<String> get level =>
+      $composableBuilder(column: $table.level, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get message =>
+      $composableBuilder(column: $table.message, builder: (column) => column);
+
+  GeneratedColumn<String> get detailJson => $composableBuilder(
+      column: $table.detailJson, builder: (column) => column);
+
+  GeneratedColumn<String> get errorCode =>
+      $composableBuilder(column: $table.errorCode, builder: (column) => column);
+
+  GeneratedColumn<String> get stackTrace => $composableBuilder(
+      column: $table.stackTrace, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get retryable =>
+      $composableBuilder(column: $table.retryable, builder: (column) => column);
+}
+
+class $$LogRecordsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $LogRecordsTable,
+    LogRecord,
+    $$LogRecordsTableFilterComposer,
+    $$LogRecordsTableOrderingComposer,
+    $$LogRecordsTableAnnotationComposer,
+    $$LogRecordsTableCreateCompanionBuilder,
+    $$LogRecordsTableUpdateCompanionBuilder,
+    (LogRecord, BaseReferences<_$AppDatabase, $LogRecordsTable, LogRecord>),
+    LogRecord,
+    PrefetchHooks Function()> {
+  $$LogRecordsTableTableManager(_$AppDatabase db, $LogRecordsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LogRecordsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LogRecordsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LogRecordsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> logId = const Value.absent(),
+            Value<String?> runId = const Value.absent(),
+            Value<String?> eventId = const Value.absent(),
+            Value<String> level = const Value.absent(),
+            Value<String> category = const Value.absent(),
+            Value<String> message = const Value.absent(),
+            Value<String?> detailJson = const Value.absent(),
+            Value<String?> errorCode = const Value.absent(),
+            Value<String?> stackTrace = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<bool> retryable = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              LogRecordsCompanion(
+            logId: logId,
+            runId: runId,
+            eventId: eventId,
+            level: level,
+            category: category,
+            message: message,
+            detailJson: detailJson,
+            errorCode: errorCode,
+            stackTrace: stackTrace,
+            createdAt: createdAt,
+            retryable: retryable,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String logId,
+            Value<String?> runId = const Value.absent(),
+            Value<String?> eventId = const Value.absent(),
+            required String level,
+            required String category,
+            required String message,
+            Value<String?> detailJson = const Value.absent(),
+            Value<String?> errorCode = const Value.absent(),
+            Value<String?> stackTrace = const Value.absent(),
+            required DateTime createdAt,
+            Value<bool> retryable = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              LogRecordsCompanion.insert(
+            logId: logId,
+            runId: runId,
+            eventId: eventId,
+            level: level,
+            category: category,
+            message: message,
+            detailJson: detailJson,
+            errorCode: errorCode,
+            stackTrace: stackTrace,
+            createdAt: createdAt,
+            retryable: retryable,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$LogRecordsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $LogRecordsTable,
+    LogRecord,
+    $$LogRecordsTableFilterComposer,
+    $$LogRecordsTableOrderingComposer,
+    $$LogRecordsTableAnnotationComposer,
+    $$LogRecordsTableCreateCompanionBuilder,
+    $$LogRecordsTableUpdateCompanionBuilder,
+    (LogRecord, BaseReferences<_$AppDatabase, $LogRecordsTable, LogRecord>),
+    LogRecord,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10311,4 +13042,10 @@ class $AppDatabaseManager {
       $$McpServersTableTableManager(_db, _db.mcpServers);
   $$AccountMetaTableTableManager get accountMeta =>
       $$AccountMetaTableTableManager(_db, _db.accountMeta);
+  $$RunRecordsTableTableManager get runRecords =>
+      $$RunRecordsTableTableManager(_db, _db.runRecords);
+  $$RunEventsTableTableManager get runEvents =>
+      $$RunEventsTableTableManager(_db, _db.runEvents);
+  $$LogRecordsTableTableManager get logRecords =>
+      $$LogRecordsTableTableManager(_db, _db.logRecords);
 }

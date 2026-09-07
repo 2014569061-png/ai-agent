@@ -11,6 +11,7 @@ import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/section_card.dart';
 import 'skill_market_page.dart';
 
 /// 插件页：Tab 1 = 声明式插件（JSON manifest）；Tab 2 = Skill 市场（GitHub）。
@@ -150,22 +151,28 @@ class _DeclarativePluginsViewState
                   icon: Icons.extension_outlined,
                   title: '暂无插件',
                   message: '导入 JSON manifest 声明式工具包或 Agent 预设')
-              : ListView.builder(
+              : ListView.separated(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: _plugins.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
                     final plugin = _plugins[index];
-                    return ListTile(
-                      leading: const Icon(Icons.extension_outlined),
-                      title: Text(plugin.name),
-                      subtitle: Text('${plugin.kind} · v${plugin.version}'),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Switch(
-                            value: plugin.enabled,
-                            onChanged: (v) => _toggle(plugin, v)),
-                        IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _delete(plugin)),
-                      ]),
+                    return SectionCard(
+                      child: ListTile(
+                        leading: const Icon(Icons.extension_outlined),
+                        title: Text(plugin.name),
+                        subtitle: Text('${plugin.kind} · v${plugin.version}'),
+                        trailing:
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                          Switch(
+                              value: plugin.enabled,
+                              onChanged: (v) => _toggle(plugin, v)),
+                          IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _delete(plugin)),
+                        ]),
+                      ),
                     );
                   },
                 ),

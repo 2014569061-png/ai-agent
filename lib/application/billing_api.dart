@@ -44,19 +44,20 @@ class BalanceInfo {
 class UsageDaily {
   const UsageDaily(
       {required this.day,
+      this.calls = 0,
       required this.promptTokens,
       required this.completionTokens,
       required this.cachedTokens,
       required this.spendCents,
       required this.costCents});
   final String day;
+  final int calls;
   final int promptTokens;
   final int completionTokens;
   final int cachedTokens;
   final int spendCents;
   final int costCents;
   int get totalTokens => promptTokens + completionTokens;
-  int get calls => 1;
 }
 
 class UsageReport {
@@ -193,8 +194,9 @@ class BillingApi {
     return UsageReport(
       summary: Map<String, dynamic>.from(j['summary'] as Map? ?? const {}),
       daily: (j['daily'] as List? ?? [])
-          .map((d) => UsageDaily(
+              .map((d) => UsageDaily(
                 day: d['day'] as String,
+                calls: (d['calls'] as num?)?.toInt() ?? 0,
                 promptTokens: (d['prompt_tokens'] as num?)?.toInt() ?? 0,
                 completionTokens:
                     (d['completion_tokens'] as num?)?.toInt() ?? 0,
@@ -205,6 +207,24 @@ class BillingApi {
           .toList(),
       models: List<Map<String, dynamic>>.from(j['models'] ?? []),
     );
+  }
+
+  Future<Map<String, dynamic>> uploadRunEvents({
+    required String access,
+    required String runId,
+    String? conversationId,
+    required List<Map<String, dynamic>> events,
+  }) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      '$baseUrl/v1/runs/events',
+      data: {
+        'run_id': runId,
+        if (conversationId != null) 'conversation_id': conversationId,
+        'events': events,
+      },
+      options: _auth(access),
+    );
+    return r.data ?? const {};
   }
 
   /// 创建充值订单（tier: '5'|'10'|'30'|'50'，或直接 amountCents）。

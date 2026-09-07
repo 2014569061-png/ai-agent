@@ -176,6 +176,71 @@ class AuditLogs extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// Agent 单次运行摘要，用于任务级可观测性。
+class RunRecords extends Table {
+  TextColumn get runId => text()();
+  TextColumn get conversationId => text()();
+  TextColumn get model => text().withDefault(const Constant('unknown'))();
+  TextColumn get status => text().withDefault(const Constant('running'))();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get endedAt => dateTime().nullable()();
+  IntColumn get inputTokens => integer().withDefault(const Constant(0))();
+  IntColumn get outputTokens => integer().withDefault(const Constant(0))();
+  IntColumn get cachedTokens => integer().withDefault(const Constant(0))();
+  IntColumn get estimatedCostCents => integer().nullable()();
+  IntColumn get eventCount => integer().withDefault(const Constant(0))();
+  IntColumn get totalDurationMs => integer().nullable()();
+  IntColumn get retryCount => integer().withDefault(const Constant(0))();
+  IntColumn get firstTokenDurationMs => integer().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {runId};
+}
+
+/// Agent 运行步骤，按 sequenceNo 回放。
+@TableIndex(
+    name: 'idx_run_events_run_sequence',
+    columns: {#runId, #sequenceNo},
+    unique: true)
+class RunEvents extends Table {
+  TextColumn get eventId => text()();
+  TextColumn get runId => text()();
+  IntColumn get sequenceNo => integer()();
+  TextColumn get type => text()();
+  TextColumn get status => text()();
+  TextColumn get name => text()();
+  DateTimeColumn get startedAt => dateTime()();
+  DateTimeColumn get endedAt => dateTime().nullable()();
+  IntColumn get durationMs => integer().nullable()();
+  TextColumn get inputSummary => text().nullable()();
+  TextColumn get outputSummary => text().nullable()();
+  TextColumn get metadataJson => text().withDefault(const Constant('{}'))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {eventId};
+}
+
+/// 面向用户的诊断日志，默认只保存脱敏摘要。
+@TableIndex(name: 'idx_log_records_run_created', columns: {#runId, #createdAt})
+@TableIndex(
+    name: 'idx_log_records_level_created', columns: {#level, #createdAt})
+class LogRecords extends Table {
+  TextColumn get logId => text()();
+  TextColumn get runId => text().nullable()();
+  TextColumn get eventId => text().nullable()();
+  TextColumn get level => text()();
+  TextColumn get category => text()();
+  TextColumn get message => text()();
+  TextColumn get detailJson => text().nullable()();
+  TextColumn get errorCode => text().nullable()();
+  TextColumn get stackTrace => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get retryable => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column<Object>> get primaryKey => {logId};
+}
+
 /// 插件市场（C6）：声明式工具包 / Agent 预设包。
 class Plugins extends Table {
   TextColumn get id => text()();
@@ -256,12 +321,15 @@ class AccountMeta extends Table {
   SkillPacks,
   McpServers,
   AccountMeta,
+  RunRecords,
+  RunEvents,
+  LogRecords,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -318,6 +386,30 @@ class AppDatabase extends _$AppDatabase {
             // Skill 市场：GitHub Skill 包本地安装记录（不含可执行代码）。
             await m.createTable(skillPacks);
           }
+          if (from < 12) {
+            await m.createTable(runRecords);
+            await m.createTable(runEvents);
+            await m.createTable(logRecords);
+          }
+          if (from < 13) {
+            await m.addColumn(runRecords, runRecords.totalDurationMs);
+            await m.addColumn(runRecords, runRecords.retryCount);
+          }
+          if (from < 14) {
+            await m.addColumn(runRecords, runRecords.firstTokenDurationMs);
+            await customStatement(
+              'CREATE UNIQUE INDEX IF NOT EXISTS idx_run_events_run_sequence '
+              'ON run_events (run_id, sequence_no)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_log_records_run_created '
+              'ON log_records (run_id, created_at)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_log_records_level_created '
+              'ON log_records (level, created_at)',
+            );
+          }
         },
       );
 
@@ -352,6 +444,15 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> deleteConversation(String id) async {
     await transaction(() async {
+      final runs = await (select(runRecords)
+            ..where((row) => row.conversationId.equals(id)))
+          .get();
+      final runIds = runs.map((run) => run.runId).toList(growable: false);
+      if (runIds.isNotEmpty) {
+        await (delete(logRecords)..where((row) => row.runId.isIn(runIds))).go();
+        await (delete(runEvents)..where((row) => row.runId.isIn(runIds))).go();
+        await (delete(runRecords)..where((row) => row.runId.isIn(runIds))).go();
+      }
       await (delete(messages)..where((row) => row.conversationId.equals(id)))
           .go();
       await (delete(conversations)..where((row) => row.id.equals(id))).go();
@@ -395,9 +496,7 @@ class AppDatabase extends _$AppDatabase {
       await (update(messages)..where((row) => row.id.equals(messageId)))
           .write(MessagesCompanion(content: Value(newContent)));
       if (trailingIds.isNotEmpty) {
-        await (delete(messages)
-                ..where((row) => row.id.isIn(trailingIds)))
-            .go();
+        await (delete(messages)..where((row) => row.id.isIn(trailingIds))).go();
       }
     });
   }
@@ -571,6 +670,159 @@ class AppDatabase extends _$AppDatabase {
         ..where((row) => row.createdAt.isSmallerThanValue(before)))
       .go();
 
+  Future<void> insertRunRecord(RunRecordsCompanion record) =>
+      into(runRecords).insertOnConflictUpdate(record);
+
+  Future<void> updateRunRecord(String runId, RunRecordsCompanion record) =>
+      (update(runRecords)..where((row) => row.runId.equals(runId)))
+          .write(record);
+
+  Future<void> insertRunEvent(RunEventsCompanion event) =>
+      into(runEvents).insertOnConflictUpdate(event);
+
+  Future<void> updateRunEvent(String eventId, RunEventsCompanion event) =>
+      (update(runEvents)..where((row) => row.eventId.equals(eventId)))
+          .write(event);
+
+  Future<List<RunRecord>> recentRuns({int limit = 100}) => (select(runRecords)
+        ..orderBy([(row) => OrderingTerm.desc(row.startedAt)])
+        ..limit(limit))
+      .get();
+
+  Future<RunRecord?> findRunRecord(String runId) =>
+      (select(runRecords)..where((row) => row.runId.equals(runId)))
+          .getSingleOrNull();
+
+  Stream<RunRecord?> watchRunRecord(String runId) =>
+      (select(runRecords)..where((row) => row.runId.equals(runId)))
+          .watch()
+          .map((rows) => rows.isEmpty ? null : rows.first);
+
+  /// Keeps completed runs from growing without bound. Active runs are always
+  /// retained so a long-running task cannot disappear mid-execution.
+  Future<void> pruneRunRecords({
+    DateTime? now,
+    int maxRuns = 100,
+    Duration maxAge = const Duration(days: 30),
+  }) async {
+    if (maxRuns < 1) return;
+    final cutoff = (now ?? DateTime.now()).subtract(maxAge);
+    await transaction(() async {
+      final rows = await (select(runRecords)
+            ..orderBy([(row) => OrderingTerm.desc(row.startedAt)]))
+          .get();
+      final keepIds = <String>{};
+      var retainedCompleted = 0;
+      for (final row in rows) {
+        if (row.status == 'running') {
+          keepIds.add(row.runId);
+          continue;
+        }
+        if (!row.startedAt.isBefore(cutoff) && retainedCompleted < maxRuns) {
+          keepIds.add(row.runId);
+          retainedCompleted++;
+        }
+      }
+      final removeIds = rows
+          .where((row) => !keepIds.contains(row.runId))
+          .map((row) => row.runId)
+          .toList(growable: false);
+      if (removeIds.isEmpty) return;
+      await (delete(logRecords)..where((row) => row.runId.isIn(removeIds)))
+          .go();
+      await (delete(runEvents)..where((row) => row.runId.isIn(removeIds))).go();
+      await (delete(runRecords)..where((row) => row.runId.isIn(removeIds)))
+          .go();
+    });
+  }
+
+  Future<List<RunEvent>> eventsForRun(String runId,
+          {int limit = 50, int offset = 0}) =>
+      (select(runEvents)
+            ..where((row) => row.runId.equals(runId))
+            ..orderBy([(row) => OrderingTerm.asc(row.sequenceNo)])
+            ..limit(limit, offset: offset))
+          .get();
+
+  Stream<List<RunEvent>> watchEventsForRun(String runId,
+          {int limit = 50, int offset = 0}) =>
+      (select(runEvents)
+            ..where((row) => row.runId.equals(runId))
+            ..orderBy([(row) => OrderingTerm.asc(row.sequenceNo)])
+            ..limit(limit, offset: offset))
+          .watch();
+
+  Future<void> insertLogRecord(LogRecordsCompanion record) =>
+      into(logRecords).insertOnConflictUpdate(record);
+
+  Future<List<LogRecord>> recentLogRecords({
+    int limit = 200,
+    int offset = 0,
+    String? runId,
+    String? level,
+    String? category,
+    String? keyword,
+    DateTime? from,
+    DateTime? to,
+  }) {
+    final query = select(logRecords)
+      ..orderBy([(row) => OrderingTerm.desc(row.createdAt)])
+      ..limit(limit, offset: offset);
+    if (runId != null) query.where((row) => row.runId.equals(runId));
+    if (level != null) query.where((row) => row.level.equals(level));
+    if (category != null) query.where((row) => row.category.equals(category));
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      final term = '%${keyword.trim()}%';
+      query.where((row) => row.message.like(term) | row.category.like(term));
+    }
+    if (from != null) {
+      query.where((row) => row.createdAt.isBiggerOrEqualValue(from));
+    }
+    if (to != null) query.where((row) => row.createdAt.isSmallerThanValue(to));
+    return query.get();
+  }
+
+  Stream<List<LogRecord>> watchLogRecords({
+    int limit = 200,
+    String? runId,
+    String? level,
+    String? category,
+    String? keyword,
+    DateTime? from,
+    DateTime? to,
+  }) {
+    final query = select(logRecords)
+      ..orderBy([(row) => OrderingTerm.desc(row.createdAt)])
+      ..limit(limit);
+    if (runId != null) query.where((row) => row.runId.equals(runId));
+    if (level != null) query.where((row) => row.level.equals(level));
+    if (category != null) query.where((row) => row.category.equals(category));
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      final term = '%${keyword.trim()}%';
+      query.where((row) => row.message.like(term) | row.category.like(term));
+    }
+    if (from != null) {
+      query.where((row) => row.createdAt.isBiggerOrEqualValue(from));
+    }
+    if (to != null) query.where((row) => row.createdAt.isSmallerThanValue(to));
+    return query.watch();
+  }
+
+  Future<void> clearLogRecords() => delete(logRecords).go();
+
+  Future<void> pruneLogRecords(DateTime before) => (delete(logRecords)
+        ..where((row) => row.createdAt.isSmallerThanValue(before)))
+      .go();
+
+  Future<void> pruneRunLogs(String runId, {int max = 2000}) async {
+    await customStatement(
+      'DELETE FROM log_records WHERE run_id = ? AND log_id NOT IN '
+      '(SELECT log_id FROM log_records WHERE run_id = ? '
+      'ORDER BY created_at DESC LIMIT ?)',
+      [runId, runId, max],
+    );
+  }
+
   // --- 插件（C6）---
 
   Future<List<Plugin>> allPlugins() =>
@@ -654,6 +906,9 @@ class AppDatabase extends _$AppDatabase {
       await delete(auditLogs).go();
       await delete(plugins).go();
       await delete(skillPacks).go();
+      await delete(runEvents).go();
+      await delete(runRecords).go();
+      await delete(logRecords).go();
     });
   }
 }

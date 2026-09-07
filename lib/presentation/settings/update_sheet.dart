@@ -25,9 +25,8 @@ class _UpdateSheetState extends State<UpdateSheet> {
       _error = null;
       _progress = 0;
     });
-    final ok = await UpdateService()
-        .downloadAndInstall(widget.info.apkUrl!,
-            onProgress: (p) => setState(() => _progress = p));
+    final ok = await UpdateService().downloadAndInstall(widget.info.apkUrl!,
+        onProgress: (p) => setState(() => _progress = p));
     if (!mounted) return;
     setState(() {
       _downloading = false;
@@ -79,7 +78,7 @@ class _UpdateSheetState extends State<UpdateSheet> {
               child: LinearProgressIndicator(value: _progress, minHeight: 6),
             ),
             const SizedBox(height: 6),
-            Text('下载中 ${( _progress * 100).toStringAsFixed(0)}%',
+            Text('下载中 ${(_progress * 100).toStringAsFixed(0)}%',
                 style: theme.textTheme.bodySmall),
             const SizedBox(height: 12),
           ],

@@ -18,8 +18,7 @@ class ToolApprovalSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final danger = risk == ToolRisk.dangerous;
-    final riskColor =
-        danger ? AppTheme.danger : AppTheme.warning;
+    final riskColor = danger ? AppTheme.danger : AppTheme.warning;
     final riskLabel =
         danger ? AppStrings.dangerOperation : AppStrings.requiresConfirmation;
     final humanizer = const ToolHumanizer();

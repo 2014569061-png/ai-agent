@@ -5,6 +5,7 @@ import '../widgets/floating_toast.dart';
 import '../widgets/immersive_dropdown.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
+import '../theme/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,6 +29,8 @@ import '../scheduled/scheduled_tasks_page.dart';
 import '../sync/sync_page.dart';
 import '../vault/vault_page.dart';
 import '../audit/audit_log_page.dart';
+import '../diagnostics/log_viewer_page.dart';
+import '../diagnostics/run_analysis_page.dart';
 import '../account/compliance_page.dart';
 import '../feedback/feedback_page.dart';
 import '../plugins/plugins_page.dart';
@@ -97,6 +100,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   bool _saving = false;
   bool _testing = false;
   bool _loadingModels = false;
+  bool _obscureApiKey = true;
+  bool _showAdvanced = false;
   List<ModelInfo> _models = [];
   List<McpServerConfig> _mcpServers = [];
   final _appLock = AppLockService();
@@ -154,9 +159,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final legacyPrefs = await SharedPreferences.getInstance();
     final legacyPlanMode = legacyPrefs.getBool('plan_mode');
     if (legacyPlanMode != null) {
-      ref
-          .read(chatControllerProvider.notifier)
-          .setPlanMode(legacyPlanMode);
+      ref.read(chatControllerProvider.notifier).setPlanMode(legacyPlanMode);
       await legacyPrefs.remove('plan_mode');
     }
     if (!kIsWeb) {
@@ -306,7 +309,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       FloatingToast.show(context, AppStrings.connectionSuccess);
       return;
     }
-    FloatingToast.show(context, '连接失败：$error');
+    FloatingToast.show(
+      context,
+      '连接失败：$error',
+      tone: ToastTone.danger,
+      persistent: true,
+      actions: [
+        FloatingCapsuleAction(
+          label: '重试',
+          onPressed: _testConnection,
+        ),
+      ],
+    );
   }
 
   Future<void> _loadModels() async {
@@ -338,7 +352,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     return Scaffold(
         appBar: AppBar(title: const Text(AppStrings.providerSettings)),
         body: ListView(padding: const EdgeInsets.all(16), children: [
-          const _SectionHeader(icon: Icons.cloud_outlined, title: '模型与服务'),
+          const _SectionHeader(icon: Icons.cloud_outlined, title: '服务商选择'),
           SectionCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -382,8 +396,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                         if (value != null) setState(() => _type = value);
                       },
                     ),
-                    const SizedBox(height: 16),
                     if (_profiles.isNotEmpty) ...[
+                      const SizedBox(height: 16),
                       ImmersiveDropdown<String>(
                           labelText: AppStrings.savedProviders,
                           initialValue: _selectedId,
@@ -393,8 +407,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                       value: p.id, child: Text(p.name)))
                               .toList(),
                           onChanged: _select),
-                      const SizedBox(height: 16),
                     ],
+                  ]),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const _SectionHeader(icon: Icons.link_outlined, title: '连接配置'),
+          SectionCard(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     TextField(
                         controller: _name,
                         decoration: const InputDecoration(
@@ -467,82 +491,125 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     const SizedBox(height: 16),
                     TextField(
                         controller: _apiKey,
-                        obscureText: true,
+                        obscureText: _obscureApiKey,
                         decoration: InputDecoration(
                             labelText: AppStrings.apiKey,
                             border: InputBorder.none,
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscureApiKey
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined),
+                              onPressed: () => setState(
+                                  () => _obscureApiKey = !_obscureApiKey),
+                            ),
                             helperText: kIsWeb
                                 ? 'web 端密钥保存在浏览器 localStorage（明文），请注意使用环境'
                                 : null)),
-                    const SizedBox(height: 16),
-                    TextField(
-                        controller: _tavilyKey,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                            labelText: AppStrings.tavilyApiKey,
-                            border: InputBorder.none)),
-                    const SizedBox(height: 16),
-                    Text('思考程度',
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant)),
-                    const SizedBox(height: 6),
-                    SegmentedButton<ReasoningEffort>(
-                      segments: const [
-                        ButtonSegment(
-                            value: ReasoningEffort.off, label: Text('关')),
-                        ButtonSegment(
-                            value: ReasoningEffort.low, label: Text('低')),
-                        ButtonSegment(
-                            value: ReasoningEffort.medium, label: Text('中')),
-                        ButtonSegment(
-                            value: ReasoningEffort.high, label: Text('高')),
-                      ],
-                      selected: {_reasoningEffort},
-                      onSelectionChanged: (selection) =>
-                          setState(() => _reasoningEffort = selection.first),
-                      showSelectedIcon: false,
-                      style: const ButtonStyle(
-                          visualDensity: VisualDensity.compact),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                        controller: _contextTokens,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                            labelText: '上下文窗口（token）',
-                            hintText: '默认 32000，超出的较早历史会被自动裁剪',
-                            border: InputBorder.none)),
-                    const SizedBox(height: 20),
-                    Row(children: [
-                      Expanded(
-                          child: FilledButton.icon(
-                              onPressed: _saving ? null : _save,
-                              icon: const Icon(Icons.save_outlined),
-                              label: Text(_saving
-                                  ? AppStrings.saving
-                                  : AppStrings.saveConfig))),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: OutlinedButton.icon(
-                              onPressed: _testing ? null : _testConnection,
-                              icon: _testing
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2))
-                                  : const Icon(Icons.wifi_tethering),
-                              label: Text(_testing
-                                  ? AppStrings.testing
-                                  : AppStrings.testConnection))),
-                    ]),
                   ]),
             ),
           ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+            child: Row(
+              children: [
+                const _SectionHeader(icon: Icons.tune_outlined, title: '高级参数'),
+                const Spacer(),
+                Icon(_showAdvanced ? Icons.expand_less : Icons.expand_more,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+              ],
+            ),
+          ),
+          if (_showAdvanced)
+            SectionCard(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextField(
+                          controller: _tavilyKey,
+                          obscureText: true,
+                          decoration: const InputDecoration(
+                              labelText: AppStrings.tavilyApiKey,
+                              border: InputBorder.none)),
+                      const SizedBox(height: 16),
+                      Text('思考程度',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
+                      const SizedBox(height: 6),
+                      SegmentedButton<ReasoningEffort>(
+                        segments: const [
+                          ButtonSegment(
+                              value: ReasoningEffort.off, label: Text('关')),
+                          ButtonSegment(
+                              value: ReasoningEffort.low, label: Text('低')),
+                          ButtonSegment(
+                              value: ReasoningEffort.medium, label: Text('中')),
+                          ButtonSegment(
+                              value: ReasoningEffort.high, label: Text('高')),
+                        ],
+                        selected: {_reasoningEffort},
+                        onSelectionChanged: (selection) =>
+                            setState(() => _reasoningEffort = selection.first),
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                            visualDensity: VisualDensity.compact),
+                      ),
+                      const SizedBox(height: 16),
+                      Text('上下文窗口: ',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant)),
+                      const SizedBox(height: 6),
+                      Slider(
+                        value: (int.tryParse(_contextTokens.text) ?? 32000)
+                            .toDouble()
+                            .clamp(4000, 2000000),
+                        min: 4000,
+                        max: 2000000,
+                        divisions: 100,
+                        label: 'k',
+                        onChanged: (val) {
+                          setState(() {
+                            _contextTokens.text = val.toInt().toString();
+                          });
+                        },
+                      ),
+                    ]),
+              ),
+            ),
+          const SizedBox(height: 20),
+          Row(children: [
+            Expanded(
+                child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: const Icon(Icons.save_outlined),
+                    label: Text(
+                        _saving ? AppStrings.saving : AppStrings.saveConfig))),
+            const SizedBox(width: 8),
+            Expanded(
+                child: OutlinedButton.icon(
+                    onPressed: _testing ? null : _testConnection,
+                    icon: _testing
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.wifi_tethering),
+                    label: Text(_testing
+                        ? AppStrings.testing
+                        : AppStrings.testConnection))),
+          ]),
           const SizedBox(height: 8),
           _buildMcpSection(context),
           _buildAccountSection(context),
@@ -585,7 +652,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                       ? '已加入系统白名单，定时任务可按时触发'
                       : '未加入白名单，激进省电可能导致定时任务延迟'),
                   trailing: _ignoringBattery
-                      ? const Icon(Icons.check_circle, color: Color(0xFF2E7D32))
+                      ? const Icon(Icons.check_circle, color: AppTheme.success)
                       : const Icon(Icons.chevron_right),
                   onTap: _requestBatteryExemption,
                 ),
@@ -640,6 +707,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               ),
               const Divider(height: 1),
               ListTile(
+                leading: const Icon(Icons.receipt_long_outlined),
+                title: const Text('诊断日志'),
+                subtitle: const Text('查看模型、工具和文件操作的运行日志'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const LogViewerPage())),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.timeline_outlined),
+                title: const Text('运行分析'),
+                subtitle: const Text('查看 Agent 任务步骤、Token 和文件操作'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const RunAnalysisPage())),
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: const Icon(Icons.cloud_sync_outlined),
                 title: const Text('云同步（Pro）'),
                 subtitle: const Text('恢复码 + 端到端加密多设备同步'),
@@ -649,14 +734,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               ),
             ]),
           ),
-          const _SectionHeader(
-              icon: Icons.wallpaper_outlined, title: '聊天背景'),
+          const _SectionHeader(icon: Icons.wallpaper_outlined, title: '聊天背景'),
           SectionCard(
             child: FutureBuilder<BackgroundConfig>(
               future: _backgroundService.load(),
               builder: (context, snapshot) {
-                final current = snapshot.data ??
-                    const BackgroundConfig(mode: 'default');
+                final current =
+                    snapshot.data ?? const BackgroundConfig(mode: 'default');
                 Widget option(String mode, String title, String subtitle,
                     {Widget? leading, VoidCallback? onTap}) {
                   final selected = current.mode == mode;
@@ -681,8 +765,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 }
 
                 return Column(children: [
-                  option('default', '默认(跟随主题)',
-                      '浅色纯白渐变 / 深色纯黑,与顶栏最统一'),
+                  option('default', '默认(跟随主题)', '浅色纯白渐变 / 深色纯黑,与顶栏最统一'),
                   option('clouds', '云朵栈桥', '内置插画背景',
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
@@ -712,21 +795,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                                       const Icon(Icons.broken_image_outlined))
                               : const Icon(Icons.image_outlined),
                         ),
-                      ),
-                      onTap: () async {
-                        try {
-                          final x = await ImagePicker()
-                              .pickImage(source: ImageSource.gallery);
-                          if (x == null) return;
-                          await _backgroundService.setCustomBackground(x.path);
-                          if (mounted) setState(() {});
-                        } catch (_) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                            const SnackBar(content: Text('选图失败,请重试')),
-                          );
-                        }
-                      }),
+                      ), onTap: () async {
+                    try {
+                      final x = await ImagePicker()
+                          .pickImage(source: ImageSource.gallery);
+                      if (x == null) return;
+                      await _backgroundService.setCustomBackground(x.path);
+                      if (mounted) setState(() {});
+                    } catch (_) {
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                        const SnackBar(content: Text('选图失败,请重试')),
+                      );
+                    }
+                  }),
                 ]);
               },
             ),
@@ -844,7 +926,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   // --- MCP 服务器管理 ---
 
   Widget _buildMcpSection(BuildContext context) {
-    return Card(
+    final mutedColor = AppTheme.semanticOf(context).mutedOnGlass;
+    return SectionCard(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -866,14 +949,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             ),
           ]),
           const SizedBox(height: 4),
-          const Text(AppStrings.mcpServersHint,
-              style: TextStyle(fontSize: 12, color: Color(0xFF627D98))),
+          Text(AppStrings.mcpServersHint,
+              style: TextStyle(fontSize: 12, color: mutedColor)),
           const SizedBox(height: 8),
           if (_mcpServers.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Text(AppStrings.noMcpServers,
-                  style: TextStyle(color: Color(0xFF627D98))),
+                  style: TextStyle(color: mutedColor)),
             )
           else
             ..._mcpServers.map((server) => SwitchListTile(
@@ -912,7 +995,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     // v0.6 聚焦使用体验，暂不开放账号、充值和用量功能。
     return Column(children: [
       const _SectionHeader(icon: Icons.privacy_tip_outlined, title: '隐私与合规'),
-      Card(
+      SectionCard(
         child: ListTile(
           leading: const Icon(Icons.privacy_tip_outlined),
           title: const Text('用户协议与隐私政策'),

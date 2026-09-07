@@ -338,6 +338,11 @@ class OpenAiCompatibleProvider implements LlmProvider {
             promptTokens: (usage['prompt_tokens'] as num?)?.toInt() ?? 0,
             completionTokens:
                 (usage['completion_tokens'] as num?)?.toInt() ?? 0,
+            cachedTokens: ((usage['prompt_tokens_details']
+                        as Map<String, dynamic>?)?['cached_tokens'] as num?)
+                    ?.toInt() ??
+                (usage['cached_tokens'] as num?)?.toInt() ??
+                0,
           ),
         );
       }

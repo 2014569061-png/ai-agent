@@ -39,8 +39,8 @@ class ImmersiveSurface extends StatelessWidget {
     final base = isDark ? AppTheme.darkElevated : AppTheme.lightElevated;
     final border = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
     final enabled = blur && !MediaQuery.of(context).disableAnimations;
-    final shadow = boxShadow ??
-        (showGlow ? AppTheme.floatingShadow(isDark) : null);
+    final shadow =
+        boxShadow ?? (showGlow ? AppTheme.floatingShadow(isDark) : null);
     final content = Container(
       margin: margin,
       padding: padding,

@@ -11,6 +11,7 @@ import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
+import '../widgets/section_card.dart';
 
 /// 知识库 / RAG 管理页（C4）：文档列表 + 上传/粘贴 + 删除 + 总开关。
 class KnowledgePage extends ConsumerStatefulWidget {
@@ -153,14 +154,28 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('知识库')),
+      appBar: AppBar(
+        title: const Text('知识库'),
+        actions: [
+          IconButton(
+            onPressed: _pasteText,
+            icon: const Icon(Icons.note_add_outlined),
+            tooltip: '粘贴文本入库',
+          ),
+        ],
+      ),
       body: Column(children: [
-        SwitchListTile(
-          secondary: const Icon(Icons.library_books_outlined),
-          title: const Text('启用知识库检索'),
-          subtitle: const Text('对话时自动注入相关片段（当前为关键词模式）'),
-          value: _enabled,
-          onChanged: _toggleEnabled,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: SectionCard(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.library_books_outlined),
+              title: const Text('启用知识库检索'),
+              subtitle: const Text('对话时自动注入相关片段（当前为关键词模式）'),
+              value: _enabled,
+              onChanged: _toggleEnabled,
+            ),
+          ),
         ),
         Expanded(
           child: AsyncStateView(
@@ -171,19 +186,24 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 ? const EmptyStateView(
                     icon: Icons.library_books_outlined,
                     title: '知识库为空',
-                    message: '上传 PDF/TXT/MD 或粘贴文本入库。')
-                : ListView.builder(
+                    message: '上传 PDF/TXT/MD 或点击右上角粘贴文本入库。')
+                : ListView.separated(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: _docs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final doc = _docs[index];
-                      return ListTile(
-                        leading: const Icon(Icons.description_outlined),
-                        title: Text(doc.name),
-                        subtitle:
-                            Text('${doc.chunkCount} 个分块 · ${doc.sourceType}'),
-                        trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _delete(doc)),
+                      return SectionCard(
+                        child: ListTile(
+                          leading: const Icon(Icons.description_outlined),
+                          title: Text(doc.name),
+                          subtitle:
+                              Text('${doc.chunkCount} 个分块 · ${doc.sourceType}'),
+                          trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _delete(doc)),
+                        ),
                       );
                     },
                   ),
@@ -194,15 +214,6 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
         onPressed: _uploadFile,
         icon: const Icon(Icons.upload_file),
         label: const Text('上传文档'),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: OutlinedButton.icon(
-              onPressed: _pasteText,
-              icon: const Icon(Icons.note_add_outlined),
-              label: const Text('粘贴文本入库')),
-        ),
       ),
     );
   }

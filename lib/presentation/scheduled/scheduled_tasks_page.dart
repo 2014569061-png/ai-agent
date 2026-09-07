@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../application/scheduled_task_service.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../theme/app_theme.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
@@ -150,8 +151,10 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                   ),
               ]),
               const SizedBox(height: 4),
-              const Text('不选则每天执行',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF627D98))),
+              Text('不选则每天执行',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.semanticOf(context).mutedOnGlass)),
             ]),
           ),
           actions: [

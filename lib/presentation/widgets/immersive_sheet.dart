@@ -33,7 +33,7 @@ Future<T?> showImmersiveSheet<T>({
               color: Colors.transparent,
               child: ImmersiveSurface(
                 level: ImmersiveMaterialLevel.ultraThick,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppTokens.modalRadius),
                 margin: EdgeInsets.zero,
                 padding: EdgeInsets.zero,
                 child: SafeArea(
@@ -86,7 +86,7 @@ Future<T?> showImmersiveDialog<T>({
               color: Colors.transparent,
               child: ImmersiveSurface(
                 level: ImmersiveMaterialLevel.ultraThick,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppTokens.modalRadius),
                 margin: EdgeInsets.zero,
                 padding: EdgeInsets.zero,
                 child: Theme(

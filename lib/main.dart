@@ -9,6 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'application/onboarding_service.dart';
+import 'application/account_services.dart';
+import 'application/billing_api.dart';
+import 'application/run_event_queue.dart';
 import 'infrastructure/background/foreground_service.dart';
 import 'infrastructure/background/scheduled_task_runner.dart';
 import 'infrastructure/database/database_provider.dart';
@@ -93,8 +96,24 @@ Future<void> _initializeServices() async {
 
     // Refresh widget data without holding up the foreground UI.
     unawaited(_refreshWidget());
+    // Recover events captured while offline after the first frame. Backoff in
+    // RunEventQueue prevents repeated startup failures from causing a storm.
+    unawaited(_recoverRunEvents());
   } catch (error, stack) {
     debugPrint('后台启动服务初始化失败: $error\n$stack');
+  }
+}
+
+Future<void> _recoverRunEvents() async {
+  try {
+    final queue = RunEventQueue();
+    if (await queue.pendingCount() == 0) return;
+    final api = BillingApi(baseUrl: defaultBackendBaseUrl());
+    final session = await AccountService(api: api).restoreSession();
+    if (session == null) return;
+    await queue.recover(api: api, access: session.access);
+  } catch (error) {
+    debugPrint('离线运行事件恢复失败: $error');
   }
 }
 

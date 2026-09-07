@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../infrastructure/sync/sync_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
@@ -93,7 +94,9 @@ class _SyncPageState extends ConsumerState<SyncPage> {
         ),
         const SizedBox(height: 8),
         Text('同步后端地址：${sync.isConfigured ? '已配置' : '未配置'}',
-            style: const TextStyle(fontSize: 12, color: Color(0xFF627D98))),
+            style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.semanticOf(context).mutedOnGlass)),
       ]),
     );
   }

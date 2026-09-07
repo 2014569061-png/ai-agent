@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../theme/app_theme.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_dropdown.dart';
 
@@ -80,8 +81,10 @@ class _FeedbackPageState extends State<FeedbackPage> {
             icon: const Icon(Icons.send_outlined),
             label: const Text('提交反馈')),
         const SizedBox(height: 8),
-        const Text('当前通过邮件客户端提交，无需注册账号。',
-            style: TextStyle(fontSize: 12, color: Color(0xFF627D98))),
+        Text('当前通过邮件客户端提交，无需注册账号。',
+            style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.semanticOf(context).mutedOnGlass)),
       ]),
     );
   }

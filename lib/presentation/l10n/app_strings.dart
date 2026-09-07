@@ -62,15 +62,15 @@ abstract final class AppStrings {
   static const error = '错误：';
 
   // --- 设置页 ---
-  static const providerSettings = 'Provider 设置';
+  static const providerSettings = '服务商设置';
   static const modelServiceConfig = '模型服务配置';
   static const quickApplyTemplate = '快速套用服务商模板';
   static const protocolType = '协议类型';
-  static const savedProviders = '已保存 Provider';
-  static const providerName = 'Provider 名称';
-  static const baseUrl = 'Base URL';
-  static const modelName = '模型名称';
-  static const apiKey = 'API Key';
+  static const savedProviders = '已保存配置';
+  static const providerName = '服务商名称';
+  static const baseUrl = '接口地址';
+  static const modelName = '模型';
+  static const apiKey = 'API 密钥';
   static const tavilyApiKey = 'Tavily API Key（联网搜索，可选）';
   static const saveConfig = '保存配置';
   static const saving = '保存中…';

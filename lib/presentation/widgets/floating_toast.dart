@@ -8,6 +8,7 @@ import '../../application/error_humanizer.dart';
 import 'immersive_surface.dart';
 import '../theme/app_tokens.dart';
 import 'glass_chip.dart';
+import '../chat/widgets/capsule_top_bar.dart';
 
 enum ToastTone { neutral, success, warning, danger }
 
@@ -51,7 +52,9 @@ class FloatingToast {
 
   static const _displayDuration = Duration(seconds: 3);
   static const _animationDuration = Duration(milliseconds: 220);
-  static const _topOffset = 128.0;
+  static const _toolCapsuleHeight = 32.0;
+  static const _topOffset =
+      (4.0 + kCapsuleTopBarHeight) + 8.0 + _toolCapsuleHeight + 8.0;
   static const _maxWidth = 480.0;
   static const _horizontalPadding = 24.0;
 

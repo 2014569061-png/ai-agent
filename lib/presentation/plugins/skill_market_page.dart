@@ -9,6 +9,7 @@ import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/section_card.dart';
 
 /// Skill 市场（v0.6）：通过 GitHub 地址安装纯指令 + 静态资源的 Skill 包。
 class SkillMarketPage extends ConsumerStatefulWidget {
@@ -205,35 +206,40 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                     title: '暂无 Skill',
                     message: '粘贴 GitHub 地址安装你的第一个 Skill',
                   )
-                : ListView.builder(
+                : ListView.separated(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     itemCount: _installed.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final pack = _installed[index];
-                      return ListTile(
-                        leading: const Icon(Icons.menu_book_outlined),
-                        title: Text(pack.name),
-                        subtitle: Text(
-                          '${pack.description}\n${pack.source} · v${pack.version}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: '检查更新',
-                              icon: const Icon(Icons.refresh),
-                              onPressed: () => _update(pack),
-                            ),
-                            Switch(
-                              value: pack.enabled,
-                              onChanged: (v) => _toggle(pack, v),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _delete(pack),
-                            ),
-                          ],
+                      return SectionCard(
+                        child: ListTile(
+                          leading: const Icon(Icons.menu_book_outlined),
+                          title: Text(pack.name),
+                          subtitle: Text(
+                            '${pack.description}\n${pack.source} · v${pack.version}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: '检查更新',
+                                icon: const Icon(Icons.refresh),
+                                onPressed: () => _update(pack),
+                              ),
+                              Switch(
+                                value: pack.enabled,
+                                onChanged: (v) => _toggle(pack, v),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline),
+                                onPressed: () => _delete(pack),
+                              ),
+                            ],
+                          ),
                         ),
                       );
                     },
@@ -246,7 +252,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
 
   Widget _buildPreviewCard() {
     final preview = _previewPack!;
-    return Card(
+    return SectionCard(
       margin: const EdgeInsets.symmetric(horizontal: 12),
       child: Padding(
         padding: const EdgeInsets.all(12),

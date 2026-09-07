@@ -901,6 +901,54 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return decision ?? ToolApproval.reject;
   }
 
+  Future<void> _selectApprovalMode() async {
+    if (ref.read(chatControllerProvider).running) return;
+    final selected = await showImmersiveSheet<ApprovalMode>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: Text('操作权限',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            ),
+            for (final mode in ApprovalMode.values)
+              ListTile(
+                leading: Icon(mode == ApprovalMode.fullAccess
+                    ? Icons.shield_outlined
+                    : Icons.verified_user_outlined),
+                title: Text(_approvalModeTitle(mode)),
+                subtitle: Text(_approvalModeDescription(mode)),
+                trailing: ref.read(chatControllerProvider).approvalMode == mode
+                    ? const Icon(Icons.check_rounded)
+                    : null,
+                onTap: () => Navigator.pop(context, mode),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (selected != null && mounted) {
+      ref.read(chatControllerProvider.notifier).setApprovalMode(selected);
+    }
+  }
+
+  String _approvalModeTitle(ApprovalMode mode) => switch (mode) {
+        ApprovalMode.ask => '每次询问',
+        ApprovalMode.autoSafe => '自动批准低风险',
+        ApprovalMode.fullAccess => '完全访问',
+      };
+
+  String _approvalModeDescription(ApprovalMode mode) => switch (mode) {
+        ApprovalMode.ask => '敏感操作执行前都需要确认',
+        ApprovalMode.autoSafe => '低风险工具自动执行，其余操作按风险确认',
+        ApprovalMode.fullAccess => '可授权工具自动执行，危险操作仍需确认',
+      };
+
   /// 把「始终允许 / 本会话允许」的授予写入审计，溯源决策链路。
   void _recordToolGrant(ToolCall call, ToolRisk risk, ToolApproval decision) {
     final audit = ref.read(auditServiceProvider);
@@ -1195,7 +1243,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   final wide = constraints.maxWidth > 700;
                   Widget column = Column(children: [
                     const SizedBox(
-                        height: 52), // Clear the absolute positioned top bar
+                        height: kCapsuleTopBarHeight +
+                            4), // Clear the absolute positioned top bar
                     // 计划面板改为 Stack 顶层悬浮，避免挤压消息区和被顶部蒙版覆盖。
                     if (state.activityLog.isNotEmpty)
                       Padding(
@@ -1222,6 +1271,34 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                     _showMessageActions(index);
                                   },
                                   onRegenerate: _regenerate,
+                                  trailingWidgets: [
+                                    if (state.planState != null &&
+                                        state.planState!.status != 'cancelled')
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: PlanPanel(
+                                          plan: state.planState!,
+                                          goal: state.planState!.steps.isEmpty
+                                              ? null
+                                              : state.planState!.steps.first
+                                                  .description,
+                                          onApprove: () =>
+                                              _chat.respondToPlan(true),
+                                          onCancel: () =>
+                                              _chat.respondToPlan(false),
+                                        ),
+                                      ),
+                                    if (state.toolActivities.isNotEmpty)
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.only(bottom: 12),
+                                        child: ToolActivityCapsule(
+                                          activities: state.toolActivities,
+                                          running: state.running,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                           if (_showScrollToBottom)
                             Positioned(
@@ -1329,9 +1406,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             .read(chatControllerProvider.notifier)
                             .setPlanMode(!state.planMode);
                       },
+                      onApprovalModeTap: _selectApprovalMode,
                       onTerminalPreview: _openTerminal,
                       onEnvSetup: _openEnvSetup,
                       planModeEnabled: state.planMode,
+                      approvalMode: state.approvalMode,
                       onVoiceToggle: _toggleVoice,
                       isListening: _listening,
                       modelLabel: state.activeModel.isEmpty
@@ -1366,7 +1445,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 top: 0,
                 left: 0,
                 right: 0,
-                height: MediaQuery.paddingOf(context).top + 68,
+                height: MediaQuery.paddingOf(context).top +
+                    kCapsuleTopBarHeight +
+                    4,
                 // 仅负责视觉蒙版；不拦截其后绘制的顶部悬浮组件事件。
                 child: IgnorePointer(
                   child: ClipRect(
@@ -1424,32 +1505,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   onNewChat: () => _chat.newConversation(),
                   onContextGaugeTap: () =>
                       _scaffoldKey.currentState?.openDrawer(),
+                  onTitleTap: _showSessionContext,
                 ),
               ),
-
-              if (state.planState != null &&
-                  state.planState!.status != 'cancelled')
-                Positioned(
-                  top: MediaQuery.paddingOf(context).top + 112,
-                  left: 16,
-                  right: 16,
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: PlanPanel(
-                      plan: state.planState!,
-                      goal: state.planState!.steps.isEmpty
-                          ? null
-                          : state.planState!.steps.first.description,
-                      onApprove: () => _chat.respondToPlan(true),
-                      onCancel: () => _chat.respondToPlan(false),
-                    ),
-                  ),
-                ),
-              if (state.toolActivities.isNotEmpty)
-                ToolActivityCapsule(
-                  activities: state.toolActivities,
-                  running: state.running,
-                ),
             ], // Stack children
           ), // Stack
         ); // Scaffold

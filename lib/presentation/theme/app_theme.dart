@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 abstract final class AppTheme {
   static const brand = Color(0xFF0A59F7);
@@ -22,7 +23,7 @@ abstract final class AppTheme {
   static const radiusSmall = 14.0;
   static const radiusCapsule = 24.0;
   static const radiusCard = 20.0;
-  static const radiusModal = 30.0;
+  static const radiusModal = 20.0;
 
   static const lightFloating = Color(0xEFFFFFFF);
   static const darkFloating = Color(0xE61E2635);
@@ -133,6 +134,13 @@ abstract final class AppTheme {
         foregroundColor: foreground,
         elevation: 0,
         scrolledUnderElevation: 0,
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          systemNavigationBarColor: Colors.transparent,
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+          systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        ),
       ),
       cardTheme: CardThemeData(
         color: surface,

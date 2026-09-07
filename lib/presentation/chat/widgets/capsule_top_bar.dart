@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
-
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_surface.dart';
 
+/// 顶栏统一高度常量
+const double kCapsuleTopBarHeight = 56.0;
+
 /// Chat 页顶部极简会话栏：
-/// 左侧汉堡菜单（打开目录抽屉），中间会话标题与模型标签，右侧实时上下文占用胶囊与新建会话按钮。
+/// 左侧汉堡菜单，中间会话标题与模型标签，右侧状态胶囊与新建会话按钮。
 class CapsuleTopBar extends StatelessWidget {
   const CapsuleTopBar({
     super.key,
@@ -14,6 +16,7 @@ class CapsuleTopBar extends StatelessWidget {
     required this.onMenu,
     required this.onNewChat,
     this.onContextGaugeTap,
+    this.onTitleTap,
     this.currentContextTokens = 0,
     this.maxContextTokens = 128000,
     this.statusActive = false,
@@ -24,6 +27,7 @@ class CapsuleTopBar extends StatelessWidget {
   final VoidCallback onMenu;
   final VoidCallback onNewChat;
   final VoidCallback? onContextGaugeTap;
+  final VoidCallback? onTitleTap;
   final int currentContextTokens;
   final int maxContextTokens;
   final bool statusActive;
@@ -43,7 +47,7 @@ class CapsuleTopBar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
       child: SizedBox(
-        height: 44,
+        height: 46, // Total 56
         child: Row(
           children: [
             // 1. 左侧汉堡菜单按钮
@@ -57,7 +61,7 @@ class CapsuleTopBar extends StatelessWidget {
             // 2. 中间当前会话/环境面包屑标题
             Expanded(
               child: GestureDetector(
-                onTap: onMenu,
+                onTap: onTitleTap ?? onMenu,
                 behavior: HitTestBehavior.opaque,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -100,20 +104,20 @@ class CapsuleTopBar extends StatelessWidget {
               ),
             ),
 
-            // 3. 右侧微型上下文占用胶囊 (HUD)
+            // 3. 右侧微型上下文占用胶囊 (HUD) 缩减尺寸
             if (currentContextTokens > 0)
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: ImmersiveSurface(
                   level: ImmersiveMaterialLevel.thin,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   child: GestureDetector(
                     onTap: onContextGaugeTap ?? onMenu,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                          horizontal: 6, vertical: 4),
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                           color: contextRatio > 0.8
                               ? AppTheme.danger
@@ -131,13 +135,15 @@ class CapsuleTopBar extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: contextRatio > 0.8
                                   ? AppTheme.danger
-                                  : AppTheme.success,
+                                  : (contextRatio > 0.6
+                                      ? AppTheme.warning
+                                      : AppTheme.success),
                               shape: BoxShape.circle,
                             ),
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '$percent% 上下文',
+                            '$percent%',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -174,16 +180,18 @@ class _Action extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ImmersiveSurface(
-      level: ImmersiveMaterialLevel.thin,
-      borderRadius: BorderRadius.circular(10),
-      child: IconButton(
-        tooltip: tooltip,
-        onPressed: onTap,
-        icon: Icon(icon, size: 18, color: theme.colorScheme.onSurface),
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        padding: EdgeInsets.zero,
+    return Tooltip(
+      message: tooltip,
+      child: ImmersiveSurface(
+        level: ImmersiveMaterialLevel.thin,
+        borderRadius: BorderRadius.circular(10),
+        child: IconButton(
+          onPressed: onTap,
+          icon: Icon(icon, size: 18, color: theme.colorScheme.onSurface),
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+        ),
       ),
     );
   }

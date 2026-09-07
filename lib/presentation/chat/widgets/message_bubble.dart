@@ -59,7 +59,7 @@ class MessageBubble extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final body = isUser
         ? ImmersiveSurface(
-            level: ImmersiveMaterialLevel.ultraThick,
+            level: ImmersiveMaterialLevel.thick,
             borderRadius: const BorderRadius.only(
               topLeft: Radius.circular(16),
               bottomLeft: Radius.circular(16),
@@ -72,8 +72,8 @@ class MessageBubble extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                glass.userBubbleStart.withValues(alpha: 0.7),
-                glass.userBubbleEnd.withValues(alpha: 0.7)
+                glass.userBubbleStart.withValues(alpha: 0.40),
+                glass.userBubbleEnd.withValues(alpha: 0.40)
               ],
             ),
             boxShadow: isDark
@@ -156,6 +156,11 @@ class MessageBubble extends StatelessWidget {
                       fontWeight: FontWeight.w600),
                   tableBody: TextStyle(
                       color: assistantTextColor, fontSize: 12.5, height: 1.35),
+                  blockquoteDecoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border(left: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.5), width: 3)),
+                  ),
                 ),
               );
 
@@ -183,7 +188,7 @@ class MessageBubble extends StatelessWidget {
             .toDouble();
         final desiredWidth = factor == ChatLayoutController.adaptive
             ? (screenWidth < 640
-                ? screenWidth * .78
+                ? (isUser ? screenWidth * .78 : availableWidth)
                 : math.min(screenWidth * .65, 720.0))
             : screenWidth * factor;
         final maxWidth = math.min(desiredWidth, availableWidth).toDouble();
@@ -194,15 +199,21 @@ class MessageBubble extends StatelessWidget {
           children: [
             if (!isUser) ...[
               if (isTool)
-                CircleAvatar(
-                    radius: 14,
-                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                    child: Icon(Icons.handyman_outlined,
-                        size: 14, color: theme.colorScheme.onSurfaceVariant))
+                Semantics(
+                  label: '工具调用',
+                  child: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      child: Icon(Icons.handyman_outlined,
+                          size: 14, color: theme.colorScheme.onSurfaceVariant)),
+                )
               else
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: MascotAvatar(modelName: message.modelName ?? ''),
+                  child: Semantics(
+                    label: '${message.modelName ?? "AI 助手"}模型',
+                    child: MascotAvatar(modelName: message.modelName ?? ''),
+                  ),
                 ),
               const SizedBox(width: 8)
             ],
@@ -212,21 +223,33 @@ class MessageBubble extends StatelessWidget {
                 message: isUser ? '长按可编辑 / 复制' : '长按可朗读 / 复制',
                 triggerMode: TooltipTriggerMode.longPress,
                 showDuration: const Duration(milliseconds: 1800),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: maxWidth),
-                  child: IntrinsicWidth(
+                child: Semantics(
+                  onLongPressHint: isUser ? '编辑或复制' : '朗读或复制',
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: maxWidth),
                     child: isUser
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Align(
-                                  alignment: Alignment.centerRight,
-                                  child: content),
-                            ],
+                        ? IntrinsicWidth(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Align(
+                                    alignment: Alignment.centerRight,
+                                    child: content),
+                              ],
+                            ),
                           )
-                        : ImmersiveSurface(
-                            level: ImmersiveMaterialLevel.thick,
-                            borderRadius: BorderRadius.circular(16),
+                        : Container(
+                            clipBehavior: Clip.antiAlias,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.05),
+                                width: 1,
+                              ),
+                            ),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 8),

@@ -96,13 +96,13 @@ class _ImmersiveDropdownState<T> extends State<ImmersiveDropdown<T>> {
     return InkWell(
       borderRadius: BorderRadius.circular(AppTokens.capsuleRadius),
       onTap: _pick,
-        child: InputDecorator(
-          decoration: InputDecoration(
-            labelText: widget.labelText,
-            prefixIcon: widget.prefixIcon,
-            suffixIcon: Icon(Icons.expand_circle_down_rounded,
-                color: colors.textMuted),
-          ),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: widget.labelText,
+          prefixIcon: widget.prefixIcon,
+          suffixIcon:
+              Icon(Icons.expand_circle_down_rounded, color: colors.textMuted),
+        ),
         child: selectedChild ??
             Text(widget.labelText, style: TextStyle(color: colors.textMuted)),
       ),

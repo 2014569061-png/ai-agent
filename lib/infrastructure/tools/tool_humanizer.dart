@@ -24,6 +24,7 @@ class ToolHumanizer {
       'write_file' || 'read_file' => _fileSummary(call.name, path),
       'edit_file' => _editSummary(path),
       'delete_file' => _deleteSummary(path),
+      'move_file' => _moveSummary(path, _s(a, 'newPath')),
       'list_directory' => path.isEmpty ? '列出工作区根目录' : '列出目录 $path',
       'search_files' => _s(a, 'query').isNotEmpty
           ? '全文搜索 “${_clip(_s(a, 'query'), 40)}”'
@@ -63,6 +64,10 @@ class ToolHumanizer {
       'write_file' || 'read_file' || 'delete_file' => [
           ('path', v('path')),
         ],
+      'move_file' => [
+          ('path', v('path')),
+          ('newPath', v('newPath')),
+        ],
       'edit_file' => [
           ('path', v('path')),
           ('替换目标', '${v('targetContent').length} 字符'),
@@ -100,6 +105,11 @@ class ToolHumanizer {
   String _editSummary(String path) => path.isEmpty ? '编辑文件' : '编辑文件 $path';
 
   String _deleteSummary(String path) => path.isEmpty ? '删除文件' : '删除文件 $path';
+
+  String _moveSummary(String path, String newPath) {
+    if (path.isEmpty || newPath.isEmpty) return '移动文件';
+    return '移动 $path -> $newPath';
+  }
 
   String _httpSummary(Map<String, dynamic> a) {
     final method =

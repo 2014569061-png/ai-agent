@@ -96,7 +96,20 @@ class AnthropicProvider implements LlmProvider {
       final decoder = utf8.decoder;
       final toolAccumulators = <int, _AnthropicToolAcc>{};
       var inputTokens = 0;
+      var cacheCreationTokens = 0;
+      var cacheReadTokens = 0;
       var outputTokens = 0;
+
+      void updateUsage(Map<String, dynamic> usage) {
+        final input = _asInt(usage['input_tokens']);
+        if (input != null) inputTokens = input;
+        final cacheCreation = _asInt(usage['cache_creation_input_tokens']);
+        if (cacheCreation != null) cacheCreationTokens = cacheCreation;
+        final cacheRead = _asInt(usage['cache_read_input_tokens']);
+        if (cacheRead != null) cacheReadTokens = cacheRead;
+        final output = _asInt(usage['output_tokens']);
+        if (output != null) outputTokens = output;
+      }
 
       await for (final chunk in stream) {
         buffer += decoder.convert(chunk);
@@ -110,7 +123,7 @@ class AnthropicProvider implements LlmProvider {
             final message =
                 json['message'] as Map<String, dynamic>? ?? const {};
             final usage = message['usage'] as Map<String, dynamic>? ?? const {};
-            inputTokens = (usage['input_tokens'] as num?)?.toInt() ?? 0;
+            updateUsage(usage);
           } else if (type == 'content_block_start') {
             final block =
                 json['content_block'] as Map<String, dynamic>? ?? const {};
@@ -138,7 +151,7 @@ class AnthropicProvider implements LlmProvider {
             }
           } else if (type == 'message_delta') {
             final usage = json['usage'] as Map<String, dynamic>? ?? const {};
-            outputTokens = (usage['output_tokens'] as num?)?.toInt() ?? 0;
+            updateUsage(usage);
           }
         }
       }
@@ -146,7 +159,7 @@ class AnthropicProvider implements LlmProvider {
       final trailing = _parseSseLine(buffer.trim());
       if (trailing != null && trailing['type'] == 'message_delta') {
         final usage = trailing['usage'] as Map<String, dynamic>? ?? const {};
-        outputTokens = (usage['output_tokens'] as num?)?.toInt() ?? 0;
+        updateUsage(usage);
       }
 
       final sortedIndexes = toolAccumulators.keys.toList()..sort();
@@ -167,7 +180,9 @@ class AnthropicProvider implements LlmProvider {
         ));
       }
       yield UsageEvent(
-          promptTokens: inputTokens, completionTokens: outputTokens);
+          promptTokens: inputTokens + cacheCreationTokens + cacheReadTokens,
+          completionTokens: outputTokens,
+          cachedTokens: cacheReadTokens);
       yield const CompletedEvent();
     } on DioException catch (error) {
       // 主动取消时静默结束。
@@ -265,6 +280,9 @@ class AnthropicProvider implements LlmProvider {
       return null;
     }
   }
+
+  static int? _asInt(dynamic value) =>
+      value is num ? value.toInt() : int.tryParse('$value');
 
   /// 把 ReasoningEffort 映射为 Anthropic Messages API 的 `thinking` 块。
   /// off 时返回 null（调用方不传该字段，保持默认行为）。

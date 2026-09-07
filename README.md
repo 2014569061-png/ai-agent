@@ -1,62 +1,60 @@
 # NEXUS Agent
 
-移动端 AI Agent 聚合客户端的 MVP。
+面向移动端的多模型 AI Agent 客户端，当前版本为 **v0.7.1**（Android versionCode `71`）。
 
-## 下载安装（手机用户）
+## 核心能力
 
-1. 打开 [Releases](https://github.com/2014569061-png/ai-agent/releases) 页面
-2. 下载最新的 `app-release.apk` 到手机
-3. 点击安装；若提示"未知来源"，按提示到系统设置中允许该来源安装应用即可
+- 支持 OpenAI 兼容接口、Anthropic、Gemini 和托管代理。
+- 支持流式对话、多轮 Agent 执行、工具调用、计划确认、风险审批和失败重试。
+- 内置工作区文件工具、MCP 服务、长期记忆、知识库和定时任务。
+- 使用 Drift/SQLite 保存会话、任务和运行记录，支持离线数据和运行恢复。
+- 提供运行时间线、Token/费用统计、缓存命中信息、诊断日志和报告导出。
+- API Key 使用系统安全存储，隐私保险箱支持加密备份与恢复。
 
-> 每次发版会自动发布新的 APK，版本号递增，可直接覆盖安装。
+## 环境要求
 
-## 当前范围
+- Flutter 3.47 或更高版本
+- Dart 3.13 或更高版本
+- Android 构建需要 JDK 17
 
-- Flutter + Riverpod，本地优先的数据模型（Drift/SQLite）
-- 多 Provider 抽象：OpenAI 兼容 / Anthropic / Gemini / 托管代理，SSE 流式
-- Agent 执行状态机：多轮工具调用、危险工具审批分级、首轮计划确认、
-  失败自动重试（仅限尚未产出内容的空流，指数退避）
-- 上下文窗口管理：按 token 预算自动裁剪较早历史（默认 32000，
-  可在 Provider 设置中按模型调整），保持工具调用与结果成组
-- 工具生态：计算/时间/JSON/HTTP/搜索/图片生成、工作区文件工具、
-  受限终端命令（白名单 + 禁 shell 管道重定向 + 拦截解释器内联求值）、
-  MCP 服务器（HTTP/stdio）、声明式插件工具、子 Agent
-- 记忆、知识库（本地 RAG）、Skill 市场（GitHub tar.gz 安装，纯指令注入）、
-  定时任务（WorkManager + 电池优化豁免引导）
-- 隐私保险箱：全量数据（含 Provider 密钥与 MCP 配置）AES-256-GCM 加密导出/恢复
-
-## 开发环境
-
-需要 Flutter SDK（Dart 3.5+）。安装后执行：
+## 本地运行
 
 ```bash
 flutter pub get
 flutter run
 ```
 
-联网和有副作用的工具必须经过用户确认；终端命令运行在工作区沙箱内，
-但注意 python/node 等解释器实际执行的脚本代码本身不受沙箱限制。
+首次启动后，在“设置”中配置模型服务商、接口地址、模型和 API Key。
 
-## 构建
+## 构建 APK
 
 ```bash
-flutter analyze
-flutter test
 flutter build apk --release
-flutter build web --release
 ```
 
-### 自动发版
+产物路径：
 
-推送 tag（如 `v0.6.0`）会触发 GitHub Actions 自动构建签名 APK 并发布到
-[Releases](https://github.com/2014569061-png/ai-agent/releases)：
-
-```bash
-git tag v0.6.0
-git push origin v0.6.0
+```text
+build/app/outputs/flutter-apk/app-release.apk
 ```
 
-签名凭据存于 GitHub Secrets（`KEYSTORE_BASE64` / `STORE_PASSWORD` /
-`KEY_PASSWORD` / `KEY_ALIAS`），不入库。本地签名配置保存在 `android/key.properties`
-和 `android/app/upload-keystore.jks`（已被 gitignore 忽略）。克隆后未配置签名时，
-项目会自动回退到 debug 签名，仍可用于开发和本地测试。
+## 项目结构
+
+```text
+lib/       应用源码
+assets/    图片与品牌资源
+android/   Android 工程
+ios/       iOS 工程
+web/       Web 工程
+macos/     macOS 工程
+windows/   Windows 工程
+linux/     Linux 工程
+```
+
+## 发布版本
+
+GitHub Releases：
+
+https://github.com/2014569061-png/ai-agent/releases
+
+下载对应版本的 `app-release.apk`，即可在 Android 设备上安装。

@@ -8,6 +8,7 @@ import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/providers/provider_config.dart';
 import 'context_window.dart';
+import 'approval_policy.dart';
 
 class AgentExecutor {
   AgentExecutor({required this.provider, required this.tools});
@@ -29,6 +30,8 @@ class AgentExecutor {
     AgentCancellationToken? cancellationToken,
     CancelToken? cancelToken,
     Future<ToolApproval> Function(ToolCall call, ToolRisk risk)? approveTool,
+    ApprovalMode approvalMode = ApprovalMode.ask,
+    bool Function(String toolName, ToolRisk risk)? isToolTrusted,
     String? systemPrompt,
     ModelCapabilities capabilities = const ModelCapabilities(),
     Future<bool> Function(List<ToolCall> calls, String planText)? confirmPlan,
@@ -52,14 +55,14 @@ class AgentExecutor {
       messages.insert(
           0,
           ChatMessage(
-              role: MessageRole.system,
-              parts: [MessagePart.text(systemText)]));
+              role: MessageRole.system, parts: [MessagePart.text(systemText)]));
     }
     // 上下文预算：每步请求前裁剪一次，同时约束初始历史与多步工具循环
     // 中持续追加的工具结果。
     final contextWindow = ContextWindow(maxTokens: contextBudgetTokens);
     var totalPromptTokens = 0;
     var totalCompletionTokens = 0;
+    var totalCachedTokens = 0;
     for (var step = 0; step < maxSteps; step++) {
       if (cancellationToken?.isCancelled ?? false) {
         yield const AgentStatusEvent(RunStatus.cancelled);
@@ -106,6 +109,7 @@ class AgentExecutor {
             } else if (event is UsageEvent) {
               totalPromptTokens += event.promptTokens;
               totalCompletionTokens += event.completionTokens;
+              totalCachedTokens += event.cachedTokens;
             } else if (event is ProviderErrorEvent) {
               failure = event;
               break;
@@ -126,6 +130,7 @@ class AgentExecutor {
           return;
         }
         attempts++;
+        yield AgentRetryEvent(attempts);
         if (cancellationToken?.isCancelled ?? false) {
           yield const AgentStatusEvent(RunStatus.cancelled);
           return;
@@ -147,7 +152,8 @@ class AgentExecutor {
         ));
         yield AgentUsageEvent(
             promptTokens: totalPromptTokens,
-            completionTokens: totalCompletionTokens);
+            completionTokens: totalCompletionTokens,
+            cachedTokens: totalCachedTokens);
         yield const AgentStatusEvent(RunStatus.completed);
         return;
       }
@@ -171,12 +177,19 @@ class AgentExecutor {
           yield AgentErrorEvent('未注册工具：${pendingCall.name}');
           return;
         }
-        if (tool.manifest.risk != ToolRisk.safe) {
+        final decision = const ApprovalPolicy().decide(
+          mode: approvalMode,
+          risk: tool.manifest.risk,
+          trusted:
+              isToolTrusted?.call(tool.manifest.name, tool.manifest.risk) ??
+                  false,
+        );
+        if (decision.requiresUser) {
           yield ApprovalRequiredEvent(pendingCall, tool.manifest.risk);
-          final decision =
+          final userDecision =
               await approveTool?.call(pendingCall, tool.manifest.risk) ??
                   ToolApproval.reject;
-          if (decision == ToolApproval.reject) {
+          if (userDecision == ToolApproval.reject) {
             yield const AgentStatusEvent(RunStatus.cancelled);
             return;
           }
@@ -192,7 +205,10 @@ class AgentExecutor {
         } catch (error) {
           result = '工具执行失败：$error';
         }
-        yield ToolResultEvent(pendingCall, result);
+        final metadata = tool is ToolExecutionMetadata
+            ? (tool as ToolExecutionMetadata).lastMetadata
+            : const <String, dynamic>{};
+        yield ToolResultEvent(pendingCall, result, metadata: metadata);
         messages.add(ChatMessage(
             role: MessageRole.tool,
             toolCallId: pendingCall.id,
@@ -244,15 +260,25 @@ class AgentErrorEvent extends AgentEvent {
   final String message;
 }
 
+class AgentRetryEvent extends AgentEvent {
+  const AgentRetryEvent(this.attempt);
+  final int attempt;
+}
+
 class AgentUsageEvent extends AgentEvent {
   const AgentUsageEvent(
-      {required this.promptTokens, required this.completionTokens});
+      {required this.promptTokens,
+      required this.completionTokens,
+      this.cachedTokens = 0});
   final int promptTokens;
   final int completionTokens;
+  final int cachedTokens;
 }
 
 class ToolResultEvent extends AgentEvent {
-  const ToolResultEvent(this.call, this.result);
+  const ToolResultEvent(this.call, this.result,
+      {this.metadata = const <String, dynamic>{}});
   final ToolCall call;
   final String result;
+  final Map<String, dynamic> metadata;
 }

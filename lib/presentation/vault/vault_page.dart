@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
 import '../../infrastructure/files/vault_exporter.dart';
+import '../theme/app_theme.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
@@ -114,8 +115,10 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           ),
         ),
         const SizedBox(height: 16),
-        const Text('注意：忘记密码将无法找回，密码永不存储。',
-            style: TextStyle(fontSize: 12, color: Color(0xFF627D98))),
+        Text('注意：忘记密码将无法找回，密码永不存储。',
+            style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.semanticOf(context).mutedOnGlass)),
       ]),
     );
   }

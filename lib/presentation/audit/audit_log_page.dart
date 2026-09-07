@@ -8,6 +8,7 @@ import '../../infrastructure/database/app_database.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/section_card.dart';
 
 /// 审计日志页（G2）：展示工具调用审批链路，支持导出 Markdown / CSV。
 class AuditLogPage extends ConsumerStatefulWidget {
@@ -88,12 +89,17 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
         ],
       ),
       body: Column(children: [
-        SwitchListTile(
-          secondary: const Icon(Icons.security_outlined),
-          title: const Text('启用审计'),
-          subtitle: const Text('开启后记录工具调用与审批（本设备可被查看）'),
-          value: _enabled,
-          onChanged: _toggle,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: SectionCard(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.security_outlined),
+              title: const Text('启用审计'),
+              subtitle: const Text('开启后记录工具调用与审批（本设备可被查看）'),
+              value: _enabled,
+              onChanged: _toggle,
+            ),
+          ),
         ),
         Expanded(
           child: AsyncStateView(
@@ -105,22 +111,27 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                     icon: Icons.security_outlined,
                     title: '暂无审计记录',
                     message: '启用审计后，工具调用会记录在此')
-                : ListView.builder(
+                : ListView.separated(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     itemCount: _logs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final log = _logs[index];
-                      return ListTile(
-                        dense: true,
-                        leading: Icon(
-                            log.type == 'approval'
-                                ? Icons.fact_check_outlined
-                                : Icons.build_outlined,
-                            size: 20),
-                        title: Text('${log.type} · ${log.detail}',
-                            maxLines: 2, overflow: TextOverflow.ellipsis),
-                        subtitle: Text(
-                            '${log.createdAt.toLocal().toString().substring(0, 19)}'
-                            '${log.decision != null ? ' · ${log.decision}' : ''}'),
+                      return SectionCard(
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(
+                              log.type == 'approval'
+                                  ? Icons.fact_check_outlined
+                                  : Icons.build_outlined,
+                              size: 20),
+                          title: Text('${log.type} · ${log.detail}',
+                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          subtitle: Text(
+                              '${log.createdAt.toLocal().toString().substring(0, 19)}'
+                              '${log.decision != null ? ' · ${log.decision}' : ''}'),
+                        ),
                       );
                     },
                   ),

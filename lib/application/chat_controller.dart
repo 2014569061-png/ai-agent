@@ -31,6 +31,9 @@ import 'headless_executor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
 import 'providers.dart';
+import 'log_service.dart';
+import 'run_event_queue.dart';
+import 'run_event_tracker.dart';
 import 'task_service.dart';
 import 'workspace_service.dart';
 import '../infrastructure/plugins/plugin_store.dart';
@@ -76,6 +79,7 @@ class ChatState {
     this.activeReasoningEffort = ReasoningEffort.medium,
     this.providerConfigured = false,
     this.planMode = false,
+    this.approvalMode = ApprovalMode.ask,
     this.planState,
     this.currentWorkspacePath,
   });
@@ -99,6 +103,7 @@ class ChatState {
   final ReasoningEffort activeReasoningEffort;
   final bool providerConfigured;
   final bool planMode;
+  final ApprovalMode approvalMode;
   final PlanState? planState;
   final String? currentWorkspacePath;
 
@@ -120,6 +125,7 @@ class ChatState {
     ReasoningEffort? activeReasoningEffort,
     bool? providerConfigured,
     bool? planMode,
+    ApprovalMode? approvalMode,
     PlanState? planState,
     String? currentWorkspacePath,
     bool clearWorkspace = false,
@@ -143,6 +149,7 @@ class ChatState {
             activeReasoningEffort ?? this.activeReasoningEffort,
         providerConfigured: providerConfigured ?? this.providerConfigured,
         planMode: planMode ?? this.planMode,
+        approvalMode: approvalMode ?? this.approvalMode,
         planState: planState ?? this.planState,
         currentWorkspacePath: clearWorkspace
             ? null
@@ -338,8 +345,7 @@ class ChatController extends Notifier<ChatState> {
   }
 
   /// 把消息部件序列化为 DB content 字段（非文本部件用占位标记）。
-  String _contentForPersist(ChatMessage message) =>
-      message.parts.map((part) {
+  String _contentForPersist(ChatMessage message) => message.parts.map((part) {
         if (part.type == 'image') return '[图片附件]';
         if (part.type == 'file') return '[文件附件]';
         return part.value;
@@ -422,6 +428,7 @@ class ChatController extends Notifier<ChatState> {
       registry.register(ListDirectoryTool(sandbox: sandbox));
       registry.register(SearchFilesTool(sandbox: sandbox));
       registry.register(DeleteFileTool(sandbox: sandbox));
+      registry.register(MoveFileTool(sandbox: sandbox));
       if (!kIsWeb) {
         registry.register(TerminalCommandTool(
           service: TerminalCommandService(workspacePath: wsPath),
@@ -468,16 +475,15 @@ class ChatController extends Notifier<ChatState> {
 
   /// 加载 Provider/Agent 配置并构建工具注册表（发送 / 重新生成 / 编辑重发共用）。
   Future<
-          ({
-            ProviderConfig config,
-            ToolRegistry registry,
-            String model,
-            int maxSteps,
-            double temperature,
-            int maxTokens,
-            double topP
-          })>
-      _prepareRun(AppDatabase database) async {
+      ({
+        ProviderConfig config,
+        ToolRegistry registry,
+        String model,
+        int maxSteps,
+        double temperature,
+        int maxTokens,
+        double topP
+      })> _prepareRun(AppDatabase database) async {
     final store = ref.read(providerConfigStoreProvider);
     final config = await store.load();
     final tavilyKey = await store.readToolKey('tavily');
@@ -830,6 +836,11 @@ class ChatController extends Notifier<ChatState> {
     state = state.copyWith(planMode: value, planState: null);
   }
 
+  void setApprovalMode(ApprovalMode mode) {
+    if (state.running) return;
+    state = state.copyWith(approvalMode: mode);
+  }
+
   /// remember 工具回调：异步懒加载 DB 并写入一条手动来源记忆。
   Future<void> _onRemember(String content) async {
     try {
@@ -950,6 +961,63 @@ class ChatController extends Notifier<ChatState> {
     Future<ToolApproval> Function(ToolCall call, ToolRisk risk) approveTool,
     String? taskId,
   ) async {
+    final runId = 'run-${DateTime.now().microsecondsSinceEpoch}';
+    final logService = ref.read(logServiceProvider);
+    final runStartedAt = DateTime.now();
+    var eventSequence = 0;
+    var runStatus = 'running';
+    var retryCount = 0;
+    RunEventTracker? tracker;
+    try {
+      final database = await ref.read(databaseProvider.future);
+      await database.insertRunRecord(RunRecordsCompanion.insert(
+        runId: runId,
+        conversationId: state.conversationId ?? 'unknown',
+        model: Value(model),
+        status: const Value('running'),
+        startedAt: runStartedAt,
+      ));
+      tracker = RunEventTracker(database: database, runId: runId);
+    } catch (_) {}
+    RunEventHandle? modelEvent;
+    final toolEvents = <String, RunEventHandle?>{};
+    RunEventHandle? activeNetworkEvent;
+    var networkSequence = 0;
+    void syncEventCount() {
+      final currentTracker = tracker;
+      if (currentTracker != null) eventSequence = currentTracker.nextSequence;
+    }
+
+    Future<void> recordRunEvent({
+      required String type,
+      required String name,
+      required String status,
+      String? outputSummary,
+      Map<String, dynamic>? metadata,
+    }) async {
+      final currentTracker = tracker;
+      if (currentTracker == null) return;
+      if (type == 'model_request' && status == 'started') {
+        modelEvent = await currentTracker.start(
+            type: type, name: name, metadata: metadata);
+      } else if (type == 'tool_call' && outputSummary != null) {
+        // Tool calls are started on ToolRequestedEvent and completed on
+        // ToolResultEvent so their duration covers the actual execution.
+        return;
+      } else {
+        await currentTracker.record(
+          type: type,
+          name: name,
+          status: status,
+          outputSummary: outputSummary,
+          metadata: metadata,
+        );
+      }
+      eventSequence = currentTracker.nextSequence;
+    }
+
+    await logService.info('Agent 开始执行',
+        runId: runId, category: 'system', detail: {'model': model});
     final provider =
         config.isConfigured ? _buildProvider(config) : DemoProvider();
     final executor = AgentExecutor(provider: provider, tools: registry);
@@ -960,8 +1028,11 @@ class ChatController extends Notifier<ChatState> {
     final answer = StringBuffer();
     final reasoning = StringBuffer();
     var usage = const Usage();
+    int? estimatedCostCents;
+    int? savedCostCents;
     final stopwatch = Stopwatch()..start();
     Duration? ttft;
+    int? firstTokenDurationMs;
     // 流式节流：token 级更新合并为每 50ms 一次，降低高频重建整个消息列表
     // 的主线程压力；流结束时会做最终完整刷新，不丢失文本。
     const flushInterval = Duration(milliseconds: 50);
@@ -1000,11 +1071,14 @@ class ChatController extends Notifier<ChatState> {
     } catch (_) {}
 
     try {
+      final trustStore = await ref.read(toolTrustStoreProvider.future);
       await for (final event in executor.run(
         history: state.messages.sublist(0, assistantIndex),
         model: model,
         confirmPlan: state.planMode ? _confirmPlan : null,
         approveTool: approveTool,
+        approvalMode: state.approvalMode,
+        isToolTrusted: trustStore.isTrusted,
         systemPrompt: state.planMode
             ? '$baseSystemPrompt\n\n[计划模式] 你的首个回复必须调用 manage_plan 工具来生成详细的 JSON 分步执行计划。在用户确认计划之前，不要调用其他工具。'
             : baseSystemPrompt,
@@ -1018,24 +1092,114 @@ class ChatController extends Notifier<ChatState> {
         cancellationToken: cancellationToken,
         cancelToken: dioCancelToken,
       )) {
-        if (event is TextEvent) {
-          ttft ??= stopwatch.elapsed;
+        if (event is AgentStatusEvent &&
+            event.status == RunStatus.waitingModel) {
+          await tracker?.finish(modelEvent, status: 'success');
+          modelEvent = await tracker?.start(
+            type: 'model_request',
+            name: '模型请求',
+            metadata: {'attempt': networkSequence + 1},
+          );
+          networkSequence++;
+          activeNetworkEvent = await tracker?.start(
+            type: 'network',
+            name: '模型网络请求',
+            metadata: {'attempt': networkSequence},
+          );
+          syncEventCount();
+        } else if (event is TextEvent) {
+          final firstTokenElapsed = stopwatch.elapsed;
+          ttft ??= firstTokenElapsed;
+          firstTokenDurationMs ??= firstTokenElapsed.inMilliseconds;
           answer.write(event.text);
           if (DateTime.now().difference(lastFlush) >= flushInterval) {
             flushAnswer();
           }
         } else if (event is ReasoningEvent) {
-          ttft ??= stopwatch.elapsed;
+          final firstTokenElapsed = stopwatch.elapsed;
+          ttft ??= firstTokenElapsed;
+          firstTokenDurationMs ??= firstTokenElapsed.inMilliseconds;
           reasoning.write(event.text);
           flushAnswer();
         } else if (event is AgentUsageEvent) {
           usage = Usage(
               promptTokens: event.promptTokens,
-              completionTokens: event.completionTokens);
+              completionTokens: event.completionTokens,
+              cachedTokens: event.cachedTokens);
+          final estimate = _estimateUsageCost(model, usage);
+          estimatedCostCents = estimate.costCents;
+          savedCostCents = estimate.savedCostCents;
         } else if (event is AgentErrorEvent) {
+          runStatus = 'failed';
+          await tracker?.finish(activeNetworkEvent,
+              status: 'failed', outputSummary: event.message);
+          await tracker?.finish(modelEvent,
+              status: 'failed', outputSummary: event.message);
+          activeNetworkEvent = null;
+          modelEvent = null;
+          for (final handle in toolEvents.values) {
+            await tracker?.finish(handle,
+                status: 'failed', outputSummary: event.message);
+          }
+          toolEvents.clear();
           answer.write('\n\n${formatErrorForMessage(event.message)}');
+          await recordRunEvent(
+              type: 'error',
+              name: 'Agent 错误',
+              status: 'failed',
+              outputSummary: event.message);
+          await logService.error('Agent 执行失败',
+              runId: runId,
+              category: 'model',
+              errorCode: 'AGENT_EXECUTION_FAILED',
+              retryable: true,
+              detail: {'message': event.message});
+        } else if (event is AgentRetryEvent) {
+          retryCount = event.attempt;
+          await tracker?.finish(activeNetworkEvent,
+              status: 'failed', metadata: {'attempt': event.attempt});
+          await tracker?.finish(modelEvent,
+              status: 'failed', metadata: {'attempt': event.attempt});
+          activeNetworkEvent = null;
+          modelEvent = null;
+          networkSequence++;
+          modelEvent = await tracker?.start(
+            type: 'model_request',
+            name: '模型请求重试',
+            metadata: {'attempt': event.attempt + 1},
+          );
+          activeNetworkEvent = await tracker?.start(
+            type: 'network',
+            name: '模型网络请求重试',
+            metadata: {'attempt': event.attempt + 1},
+          );
+          syncEventCount();
+          await logService.warning('模型请求将重试',
+              runId: runId,
+              category: 'network',
+              detail: {'attempt': event.attempt});
         } else if (event is ToolRequestedEvent) {
           final risk = _riskFor(registry, event.call.name);
+          // The provider response is complete once tool calls are emitted;
+          // keep network latency separate from the tool execution duration.
+          await tracker?.finish(activeNetworkEvent, status: 'success');
+          await tracker?.finish(modelEvent, status: 'success');
+          activeNetworkEvent = null;
+          modelEvent = null;
+          toolEvents[event.call.id] = await tracker?.start(
+            type: _isFileOperationTool(event.call.name)
+                ? 'file_operation'
+                : 'tool_call',
+            name: event.call.name,
+            inputSummary: jsonEncode(event.call.arguments),
+            metadata: {
+              'tool': event.call.name,
+              'path': event.call.arguments['path'],
+              if (event.call.arguments['newPath'] != null)
+                'newPath': event.call.arguments['newPath'],
+            },
+          );
+          syncEventCount();
           await _persistToolCall(event.call, risk);
           state = state.copyWith(
             activityLog: [...state.activityLog, '等待确认'],
@@ -1060,8 +1224,33 @@ class ChatController extends Notifier<ChatState> {
                 status: '等待确认'),
           );
         } else if (event is ToolResultEvent) {
-          _updatePlanStepStatus(
-              event.result.startsWith('工具执行失败') ? 'failed' : 'completed');
+          final toolFailed = _isToolFailureResult(event.result);
+          await tracker?.finish(
+            toolEvents.remove(event.call.id),
+            status: toolFailed ? 'failed' : 'success',
+            outputSummary: event.result,
+            metadata: event.metadata,
+          );
+          await recordRunEvent(
+              type: 'tool_call',
+              name: event.call.name,
+              status: toolFailed ? 'failed' : 'success',
+              outputSummary: event.result,
+              metadata: {
+                ...event.metadata,
+                'fileOperation': _isFileOperationTool(event.call.name),
+                if (event.call.arguments['path'] != null)
+                  'path': event.call.arguments['path'],
+                if (_isFileOperationTool(event.call.name) &&
+                    !event.metadata.containsKey('operation'))
+                  'operation': event.call.name,
+              });
+          await logService
+              .info('工具执行完成', runId: runId, category: 'tool', detail: {
+            'tool': event.call.name,
+            'success': !toolFailed,
+          });
+          _updatePlanStepStatus(toolFailed ? 'failed' : 'completed');
           await _persistMessage(ChatMessage(
               role: MessageRole.tool,
               toolCallId: event.call.id,
@@ -1070,18 +1259,140 @@ class ChatController extends Notifier<ChatState> {
             toolActivities: _updateToolActivity(
               state.toolActivities,
               event.call.id,
-              status: event.result.startsWith('工具执行失败') ? '执行失败' : '已完成',
+              status: toolFailed ? '执行失败' : '已完成',
               result: event.result,
             ),
           );
+        }
+        if (event is AgentStatusEvent) {
+          if (event.status == RunStatus.cancelled) {
+            runStatus = 'cancelled';
+            await tracker?.finish(activeNetworkEvent, status: 'cancelled');
+            await tracker?.finish(modelEvent, status: 'cancelled');
+            activeNetworkEvent = null;
+            modelEvent = null;
+            for (final handle in toolEvents.values) {
+              await tracker?.finish(handle, status: 'cancelled');
+            }
+            toolEvents.clear();
+          }
+          if (event.status == RunStatus.completed) {
+            runStatus = 'success';
+            final usageMetadata = {
+              'promptTokens': usage.promptTokens,
+              'completionTokens': usage.completionTokens,
+              'cachedTokens': usage.cachedTokens,
+              'cacheHit': usage.cachedTokens > 0,
+              'cacheSource': usage.cachedTokens > 0 ? 'provider-usage' : null,
+              'savedTokens': usage.cachedTokens,
+              'savedCostCents': savedCostCents,
+              'estimatedCostCents': estimatedCostCents,
+            };
+            await tracker?.finish(activeNetworkEvent,
+                status: 'success', metadata: usageMetadata);
+            await tracker?.finish(modelEvent,
+                status: 'success', metadata: usageMetadata);
+            activeNetworkEvent = null;
+            modelEvent = null;
+          }
         }
       }
     } catch (error) {
       // 兜底：任何未预期异常（DB 写入失败、附件解析、审批回调等）都不能让
       // UI 永久停留在"运行中"。写入错误信息并恢复可交互状态。
+      runStatus = 'failed';
+      await tracker?.finish(activeNetworkEvent,
+          status: 'failed', outputSummary: error.toString());
+      await tracker?.finish(modelEvent,
+          status: 'failed', outputSummary: error.toString());
+      for (final handle in toolEvents.values) {
+        await tracker?.finish(handle,
+            status: 'failed', outputSummary: error.toString());
+      }
+      activeNetworkEvent = null;
+      modelEvent = null;
+      toolEvents.clear();
       answer.write('\n\n${formatErrorForMessage(error.toString())}');
+      await logService.error('Agent 未预期异常',
+          runId: runId,
+          category: 'system',
+          errorCode: 'AGENT_UNEXPECTED_ERROR',
+          error: error,
+          stackTrace: StackTrace.current);
     } finally {
       stopwatch.stop();
+      try {
+        final runDb = await ref.read(databaseProvider.future);
+        if (runStatus == 'running') runStatus = 'failed';
+        if (activeNetworkEvent != null) {
+          await tracker?.finish(activeNetworkEvent,
+              status: runStatus == 'cancelled' ? 'cancelled' : 'failed');
+          activeNetworkEvent = null;
+        }
+        if (modelEvent != null) {
+          await tracker?.finish(modelEvent,
+              status: runStatus == 'cancelled' ? 'cancelled' : 'failed');
+          modelEvent = null;
+        }
+        if (toolEvents.isNotEmpty) {
+          final status = runStatus == 'cancelled' ? 'cancelled' : 'failed';
+          for (final handle in toolEvents.values) {
+            await tracker?.finish(handle, status: status);
+          }
+          toolEvents.clear();
+        }
+        // Event/log writes are queued so streaming stays responsive. Make the
+        // run completion the durability boundary before reading/uploading.
+        await tracker?.flush();
+        await logService.flush();
+        await runDb.updateRunRecord(
+            runId,
+            RunRecordsCompanion(
+              status: Value(runStatus),
+              endedAt: Value(DateTime.now()),
+              inputTokens: Value(usage.promptTokens),
+              outputTokens: Value(usage.completionTokens),
+              cachedTokens: Value(usage.cachedTokens),
+              estimatedCostCents: Value(estimatedCostCents),
+              eventCount: Value(eventSequence),
+              totalDurationMs: Value(stopwatch.elapsedMilliseconds),
+              retryCount: Value(retryCount),
+              firstTokenDurationMs: Value(firstTokenDurationMs),
+            ));
+        final session = await ref.read(accountServiceProvider).restoreSession();
+        if (session != null && eventSequence > 0) {
+          final events = await runDb.eventsForRun(runId);
+          final payload = events
+              .map((event) => {
+                    'event_id': event.eventId,
+                    'sequence': event.sequenceNo,
+                    'type': event.type,
+                    'status': event.status,
+                    'name': event.name,
+                    'started_at': event.startedAt.toIso8601String(),
+                    'ended_at': event.endedAt?.toIso8601String(),
+                    'duration_ms': event.durationMs,
+                    'metadata': jsonDecode(event.metadataJson),
+                  })
+              .toList();
+          final queue = RunEventQueue();
+          await queue.flush(
+              api: ref.read(billingApiProvider), access: session.access);
+          try {
+            await ref.read(billingApiProvider).uploadRunEvents(
+                access: session.access,
+                runId: runId,
+                conversationId: state.conversationId,
+                events: payload);
+          } catch (_) {
+            await queue.enqueue(
+                runId: runId,
+                conversationId: state.conversationId,
+                events: payload);
+          }
+        }
+        await runDb.pruneRunRecords();
+      } catch (_) {}
     }
     final assistantMessage = ChatMessage(
       role: MessageRole.assistant,
@@ -1108,6 +1419,32 @@ class ChatController extends Notifier<ChatState> {
             taskDb, taskId, _wasCancelled ? 'cancelled' : 'completed');
       } catch (_) {}
     }
+  }
+
+  ({int? costCents, int? savedCostCents}) _estimateUsageCost(
+      String model, Usage usage) {
+    const rates = <String, (int, int)>{
+      'gpt-4o-mini': (2, 9),
+      'gpt-4o': (35, 140),
+      'claude-sonnet-4-5': (45, 190),
+      'deepseek-chat': (3, 11),
+      'deepseek-reasoner': (6, 22),
+    };
+    final rate = rates[model];
+    if (rate == null || usage.totalTokens == 0) {
+      return (costCents: null, savedCostCents: null);
+    }
+    final cachedRate = rate.$1 / 10;
+    final freshInput =
+        (usage.promptTokens - usage.cachedTokens).clamp(0, 1 << 30);
+    final cost = ((freshInput * rate.$1 +
+                usage.cachedTokens * cachedRate +
+                usage.completionTokens * rate.$2) /
+            1000000)
+        .ceil();
+    final saved =
+        ((usage.cachedTokens * (rate.$1 - cachedRate)) / 1000000).ceil();
+    return (costCents: cost, savedCostCents: saved);
   }
 
   bool _wasCancelled = false;
@@ -1209,6 +1546,13 @@ class ChatController extends Notifier<ChatState> {
 
   ToolRisk _riskFor(ToolRegistry registry, String name) =>
       registry.find(name)?.manifest.risk ?? ToolRisk.safe;
+
+  bool _isFileOperationTool(String name) =>
+      name.endsWith('_file') ||
+      const {'list_directory', 'search_files'}.contains(name);
+
+  bool _isToolFailureResult(String result) =>
+      RegExp(r'(失败|failed|error)', caseSensitive: false).hasMatch(result);
 
   /// 取 assistantIndex 之前最近的一条用户文本，作为知识库检索的 query。
   String _lastUserText(int assistantIndex) {

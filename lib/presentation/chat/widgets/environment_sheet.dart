@@ -39,8 +39,7 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
       'echo "allow-external-apps = true" >> ~/.termux/termux.properties; '
       'termux-reload-settings 2>/dev/null; '
       'echo 配置完成,请完全退出Termux(通知栏滑掉或系统里强行停止)后重新打开';
-  static const _toolchainCommand =
-      'pkg install -y golang git curl jq && '
+  static const _toolchainCommand = 'pkg install -y golang git curl jq && '
       'go env -w GOPROXY=https://goproxy.cn,direct && go env -w GOTOOLCHAIN=local && '
       'termux-wake-lock && echo 工具链就绪,可回到NEXUS点重新检测';
 
@@ -81,7 +80,8 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
 
       // Step 2: 桥是否授权(allow-external-apps)。超时即未配置或 Termux 被冻结。
       _set(1, _StepState.checking);
-      final bridge = await _runBridged('echo bridge-ok', const Duration(seconds: 6));
+      final bridge =
+          await _runBridged('echo bridge-ok', const Duration(seconds: 6));
       if (!bridge.$1) {
         _set(1, _StepState.action, hint: bridge.$2);
         _set(2, _StepState.failed, hint: '依赖上一步');
@@ -119,7 +119,8 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
     } catch (_) {}
     final script = "{\n$command\n} > '$outFile' 2>&1\necho \$? > '$codeFile'";
     try {
-      await _bridge.invokeMethod('runInTermux', {'command': script, 'timeoutMs': timeout.inMilliseconds});
+      await _bridge.invokeMethod('runInTermux',
+          {'command': script, 'timeoutMs': timeout.inMilliseconds});
     } on PlatformException catch (e) {
       final msg = e.code == 'PERMISSION_DENIED'
           ? '用户拒绝了 Termux 调用权限,请重试并允许'
@@ -141,9 +142,11 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
       } catch (_) {}
       return (code == 0, code == 0 ? out : '命令退出码 $code:$out');
     }
-    return (false,
-        '等待 Termux 执行超时。通常原因:① 未配置 allow-external-apps(复制下方命令到 Termux 执行);'
-        '② Termux 被系统冻结(先打开一次 Termux 再重试)');
+    return (
+      false,
+      '等待 Termux 执行超时。通常原因:① 未配置 allow-external-apps(复制下方命令到 Termux 执行);'
+          '② Termux 被系统冻结(先打开一次 Termux 再重试)'
+    );
   }
 
   Future<void> _installTermux() async {
@@ -248,7 +251,8 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
             Text(_installStatus, style: Theme.of(context).textTheme.bodySmall),
           ],
           const SizedBox(height: 24),
-          Text('说明:Termux 桥的执行结果是加密写入本机共享目录的,全程不经过电脑;'
+          Text(
+              '说明:Termux 桥的执行结果是加密写入本机共享目录的,全程不经过电脑;'
               '若长期未打开 Termux 被系统冻结,执行会超时,打开一次 Termux 即可恢复。',
               style: Theme.of(context).textTheme.bodySmall),
         ],
@@ -271,7 +275,9 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
           Row(children: [
             Icon(icon, color: color),
             const SizedBox(width: 8),
-            Expanded(child: Text(s.title, style: Theme.of(context).textTheme.titleMedium)),
+            Expanded(
+                child: Text(s.title,
+                    style: Theme.of(context).textTheme.titleMedium)),
           ]),
           const SizedBox(height: 4),
           Text(s.detail, style: Theme.of(context).textTheme.bodySmall),
@@ -296,9 +302,11 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
           ],
           if (s == _steps[2]) ...[
             if (s.state == _StepState.action)
-              _commandBlock(context, '工具链安装命令(整段复制,粘贴到 Termux 回车)', _toolchainCommand)
+              _commandBlock(
+                  context, '工具链安装命令(整段复制,粘贴到 Termux 回车)', _toolchainCommand)
             else if (s.state == _StepState.ok)
-              _collapsedCommand(context, '查看工具链安装命令(重装工具链时使用)', _toolchainCommand),
+              _collapsedCommand(
+                  context, '查看工具链安装命令(重装工具链时使用)', _toolchainCommand),
           ],
         ]),
       ),

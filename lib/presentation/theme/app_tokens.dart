@@ -12,7 +12,7 @@ abstract final class AppTokens {
   static const smallControlRadius = 14.0;
   static const capsuleRadius = 24.0;
   static const cardRadius = 20.0;
-  static const modalRadius = 30.0;
+  static const modalRadius = 20.0;
 
   static double blurSigma(ImmersiveMaterialLevel level) => switch (level) {
         ImmersiveMaterialLevel.ultraThin => 8,
@@ -24,11 +24,11 @@ abstract final class AppTokens {
 
   static double surfaceOpacity(ImmersiveMaterialLevel level, bool isDark) =>
       switch (level) {
-        ImmersiveMaterialLevel.ultraThin => isDark ? .10 : .15,
-        ImmersiveMaterialLevel.thin => isDark ? .15 : .25,
-        ImmersiveMaterialLevel.regular => isDark ? .25 : .35,
-        ImmersiveMaterialLevel.thick => isDark ? .40 : .50,
-        ImmersiveMaterialLevel.ultraThick => isDark ? .55 : .65,
+        ImmersiveMaterialLevel.ultraThin => isDark ? .12 : .15,
+        ImmersiveMaterialLevel.thin => isDark ? .20 : .25,
+        ImmersiveMaterialLevel.regular => isDark ? .30 : .35,
+        ImmersiveMaterialLevel.thick => isDark ? .46 : .50,
+        ImmersiveMaterialLevel.ultraThick => isDark ? .60 : .65,
       };
 
   // 动画时长 token
