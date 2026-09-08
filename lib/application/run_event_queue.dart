@@ -22,7 +22,7 @@ class RunEventQueue {
             millis > max.inMilliseconds ? max.inMilliseconds : millis);
   }
 
-  Future<void> enqueue({
+  Future<RunEventEnqueueResult> enqueue({
     required String runId,
     String? conversationId,
     required List<Map<String, dynamic>> events,
@@ -43,11 +43,18 @@ class RunEventQueue {
     } else {
       current.add(item);
     }
+    final droppedRunId =
+        current.length > maxItems ? current.first['runId']?.toString() : null;
     final bounded = current.length <= maxItems
         ? current
         : current.sublist(current.length - maxItems);
     await prefs.setStringList(
         _key, bounded.map(jsonEncode).toList(growable: false));
+    return RunEventEnqueueResult(
+      accepted: true,
+      droppedOldest: droppedRunId != null,
+      droppedRunId: droppedRunId,
+    );
   }
 
   Future<int> pendingCount() async {
@@ -130,4 +137,16 @@ class RunEventQueue {
     }
     return result;
   }
+}
+
+class RunEventEnqueueResult {
+  const RunEventEnqueueResult({
+    required this.accepted,
+    required this.droppedOldest,
+    this.droppedRunId,
+  });
+
+  final bool accepted;
+  final bool droppedOldest;
+  final String? droppedRunId;
 }

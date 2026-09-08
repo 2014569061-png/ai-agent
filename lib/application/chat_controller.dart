@@ -1880,10 +1880,18 @@ class ChatController extends Notifier<ChatState> {
                 conversationId: runConversationId,
                 events: payload);
           } catch (_) {
-            await queue.enqueue(
+            final enqueueResult = await queue.enqueue(
                 runId: runId,
                 conversationId: runConversationId,
                 events: payload);
+            if (enqueueResult.droppedOldest) {
+              await NotificationService.instance.init();
+              await NotificationService.instance.show(
+                id: 0x4e515545,
+                title: '运行记录队列已满',
+                body: '离线运行记录已达到上限，最早的一条记录已被移除。联网后将继续上传。',
+              );
+            }
           }
         }
         await runDb.pruneRunRecords();

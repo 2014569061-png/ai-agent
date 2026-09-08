@@ -28,6 +28,7 @@ class _UpdateSheetState extends State<UpdateSheet> {
     final result = await UpdateService().downloadAndInstallDetailed(
       widget.info.apkUrl!,
       expectedSha256: widget.info.sha256,
+      requireSha256: true,
       onProgress: (p) {
         if (mounted) setState(() => _progress = p);
       },

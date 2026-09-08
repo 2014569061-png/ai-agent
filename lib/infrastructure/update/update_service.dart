@@ -48,14 +48,17 @@ class UpdateService {
 
       String? apkUrl;
       String? apkDigest;
+      String? checksumUrl;
       for (final asset in (data['assets'] as List<dynamic>? ?? const [])) {
         final map = asset as Map<String, dynamic>;
         final name = (map['name'] as String?) ?? '';
         if (name.toLowerCase().endsWith('.apk')) {
           apkUrl = map['browser_download_url'] as String?;
           final digest = map['digest'] as String?;
-          apkDigest = digest?.replaceFirst(RegExp(r'^sha256:'), '');
-          break;
+          apkDigest = _normalizeSha256(digest);
+        } else if (name.toLowerCase().endsWith('.apk.sha256') ||
+            name.toLowerCase().endsWith('.apk.sha256.txt')) {
+          checksumUrl = map['browser_download_url'] as String?;
         }
       }
       if (apkUrl == null || apkUrl.isEmpty) {
@@ -63,6 +66,27 @@ class UpdateService {
         return UpdateCheckResult(
           status: UpdateCheckStatus.upToDate,
           currentVersion: info.version,
+        );
+      }
+
+      if (apkDigest == null && checksumUrl != null) {
+        try {
+          final checksumResponse = await _dio.get<String>(
+            checksumUrl,
+            options: Options(
+              responseType: ResponseType.plain,
+              receiveTimeout: const Duration(seconds: 15),
+            ),
+          );
+          apkDigest = parseSha256(checksumResponse.data ?? '');
+        } catch (error) {
+          debugPrint('UpdateService checksum sidecar failed: $error');
+        }
+      }
+      if (apkDigest == null) {
+        return const UpdateCheckResult(
+          status: UpdateCheckStatus.failed,
+          error: '更新包缺少可验证的 SHA-256 校验值，已停止更新',
         );
       }
 
@@ -112,12 +136,17 @@ class UpdateService {
     String url, {
     void Function(double progress)? onProgress,
     String? expectedSha256,
+    bool requireSha256 = false,
   }) async {
     if (kIsWeb) {
       return const UpdateInstallResult.failure('Web 平台不支持应用内更新');
     }
     if (url.trim().isEmpty) {
       return const UpdateInstallResult.failure('更新地址为空');
+    }
+
+    if (requireSha256 && _normalizeSha256(expectedSha256) == null) {
+      return const UpdateInstallResult.failure('更新包缺少 SHA-256 校验值，已停止安装');
     }
 
     File? partFile;
@@ -153,9 +182,10 @@ class UpdateService {
       if (!await _isValidApk(partFile)) {
         return const UpdateInstallResult.failure('下载的更新文件无效，请重试');
       }
-      if (expectedSha256 != null && expectedSha256.trim().isNotEmpty) {
+      final normalizedExpectedSha256 = _normalizeSha256(expectedSha256);
+      if (normalizedExpectedSha256 != null) {
         final actual = await _sha256(partFile);
-        if (actual != expectedSha256.trim().toLowerCase()) {
+        if (actual != normalizedExpectedSha256) {
           return const UpdateInstallResult.failure('更新文件校验失败，请重新检测更新');
         }
       }
@@ -264,6 +294,22 @@ class UpdateService {
     }
   }
 
+  static String? parseSha256(String value) {
+    final match = RegExp(r'(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])')
+        .firstMatch(value);
+    return match?.group(0)?.toLowerCase();
+  }
+
+  static String? _normalizeSha256(String? value) {
+    if (value == null) return null;
+    final normalized = value
+        .trim()
+        .replaceFirst(RegExp(r'^sha256:', caseSensitive: false), '');
+    return RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(normalized)
+        ? normalized.toLowerCase()
+        : null;
+  }
+
   static bool _isNewer(String version, String current) {
     final a = _parse(version);
     final b = _parse(current);
@@ -299,8 +345,8 @@ class UpdateCheckResult {
 }
 
 class UpdateInfo {
-  const UpdateInfo({required this.version, required this.notes, this.apkUrl,
-    this.sha256});
+  const UpdateInfo(
+      {required this.version, required this.notes, this.apkUrl, this.sha256});
 
   final String version;
   final String notes;
