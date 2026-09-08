@@ -104,9 +104,13 @@ class _AgentsPageState extends State<AgentsPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: const Text('编辑 Agent'),
-          content: SizedBox(
-            width: double.maxFinite,
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 460,
+              maxHeight: MediaQuery.sizeOf(context).height * 0.58,
+            ),
             child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 8),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 TextField(
                     controller: name,

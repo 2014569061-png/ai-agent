@@ -77,6 +77,14 @@ android {
             signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
         }
     }
+
+    // PRoot is launched as an executable from applicationInfo.nativeLibraryDir.
+    // Keep the ARM64 native payload extracted instead of leaving it only in the APK.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 kotlin {

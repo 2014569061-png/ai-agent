@@ -22,6 +22,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingTermux: MethodChannel.Result? = null
     private var pendingTermuxCommand: String? = null
     private var pendingTermuxTimeout: Long = 300000L
+    private var builtinLinuxRunner: BuiltinLinuxRunner? = null
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -45,6 +46,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        builtinLinuxRunner = BuiltinLinuxRunner(this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nexus/update")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -127,6 +129,48 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "nexus/builtin_linux")
+            .setMethodCallHandler { call, result ->
+                val runner = builtinLinuxRunner
+                if (runner == null) {
+                    result.error("UNAVAILABLE", "内置 Linux Runner 尚未初始化", null)
+                    return@setMethodCallHandler
+                }
+                when (call.method) {
+                    "inspect" -> result.success(runner.inspect())
+                    "run" -> {
+                        val command = call.argument<String>("command")
+                        val workingDirectory = call.argument<String>("workingDirectory")
+                        val rootfsPath = call.argument<String>("rootfsPath")
+                        val runtimeLibraryPath = call.argument<String>("runtimeLibraryPath")
+                        if (command == null || workingDirectory == null || rootfsPath == null || runtimeLibraryPath == null) {
+                            result.error("INVALID_ARGS", "command、workingDirectory、rootfsPath、runtimeLibraryPath 不能为空", null)
+                            return@setMethodCallHandler
+                        }
+                        val timeoutMs = (call.argument<Number>("timeoutMs") ?: 300000L).toLong()
+                        val maxOutputBytes = (call.argument<Number>("maxOutputBytes") ?: 131072).toInt()
+                        runner.run(
+                            command = command,
+                            workingDirectory = workingDirectory,
+                            rootfsPath = rootfsPath,
+                            runtimeLibraryPath = runtimeLibraryPath,
+                            timeoutMs = timeoutMs,
+                            maxOutputBytes = maxOutputBytes,
+                        ) { response -> result.success(response) }
+                    }
+                    "stop" -> {
+                        runner.stop()
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    override fun onDestroy() {
+        builtinLinuxRunner?.stop()
+        super.onDestroy()
     }
 
     private fun installApk(path: String, result: MethodChannel.Result) {

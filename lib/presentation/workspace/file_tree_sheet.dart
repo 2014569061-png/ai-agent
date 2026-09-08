@@ -23,6 +23,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
   final List<String> _forward = [];
   List<FileSystemEntity> _entities = [];
   bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
@@ -37,7 +38,12 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
   }
 
   Future<void> _loadDirectory() async {
-    setState(() => _loading = true);
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     final dir = Directory(_currentDir);
     if (!dir.existsSync()) {
       if (mounted) setState(() => _loading = false);
@@ -63,8 +69,11 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
       });
 
       if (mounted) setState(() => _entities = filtered);
-    } catch (_) {}
-    if (mounted) setState(() => _loading = false);
+    } catch (error) {
+      if (mounted) setState(() => _error = error.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   void _openDir(String path) {
@@ -203,58 +212,76 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _entities.isEmpty
+                : _error != null
                     ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.folder_open_outlined,
-                                size: 48,
-                                color: theme.colorScheme.onSurfaceVariant
-                                    .withValues(alpha: 0.5)),
-                            const SizedBox(height: 10),
-                            Text('此目录为空',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                    color: theme.colorScheme.onSurfaceVariant)),
-                          ],
-                        ),
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.error_outline,
+                              size: 44, color: theme.colorScheme.error),
+                          const SizedBox(height: 10),
+                          const Text('目录读取失败'),
+                          const SizedBox(height: 12),
+                          OutlinedButton.icon(
+                            onPressed: _loadDirectory,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('重试'),
+                          ),
+                        ]),
                       )
-                    : ListView.builder(
-                        itemCount: _entities.length,
-                        itemBuilder: (context, index) {
-                          final entity = _entities[index];
-                          final isDir = entity is Directory;
-                          final name = p.basename(entity.path);
+                    : _entities.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.folder_open_outlined,
+                                    size: 48,
+                                    color: theme.colorScheme.onSurfaceVariant
+                                        .withValues(alpha: 0.5)),
+                                const SizedBox(height: 10),
+                                Text('此目录为空',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                        color: theme
+                                            .colorScheme.onSurfaceVariant)),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            itemCount: _entities.length,
+                            itemBuilder: (context, index) {
+                              final entity = _entities[index];
+                              final isDir = entity is Directory;
+                              final name = p.basename(entity.path);
 
-                          return ListTile(
-                            dense: true,
-                            leading: Icon(
-                              isDir
-                                  ? Icons.folder_rounded
-                                  : _getFileIcon(entity.path),
-                              size: 20,
-                              color: isDir
-                                  ? Colors.amber[700]
-                                  : theme.colorScheme.primary,
-                            ),
-                            title: Text(
-                              isDir ? '$name/' : name,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight:
-                                    isDir ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                            ),
-                            trailing: isDir
-                                ? const Icon(Icons.chevron_right, size: 18)
-                                : null,
-                            onTap: isDir
-                                ? () => _openDir(entity.path)
-                                : () => _viewFile(entity as File),
-                          );
-                        },
-                      ),
+                              return ListTile(
+                                dense: true,
+                                leading: Icon(
+                                  isDir
+                                      ? Icons.folder_rounded
+                                      : _getFileIcon(entity.path),
+                                  size: 20,
+                                  color: isDir
+                                      ? Colors.amber[700]
+                                      : theme.colorScheme.primary,
+                                ),
+                                title: Text(
+                                  isDir ? '$name/' : name,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: isDir
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                                trailing: isDir
+                                    ? const Icon(Icons.chevron_right, size: 18)
+                                    : null,
+                                onTap: isDir
+                                    ? () => _openDir(entity.path)
+                                    : () => _viewFile(entity as File),
+                              );
+                            },
+                          ),
           ),
         ],
       ),

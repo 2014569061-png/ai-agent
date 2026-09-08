@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../application/error_humanizer.dart';
 
 class AsyncStateView extends StatelessWidget {
   final bool loading;
@@ -21,6 +22,7 @@ class AsyncStateView extends StatelessWidget {
     }
     if (error != null) {
       final theme = Theme.of(context);
+      final humanized = humanizeError(error.toString());
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -33,7 +35,7 @@ class AsyncStateView extends StatelessWidget {
               Text('加载失败', style: theme.textTheme.titleMedium),
               const SizedBox(height: 6),
               Text(
-                error.toString(),
+                humanized.summary,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,

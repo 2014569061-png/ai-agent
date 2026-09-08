@@ -50,6 +50,8 @@ void main() async {
     request.response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
     request.response.headers
         .set('Cross-Origin-Embedder-Policy', 'require-corp');
+    request.response.headers
+        .set('Cache-Control', 'no-cache, no-store, must-revalidate');
 
     String reqPath = request.uri.path;
     if (reqPath == '/' || reqPath.isEmpty) reqPath = '/index.html';

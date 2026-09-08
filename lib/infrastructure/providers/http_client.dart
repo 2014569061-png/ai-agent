@@ -81,7 +81,19 @@ class RetryInterceptor extends Interceptor {
 
     err.requestOptions.extra[_retryCountKey] = attempts + 1;
     final delay = baseDelay * pow(2, attempts);
-    await Future<void>.delayed(delay);
+    final cancelToken = err.requestOptions.cancelToken;
+    if (cancelToken != null) {
+      await Future.any<void>([
+        Future<void>.delayed(delay),
+        cancelToken.whenCancel.then<void>((_) {}),
+      ]);
+      if (cancelToken.isCancelled) {
+        handler.next(err);
+        return;
+      }
+    } else {
+      await Future<void>.delayed(delay);
+    }
 
     try {
       final response = await dio.fetch<dynamic>(err.requestOptions);

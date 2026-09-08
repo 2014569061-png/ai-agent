@@ -23,6 +23,8 @@ class NotificationService {
       const settings = InitializationSettings(android: android, iOS: darwin);
       await _plugin.initialize(settings);
       _initialized = true;
+      // Android 13+ otherwise silently drops task notifications.
+      await requestPermission();
     } catch (_) {
       // 通知初始化失败不影响主流程（静默降级）。
     }

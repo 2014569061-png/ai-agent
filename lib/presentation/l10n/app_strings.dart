@@ -165,7 +165,59 @@ abstract final class AppStrings {
   static const onboardingStep1 = '填入模型服务';
   static const onboardingStep2 = '选择你的模型';
   static const onboardingStep3 = '让 Agent 用工具';
-  static const onboardingStep4 = '隐私，本地优先';
   static const skip = '跳过';
   static const startUsing = '开始使用';
+
+  // --- 任务中心与执行分析 ---
+  static const taskCenter = '任务中心';
+  static const developmentTasks = '开发任务';
+  static const taskDetails = '任务详情';
+  static const runAnalysis = '运行分析';
+  static const currentRun = '当前运行';
+  static const historyRuns = '历史记录';
+  static const planModeActiveHint = '计划模式已开启 · 首轮需要确认';
+  static const stageRequestingModel = '正在请求模型…';
+  static const stageExecutingTools = '工具执行中…';
+  static const stageAwaitingApproval = '等待用户审批中…';
+  static const confirmAndExecutePlan = '确认并执行计划';
+  static const stopExecution = '停止执行';
+  static const retryFailedStep = '重试失败步骤';
+  static const regeneratePlan = '重新生成计划';
+  static const openAssociatedChat = '打开关联会话';
+  static const startCollaboration = '发起协作分析';
+  static const copyReport = '复制运行报告';
+
+  // --- 仪表盘 ---
+  static const dashboard = '仪表盘';
+  static const dashboardSubtitle = 'Agent 工作负载与运行总览';
+  static const todayConversations = '今日会话';
+  static const todayTokens = '今日 Token';
+  static const runningTasks = '进行中任务';
+  static const taskSuccessRate = '任务成功率';
+  static const tokenTrend7Days = 'Token 用量（近 7 天）';
+  static const runStatus = '运行状态';
+  static const pendingActions = '待我处理';
+  static const recentConversations = '最近会话';
+  static const viewAll = '查看全部';
+  static const noRunningRecords = '还没有运行记录，去对话页发起第一个任务';
+  static const noPendingActions = '暂无待处理项';
+  static const noRecentConversations = '暂无最近会话';
+  static const approve = '批准';
+  static const confirm = '确认';
+  static const resume = '继续执行';
+  static const viewUsageReport = '查看用量报告';
+  static const viewTaskDetails = '查看任务详情';
+  static const cacheHit = '缓存命中';
+  static const cached = '缓存';
+  static const refreshDashboard = '刷新仪表盘';
+  static String dashboardLoadFailed(String error) => '加载仪表盘失败：$error';
+  static const retry = '重试';
+  static const pendingApproval = '等待审批';
+  static const pendingPlanConfirm = '计划待确认';
+  static const pendingResume = '可恢复任务';
+  static const resumingTask = '正在恢复执行任务…';
+  static const viewDetails = '查看';
+  static const goTo = '前往';
+  static String durationLabel(String duration) => '耗时 $duration';
+  static const noTokenData = '暂无 Token 消耗数据';
 }

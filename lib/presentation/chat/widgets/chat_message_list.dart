@@ -13,6 +13,8 @@ class ChatMessageList extends StatefulWidget {
     required this.onLongPress,
     required this.onRegenerate,
     this.trailingWidgets = const [],
+    this.sessionKey,
+    this.liveReply,
   });
 
   final List<ChatMessage> messages;
@@ -21,6 +23,8 @@ class ChatMessageList extends StatefulWidget {
   final ValueChanged<int> onLongPress;
   final VoidCallback onRegenerate;
   final List<Widget> trailingWidgets;
+  final String? sessionKey;
+  final LiveReply? liveReply;
 
   @override
   State<ChatMessageList> createState() => _ChatMessageListState();
@@ -30,6 +34,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
   static const _initialWindow = 40;
   static const _pageSize = 20;
   late int _start;
+  bool _loadingOlder = false;
 
   @override
   void initState() {
@@ -41,10 +46,10 @@ class _ChatMessageListState extends State<ChatMessageList> {
   @override
   void didUpdateWidget(covariant ChatMessageList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.messages.length < oldWidget.messages.length ||
-        (widget.messages.isNotEmpty &&
-            oldWidget.messages.isNotEmpty &&
-            widget.messages.first.text != oldWidget.messages.first.text)) {
+    final sessionChanged =
+        widget.sessionKey != null && widget.sessionKey != oldWidget.sessionKey;
+    final countDecreased = widget.messages.length < oldWidget.messages.length;
+    if (sessionChanged || countDecreased) {
       _resetWindow();
     }
   }
@@ -63,18 +68,27 @@ class _ChatMessageListState extends State<ChatMessageList> {
   void _onScroll() {
     if (!widget.controller.hasClients ||
         widget.controller.position.pixels > 80 ||
-        _start == 0) {
+        _start == 0 ||
+        _loadingOlder) {
       return;
     }
+    _loadingOlder = true;
     final oldStart = _start;
+    final oldExtent = widget.controller.position.maxScrollExtent;
+    final oldPixels = widget.controller.position.pixels;
     setState(() {
       _start = (oldStart - _pageSize).clamp(0, oldStart);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && widget.controller.hasClients) {
-        widget.controller.jumpTo((widget.controller.position.pixels + 900)
-            .clamp(0.0, widget.controller.position.maxScrollExtent));
+        final newExtent = widget.controller.position.maxScrollExtent;
+        final delta = newExtent - oldExtent;
+        if (delta > 0) {
+          widget.controller.jumpTo((oldPixels + delta)
+              .clamp(0.0, widget.controller.position.maxScrollExtent));
+        }
       }
+      if (mounted) _loadingOlder = false;
     });
   }
 
@@ -91,7 +105,21 @@ class _ChatMessageListState extends State<ChatMessageList> {
           return widget.trailingWidgets[localIndex - count];
         }
         final index = _start + localIndex;
-        final message = widget.messages[index];
+        final storedMessage = widget.messages[index];
+        final live = widget.liveReply;
+        final message = live != null && live.messageIndex == index
+            ? ChatMessage(
+                role: storedMessage.role,
+                parts: [MessagePart.text(live.text)],
+                toolCallId: storedMessage.toolCallId,
+                toolCalls: storedMessage.toolCalls,
+                modelName: storedMessage.modelName,
+                usage: storedMessage.usage,
+                elapsed: storedMessage.elapsed,
+                ttft: storedMessage.ttft,
+                reasoning: live.reasoning,
+              )
+            : storedMessage;
         return MessageBubble(
           message: message,
           isLast: index == widget.messages.length - 1,

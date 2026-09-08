@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../application/chat_controller.dart';
+import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_surface.dart';
 
@@ -45,7 +47,10 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
       level: ImmersiveMaterialLevel.thin,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        onTap: () => setState(() => _open = true),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          setState(() => _open = true);
+        },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -94,7 +99,10 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
               IconButton(
                 visualDensity: VisualDensity.compact,
                 icon: const Icon(Icons.close_rounded, size: 20),
-                onPressed: () => setState(() => _open = false),
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _open = false);
+                },
               ),
             ]),
           ),
@@ -133,6 +141,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
 
   Widget _row(BuildContext context, ToolActivity a) {
     final theme = Theme.of(context);
+    final semantic = AppTheme.semanticOf(context);
     final running = a.status == '执行中';
     final done = a.status == '已完成';
     final pending = a.status == '等待确认';
@@ -157,10 +166,10 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
                         : Icons.radio_button_unchecked,
                 size: 18,
                 color: done
-                    ? Colors.green
+                    ? semantic.success
                     : pending
-                        ? Colors.orange
-                        : theme.hintColor,
+                        ? semantic.warning
+                        : semantic.textMuted,
               ),
         title: Text(a.call.name,
             style:
@@ -168,11 +177,11 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
         subtitle: Text(argsBrief,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+            style: theme.textTheme.bodySmall?.copyWith(color: semantic.textMuted)),
         trailing: pending
             ? Text('待确认',
                 style:
-                    theme.textTheme.labelSmall?.copyWith(color: Colors.orange))
+                    theme.textTheme.labelSmall?.copyWith(color: semantic.warning))
             : null,
         children: [
           Align(

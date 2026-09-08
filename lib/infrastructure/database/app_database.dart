@@ -108,6 +108,92 @@ class Tasks extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// v0.9 鍗忎綔鍒嗘瀽杩愯鐘舵€併€佽鍒掍笌鎬荤粨銆?
+@TableIndex(
+    name: 'idx_collaboration_runs_task_updated', columns: {#taskId, #updatedAt})
+class CollaborationRuns extends Table {
+  TextColumn get id => text()();
+  TextColumn get taskId => text()();
+  TextColumn get mode => text()();
+  TextColumn get status => text()();
+  IntColumn get budgetTokens => integer().withDefault(const Constant(4000))();
+  IntColumn get consumedTokens => integer().withDefault(const Constant(0))();
+  IntColumn get maxAgents => integer().withDefault(const Constant(3))();
+  IntColumn get maxRounds => integer().withDefault(const Constant(1))();
+  IntColumn get currentRound => integer().withDefault(const Constant(0))();
+  TextColumn get planJson => text().withDefault(const Constant('{}'))();
+  TextColumn get resultJson => text().nullable()();
+  TextColumn get error => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// v0.9 子 Agent 的角色运行记录，按 run + round 幂等。
+@TableIndex(
+    name: 'idx_collaboration_agent_runs_run_round',
+    columns: {#collaborationRunId, #round})
+class CollaborationAgentRuns extends Table {
+  TextColumn get id => text()();
+  TextColumn get collaborationRunId => text()();
+  TextColumn get role => text()();
+  TextColumn get agentProfileId => text().nullable()();
+  TextColumn get status => text()();
+  IntColumn get round => integer().withDefault(const Constant(1))();
+  TextColumn get contextManifest => text().withDefault(const Constant('[]'))();
+  TextColumn get allowedTools => text().withDefault(const Constant('[]'))();
+  TextColumn get inputDigest => text().withDefault(const Constant(''))();
+  TextColumn get outputSummary => text().nullable()();
+  TextColumn get failureReason => text().nullable()();
+  IntColumn get inputTokens => integer().withDefault(const Constant(0))();
+  IntColumn get outputTokens => integer().withDefault(const Constant(0))();
+  IntColumn get cachedTokens => integer().withDefault(const Constant(0))();
+  DateTimeColumn get startedAt => dateTime().nullable()();
+  DateTimeColumn get finishedAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// v0.9 子 Agent 提交的结构化产物。
+@TableIndex(
+    name: 'idx_collaboration_artifacts_run_created',
+    columns: {#collaborationRunId, #createdAt})
+class CollaborationArtifacts extends Table {
+  TextColumn get id => text()();
+  TextColumn get collaborationRunId => text()();
+  TextColumn get producerAgentRunId => text()();
+  TextColumn get type => text()();
+  TextColumn get payloadJson => text()();
+  TextColumn get evidenceRefs => text().withDefault(const Constant('[]'))();
+  RealColumn get confidence => real().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+/// v0.9 协作讨论的脱敏消息摘要。
+@TableIndex(
+    name: 'idx_collaboration_messages_run_round',
+    columns: {#collaborationRunId, #round})
+class CollaborationMessages extends Table {
+  TextColumn get id => text()();
+  TextColumn get collaborationRunId => text()();
+  TextColumn get senderAgentRunId => text().nullable()();
+  TextColumn get recipientRole => text().nullable()();
+  IntColumn get round => integer().withDefault(const Constant(1))();
+  TextColumn get contentDigest => text().withDefault(const Constant(''))();
+  TextColumn get content => text()();
+  TextColumn get artifactRefs => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
 /// 云同步元数据（D1）：记录各业务行的版本号与脏标记，用于增量密文同步。
 class SyncMeta extends Table {
   TextColumn get objectId => text()();
@@ -192,6 +278,12 @@ class RunRecords extends Table {
   IntColumn get totalDurationMs => integer().nullable()();
   IntColumn get retryCount => integer().withDefault(const Constant(0))();
   IntColumn get firstTokenDurationMs => integer().nullable()();
+
+  /// Output rate in tokens/sec multiplied by 1000 for stable SQLite storage.
+  IntColumn get outputRateMilli => integer().nullable()();
+  IntColumn get maxStallDurationMs => integer().nullable()();
+  IntColumn get stallCount => integer().nullable()();
+  IntColumn get cancelDurationMs => integer().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {runId};
@@ -324,12 +416,16 @@ class AccountMeta extends Table {
   RunRecords,
   RunEvents,
   LogRecords,
+  CollaborationRuns,
+  CollaborationAgentRuns,
+  CollaborationArtifacts,
+  CollaborationMessages,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -441,6 +537,50 @@ class AppDatabase extends _$AppDatabase {
               'ON log_records (level, created_at)',
             );
           }
+          if (from < 15) {
+            if (!await hasTable('collaboration_runs')) {
+              await m.createTable(collaborationRuns);
+            }
+            if (!await hasTable('collaboration_agent_runs')) {
+              await m.createTable(collaborationAgentRuns);
+            }
+            if (!await hasTable('collaboration_artifacts')) {
+              await m.createTable(collaborationArtifacts);
+            }
+            if (!await hasTable('collaboration_messages')) {
+              await m.createTable(collaborationMessages);
+            }
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_collaboration_runs_task_updated '
+              'ON collaboration_runs (task_id, updated_at)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_collaboration_agent_runs_run_round '
+              'ON collaboration_agent_runs (collaboration_run_id, round)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_collaboration_artifacts_run_created '
+              'ON collaboration_artifacts (collaboration_run_id, created_at)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_collaboration_messages_run_round '
+              'ON collaboration_messages (collaboration_run_id, round)',
+            );
+          }
+          if (from < 16) {
+            if (!await hasColumn('run_records', 'output_rate_milli')) {
+              await m.addColumn(runRecords, runRecords.outputRateMilli);
+            }
+            if (!await hasColumn('run_records', 'max_stall_duration_ms')) {
+              await m.addColumn(runRecords, runRecords.maxStallDurationMs);
+            }
+            if (!await hasColumn('run_records', 'stall_count')) {
+              await m.addColumn(runRecords, runRecords.stallCount);
+            }
+            if (!await hasColumn('run_records', 'cancel_duration_ms')) {
+              await m.addColumn(runRecords, runRecords.cancelDurationMs);
+            }
+          }
         },
       );
 
@@ -450,6 +590,19 @@ class AppDatabase extends _$AppDatabase {
           (row) => OrderingTerm.desc(row.updatedAt),
         ]))
       .get();
+
+  /// [since] 之后"活跃过"（更新或新建）的会话，按置顶 + 更新时间倒序。
+  /// 供仪表盘统计今日会话与最近会话，避免无 limit 拉全表。
+  Future<List<Conversation>> conversationsSince(DateTime since) =>
+      (select(conversations)
+            ..where((row) =>
+                row.updatedAt.isBiggerOrEqualValue(since) |
+                row.createdAt.isBiggerOrEqualValue(since))
+            ..orderBy([
+              (row) => OrderingTerm.desc(row.isPinned),
+              (row) => OrderingTerm.desc(row.updatedAt),
+            ]))
+          .get();
 
   Stream<List<Message>> watchMessages(String conversationId) =>
       (select(messages)
@@ -567,6 +720,56 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deletePromptTemplate(String id) =>
       (delete(promptTemplates)..where((row) => row.id.equals(id))).go();
 
+  /// Install built-in templates once while preserving user edits and deletes.
+  Future<void> ensureDefaultPromptTemplates() async {
+    final now = DateTime.now();
+    const defaults =
+        <({String id, String name, String category, String content})>[
+      (
+        id: 'builtin-explain',
+        name: '解释概念',
+        category: '学习',
+        content: '请用清晰、易懂的中文解释以下概念：\n\n{内容}\n\n先给出一句话定义，再用要点说明核心原理，并补充一个实际例子。'
+      ),
+      (
+        id: 'builtin-summarize',
+        name: '总结要点',
+        category: '效率',
+        content: '请总结以下内容，提炼 3-5 条关键要点，并列出需要继续跟进的事项：\n\n{内容}'
+      ),
+      (
+        id: 'builtin-code-review',
+        name: '代码审查',
+        category: '编程',
+        content:
+            '请审查下面的代码，优先指出真实的 bug、安全风险和可维护性问题。按“严重程度、位置、原因、修改建议”输出：\n\n{代码}'
+      ),
+      (
+        id: 'builtin-writing',
+        name: '润色改写',
+        category: '写作',
+        content: '请在不改变原意的前提下润色下面的文字，使表达更自然、专业、简洁。直接给出修改后的版本，并简要说明主要改动：\n\n{原文}'
+      ),
+      (
+        id: 'builtin-plan',
+        name: '制定执行计划',
+        category: '工作',
+        content: '请把以下目标拆解成可执行的步骤，标注每一步的产出、依赖和验收标准，并指出可能的风险：\n\n{目标}'
+      ),
+    ];
+    for (final item in defaults) {
+      if (await findPromptTemplate(item.id) != null) continue;
+      await insertPromptTemplate(PromptTemplatesCompanion.insert(
+        id: item.id,
+        name: item.name,
+        content: item.content,
+        category: Value(item.category),
+        createdAt: now,
+        updatedAt: now,
+      ));
+    }
+  }
+
   // --- Memories ---
 
   Future<List<Memory>> allMemories() =>
@@ -600,6 +803,20 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
       .get();
 
+  Future<List<Task>> allTasks({int limit = 100}) => (select(tasks)
+        ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
+        ..limit(limit))
+      .get();
+
+  /// [since] 后更新过的任务，按 updatedAt 倒序。
+  /// 供仪表盘成功率/待办统计，避免 allTasks 固定 100 条导致窗口失真。
+  Future<List<Task>> tasksSince(DateTime since, {int limit = 2000}) =>
+      (select(tasks)
+            ..where((row) => row.updatedAt.isBiggerOrEqualValue(since))
+            ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
+            ..limit(limit))
+          .get();
+
   Future<Task?> findTask(String id) =>
       (select(tasks)..where((row) => row.id.equals(id))).getSingleOrNull();
 
@@ -607,6 +824,82 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> insertTask(TasksCompanion task) =>
       into(tasks).insertOnConflictUpdate(task);
+
+  // --- v0.9 协作分析 ---
+
+  Future<CollaborationRun?> findCollaborationRun(String id) =>
+      (select(collaborationRuns)..where((row) => row.id.equals(id)))
+          .getSingleOrNull();
+
+  Future<CollaborationRun?> latestCollaborationRunForTask(String taskId) =>
+      (select(collaborationRuns)
+            ..where((row) => row.taskId.equals(taskId))
+            ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
+            ..limit(1))
+          .getSingleOrNull();
+
+  Future<List<CollaborationRun>> allCollaborationRuns({int limit = 100}) =>
+      (select(collaborationRuns)
+            ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
+            ..limit(limit))
+          .get();
+
+  Stream<CollaborationRun?> watchCollaborationRun(String id) =>
+      (select(collaborationRuns)..where((row) => row.id.equals(id)))
+          .watchSingleOrNull();
+
+  Future<void> saveCollaborationRun(CollaborationRun run) =>
+      into(collaborationRuns).insertOnConflictUpdate(run);
+
+  Future<List<CollaborationAgentRun>> agentRunsForCollaboration(String runId) =>
+      (select(collaborationAgentRuns)
+            ..where((row) => row.collaborationRunId.equals(runId))
+            ..orderBy([
+              (row) => OrderingTerm.asc(row.round),
+              (row) => OrderingTerm.asc(row.startedAt),
+            ]))
+          .get();
+
+  Stream<List<CollaborationAgentRun>> watchAgentRunsForCollaboration(
+          String runId) =>
+      (select(collaborationAgentRuns)
+            ..where((row) => row.collaborationRunId.equals(runId))
+            ..orderBy([
+              (row) => OrderingTerm.asc(row.round),
+              (row) => OrderingTerm.asc(row.startedAt),
+            ]))
+          .watch();
+
+  Future<void> saveCollaborationAgentRun(CollaborationAgentRun run) =>
+      into(collaborationAgentRuns).insertOnConflictUpdate(run);
+
+  Future<List<CollaborationArtifact>> artifactsForCollaboration(String runId) =>
+      (select(collaborationArtifacts)
+            ..where((row) => row.collaborationRunId.equals(runId))
+            ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+          .get();
+
+  Stream<List<CollaborationArtifact>> watchArtifactsForCollaboration(
+          String runId) =>
+      (select(collaborationArtifacts)
+            ..where((row) => row.collaborationRunId.equals(runId))
+            ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+          .watch();
+
+  Future<void> saveCollaborationArtifact(CollaborationArtifact artifact) =>
+      into(collaborationArtifacts).insertOnConflictUpdate(artifact);
+
+  Future<List<CollaborationMessage>> messagesForCollaboration(String runId) =>
+      (select(collaborationMessages)
+            ..where((row) => row.collaborationRunId.equals(runId))
+            ..orderBy([
+              (row) => OrderingTerm.asc(row.round),
+              (row) => OrderingTerm.asc(row.createdAt),
+            ]))
+          .get();
+
+  Future<void> saveCollaborationMessage(CollaborationMessage message) =>
+      into(collaborationMessages).insertOnConflictUpdate(message);
 
   Future<void> updateTaskStatus(String id, String status) async {
     await (update(tasks)..where((row) => row.id.equals(id)))
@@ -719,6 +1012,17 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(row) => OrderingTerm.desc(row.startedAt)])
         ..limit(limit))
       .get();
+
+  /// [since] 起的运行记录，按 startedAt 倒序。
+  /// 供仪表盘 7 天 Token 聚合：不再受 recentRuns 固定条数限制截断窗口。
+  /// 注：runRecords 受保留策略约束（默认仅保留 30 天内 / 100 条已完成记录），
+  /// 7 天窗口在该策略下通常完整，但极端高频使用仍可能被清理，属数据模型层限制。
+  Future<List<RunRecord>> runsSince(DateTime since, {int limit = 2000}) =>
+      (select(runRecords)
+            ..where((row) => row.startedAt.isBiggerOrEqualValue(since))
+            ..orderBy([(row) => OrderingTerm.desc(row.startedAt)])
+            ..limit(limit))
+          .get();
 
   Future<RunRecord?> findRunRecord(String runId) =>
       (select(runRecords)..where((row) => row.runId.equals(runId)))
@@ -945,5 +1249,7 @@ class AppDatabase extends _$AppDatabase {
 }
 
 Future<AppDatabase> openAppDatabase() async {
-  return AppDatabase(await createDatabaseExecutor());
+  final database = AppDatabase(await createDatabaseExecutor());
+  await database.ensureDefaultPromptTemplates();
+  return database;
 }

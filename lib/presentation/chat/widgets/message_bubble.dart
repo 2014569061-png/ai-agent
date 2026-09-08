@@ -9,8 +9,11 @@ import '../../../domain/models.dart';
 import '../chat_layout_controller.dart';
 import '../../markdown/code_block.dart';
 import '../../markdown/math_block.dart';
+import '../../markdown/markdown_render_policy.dart';
+import '../../markdown/markdown_render_metrics.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/floating_toast.dart';
 import '../../widgets/immersive_surface.dart';
 import 'mascot_avatar.dart';
 import 'message_metrics_sheet.dart';
@@ -101,7 +104,7 @@ class MessageBubble extends StatelessWidget {
                 style: TextStyle(
                     color: assistantTextColor, height: 1.45, fontSize: 13.5),
               )
-            : MathMarkdown(
+            : _DeferredMarkdown(
                 data: errorSplit.main,
                 selectable: true,
                 builders: {'pre': CodeBlockBuilder()},
@@ -157,9 +160,14 @@ class MessageBubble extends StatelessWidget {
                   tableBody: TextStyle(
                       color: assistantTextColor, fontSize: 12.5, height: 1.35),
                   blockquoteDecoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border(left: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.5), width: 3)),
+                    border: Border(
+                        left: BorderSide(
+                            color: theme.colorScheme.primary
+                                .withValues(alpha: 0.5),
+                            width: 3)),
                   ),
                 ),
               );
@@ -203,7 +211,8 @@ class MessageBubble extends StatelessWidget {
                   label: '工具调用',
                   child: CircleAvatar(
                       radius: 14,
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
                       child: Icon(Icons.handyman_outlined,
                           size: 14, color: theme.colorScheme.onSurfaceVariant)),
                 )
@@ -238,27 +247,21 @@ class MessageBubble extends StatelessWidget {
                               ],
                             ),
                           )
-                        : Container(
-                            clipBehavior: Clip.antiAlias,
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.08)
-                                    : Colors.black.withValues(alpha: 0.05),
-                                width: 1,
-                              ),
-                            ),
+                        : ImmersiveSurface(
+                            level: ImmersiveMaterialLevel.thin,
+                            borderRadius: BorderRadius.circular(16),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 8),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (_hasMeta(message) && !isTool)
+                                  if (!isTool &&
+                                      (_hasMeta(message) ||
+                                          (running && !isUser)))
                                     ReasoningCompactBlock(
                                       reasoning: reasoningText ?? '',
+                                      streaming: running && !hasText,
                                       leading:
                                           MessageStatusPill(message: message),
                                     ),
@@ -277,9 +280,16 @@ class MessageBubble extends StatelessWidget {
                                             padding: EdgeInsets.zero,
                                             constraints: const BoxConstraints(
                                                 minWidth: 28, minHeight: 28),
-                                            onPressed: () => Clipboard.setData(
-                                                ClipboardData(
-                                                    text: message.text)),
+                                            onPressed: () {
+                                              Clipboard.setData(ClipboardData(
+                                                  text: message.text));
+                                              HapticFeedback.lightImpact();
+                                              FloatingToast.show(
+                                                context,
+                                                '已复制全文',
+                                                tone: ToastTone.success,
+                                              );
+                                            },
                                             icon: Icon(Icons.copy_outlined,
                                                 color: glass.textMuted),
                                             tooltip: '复制'),
@@ -319,6 +329,92 @@ class MessageBubble extends StatelessWidget {
       message.modelName != null ||
       message.elapsed != null ||
       (message.usage?.totalTokens ?? 0) > 0;
+}
+
+/// Delays expensive Markdown and math parsing for long completed replies.
+class _DeferredMarkdown extends StatefulWidget {
+  const _DeferredMarkdown({
+    required this.data,
+    required this.selectable,
+    required this.builders,
+    required this.textColor,
+    required this.styleSheet,
+  });
+
+  final String data;
+  final bool selectable;
+  final Map<String, MarkdownElementBuilder> builders;
+  final Color textColor;
+  final MarkdownStyleSheet styleSheet;
+
+  @override
+  State<_DeferredMarkdown> createState() => _DeferredMarkdownState();
+}
+
+class _DeferredMarkdownState extends State<_DeferredMarkdown> {
+  bool _ready = false;
+  bool _markdownMetricRecorded = false;
+
+  bool _shouldDefer(BuildContext context) => MarkdownRenderPolicy.shouldDefer(
+        widget.data,
+        MediaQuery.sizeOf(context).width,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleMarkdown();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeferredMarkdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) {
+      _ready = false;
+      _markdownMetricRecorded = false;
+      _scheduleMarkdown();
+    }
+  }
+
+  void _scheduleMarkdown() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        setState(() => _ready = true);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shouldDefer = _shouldDefer(context);
+    if (shouldDefer && !_ready) {
+      return SelectableText(
+        widget.data,
+        style: TextStyle(
+          color: widget.textColor,
+          height: 1.45,
+          fontSize: 13,
+        ),
+      );
+    }
+    if (!_markdownMetricRecorded) {
+      _markdownMetricRecorded = true;
+      final stopwatch = Stopwatch()..start();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        stopwatch.stop();
+        MarkdownRenderMetrics.instance.recordMarkdown(
+          durationMs: stopwatch.elapsedMilliseconds,
+        );
+      });
+    }
+    return MathMarkdown(
+      data: widget.data,
+      selectable: widget.selectable,
+      builders: widget.builders,
+      textColor: widget.textColor,
+      styleSheet: widget.styleSheet,
+    );
+  }
 }
 
 /// 错误原文折叠块：默认收起，点开展开底层异常全文（样式对齐 ReasoningBlock 的弱化文本）。

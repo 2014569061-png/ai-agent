@@ -19,17 +19,40 @@ class VaultPage extends ConsumerStatefulWidget {
 
 class _VaultPageState extends ConsumerState<VaultPage> {
   Future<void> _export() async {
+    final includeSecrets = await _confirmSensitiveExport();
+    if (includeSecrets == null || !mounted) return;
     final password = await _askPassword('设置加密密码');
     if (password == null || !mounted) return;
     final db = await ref.read(databaseProvider.future);
-    final path = await exportVaultFile(db, password);
+    final path = await exportVaultFile(db, password,
+        includeSecrets: includeSecrets);
     if (!mounted) return;
     if (path == null) {
       FloatingToast.show(context, '导出失败');
     } else {
-      FloatingToast.show(context, '已导出到 $path（忘记密码将无法找回）');
+      FloatingToast.show(context,
+          '已导出到 $path（${includeSecrets ? '包含密钥' : '不包含密钥'}，忘记密码将无法找回）');
     }
   }
+
+  Future<bool?> _confirmSensitiveExport() => showImmersiveDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('导出密钥？'),
+          content: const Text(
+              '默认只导出会话、记忆和应用数据。包含 API Key 和工具密钥会增加备份泄露风险，是否明确包含？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('不包含密钥'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('包含密钥'),
+            ),
+          ],
+        ),
+      );
 
   Future<void> _import() async {
     final result =
@@ -99,7 +122,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           child: ListTile(
             leading: const Icon(Icons.upload_file_outlined),
             title: const Text('加密导出'),
-            subtitle: const Text('把会话/记忆/设置打包为单个 .nexusvault 加密文件'),
+            subtitle: const Text('默认不包含 API Key；可在导出时手动选择'),
             trailing: const Icon(Icons.chevron_right),
             onTap: _export,
           ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../theme/app_theme.dart';
 
 import '../../../application/chat_controller.dart';
@@ -39,6 +40,7 @@ class SessionContextSheet extends StatelessWidget {
       required String label,
       required String value,
       required VoidCallback onTap,
+      Widget? trailing,
     }) {
       return ListTile(
         leading: Icon(icon, color: theme.colorScheme.primary),
@@ -49,8 +51,11 @@ class SessionContextSheet extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
                 fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
-        trailing: const Icon(Icons.chevron_right_rounded, size: 20),
-        onTap: onTap,
+        trailing: trailing ?? const Icon(Icons.chevron_right_rounded, size: 20),
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
       );
     }
 
@@ -94,6 +99,23 @@ class SessionContextSheet extends StatelessWidget {
               label: '项目工作区',
               value: folder ?? '未绑定本地文件夹',
               onTap: onPickWorkspace,
+              trailing: folder != null
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.link_off_rounded, size: 20),
+                          tooltip: '解绑工作区',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            onClearWorkspace();
+                          },
+                        ),
+                        const Icon(Icons.chevron_right_rounded, size: 20),
+                      ],
+                    )
+                  : const Icon(Icons.chevron_right_rounded, size: 20),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,

@@ -37,18 +37,18 @@ class AgentExecutor {
     Future<bool> Function(List<ToolCall> calls, String planText)? confirmPlan,
   }) async* {
     var messages = List<ChatMessage>.of(history);
-    // G1:Android 上 terminal 工具的 go/bash 等经 Termux 桥在本机执行,具备完整
-    // Go 工具链。显式告知模型本机可编译,避免其基于常识让用户"去 Windows 编译"。
+    // Android 上 terminal 优先使用内置 Alpine Linux，必要时回退到 Termux。
+    // 显式告知模型本机有 Linux shell，避免其基于常识让用户"去 Windows 编译"。
     var systemText = systemPrompt?.trim() ?? '';
     if (systemText.isNotEmpty &&
         Platform.isAndroid &&
         tools.manifests.any((t) => t.name == 'terminal')) {
-      systemText += '\n\n[运行环境说明] 当前运行在 Android 手机上,terminal 工具中的 '
-          'go/gofmt/bash/sh/curl/jq/make/zig 会自动转交本机 Termux 沙箱执行(内置完整 Go '
-          '工具链与网络)。因此:Go 程序可以直接在本机编写并运行 go vet / go test 验证,'
-          '用 GOOS=windows GOARCH=amd64 go build -o <名字>.exe . 交叉编译出 Windows exe,'
-          '产物直接落在工作区目录。编译或测试报错时直接修改代码重试;'
-          '绝对不要让用户"到 Windows 电脑上手动编译",也不要声称本环境无法构建。';
+      systemText += '\n\n[运行环境说明] 当前运行在 Android 手机上。terminal 工具优先使用内置 '
+          'Alpine Linux（PRoot + ARM64 rootfs），不可用时回退到 Termux，再回退到 Android Shell。'
+          '内置 Alpine 默认是精简 rootfs，提供 sh/ash/BusyBox 基础命令；Go/Git/Node/Python 等工具'
+          '可能尚未安装，需要先在 Alpine 中执行 apk add，或使用已配置的 Termux 工具链。'
+          '因此不要默认声称环境无法运行 Linux 命令；编译或测试报错时先检查当前 Runtime 和缺失工具，'
+          '再安装依赖或切换备用 Runtime。';
     }
     if (systemText.isNotEmpty &&
         !messages.any((m) => m.role == MessageRole.system)) {
@@ -135,7 +135,15 @@ class AgentExecutor {
           yield const AgentStatusEvent(RunStatus.cancelled);
           return;
         }
-        await Future<void>.delayed(retryBackoff * attempts);
+        var remaining = retryBackoff * attempts;
+        while (remaining > Duration.zero &&
+            !(cancellationToken?.isCancelled ?? false)) {
+          final slice = remaining < const Duration(milliseconds: 100)
+              ? remaining
+              : const Duration(milliseconds: 100);
+          await Future<void>.delayed(slice);
+          remaining -= slice;
+        }
       }
       // 流被主动取消（底层 HTTP 已真正中断）时，不产出 completed。
       if (cancellationToken?.isCancelled ?? false) {
@@ -158,12 +166,14 @@ class AgentExecutor {
         return;
       }
       // C3 计划模式门禁：首轮有工具调用时，先产出计划等待用户确认，再执行工具。
+      var planApproved = false;
       if (step == 0 && confirmPlan != null && pendingCalls.isNotEmpty) {
         final approved = await confirmPlan(pendingCalls, textBuffer.toString());
         if (!approved) {
           yield const AgentStatusEvent(RunStatus.cancelled);
           return;
         }
+        planApproved = true;
       }
       messages.add(ChatMessage(
         role: MessageRole.assistant,
@@ -214,8 +224,27 @@ class AgentExecutor {
             toolCallId: pendingCall.id,
             parts: [MessagePart.text(result)]));
       }
+      // 计划审批只负责放行首轮工具调用。工具返回后必须显式告诉模型继续
+      // 执行已批准的计划，否则模型可能把“计划已提交”误判为本轮任务结束。
+      if (planApproved) {
+        messages.add(ChatMessage(
+          role: MessageRole.user,
+          parts: [
+            MessagePart.text(
+              '[计划已确认] 用户已批准执行以上计划。请继续按照计划执行剩余步骤；需要工具时直接调用工具，不要只输出计划或提前结束。完成全部步骤后再总结结果。',
+            )
+          ],
+        ));
+      }
     }
-    yield const AgentErrorEvent('Agent 已达到最大执行步数');
+    // 达到 maxSteps 不是业务失败：将其区分为可恢复的"预算暂停"状态，并把
+    // 当前完整上下文（含工具结果与已批准的续跑指令）一并交给调用方，便于
+    // 从断点续跑，而不是重新提交原始 prompt。
+    yield const AgentStatusEvent(RunStatus.paused);
+    yield AgentBudgetExhaustedEvent(
+      context: messages,
+      maxSteps: maxSteps,
+    );
   }
 }
 
@@ -257,6 +286,19 @@ class ApprovalRequiredEvent extends AgentEvent {
 
 class AgentErrorEvent extends AgentEvent {
   const AgentErrorEvent(this.message);
+  final String message;
+}
+
+/// 达到 maxSteps 触发的可恢复预算暂停。携带当前完整上下文，调用方可用它
+/// 作为下一次 [AgentExecutor.run] 的 history，从断点续跑而不重新执行工具。
+class AgentBudgetExhaustedEvent extends AgentEvent {
+  const AgentBudgetExhaustedEvent({
+    required this.context,
+    required this.maxSteps,
+    this.message = '已达到单次执行步数预算，任务已暂停，可继续执行',
+  });
+  final List<ChatMessage> context;
+  final int maxSteps;
   final String message;
 }
 

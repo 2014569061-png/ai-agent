@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
@@ -5,18 +7,20 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_sheet.dart';
 import '../../widgets/immersive_surface.dart';
+import '../../widgets/nexus_status_pill.dart';
 
-/// Zcode 风格的执行计划浮层卡片。
-///
-/// - 折叠态：右侧胶囊卡片，仅展示当前项（带 → 箭头前缀）。
-/// - 展开态：标题「计划」、目标区、进度（已完成/总数）、步骤清单
-///   （已完成绿勾划线、当前项箭头、未完成空心圆）、顶部三点菜单与
-///   展开/收起图标、底部「智能体」署名。
+/// 执行计划浮层卡片 (PlanPanel)
+/// 严格依据 NEXUS UI 设计优化规范重构：
+/// 1. 顶部展示统一状态徽标 (NexusStatusPill)、完成进度、当前步骤与预计预估。
+/// 2. 确认按钮文案明确为“确认并执行计划”，执行中变为“停止执行”。
+/// 3. 当前步骤使用品牌色，已完成步骤绿色划线，失败步骤红色高亮并提供重试。
+/// 4. 完成后收拢为极简紧凑完成条，点击可展开复盘，不再遮挡消息流。
 class PlanPanel extends StatefulWidget {
   final PlanState plan;
   final String? goal;
   final VoidCallback onApprove;
   final VoidCallback onCancel;
+  final VoidCallback? onRetry;
 
   const PlanPanel({
     super.key,
@@ -24,6 +28,7 @@ class PlanPanel extends StatefulWidget {
     this.goal,
     required this.onApprove,
     required this.onCancel,
+    this.onRetry,
   });
 
   @override
@@ -36,8 +41,8 @@ class _PlanPanelState extends State<PlanPanel> {
   @override
   void initState() {
     super.initState();
-    // 未确认（等待用户审批）时默认展开，便于用户查看完整计划。
-    _expanded = !widget.plan.isConfirmed;
+    // 未确认时展开方便审核；执行完成后默认紧凑收起，避免遮挡消息
+    _expanded = !widget.plan.isConfirmed && widget.plan.status != 'completed';
   }
 
   @override
@@ -58,6 +63,10 @@ class _PlanPanelState extends State<PlanPanel> {
   int get _completedCount =>
       widget.plan.steps.where((s) => s.status == 'completed').length;
 
+  bool get _isCompleted => widget.plan.status == 'completed';
+  bool get _isExecuting => widget.plan.status == 'executing';
+  bool get _isFailed => widget.plan.status == 'failed';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -65,9 +74,8 @@ class _PlanPanelState extends State<PlanPanel> {
     final muted =
         isDark ? AppTheme.darkSemantic.mutedOnGlass : AppTheme.textSecondary;
 
-    // 右侧浮层卡片观感：受限宽度 + 统一玻璃材质与光晕阴影。
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 340, maxHeight: 360),
+      constraints: const BoxConstraints(maxWidth: 380, maxHeight: 420),
       child: ImmersiveSurface(
         level: ImmersiveMaterialLevel.ultraThick,
         showGlow: true,
@@ -75,50 +83,119 @@ class _PlanPanelState extends State<PlanPanel> {
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-          child: _expanded
-              ? SingleChildScrollView(child: _buildExpanded(muted))
-              : _buildCollapsed(muted),
+          child: _isCompleted && !_expanded
+              ? _buildCompletedCompact(muted)
+              : (_expanded
+                  ? SizedBox(
+                      height: math.min(
+                          410.0, MediaQuery.sizeOf(context).height * 0.58),
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child:
+                                  _buildExpanded(muted, includeActions: false),
+                            ),
+                          ),
+                          _buildPlanActions(),
+                        ],
+                      ),
+                    )
+                  : _buildCollapsed(muted)),
         ),
       ),
     );
   }
 
-  // --- 折叠态：仅显示当前项 ---
-  Widget _buildCollapsed(Color muted) {
-    final current = _currentStep;
-    final label = current?.description ?? '查看执行计划';
+  // --- 执行完成时的紧凑条 ---
+  Widget _buildCompletedCompact(Color muted) {
+    final total = widget.plan.steps.length;
     return InkWell(
       onTap: () => setState(() => _expanded = true),
       borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded,
+                size: 18, color: AppTheme.success),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '执行计划已完成 · 全部 $total 个步骤均通过',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.success,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text('查看',
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.primary)),
+            const Icon(Icons.chevron_right_rounded, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- 折叠态：仅展示当前步骤与进度 ---
+  Widget _buildCollapsed(Color muted) {
+    final current = _currentStep;
+    final label = current?.description ?? '查看执行计划详情';
+    final total = widget.plan.steps.length;
+    final done = _completedCount;
+
+    return InkWell(
+      onTap: () => setState(() => _expanded = true),
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         child: Row(
           children: [
             const Icon(Icons.checklist_rounded,
                 size: 18, color: AppTheme.brandBright),
             const SizedBox(width: 8),
             Expanded(
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.arrow_right_alt_rounded,
-                      size: 16, color: AppTheme.brandBright),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.brandBright,
+                  Row(
+                    children: [
+                      Text(
+                        '进度 $done/$total',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: muted,
+                        ),
                       ),
+                      const SizedBox(width: 6),
+                      NexusStatusPill.fromString(
+                        widget.plan.status,
+                        isCompact: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
               ),
             ),
-            _threeDotMenu(muted),
             IconButton(
               tooltip: '展开计划',
               icon: const Icon(Icons.expand_more_rounded, size: 20),
@@ -134,7 +211,7 @@ class _PlanPanelState extends State<PlanPanel> {
   }
 
   // --- 展开态 ---
-  Widget _buildExpanded(Color muted) {
+  Widget _buildExpanded(Color muted, {bool includeActions = true}) {
     final theme = Theme.of(context);
     final total = widget.plan.steps.length;
     final done = _completedCount;
@@ -144,26 +221,31 @@ class _PlanPanelState extends State<PlanPanel> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 顶部：标题 + 三点菜单 + 收起图标
+        // 顶部：标题 + 状态徽标 + 收起图标
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 6, 6),
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 6),
           child: Row(
             children: [
               const Icon(Icons.checklist_rounded,
                   size: 18, color: AppTheme.brandBright),
               const SizedBox(width: 8),
               Text(
-                '计划',
+                '执行计划',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.onSurface,
+                  fontSize: 15,
                 ),
+              ),
+              const SizedBox(width: 8),
+              NexusStatusPill.fromString(
+                widget.plan.status,
+                isCompact: true,
               ),
               const Spacer(),
               _threeDotMenu(muted),
               IconButton(
                 tooltip: '收起计划',
-                icon: const Icon(Icons.expand_more_rounded, size: 20),
+                icon: const Icon(Icons.expand_less_rounded, size: 20),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -172,6 +254,7 @@ class _PlanPanelState extends State<PlanPanel> {
             ],
           ),
         ),
+
         // 目标区
         if (widget.goal != null && widget.goal!.trim().isNotEmpty)
           Padding(
@@ -182,36 +265,40 @@ class _PlanPanelState extends State<PlanPanel> {
               decoration: BoxDecoration(
                 color: AppTheme.brandBright.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppTheme.brandBright.withValues(alpha: 0.15),
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('目标',
+                  const Text('执行目标',
                       style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
                           color: AppTheme.brandBright)),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Text(
                     widget.goal!,
                     style: TextStyle(
-                        fontSize: 13,
-                        color: theme.brightness == Brightness.dark
-                            ? AppTheme.darkSemantic.textPrimary
-                            : AppTheme.lightSemantic.textPrimary),
+                      fontSize: 13,
+                      height: 1.3,
+                      color: theme.colorScheme.onSurface,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-        // 进度
+
+        // 进度指示条
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+          padding: const EdgeInsets.fromLTRB(14, 2, 14, 10),
           child: Row(
             children: [
-              Text('进度 $done/$total',
+              Text('完成度 $done/$total',
                   style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
+                      fontSize: 12, fontWeight: FontWeight.w600)),
               const SizedBox(width: 10),
               Expanded(
                 child: ClipRRect(
@@ -222,14 +309,16 @@ class _PlanPanelState extends State<PlanPanel> {
                     backgroundColor: theme.brightness == Brightness.dark
                         ? AppTheme.darkBorder
                         : AppTheme.lightBorder,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppTheme.brandBright),
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      _isFailed ? AppTheme.danger : AppTheme.brandBright,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         ),
+
         // 步骤清单
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
@@ -240,47 +329,164 @@ class _PlanPanelState extends State<PlanPanel> {
                 .toList(),
           ),
         ),
-        // 未确认时的审批按钮
-        if (!widget.plan.isConfirmed)
+
+        // 操作控制区
+        if (includeActions && !widget.plan.isConfirmed)
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
             child: Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
                     onPressed: widget.onCancel,
-                    child: const Text('取消'),
+                    child: const Text('取消计划'),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: FilledButton(
+                  flex: 2,
+                  child: FilledButton.icon(
                     onPressed: widget.onApprove,
-                    child: const Text('执行'),
+                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    label: const Text('确认并执行计划'),
                   ),
                 ),
               ],
             ),
+          )
+        else if (includeActions && _isExecuting)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.danger,
+                  side: const BorderSide(color: AppTheme.danger),
+                ),
+                onPressed: widget.onCancel,
+                icon: const Icon(Icons.stop_circle_outlined, size: 18),
+                label: const Text('停止执行计划'),
+              ),
+            ),
+          )
+        else if (includeActions && _isFailed)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: widget.onCancel,
+                    child: const Text('重新生成'),
+                  ),
+                ),
+                if (widget.onRetry != null) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: widget.onRetry,
+                      icon: const Icon(Icons.refresh_rounded, size: 16),
+                      label: const Text('重试失败步骤'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
+
         // 底部署名
-        const Divider(height: 1, thickness: 1),
+        const Divider(height: 1, thickness: 0.8),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           child: Row(
             children: [
               const Icon(Icons.auto_awesome_rounded,
-                  size: 14, color: AppTheme.brandBright),
-              const SizedBox(width: 6),
-              const Text('智能体',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.mutedOnGlassLight)),
+                  size: 13, color: AppTheme.brandBright),
+              const SizedBox(width: 5),
+              const Text(
+                'NEXUS 智能协同执行引擎',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: AppTheme.mutedOnGlassLight,
+                ),
+              ),
             ],
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildPlanActions() {
+    if (!widget.plan.isConfirmed) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.onCancel,
+                child: const Text('取消计划'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: widget.onApprove,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('确认并执行计划'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_isExecuting) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+        child: SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.danger,
+              side: const BorderSide(color: AppTheme.danger),
+            ),
+            onPressed: widget.onCancel,
+            icon: const Icon(Icons.stop_circle_outlined, size: 18),
+            label: const Text('停止执行计划'),
+          ),
+        ),
+      );
+    }
+    if (_isFailed) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.onCancel,
+                child: const Text('重新生成'),
+              ),
+            ),
+            if (widget.onRetry != null) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: widget.onRetry,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('重试失败步骤'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   Widget _buildStepRow(PlanStep step, Color muted) {
@@ -316,7 +522,7 @@ class _PlanPanelState extends State<PlanPanel> {
             child: Text(
               step.description,
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 13.5,
                 color: isCurrent
                     ? AppTheme.brandBright
                     : (isDone
@@ -330,15 +536,15 @@ class _PlanPanelState extends State<PlanPanel> {
           ),
           if (isCurrent)
             const SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 2)),
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
         ],
       ),
     );
   }
 
-  /// 计划操作菜单：与全应用一致的沉浸式毛玻璃面板（替代不透明 PopupMenu）。
   Future<void> _showActionsMenu() async {
     final action = await showImmersiveSheet<String>(
       context: context,
@@ -349,25 +555,24 @@ class _PlanPanelState extends State<PlanPanel> {
             if (!widget.plan.isConfirmed)
               ListTile(
                 leading: const Icon(Icons.play_arrow_rounded),
-                title: const Text('执行计划'),
+                title: const Text('确认并执行计划'),
                 onTap: () => Navigator.pop(sheetContext, 'approve'),
               ),
-            if (!widget.plan.isConfirmed)
-              ListTile(
-                leading: const Icon(Icons.close_rounded),
-                title: const Text('取消计划'),
-                onTap: () => Navigator.pop(sheetContext, 'cancel'),
-              ),
+            ListTile(
+              leading: const Icon(Icons.close_rounded),
+              title: const Text('取消 / 终止计划'),
+              onTap: () => Navigator.pop(sheetContext, 'cancel'),
+            ),
             ListTile(
               leading: const Icon(Icons.expand_less_rounded),
-              title: const Text('收起'),
+              title: const Text('收起卡片'),
               onTap: () => Navigator.pop(sheetContext, 'collapse'),
             ),
           ],
         ),
       ),
     );
-    if (!mounted) return;
+    if (!mounted || action == null) return;
     if (action == 'approve') widget.onApprove();
     if (action == 'cancel') widget.onCancel();
     if (action == 'collapse') setState(() => _expanded = false);

@@ -6,6 +6,7 @@ import '../../domain/models.dart';
 import 'http_client.dart';
 import 'provider_config.dart';
 import 'llm_provider.dart';
+import 'sse_decoder.dart';
 
 class OpenAiCompatibleProvider implements LlmProvider {
   OpenAiCompatibleProvider({required this.config, Dio? dio})
@@ -128,8 +129,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
         yield const ProviderErrorEvent('Provider 返回了空响应');
         return;
       }
-      var buffer = '';
-      final decoder = utf8.decoder;
+      final sse = SseDecoder();
       final toolAccumulators = <int, _ToolAccumulator>{};
       var nextToolIndex = 0;
       void collect(_SseChunk parsed) {
@@ -148,11 +148,8 @@ class OpenAiCompatibleProvider implements LlmProvider {
       }
 
       await for (final chunk in stream) {
-        buffer += decoder.convert(chunk);
-        final lines = buffer.split('\n');
-        buffer = lines.removeLast();
-        for (final line in lines) {
-          final parsed = _parseSseLine(line.trim());
+        for (final data in sse.add(chunk)) {
+          final parsed = _parseSseData(data);
           if (parsed == null) continue;
           if (parsed.text != null && parsed.text!.isNotEmpty) {
             yield TextDeltaEvent(parsed.text!);
@@ -164,9 +161,9 @@ class OpenAiCompatibleProvider implements LlmProvider {
           if (parsed.usage != null) yield parsed.usage!;
         }
       }
-      buffer += decoder.convert(const <int>[]);
-      final parsed = _parseSseLine(buffer.trim());
-      if (parsed != null) {
+      for (final data in sse.close()) {
+        final parsed = _parseSseData(data);
+        if (parsed == null) continue;
         if (parsed.text != null && parsed.text!.isNotEmpty) {
           yield TextDeltaEvent(parsed.text!);
         }
@@ -325,9 +322,8 @@ class OpenAiCompatibleProvider implements LlmProvider {
     return 'mp3';
   }
 
-  _SseChunk? _parseSseLine(String line) {
-    if (!line.startsWith('data:')) return null;
-    final data = line.substring(5).trim();
+  _SseChunk? _parseSseData(String data) {
+    data = data.trim();
     if (data == '[DONE]' || data.isEmpty) return null;
     try {
       final json = jsonDecode(data) as Map<String, dynamic>;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../theme/app_theme.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -7,11 +8,16 @@ import '../../markdown/math_block.dart';
 /// G1 思考过程紧凑块:指标 Pill 与"思考"chip 同行(右对齐),点击在下方
 /// 展开/收起思考内容——不再以常驻大卡抢占消息头部空间。
 class ReasoningCompactBlock extends StatefulWidget {
-  const ReasoningCompactBlock(
-      {super.key, required this.reasoning, this.leading});
+  const ReasoningCompactBlock({
+    super.key,
+    required this.reasoning,
+    this.leading,
+    this.streaming = false,
+  });
 
   final String reasoning;
   final Widget? leading;
+  final bool streaming;
 
   @override
   State<ReasoningCompactBlock> createState() => _ReasoningCompactBlockState();
@@ -24,6 +30,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final hasReasoning = widget.reasoning.trim().isNotEmpty;
+    final visible = hasReasoning || widget.streaming;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -37,32 +44,49 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                   child: widget.leading!,
                 ),
               ),
-            if (hasReasoning) ...[
+            if (visible) ...[
               const SizedBox(width: 8),
-              InkWell(
-                onTap: () => setState(() => _expanded = !_expanded),
+              Material(
+                color: AppTheme.brandGradientEnd.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.brandGradientEnd.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _expanded = !_expanded);
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (widget.streaming && !hasReasoning)
+                        SizedBox(
+                          width: 13,
+                          height: 13,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.8,
+                            color: AppTheme.brandGradientEnd,
+                          ),
+                        )
+                      else
+                        Icon(Icons.psychology_outlined,
+                            size: 13, color: AppTheme.brandGradientEnd),
+                      const SizedBox(width: 4),
+                      Text(
+                          widget.streaming && !hasReasoning
+                              ? '正在思考…'
+                              : '思考 ${widget.reasoning.length} 字',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: theme.colorScheme.onSurfaceVariant)),
+                      AnimatedRotation(
+                        turns: _expanded ? .5 : 0,
+                        duration: const Duration(milliseconds: 180),
+                        child: Icon(Icons.expand_more_rounded,
+                            size: 14, color: theme.colorScheme.outline),
+                      ),
+                    ]),
                   ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.psychology_outlined,
-                        size: 13, color: AppTheme.brandGradientEnd),
-                    const SizedBox(width: 4),
-                    Text('思考 ${widget.reasoning.length} 字',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurfaceVariant)),
-                    AnimatedRotation(
-                      turns: _expanded ? .5 : 0,
-                      duration: const Duration(milliseconds: 180),
-                      child: Icon(Icons.expand_more_rounded,
-                          size: 14, color: theme.colorScheme.outline),
-                    ),
-                  ]),
                 ),
               ),
             ],
@@ -107,8 +131,9 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                 ),
               ),
             ),
-            crossFadeState:
-                _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            crossFadeState: _expanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 180),
           ),
       ],

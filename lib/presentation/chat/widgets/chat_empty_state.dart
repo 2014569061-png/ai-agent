@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/app_tokens.dart';
 import '../../widgets/brand_mark.dart';
 
 /// 对话页空态：品牌图标 + 动态问候语 + 三个独立快捷操作卡片。
@@ -169,37 +171,43 @@ class _SuggestionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
+    final semantic = AppTheme.semanticOf(context);
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(22),
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: isDark ? 0.08 : 0.55),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.08),
-            width: 1,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(_icon, size: 18, color: theme.colorScheme.onSurface),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontSize: 14,
-                fontWeight: FontWeight.w400,
-                color: theme.colorScheme.onSurface,
-              ),
+    return Material(
+      color: semantic.surfaceTint,
+      borderRadius: BorderRadius.circular(AppTokens.radiusCapsule),
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(AppTokens.radiusCapsule),
+        child: Container(
+          height: 44,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTokens.radiusCapsule),
+            border: Border.all(
+              color: semantic.border.withValues(alpha: 0.5),
+              width: 1,
             ),
-          ],
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(_icon, size: 18, color: theme.colorScheme.onSurface),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -36,7 +36,23 @@ if exist "mobile_agent\web" (
         exit /b 1
     )
 )
-call flutter build web
+set "FLUTTER_EXE="
+if exist "C:\src\flutter\bin\flutter.bat" set "FLUTTER_EXE=C:\src\flutter\bin\flutter.bat"
+if not defined FLUTTER_EXE (
+    where flutter >nul 2>nul && set "FLUTTER_EXE=flutter"
+)
+if not defined FLUTTER_EXE (
+    echo [!] 未找到 Flutter。请确认 C:\src\flutter\bin 已加入 PATH，或安装 Flutter。
+    pause
+    exit /b 1
+)
+
+call "%FLUTTER_EXE%" build web --pwa-strategy=none
+if errorlevel 1 (
+    echo [!] Web 编译失败，已停止启动旧版本产物。
+    pause
+    exit /b 1
+)
 cd /d "%~dp0"
 
 echo [✓] 编译完成，正在启动本地 Web 服务并自动唤起浏览器...

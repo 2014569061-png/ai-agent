@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 
+import 'markdown_render_metrics.dart';
+
 /// 轻量级正则语法高亮器，用于代码块内的关键字/字符串/注释/数字着色。
 ///
 /// 基于单次正则扫描 + 分组判断，覆盖 Dart/JS/Python/Java 等常见语言的
@@ -173,12 +175,83 @@ class CodeBlockBuilder extends MarkdownElementBuilder {
 }
 
 /// 代码块卡片：标题栏（语言名 + 复制）+ 横向滚动的高亮代码。
-class CodeBlockWidget extends StatelessWidget {
+class CodeBlockWidget extends StatefulWidget {
   const CodeBlockWidget(
       {super.key, required this.language, required this.code});
 
   final String? language;
   final String code;
+
+  @override
+  State<CodeBlockWidget> createState() => _CodeBlockWidgetState();
+}
+
+class _CodeBlockWidgetState extends State<CodeBlockWidget> {
+  static const _maxHighlightChars = 12000;
+  bool _highlighted = false;
+  bool _codeMetricRecorded = false;
+  TextSpan? _highlightedSpan;
+  ScrollPosition? _scrollPosition;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _watchViewport());
+  }
+
+  @override
+  void didUpdateWidget(covariant CodeBlockWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.code != widget.code ||
+        oldWidget.language != widget.language) {
+      _highlighted = false;
+      _codeMetricRecorded = false;
+      _highlightedSpan = null;
+      _detachScrollListener();
+      WidgetsBinding.instance.addPostFrameCallback((_) => _watchViewport());
+    }
+  }
+
+  void _watchViewport() {
+    if (!mounted) return;
+    if (widget.code.length > _maxHighlightChars) {
+      _detachScrollListener();
+      return;
+    }
+    final position = Scrollable.maybeOf(context)?.position;
+    if (position == null) {
+      _highlightIfVisible();
+      return;
+    }
+    _scrollPosition = position;
+    position.addListener(_onScroll);
+    _highlightIfVisible();
+  }
+
+  void _onScroll() => _highlightIfVisible();
+
+  void _highlightIfVisible() {
+    if (!mounted || _highlighted) return;
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.hasSize) return;
+    final topLeft = renderObject.localToGlobal(Offset.zero);
+    final bottom = topLeft.dy + renderObject.size.height;
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    if (bottom < -200 || topLeft.dy > viewportHeight + 200) return;
+    setState(() => _highlighted = true);
+    _detachScrollListener();
+  }
+
+  void _detachScrollListener() {
+    _scrollPosition?.removeListener(_onScroll);
+    _scrollPosition = null;
+  }
+
+  @override
+  void dispose() {
+    _detachScrollListener();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -190,7 +263,8 @@ class CodeBlockWidget extends StatelessWidget {
     final border = dark ? const Color(0xFF2C3547) : const Color(0xFFE2E8F0);
     final headerText = dark ? const Color(0xFFA6B2C6) : const Color(0xFF64748B);
     final codeColor = dark ? const Color(0xFFE6EDF3) : const Color(0xFF24292F);
-    final trimmed = code.trimRight();
+    final trimmed = widget.code.trimRight();
+    final longFallback = widget.code.length > _maxHighlightChars;
 
     final highlighter = SimpleSyntaxHighlighter(
       keywordColor: dark ? const Color(0xFFC678DD) : const Color(0xFFA626A4),
@@ -219,7 +293,7 @@ class CodeBlockWidget extends StatelessWidget {
                 Icon(Icons.code, size: 14, color: headerText),
                 const SizedBox(width: 6),
                 Text(
-                  language ?? '代码',
+                  widget.language ?? '代码',
                   style: TextStyle(
                     fontSize: 12,
                     color: headerText,
@@ -228,44 +302,104 @@ class CodeBlockWidget extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                InkWell(
-                  borderRadius: BorderRadius.circular(6),
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: trimmed));
-                    FloatingToast.show(context, '代码已复制');
-                  },
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.copy, size: 14, color: headerText),
-                        const SizedBox(width: 4),
-                        Text('复制',
-                            style: TextStyle(fontSize: 12, color: headerText)),
-                      ],
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      Clipboard.setData(ClipboardData(text: trimmed));
+                      FloatingToast.show(context, '代码已复制');
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.copy, size: 14, color: headerText),
+                          const SizedBox(width: 4),
+                          Text('复制',
+                              style:
+                                  TextStyle(fontSize: 12, color: headerText)),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.all(12),
-            child: SelectableText.rich(
-              highlighter.format(trimmed),
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-                color: codeColor,
-                height: 1.5,
-              ),
+          Scrollbar(
+            thumbVisibility: false,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.all(12),
+              child: _highlighted
+                  ? _buildHighlighted(
+                      highlighter, trimmed, codeColor, longFallback)
+                  : _buildPlain(trimmed, codeColor),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildPlain(String code, Color color) {
+    _recordCodeMetric(
+      highlighted: false,
+      durationMs: 0,
+      longFallback: code.length > _maxHighlightChars,
+    );
+    return SelectableText(
+      code,
+      style: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        color: color,
+        height: 1.5,
+      ),
+    );
+  }
+
+  Widget _buildHighlighted(SimpleSyntaxHighlighter highlighter, String code,
+      Color color, bool longFallback) {
+    final stopwatch = Stopwatch();
+    if (_highlightedSpan == null) {
+      stopwatch.start();
+      _highlightedSpan = highlighter.format(code);
+      stopwatch.stop();
+    }
+    _recordCodeMetric(
+      highlighted: true,
+      durationMs: stopwatch.elapsedMilliseconds,
+      longFallback: longFallback,
+    );
+    return SelectableText.rich(
+      _highlightedSpan!,
+      style: TextStyle(
+        fontFamily: 'monospace',
+        fontSize: 13,
+        color: color,
+        height: 1.5,
+      ),
+    );
+  }
+
+  void _recordCodeMetric({
+    required bool highlighted,
+    required int durationMs,
+    required bool longFallback,
+  }) {
+    if (_codeMetricRecorded) return;
+    _codeMetricRecorded = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MarkdownRenderMetrics.instance.recordCodeBlock(
+        highlighted: highlighted,
+        durationMs: durationMs,
+        longFallback: longFallback,
+      );
+    });
   }
 }

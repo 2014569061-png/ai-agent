@@ -6919,6 +6919,30 @@ class $RunRecordsTable extends RunRecords
   late final GeneratedColumn<int> firstTokenDurationMs = GeneratedColumn<int>(
       'first_token_duration_ms', aliasedName, true,
       type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _outputRateMilliMeta =
+      const VerificationMeta('outputRateMilli');
+  @override
+  late final GeneratedColumn<int> outputRateMilli = GeneratedColumn<int>(
+      'output_rate_milli', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _maxStallDurationMsMeta =
+      const VerificationMeta('maxStallDurationMs');
+  @override
+  late final GeneratedColumn<int> maxStallDurationMs = GeneratedColumn<int>(
+      'max_stall_duration_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _stallCountMeta =
+      const VerificationMeta('stallCount');
+  @override
+  late final GeneratedColumn<int> stallCount = GeneratedColumn<int>(
+      'stall_count', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _cancelDurationMsMeta =
+      const VerificationMeta('cancelDurationMs');
+  @override
+  late final GeneratedColumn<int> cancelDurationMs = GeneratedColumn<int>(
+      'cancel_duration_ms', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         runId,
@@ -6934,7 +6958,11 @@ class $RunRecordsTable extends RunRecords
         eventCount,
         totalDurationMs,
         retryCount,
-        firstTokenDurationMs
+        firstTokenDurationMs,
+        outputRateMilli,
+        maxStallDurationMs,
+        stallCount,
+        cancelDurationMs
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7026,6 +7054,30 @@ class $RunRecordsTable extends RunRecords
           firstTokenDurationMs.isAcceptableOrUnknown(
               data['first_token_duration_ms']!, _firstTokenDurationMsMeta));
     }
+    if (data.containsKey('output_rate_milli')) {
+      context.handle(
+          _outputRateMilliMeta,
+          outputRateMilli.isAcceptableOrUnknown(
+              data['output_rate_milli']!, _outputRateMilliMeta));
+    }
+    if (data.containsKey('max_stall_duration_ms')) {
+      context.handle(
+          _maxStallDurationMsMeta,
+          maxStallDurationMs.isAcceptableOrUnknown(
+              data['max_stall_duration_ms']!, _maxStallDurationMsMeta));
+    }
+    if (data.containsKey('stall_count')) {
+      context.handle(
+          _stallCountMeta,
+          stallCount.isAcceptableOrUnknown(
+              data['stall_count']!, _stallCountMeta));
+    }
+    if (data.containsKey('cancel_duration_ms')) {
+      context.handle(
+          _cancelDurationMsMeta,
+          cancelDurationMs.isAcceptableOrUnknown(
+              data['cancel_duration_ms']!, _cancelDurationMsMeta));
+    }
     return context;
   }
 
@@ -7063,6 +7115,14 @@ class $RunRecordsTable extends RunRecords
           .read(DriftSqlType.int, data['${effectivePrefix}retry_count'])!,
       firstTokenDurationMs: attachedDatabase.typeMapping.read(
           DriftSqlType.int, data['${effectivePrefix}first_token_duration_ms']),
+      outputRateMilli: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}output_rate_milli']),
+      maxStallDurationMs: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}max_stall_duration_ms']),
+      stallCount: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}stall_count']),
+      cancelDurationMs: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}cancel_duration_ms']),
     );
   }
 
@@ -7087,6 +7147,12 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
   final int? totalDurationMs;
   final int retryCount;
   final int? firstTokenDurationMs;
+
+  /// Output rate in tokens/sec multiplied by 1000 for stable SQLite storage.
+  final int? outputRateMilli;
+  final int? maxStallDurationMs;
+  final int? stallCount;
+  final int? cancelDurationMs;
   const RunRecord(
       {required this.runId,
       required this.conversationId,
@@ -7101,7 +7167,11 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       required this.eventCount,
       this.totalDurationMs,
       required this.retryCount,
-      this.firstTokenDurationMs});
+      this.firstTokenDurationMs,
+      this.outputRateMilli,
+      this.maxStallDurationMs,
+      this.stallCount,
+      this.cancelDurationMs});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -7126,6 +7196,18 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
     map['retry_count'] = Variable<int>(retryCount);
     if (!nullToAbsent || firstTokenDurationMs != null) {
       map['first_token_duration_ms'] = Variable<int>(firstTokenDurationMs);
+    }
+    if (!nullToAbsent || outputRateMilli != null) {
+      map['output_rate_milli'] = Variable<int>(outputRateMilli);
+    }
+    if (!nullToAbsent || maxStallDurationMs != null) {
+      map['max_stall_duration_ms'] = Variable<int>(maxStallDurationMs);
+    }
+    if (!nullToAbsent || stallCount != null) {
+      map['stall_count'] = Variable<int>(stallCount);
+    }
+    if (!nullToAbsent || cancelDurationMs != null) {
+      map['cancel_duration_ms'] = Variable<int>(cancelDurationMs);
     }
     return map;
   }
@@ -7154,6 +7236,18 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       firstTokenDurationMs: firstTokenDurationMs == null && nullToAbsent
           ? const Value.absent()
           : Value(firstTokenDurationMs),
+      outputRateMilli: outputRateMilli == null && nullToAbsent
+          ? const Value.absent()
+          : Value(outputRateMilli),
+      maxStallDurationMs: maxStallDurationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxStallDurationMs),
+      stallCount: stallCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stallCount),
+      cancelDurationMs: cancelDurationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cancelDurationMs),
     );
   }
 
@@ -7176,6 +7270,10 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       retryCount: serializer.fromJson<int>(json['retryCount']),
       firstTokenDurationMs:
           serializer.fromJson<int?>(json['firstTokenDurationMs']),
+      outputRateMilli: serializer.fromJson<int?>(json['outputRateMilli']),
+      maxStallDurationMs: serializer.fromJson<int?>(json['maxStallDurationMs']),
+      stallCount: serializer.fromJson<int?>(json['stallCount']),
+      cancelDurationMs: serializer.fromJson<int?>(json['cancelDurationMs']),
     );
   }
   @override
@@ -7196,6 +7294,10 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       'totalDurationMs': serializer.toJson<int?>(totalDurationMs),
       'retryCount': serializer.toJson<int>(retryCount),
       'firstTokenDurationMs': serializer.toJson<int?>(firstTokenDurationMs),
+      'outputRateMilli': serializer.toJson<int?>(outputRateMilli),
+      'maxStallDurationMs': serializer.toJson<int?>(maxStallDurationMs),
+      'stallCount': serializer.toJson<int?>(stallCount),
+      'cancelDurationMs': serializer.toJson<int?>(cancelDurationMs),
     };
   }
 
@@ -7213,7 +7315,11 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
           int? eventCount,
           Value<int?> totalDurationMs = const Value.absent(),
           int? retryCount,
-          Value<int?> firstTokenDurationMs = const Value.absent()}) =>
+          Value<int?> firstTokenDurationMs = const Value.absent(),
+          Value<int?> outputRateMilli = const Value.absent(),
+          Value<int?> maxStallDurationMs = const Value.absent(),
+          Value<int?> stallCount = const Value.absent(),
+          Value<int?> cancelDurationMs = const Value.absent()}) =>
       RunRecord(
         runId: runId ?? this.runId,
         conversationId: conversationId ?? this.conversationId,
@@ -7235,6 +7341,16 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
         firstTokenDurationMs: firstTokenDurationMs.present
             ? firstTokenDurationMs.value
             : this.firstTokenDurationMs,
+        outputRateMilli: outputRateMilli.present
+            ? outputRateMilli.value
+            : this.outputRateMilli,
+        maxStallDurationMs: maxStallDurationMs.present
+            ? maxStallDurationMs.value
+            : this.maxStallDurationMs,
+        stallCount: stallCount.present ? stallCount.value : this.stallCount,
+        cancelDurationMs: cancelDurationMs.present
+            ? cancelDurationMs.value
+            : this.cancelDurationMs,
       );
   RunRecord copyWithCompanion(RunRecordsCompanion data) {
     return RunRecord(
@@ -7267,6 +7383,17 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       firstTokenDurationMs: data.firstTokenDurationMs.present
           ? data.firstTokenDurationMs.value
           : this.firstTokenDurationMs,
+      outputRateMilli: data.outputRateMilli.present
+          ? data.outputRateMilli.value
+          : this.outputRateMilli,
+      maxStallDurationMs: data.maxStallDurationMs.present
+          ? data.maxStallDurationMs.value
+          : this.maxStallDurationMs,
+      stallCount:
+          data.stallCount.present ? data.stallCount.value : this.stallCount,
+      cancelDurationMs: data.cancelDurationMs.present
+          ? data.cancelDurationMs.value
+          : this.cancelDurationMs,
     );
   }
 
@@ -7286,7 +7413,11 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
           ..write('eventCount: $eventCount, ')
           ..write('totalDurationMs: $totalDurationMs, ')
           ..write('retryCount: $retryCount, ')
-          ..write('firstTokenDurationMs: $firstTokenDurationMs')
+          ..write('firstTokenDurationMs: $firstTokenDurationMs, ')
+          ..write('outputRateMilli: $outputRateMilli, ')
+          ..write('maxStallDurationMs: $maxStallDurationMs, ')
+          ..write('stallCount: $stallCount, ')
+          ..write('cancelDurationMs: $cancelDurationMs')
           ..write(')'))
         .toString();
   }
@@ -7306,7 +7437,11 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       eventCount,
       totalDurationMs,
       retryCount,
-      firstTokenDurationMs);
+      firstTokenDurationMs,
+      outputRateMilli,
+      maxStallDurationMs,
+      stallCount,
+      cancelDurationMs);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -7324,7 +7459,11 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
           other.eventCount == this.eventCount &&
           other.totalDurationMs == this.totalDurationMs &&
           other.retryCount == this.retryCount &&
-          other.firstTokenDurationMs == this.firstTokenDurationMs);
+          other.firstTokenDurationMs == this.firstTokenDurationMs &&
+          other.outputRateMilli == this.outputRateMilli &&
+          other.maxStallDurationMs == this.maxStallDurationMs &&
+          other.stallCount == this.stallCount &&
+          other.cancelDurationMs == this.cancelDurationMs);
 }
 
 class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
@@ -7342,6 +7481,10 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
   final Value<int?> totalDurationMs;
   final Value<int> retryCount;
   final Value<int?> firstTokenDurationMs;
+  final Value<int?> outputRateMilli;
+  final Value<int?> maxStallDurationMs;
+  final Value<int?> stallCount;
+  final Value<int?> cancelDurationMs;
   final Value<int> rowid;
   const RunRecordsCompanion({
     this.runId = const Value.absent(),
@@ -7358,6 +7501,10 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
     this.totalDurationMs = const Value.absent(),
     this.retryCount = const Value.absent(),
     this.firstTokenDurationMs = const Value.absent(),
+    this.outputRateMilli = const Value.absent(),
+    this.maxStallDurationMs = const Value.absent(),
+    this.stallCount = const Value.absent(),
+    this.cancelDurationMs = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RunRecordsCompanion.insert({
@@ -7375,6 +7522,10 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
     this.totalDurationMs = const Value.absent(),
     this.retryCount = const Value.absent(),
     this.firstTokenDurationMs = const Value.absent(),
+    this.outputRateMilli = const Value.absent(),
+    this.maxStallDurationMs = const Value.absent(),
+    this.stallCount = const Value.absent(),
+    this.cancelDurationMs = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : runId = Value(runId),
         conversationId = Value(conversationId),
@@ -7394,6 +7545,10 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
     Expression<int>? totalDurationMs,
     Expression<int>? retryCount,
     Expression<int>? firstTokenDurationMs,
+    Expression<int>? outputRateMilli,
+    Expression<int>? maxStallDurationMs,
+    Expression<int>? stallCount,
+    Expression<int>? cancelDurationMs,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7413,6 +7568,11 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
       if (retryCount != null) 'retry_count': retryCount,
       if (firstTokenDurationMs != null)
         'first_token_duration_ms': firstTokenDurationMs,
+      if (outputRateMilli != null) 'output_rate_milli': outputRateMilli,
+      if (maxStallDurationMs != null)
+        'max_stall_duration_ms': maxStallDurationMs,
+      if (stallCount != null) 'stall_count': stallCount,
+      if (cancelDurationMs != null) 'cancel_duration_ms': cancelDurationMs,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7432,6 +7592,10 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
       Value<int?>? totalDurationMs,
       Value<int>? retryCount,
       Value<int?>? firstTokenDurationMs,
+      Value<int?>? outputRateMilli,
+      Value<int?>? maxStallDurationMs,
+      Value<int?>? stallCount,
+      Value<int?>? cancelDurationMs,
       Value<int>? rowid}) {
     return RunRecordsCompanion(
       runId: runId ?? this.runId,
@@ -7448,6 +7612,10 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
       totalDurationMs: totalDurationMs ?? this.totalDurationMs,
       retryCount: retryCount ?? this.retryCount,
       firstTokenDurationMs: firstTokenDurationMs ?? this.firstTokenDurationMs,
+      outputRateMilli: outputRateMilli ?? this.outputRateMilli,
+      maxStallDurationMs: maxStallDurationMs ?? this.maxStallDurationMs,
+      stallCount: stallCount ?? this.stallCount,
+      cancelDurationMs: cancelDurationMs ?? this.cancelDurationMs,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7498,6 +7666,18 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
       map['first_token_duration_ms'] =
           Variable<int>(firstTokenDurationMs.value);
     }
+    if (outputRateMilli.present) {
+      map['output_rate_milli'] = Variable<int>(outputRateMilli.value);
+    }
+    if (maxStallDurationMs.present) {
+      map['max_stall_duration_ms'] = Variable<int>(maxStallDurationMs.value);
+    }
+    if (stallCount.present) {
+      map['stall_count'] = Variable<int>(stallCount.value);
+    }
+    if (cancelDurationMs.present) {
+      map['cancel_duration_ms'] = Variable<int>(cancelDurationMs.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7521,6 +7701,10 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
           ..write('totalDurationMs: $totalDurationMs, ')
           ..write('retryCount: $retryCount, ')
           ..write('firstTokenDurationMs: $firstTokenDurationMs, ')
+          ..write('outputRateMilli: $outputRateMilli, ')
+          ..write('maxStallDurationMs: $maxStallDurationMs, ')
+          ..write('stallCount: $stallCount, ')
+          ..write('cancelDurationMs: $cancelDurationMs, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8693,6 +8877,2423 @@ class LogRecordsCompanion extends UpdateCompanion<LogRecord> {
   }
 }
 
+class $CollaborationRunsTable extends CollaborationRuns
+    with TableInfo<$CollaborationRunsTable, CollaborationRun> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CollaborationRunsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+      'task_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _modeMeta = const VerificationMeta('mode');
+  @override
+  late final GeneratedColumn<String> mode = GeneratedColumn<String>(
+      'mode', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _budgetTokensMeta =
+      const VerificationMeta('budgetTokens');
+  @override
+  late final GeneratedColumn<int> budgetTokens = GeneratedColumn<int>(
+      'budget_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(4000));
+  static const VerificationMeta _consumedTokensMeta =
+      const VerificationMeta('consumedTokens');
+  @override
+  late final GeneratedColumn<int> consumedTokens = GeneratedColumn<int>(
+      'consumed_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _maxAgentsMeta =
+      const VerificationMeta('maxAgents');
+  @override
+  late final GeneratedColumn<int> maxAgents = GeneratedColumn<int>(
+      'max_agents', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(3));
+  static const VerificationMeta _maxRoundsMeta =
+      const VerificationMeta('maxRounds');
+  @override
+  late final GeneratedColumn<int> maxRounds = GeneratedColumn<int>(
+      'max_rounds', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _currentRoundMeta =
+      const VerificationMeta('currentRound');
+  @override
+  late final GeneratedColumn<int> currentRound = GeneratedColumn<int>(
+      'current_round', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _planJsonMeta =
+      const VerificationMeta('planJson');
+  @override
+  late final GeneratedColumn<String> planJson = GeneratedColumn<String>(
+      'plan_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('{}'));
+  static const VerificationMeta _resultJsonMeta =
+      const VerificationMeta('resultJson');
+  @override
+  late final GeneratedColumn<String> resultJson = GeneratedColumn<String>(
+      'result_json', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _errorMeta = const VerificationMeta('error');
+  @override
+  late final GeneratedColumn<String> error = GeneratedColumn<String>(
+      'error', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        taskId,
+        mode,
+        status,
+        budgetTokens,
+        consumedTokens,
+        maxAgents,
+        maxRounds,
+        currentRound,
+        planJson,
+        resultJson,
+        error,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'collaboration_runs';
+  @override
+  VerificationContext validateIntegrity(Insertable<CollaborationRun> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(_taskIdMeta,
+          taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta));
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('mode')) {
+      context.handle(
+          _modeMeta, mode.isAcceptableOrUnknown(data['mode']!, _modeMeta));
+    } else if (isInserting) {
+      context.missing(_modeMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('budget_tokens')) {
+      context.handle(
+          _budgetTokensMeta,
+          budgetTokens.isAcceptableOrUnknown(
+              data['budget_tokens']!, _budgetTokensMeta));
+    }
+    if (data.containsKey('consumed_tokens')) {
+      context.handle(
+          _consumedTokensMeta,
+          consumedTokens.isAcceptableOrUnknown(
+              data['consumed_tokens']!, _consumedTokensMeta));
+    }
+    if (data.containsKey('max_agents')) {
+      context.handle(_maxAgentsMeta,
+          maxAgents.isAcceptableOrUnknown(data['max_agents']!, _maxAgentsMeta));
+    }
+    if (data.containsKey('max_rounds')) {
+      context.handle(_maxRoundsMeta,
+          maxRounds.isAcceptableOrUnknown(data['max_rounds']!, _maxRoundsMeta));
+    }
+    if (data.containsKey('current_round')) {
+      context.handle(
+          _currentRoundMeta,
+          currentRound.isAcceptableOrUnknown(
+              data['current_round']!, _currentRoundMeta));
+    }
+    if (data.containsKey('plan_json')) {
+      context.handle(_planJsonMeta,
+          planJson.isAcceptableOrUnknown(data['plan_json']!, _planJsonMeta));
+    }
+    if (data.containsKey('result_json')) {
+      context.handle(
+          _resultJsonMeta,
+          resultJson.isAcceptableOrUnknown(
+              data['result_json']!, _resultJsonMeta));
+    }
+    if (data.containsKey('error')) {
+      context.handle(
+          _errorMeta, error.isAcceptableOrUnknown(data['error']!, _errorMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CollaborationRun map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CollaborationRun(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      taskId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}task_id'])!,
+      mode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}mode'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      budgetTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}budget_tokens'])!,
+      consumedTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}consumed_tokens'])!,
+      maxAgents: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}max_agents'])!,
+      maxRounds: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}max_rounds'])!,
+      currentRound: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}current_round'])!,
+      planJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}plan_json'])!,
+      resultJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}result_json']),
+      error: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}error']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $CollaborationRunsTable createAlias(String alias) {
+    return $CollaborationRunsTable(attachedDatabase, alias);
+  }
+}
+
+class CollaborationRun extends DataClass
+    implements Insertable<CollaborationRun> {
+  final String id;
+  final String taskId;
+  final String mode;
+  final String status;
+  final int budgetTokens;
+  final int consumedTokens;
+  final int maxAgents;
+  final int maxRounds;
+  final int currentRound;
+  final String planJson;
+  final String? resultJson;
+  final String? error;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const CollaborationRun(
+      {required this.id,
+      required this.taskId,
+      required this.mode,
+      required this.status,
+      required this.budgetTokens,
+      required this.consumedTokens,
+      required this.maxAgents,
+      required this.maxRounds,
+      required this.currentRound,
+      required this.planJson,
+      this.resultJson,
+      this.error,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['task_id'] = Variable<String>(taskId);
+    map['mode'] = Variable<String>(mode);
+    map['status'] = Variable<String>(status);
+    map['budget_tokens'] = Variable<int>(budgetTokens);
+    map['consumed_tokens'] = Variable<int>(consumedTokens);
+    map['max_agents'] = Variable<int>(maxAgents);
+    map['max_rounds'] = Variable<int>(maxRounds);
+    map['current_round'] = Variable<int>(currentRound);
+    map['plan_json'] = Variable<String>(planJson);
+    if (!nullToAbsent || resultJson != null) {
+      map['result_json'] = Variable<String>(resultJson);
+    }
+    if (!nullToAbsent || error != null) {
+      map['error'] = Variable<String>(error);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CollaborationRunsCompanion toCompanion(bool nullToAbsent) {
+    return CollaborationRunsCompanion(
+      id: Value(id),
+      taskId: Value(taskId),
+      mode: Value(mode),
+      status: Value(status),
+      budgetTokens: Value(budgetTokens),
+      consumedTokens: Value(consumedTokens),
+      maxAgents: Value(maxAgents),
+      maxRounds: Value(maxRounds),
+      currentRound: Value(currentRound),
+      planJson: Value(planJson),
+      resultJson: resultJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resultJson),
+      error:
+          error == null && nullToAbsent ? const Value.absent() : Value(error),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CollaborationRun.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CollaborationRun(
+      id: serializer.fromJson<String>(json['id']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      mode: serializer.fromJson<String>(json['mode']),
+      status: serializer.fromJson<String>(json['status']),
+      budgetTokens: serializer.fromJson<int>(json['budgetTokens']),
+      consumedTokens: serializer.fromJson<int>(json['consumedTokens']),
+      maxAgents: serializer.fromJson<int>(json['maxAgents']),
+      maxRounds: serializer.fromJson<int>(json['maxRounds']),
+      currentRound: serializer.fromJson<int>(json['currentRound']),
+      planJson: serializer.fromJson<String>(json['planJson']),
+      resultJson: serializer.fromJson<String?>(json['resultJson']),
+      error: serializer.fromJson<String?>(json['error']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'taskId': serializer.toJson<String>(taskId),
+      'mode': serializer.toJson<String>(mode),
+      'status': serializer.toJson<String>(status),
+      'budgetTokens': serializer.toJson<int>(budgetTokens),
+      'consumedTokens': serializer.toJson<int>(consumedTokens),
+      'maxAgents': serializer.toJson<int>(maxAgents),
+      'maxRounds': serializer.toJson<int>(maxRounds),
+      'currentRound': serializer.toJson<int>(currentRound),
+      'planJson': serializer.toJson<String>(planJson),
+      'resultJson': serializer.toJson<String?>(resultJson),
+      'error': serializer.toJson<String?>(error),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CollaborationRun copyWith(
+          {String? id,
+          String? taskId,
+          String? mode,
+          String? status,
+          int? budgetTokens,
+          int? consumedTokens,
+          int? maxAgents,
+          int? maxRounds,
+          int? currentRound,
+          String? planJson,
+          Value<String?> resultJson = const Value.absent(),
+          Value<String?> error = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      CollaborationRun(
+        id: id ?? this.id,
+        taskId: taskId ?? this.taskId,
+        mode: mode ?? this.mode,
+        status: status ?? this.status,
+        budgetTokens: budgetTokens ?? this.budgetTokens,
+        consumedTokens: consumedTokens ?? this.consumedTokens,
+        maxAgents: maxAgents ?? this.maxAgents,
+        maxRounds: maxRounds ?? this.maxRounds,
+        currentRound: currentRound ?? this.currentRound,
+        planJson: planJson ?? this.planJson,
+        resultJson: resultJson.present ? resultJson.value : this.resultJson,
+        error: error.present ? error.value : this.error,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  CollaborationRun copyWithCompanion(CollaborationRunsCompanion data) {
+    return CollaborationRun(
+      id: data.id.present ? data.id.value : this.id,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      mode: data.mode.present ? data.mode.value : this.mode,
+      status: data.status.present ? data.status.value : this.status,
+      budgetTokens: data.budgetTokens.present
+          ? data.budgetTokens.value
+          : this.budgetTokens,
+      consumedTokens: data.consumedTokens.present
+          ? data.consumedTokens.value
+          : this.consumedTokens,
+      maxAgents: data.maxAgents.present ? data.maxAgents.value : this.maxAgents,
+      maxRounds: data.maxRounds.present ? data.maxRounds.value : this.maxRounds,
+      currentRound: data.currentRound.present
+          ? data.currentRound.value
+          : this.currentRound,
+      planJson: data.planJson.present ? data.planJson.value : this.planJson,
+      resultJson:
+          data.resultJson.present ? data.resultJson.value : this.resultJson,
+      error: data.error.present ? data.error.value : this.error,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationRun(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('mode: $mode, ')
+          ..write('status: $status, ')
+          ..write('budgetTokens: $budgetTokens, ')
+          ..write('consumedTokens: $consumedTokens, ')
+          ..write('maxAgents: $maxAgents, ')
+          ..write('maxRounds: $maxRounds, ')
+          ..write('currentRound: $currentRound, ')
+          ..write('planJson: $planJson, ')
+          ..write('resultJson: $resultJson, ')
+          ..write('error: $error, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      taskId,
+      mode,
+      status,
+      budgetTokens,
+      consumedTokens,
+      maxAgents,
+      maxRounds,
+      currentRound,
+      planJson,
+      resultJson,
+      error,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CollaborationRun &&
+          other.id == this.id &&
+          other.taskId == this.taskId &&
+          other.mode == this.mode &&
+          other.status == this.status &&
+          other.budgetTokens == this.budgetTokens &&
+          other.consumedTokens == this.consumedTokens &&
+          other.maxAgents == this.maxAgents &&
+          other.maxRounds == this.maxRounds &&
+          other.currentRound == this.currentRound &&
+          other.planJson == this.planJson &&
+          other.resultJson == this.resultJson &&
+          other.error == this.error &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CollaborationRunsCompanion extends UpdateCompanion<CollaborationRun> {
+  final Value<String> id;
+  final Value<String> taskId;
+  final Value<String> mode;
+  final Value<String> status;
+  final Value<int> budgetTokens;
+  final Value<int> consumedTokens;
+  final Value<int> maxAgents;
+  final Value<int> maxRounds;
+  final Value<int> currentRound;
+  final Value<String> planJson;
+  final Value<String?> resultJson;
+  final Value<String?> error;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CollaborationRunsCompanion({
+    this.id = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.mode = const Value.absent(),
+    this.status = const Value.absent(),
+    this.budgetTokens = const Value.absent(),
+    this.consumedTokens = const Value.absent(),
+    this.maxAgents = const Value.absent(),
+    this.maxRounds = const Value.absent(),
+    this.currentRound = const Value.absent(),
+    this.planJson = const Value.absent(),
+    this.resultJson = const Value.absent(),
+    this.error = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CollaborationRunsCompanion.insert({
+    required String id,
+    required String taskId,
+    required String mode,
+    required String status,
+    this.budgetTokens = const Value.absent(),
+    this.consumedTokens = const Value.absent(),
+    this.maxAgents = const Value.absent(),
+    this.maxRounds = const Value.absent(),
+    this.currentRound = const Value.absent(),
+    this.planJson = const Value.absent(),
+    this.resultJson = const Value.absent(),
+    this.error = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        taskId = Value(taskId),
+        mode = Value(mode),
+        status = Value(status),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<CollaborationRun> custom({
+    Expression<String>? id,
+    Expression<String>? taskId,
+    Expression<String>? mode,
+    Expression<String>? status,
+    Expression<int>? budgetTokens,
+    Expression<int>? consumedTokens,
+    Expression<int>? maxAgents,
+    Expression<int>? maxRounds,
+    Expression<int>? currentRound,
+    Expression<String>? planJson,
+    Expression<String>? resultJson,
+    Expression<String>? error,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (taskId != null) 'task_id': taskId,
+      if (mode != null) 'mode': mode,
+      if (status != null) 'status': status,
+      if (budgetTokens != null) 'budget_tokens': budgetTokens,
+      if (consumedTokens != null) 'consumed_tokens': consumedTokens,
+      if (maxAgents != null) 'max_agents': maxAgents,
+      if (maxRounds != null) 'max_rounds': maxRounds,
+      if (currentRound != null) 'current_round': currentRound,
+      if (planJson != null) 'plan_json': planJson,
+      if (resultJson != null) 'result_json': resultJson,
+      if (error != null) 'error': error,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CollaborationRunsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? taskId,
+      Value<String>? mode,
+      Value<String>? status,
+      Value<int>? budgetTokens,
+      Value<int>? consumedTokens,
+      Value<int>? maxAgents,
+      Value<int>? maxRounds,
+      Value<int>? currentRound,
+      Value<String>? planJson,
+      Value<String?>? resultJson,
+      Value<String?>? error,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return CollaborationRunsCompanion(
+      id: id ?? this.id,
+      taskId: taskId ?? this.taskId,
+      mode: mode ?? this.mode,
+      status: status ?? this.status,
+      budgetTokens: budgetTokens ?? this.budgetTokens,
+      consumedTokens: consumedTokens ?? this.consumedTokens,
+      maxAgents: maxAgents ?? this.maxAgents,
+      maxRounds: maxRounds ?? this.maxRounds,
+      currentRound: currentRound ?? this.currentRound,
+      planJson: planJson ?? this.planJson,
+      resultJson: resultJson ?? this.resultJson,
+      error: error ?? this.error,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (mode.present) {
+      map['mode'] = Variable<String>(mode.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (budgetTokens.present) {
+      map['budget_tokens'] = Variable<int>(budgetTokens.value);
+    }
+    if (consumedTokens.present) {
+      map['consumed_tokens'] = Variable<int>(consumedTokens.value);
+    }
+    if (maxAgents.present) {
+      map['max_agents'] = Variable<int>(maxAgents.value);
+    }
+    if (maxRounds.present) {
+      map['max_rounds'] = Variable<int>(maxRounds.value);
+    }
+    if (currentRound.present) {
+      map['current_round'] = Variable<int>(currentRound.value);
+    }
+    if (planJson.present) {
+      map['plan_json'] = Variable<String>(planJson.value);
+    }
+    if (resultJson.present) {
+      map['result_json'] = Variable<String>(resultJson.value);
+    }
+    if (error.present) {
+      map['error'] = Variable<String>(error.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationRunsCompanion(')
+          ..write('id: $id, ')
+          ..write('taskId: $taskId, ')
+          ..write('mode: $mode, ')
+          ..write('status: $status, ')
+          ..write('budgetTokens: $budgetTokens, ')
+          ..write('consumedTokens: $consumedTokens, ')
+          ..write('maxAgents: $maxAgents, ')
+          ..write('maxRounds: $maxRounds, ')
+          ..write('currentRound: $currentRound, ')
+          ..write('planJson: $planJson, ')
+          ..write('resultJson: $resultJson, ')
+          ..write('error: $error, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CollaborationAgentRunsTable extends CollaborationAgentRuns
+    with TableInfo<$CollaborationAgentRunsTable, CollaborationAgentRun> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CollaborationAgentRunsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _collaborationRunIdMeta =
+      const VerificationMeta('collaborationRunId');
+  @override
+  late final GeneratedColumn<String> collaborationRunId =
+      GeneratedColumn<String>('collaboration_run_id', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+      'role', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _agentProfileIdMeta =
+      const VerificationMeta('agentProfileId');
+  @override
+  late final GeneratedColumn<String> agentProfileId = GeneratedColumn<String>(
+      'agent_profile_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _roundMeta = const VerificationMeta('round');
+  @override
+  late final GeneratedColumn<int> round = GeneratedColumn<int>(
+      'round', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _contextManifestMeta =
+      const VerificationMeta('contextManifest');
+  @override
+  late final GeneratedColumn<String> contextManifest = GeneratedColumn<String>(
+      'context_manifest', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('[]'));
+  static const VerificationMeta _allowedToolsMeta =
+      const VerificationMeta('allowedTools');
+  @override
+  late final GeneratedColumn<String> allowedTools = GeneratedColumn<String>(
+      'allowed_tools', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('[]'));
+  static const VerificationMeta _inputDigestMeta =
+      const VerificationMeta('inputDigest');
+  @override
+  late final GeneratedColumn<String> inputDigest = GeneratedColumn<String>(
+      'input_digest', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _outputSummaryMeta =
+      const VerificationMeta('outputSummary');
+  @override
+  late final GeneratedColumn<String> outputSummary = GeneratedColumn<String>(
+      'output_summary', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _failureReasonMeta =
+      const VerificationMeta('failureReason');
+  @override
+  late final GeneratedColumn<String> failureReason = GeneratedColumn<String>(
+      'failure_reason', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _inputTokensMeta =
+      const VerificationMeta('inputTokens');
+  @override
+  late final GeneratedColumn<int> inputTokens = GeneratedColumn<int>(
+      'input_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _outputTokensMeta =
+      const VerificationMeta('outputTokens');
+  @override
+  late final GeneratedColumn<int> outputTokens = GeneratedColumn<int>(
+      'output_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _cachedTokensMeta =
+      const VerificationMeta('cachedTokens');
+  @override
+  late final GeneratedColumn<int> cachedTokens = GeneratedColumn<int>(
+      'cached_tokens', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _startedAtMeta =
+      const VerificationMeta('startedAt');
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+      'started_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _finishedAtMeta =
+      const VerificationMeta('finishedAt');
+  @override
+  late final GeneratedColumn<DateTime> finishedAt = GeneratedColumn<DateTime>(
+      'finished_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        collaborationRunId,
+        role,
+        agentProfileId,
+        status,
+        round,
+        contextManifest,
+        allowedTools,
+        inputDigest,
+        outputSummary,
+        failureReason,
+        inputTokens,
+        outputTokens,
+        cachedTokens,
+        startedAt,
+        finishedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'collaboration_agent_runs';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<CollaborationAgentRun> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('collaboration_run_id')) {
+      context.handle(
+          _collaborationRunIdMeta,
+          collaborationRunId.isAcceptableOrUnknown(
+              data['collaboration_run_id']!, _collaborationRunIdMeta));
+    } else if (isInserting) {
+      context.missing(_collaborationRunIdMeta);
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+          _roleMeta, role.isAcceptableOrUnknown(data['role']!, _roleMeta));
+    } else if (isInserting) {
+      context.missing(_roleMeta);
+    }
+    if (data.containsKey('agent_profile_id')) {
+      context.handle(
+          _agentProfileIdMeta,
+          agentProfileId.isAcceptableOrUnknown(
+              data['agent_profile_id']!, _agentProfileIdMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('round')) {
+      context.handle(
+          _roundMeta, round.isAcceptableOrUnknown(data['round']!, _roundMeta));
+    }
+    if (data.containsKey('context_manifest')) {
+      context.handle(
+          _contextManifestMeta,
+          contextManifest.isAcceptableOrUnknown(
+              data['context_manifest']!, _contextManifestMeta));
+    }
+    if (data.containsKey('allowed_tools')) {
+      context.handle(
+          _allowedToolsMeta,
+          allowedTools.isAcceptableOrUnknown(
+              data['allowed_tools']!, _allowedToolsMeta));
+    }
+    if (data.containsKey('input_digest')) {
+      context.handle(
+          _inputDigestMeta,
+          inputDigest.isAcceptableOrUnknown(
+              data['input_digest']!, _inputDigestMeta));
+    }
+    if (data.containsKey('output_summary')) {
+      context.handle(
+          _outputSummaryMeta,
+          outputSummary.isAcceptableOrUnknown(
+              data['output_summary']!, _outputSummaryMeta));
+    }
+    if (data.containsKey('failure_reason')) {
+      context.handle(
+          _failureReasonMeta,
+          failureReason.isAcceptableOrUnknown(
+              data['failure_reason']!, _failureReasonMeta));
+    }
+    if (data.containsKey('input_tokens')) {
+      context.handle(
+          _inputTokensMeta,
+          inputTokens.isAcceptableOrUnknown(
+              data['input_tokens']!, _inputTokensMeta));
+    }
+    if (data.containsKey('output_tokens')) {
+      context.handle(
+          _outputTokensMeta,
+          outputTokens.isAcceptableOrUnknown(
+              data['output_tokens']!, _outputTokensMeta));
+    }
+    if (data.containsKey('cached_tokens')) {
+      context.handle(
+          _cachedTokensMeta,
+          cachedTokens.isAcceptableOrUnknown(
+              data['cached_tokens']!, _cachedTokensMeta));
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(_startedAtMeta,
+          startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta));
+    }
+    if (data.containsKey('finished_at')) {
+      context.handle(
+          _finishedAtMeta,
+          finishedAt.isAcceptableOrUnknown(
+              data['finished_at']!, _finishedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CollaborationAgentRun map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CollaborationAgentRun(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      collaborationRunId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}collaboration_run_id'])!,
+      role: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}role'])!,
+      agentProfileId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}agent_profile_id']),
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      round: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}round'])!,
+      contextManifest: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}context_manifest'])!,
+      allowedTools: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}allowed_tools'])!,
+      inputDigest: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}input_digest'])!,
+      outputSummary: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}output_summary']),
+      failureReason: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}failure_reason']),
+      inputTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}input_tokens'])!,
+      outputTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}output_tokens'])!,
+      cachedTokens: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}cached_tokens'])!,
+      startedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}started_at']),
+      finishedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}finished_at']),
+    );
+  }
+
+  @override
+  $CollaborationAgentRunsTable createAlias(String alias) {
+    return $CollaborationAgentRunsTable(attachedDatabase, alias);
+  }
+}
+
+class CollaborationAgentRun extends DataClass
+    implements Insertable<CollaborationAgentRun> {
+  final String id;
+  final String collaborationRunId;
+  final String role;
+  final String? agentProfileId;
+  final String status;
+  final int round;
+  final String contextManifest;
+  final String allowedTools;
+  final String inputDigest;
+  final String? outputSummary;
+  final String? failureReason;
+  final int inputTokens;
+  final int outputTokens;
+  final int cachedTokens;
+  final DateTime? startedAt;
+  final DateTime? finishedAt;
+  const CollaborationAgentRun(
+      {required this.id,
+      required this.collaborationRunId,
+      required this.role,
+      this.agentProfileId,
+      required this.status,
+      required this.round,
+      required this.contextManifest,
+      required this.allowedTools,
+      required this.inputDigest,
+      this.outputSummary,
+      this.failureReason,
+      required this.inputTokens,
+      required this.outputTokens,
+      required this.cachedTokens,
+      this.startedAt,
+      this.finishedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['collaboration_run_id'] = Variable<String>(collaborationRunId);
+    map['role'] = Variable<String>(role);
+    if (!nullToAbsent || agentProfileId != null) {
+      map['agent_profile_id'] = Variable<String>(agentProfileId);
+    }
+    map['status'] = Variable<String>(status);
+    map['round'] = Variable<int>(round);
+    map['context_manifest'] = Variable<String>(contextManifest);
+    map['allowed_tools'] = Variable<String>(allowedTools);
+    map['input_digest'] = Variable<String>(inputDigest);
+    if (!nullToAbsent || outputSummary != null) {
+      map['output_summary'] = Variable<String>(outputSummary);
+    }
+    if (!nullToAbsent || failureReason != null) {
+      map['failure_reason'] = Variable<String>(failureReason);
+    }
+    map['input_tokens'] = Variable<int>(inputTokens);
+    map['output_tokens'] = Variable<int>(outputTokens);
+    map['cached_tokens'] = Variable<int>(cachedTokens);
+    if (!nullToAbsent || startedAt != null) {
+      map['started_at'] = Variable<DateTime>(startedAt);
+    }
+    if (!nullToAbsent || finishedAt != null) {
+      map['finished_at'] = Variable<DateTime>(finishedAt);
+    }
+    return map;
+  }
+
+  CollaborationAgentRunsCompanion toCompanion(bool nullToAbsent) {
+    return CollaborationAgentRunsCompanion(
+      id: Value(id),
+      collaborationRunId: Value(collaborationRunId),
+      role: Value(role),
+      agentProfileId: agentProfileId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(agentProfileId),
+      status: Value(status),
+      round: Value(round),
+      contextManifest: Value(contextManifest),
+      allowedTools: Value(allowedTools),
+      inputDigest: Value(inputDigest),
+      outputSummary: outputSummary == null && nullToAbsent
+          ? const Value.absent()
+          : Value(outputSummary),
+      failureReason: failureReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureReason),
+      inputTokens: Value(inputTokens),
+      outputTokens: Value(outputTokens),
+      cachedTokens: Value(cachedTokens),
+      startedAt: startedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startedAt),
+      finishedAt: finishedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finishedAt),
+    );
+  }
+
+  factory CollaborationAgentRun.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CollaborationAgentRun(
+      id: serializer.fromJson<String>(json['id']),
+      collaborationRunId:
+          serializer.fromJson<String>(json['collaborationRunId']),
+      role: serializer.fromJson<String>(json['role']),
+      agentProfileId: serializer.fromJson<String?>(json['agentProfileId']),
+      status: serializer.fromJson<String>(json['status']),
+      round: serializer.fromJson<int>(json['round']),
+      contextManifest: serializer.fromJson<String>(json['contextManifest']),
+      allowedTools: serializer.fromJson<String>(json['allowedTools']),
+      inputDigest: serializer.fromJson<String>(json['inputDigest']),
+      outputSummary: serializer.fromJson<String?>(json['outputSummary']),
+      failureReason: serializer.fromJson<String?>(json['failureReason']),
+      inputTokens: serializer.fromJson<int>(json['inputTokens']),
+      outputTokens: serializer.fromJson<int>(json['outputTokens']),
+      cachedTokens: serializer.fromJson<int>(json['cachedTokens']),
+      startedAt: serializer.fromJson<DateTime?>(json['startedAt']),
+      finishedAt: serializer.fromJson<DateTime?>(json['finishedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'collaborationRunId': serializer.toJson<String>(collaborationRunId),
+      'role': serializer.toJson<String>(role),
+      'agentProfileId': serializer.toJson<String?>(agentProfileId),
+      'status': serializer.toJson<String>(status),
+      'round': serializer.toJson<int>(round),
+      'contextManifest': serializer.toJson<String>(contextManifest),
+      'allowedTools': serializer.toJson<String>(allowedTools),
+      'inputDigest': serializer.toJson<String>(inputDigest),
+      'outputSummary': serializer.toJson<String?>(outputSummary),
+      'failureReason': serializer.toJson<String?>(failureReason),
+      'inputTokens': serializer.toJson<int>(inputTokens),
+      'outputTokens': serializer.toJson<int>(outputTokens),
+      'cachedTokens': serializer.toJson<int>(cachedTokens),
+      'startedAt': serializer.toJson<DateTime?>(startedAt),
+      'finishedAt': serializer.toJson<DateTime?>(finishedAt),
+    };
+  }
+
+  CollaborationAgentRun copyWith(
+          {String? id,
+          String? collaborationRunId,
+          String? role,
+          Value<String?> agentProfileId = const Value.absent(),
+          String? status,
+          int? round,
+          String? contextManifest,
+          String? allowedTools,
+          String? inputDigest,
+          Value<String?> outputSummary = const Value.absent(),
+          Value<String?> failureReason = const Value.absent(),
+          int? inputTokens,
+          int? outputTokens,
+          int? cachedTokens,
+          Value<DateTime?> startedAt = const Value.absent(),
+          Value<DateTime?> finishedAt = const Value.absent()}) =>
+      CollaborationAgentRun(
+        id: id ?? this.id,
+        collaborationRunId: collaborationRunId ?? this.collaborationRunId,
+        role: role ?? this.role,
+        agentProfileId:
+            agentProfileId.present ? agentProfileId.value : this.agentProfileId,
+        status: status ?? this.status,
+        round: round ?? this.round,
+        contextManifest: contextManifest ?? this.contextManifest,
+        allowedTools: allowedTools ?? this.allowedTools,
+        inputDigest: inputDigest ?? this.inputDigest,
+        outputSummary:
+            outputSummary.present ? outputSummary.value : this.outputSummary,
+        failureReason:
+            failureReason.present ? failureReason.value : this.failureReason,
+        inputTokens: inputTokens ?? this.inputTokens,
+        outputTokens: outputTokens ?? this.outputTokens,
+        cachedTokens: cachedTokens ?? this.cachedTokens,
+        startedAt: startedAt.present ? startedAt.value : this.startedAt,
+        finishedAt: finishedAt.present ? finishedAt.value : this.finishedAt,
+      );
+  CollaborationAgentRun copyWithCompanion(
+      CollaborationAgentRunsCompanion data) {
+    return CollaborationAgentRun(
+      id: data.id.present ? data.id.value : this.id,
+      collaborationRunId: data.collaborationRunId.present
+          ? data.collaborationRunId.value
+          : this.collaborationRunId,
+      role: data.role.present ? data.role.value : this.role,
+      agentProfileId: data.agentProfileId.present
+          ? data.agentProfileId.value
+          : this.agentProfileId,
+      status: data.status.present ? data.status.value : this.status,
+      round: data.round.present ? data.round.value : this.round,
+      contextManifest: data.contextManifest.present
+          ? data.contextManifest.value
+          : this.contextManifest,
+      allowedTools: data.allowedTools.present
+          ? data.allowedTools.value
+          : this.allowedTools,
+      inputDigest:
+          data.inputDigest.present ? data.inputDigest.value : this.inputDigest,
+      outputSummary: data.outputSummary.present
+          ? data.outputSummary.value
+          : this.outputSummary,
+      failureReason: data.failureReason.present
+          ? data.failureReason.value
+          : this.failureReason,
+      inputTokens:
+          data.inputTokens.present ? data.inputTokens.value : this.inputTokens,
+      outputTokens: data.outputTokens.present
+          ? data.outputTokens.value
+          : this.outputTokens,
+      cachedTokens: data.cachedTokens.present
+          ? data.cachedTokens.value
+          : this.cachedTokens,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      finishedAt:
+          data.finishedAt.present ? data.finishedAt.value : this.finishedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationAgentRun(')
+          ..write('id: $id, ')
+          ..write('collaborationRunId: $collaborationRunId, ')
+          ..write('role: $role, ')
+          ..write('agentProfileId: $agentProfileId, ')
+          ..write('status: $status, ')
+          ..write('round: $round, ')
+          ..write('contextManifest: $contextManifest, ')
+          ..write('allowedTools: $allowedTools, ')
+          ..write('inputDigest: $inputDigest, ')
+          ..write('outputSummary: $outputSummary, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('inputTokens: $inputTokens, ')
+          ..write('outputTokens: $outputTokens, ')
+          ..write('cachedTokens: $cachedTokens, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      collaborationRunId,
+      role,
+      agentProfileId,
+      status,
+      round,
+      contextManifest,
+      allowedTools,
+      inputDigest,
+      outputSummary,
+      failureReason,
+      inputTokens,
+      outputTokens,
+      cachedTokens,
+      startedAt,
+      finishedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CollaborationAgentRun &&
+          other.id == this.id &&
+          other.collaborationRunId == this.collaborationRunId &&
+          other.role == this.role &&
+          other.agentProfileId == this.agentProfileId &&
+          other.status == this.status &&
+          other.round == this.round &&
+          other.contextManifest == this.contextManifest &&
+          other.allowedTools == this.allowedTools &&
+          other.inputDigest == this.inputDigest &&
+          other.outputSummary == this.outputSummary &&
+          other.failureReason == this.failureReason &&
+          other.inputTokens == this.inputTokens &&
+          other.outputTokens == this.outputTokens &&
+          other.cachedTokens == this.cachedTokens &&
+          other.startedAt == this.startedAt &&
+          other.finishedAt == this.finishedAt);
+}
+
+class CollaborationAgentRunsCompanion
+    extends UpdateCompanion<CollaborationAgentRun> {
+  final Value<String> id;
+  final Value<String> collaborationRunId;
+  final Value<String> role;
+  final Value<String?> agentProfileId;
+  final Value<String> status;
+  final Value<int> round;
+  final Value<String> contextManifest;
+  final Value<String> allowedTools;
+  final Value<String> inputDigest;
+  final Value<String?> outputSummary;
+  final Value<String?> failureReason;
+  final Value<int> inputTokens;
+  final Value<int> outputTokens;
+  final Value<int> cachedTokens;
+  final Value<DateTime?> startedAt;
+  final Value<DateTime?> finishedAt;
+  final Value<int> rowid;
+  const CollaborationAgentRunsCompanion({
+    this.id = const Value.absent(),
+    this.collaborationRunId = const Value.absent(),
+    this.role = const Value.absent(),
+    this.agentProfileId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.round = const Value.absent(),
+    this.contextManifest = const Value.absent(),
+    this.allowedTools = const Value.absent(),
+    this.inputDigest = const Value.absent(),
+    this.outputSummary = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    this.inputTokens = const Value.absent(),
+    this.outputTokens = const Value.absent(),
+    this.cachedTokens = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.finishedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CollaborationAgentRunsCompanion.insert({
+    required String id,
+    required String collaborationRunId,
+    required String role,
+    this.agentProfileId = const Value.absent(),
+    required String status,
+    this.round = const Value.absent(),
+    this.contextManifest = const Value.absent(),
+    this.allowedTools = const Value.absent(),
+    this.inputDigest = const Value.absent(),
+    this.outputSummary = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    this.inputTokens = const Value.absent(),
+    this.outputTokens = const Value.absent(),
+    this.cachedTokens = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.finishedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        collaborationRunId = Value(collaborationRunId),
+        role = Value(role),
+        status = Value(status);
+  static Insertable<CollaborationAgentRun> custom({
+    Expression<String>? id,
+    Expression<String>? collaborationRunId,
+    Expression<String>? role,
+    Expression<String>? agentProfileId,
+    Expression<String>? status,
+    Expression<int>? round,
+    Expression<String>? contextManifest,
+    Expression<String>? allowedTools,
+    Expression<String>? inputDigest,
+    Expression<String>? outputSummary,
+    Expression<String>? failureReason,
+    Expression<int>? inputTokens,
+    Expression<int>? outputTokens,
+    Expression<int>? cachedTokens,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? finishedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (collaborationRunId != null)
+        'collaboration_run_id': collaborationRunId,
+      if (role != null) 'role': role,
+      if (agentProfileId != null) 'agent_profile_id': agentProfileId,
+      if (status != null) 'status': status,
+      if (round != null) 'round': round,
+      if (contextManifest != null) 'context_manifest': contextManifest,
+      if (allowedTools != null) 'allowed_tools': allowedTools,
+      if (inputDigest != null) 'input_digest': inputDigest,
+      if (outputSummary != null) 'output_summary': outputSummary,
+      if (failureReason != null) 'failure_reason': failureReason,
+      if (inputTokens != null) 'input_tokens': inputTokens,
+      if (outputTokens != null) 'output_tokens': outputTokens,
+      if (cachedTokens != null) 'cached_tokens': cachedTokens,
+      if (startedAt != null) 'started_at': startedAt,
+      if (finishedAt != null) 'finished_at': finishedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CollaborationAgentRunsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? collaborationRunId,
+      Value<String>? role,
+      Value<String?>? agentProfileId,
+      Value<String>? status,
+      Value<int>? round,
+      Value<String>? contextManifest,
+      Value<String>? allowedTools,
+      Value<String>? inputDigest,
+      Value<String?>? outputSummary,
+      Value<String?>? failureReason,
+      Value<int>? inputTokens,
+      Value<int>? outputTokens,
+      Value<int>? cachedTokens,
+      Value<DateTime?>? startedAt,
+      Value<DateTime?>? finishedAt,
+      Value<int>? rowid}) {
+    return CollaborationAgentRunsCompanion(
+      id: id ?? this.id,
+      collaborationRunId: collaborationRunId ?? this.collaborationRunId,
+      role: role ?? this.role,
+      agentProfileId: agentProfileId ?? this.agentProfileId,
+      status: status ?? this.status,
+      round: round ?? this.round,
+      contextManifest: contextManifest ?? this.contextManifest,
+      allowedTools: allowedTools ?? this.allowedTools,
+      inputDigest: inputDigest ?? this.inputDigest,
+      outputSummary: outputSummary ?? this.outputSummary,
+      failureReason: failureReason ?? this.failureReason,
+      inputTokens: inputTokens ?? this.inputTokens,
+      outputTokens: outputTokens ?? this.outputTokens,
+      cachedTokens: cachedTokens ?? this.cachedTokens,
+      startedAt: startedAt ?? this.startedAt,
+      finishedAt: finishedAt ?? this.finishedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (collaborationRunId.present) {
+      map['collaboration_run_id'] = Variable<String>(collaborationRunId.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (agentProfileId.present) {
+      map['agent_profile_id'] = Variable<String>(agentProfileId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (round.present) {
+      map['round'] = Variable<int>(round.value);
+    }
+    if (contextManifest.present) {
+      map['context_manifest'] = Variable<String>(contextManifest.value);
+    }
+    if (allowedTools.present) {
+      map['allowed_tools'] = Variable<String>(allowedTools.value);
+    }
+    if (inputDigest.present) {
+      map['input_digest'] = Variable<String>(inputDigest.value);
+    }
+    if (outputSummary.present) {
+      map['output_summary'] = Variable<String>(outputSummary.value);
+    }
+    if (failureReason.present) {
+      map['failure_reason'] = Variable<String>(failureReason.value);
+    }
+    if (inputTokens.present) {
+      map['input_tokens'] = Variable<int>(inputTokens.value);
+    }
+    if (outputTokens.present) {
+      map['output_tokens'] = Variable<int>(outputTokens.value);
+    }
+    if (cachedTokens.present) {
+      map['cached_tokens'] = Variable<int>(cachedTokens.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (finishedAt.present) {
+      map['finished_at'] = Variable<DateTime>(finishedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationAgentRunsCompanion(')
+          ..write('id: $id, ')
+          ..write('collaborationRunId: $collaborationRunId, ')
+          ..write('role: $role, ')
+          ..write('agentProfileId: $agentProfileId, ')
+          ..write('status: $status, ')
+          ..write('round: $round, ')
+          ..write('contextManifest: $contextManifest, ')
+          ..write('allowedTools: $allowedTools, ')
+          ..write('inputDigest: $inputDigest, ')
+          ..write('outputSummary: $outputSummary, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('inputTokens: $inputTokens, ')
+          ..write('outputTokens: $outputTokens, ')
+          ..write('cachedTokens: $cachedTokens, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CollaborationArtifactsTable extends CollaborationArtifacts
+    with TableInfo<$CollaborationArtifactsTable, CollaborationArtifact> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CollaborationArtifactsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _collaborationRunIdMeta =
+      const VerificationMeta('collaborationRunId');
+  @override
+  late final GeneratedColumn<String> collaborationRunId =
+      GeneratedColumn<String>('collaboration_run_id', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _producerAgentRunIdMeta =
+      const VerificationMeta('producerAgentRunId');
+  @override
+  late final GeneratedColumn<String> producerAgentRunId =
+      GeneratedColumn<String>('producer_agent_run_id', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+      'type', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _payloadJsonMeta =
+      const VerificationMeta('payloadJson');
+  @override
+  late final GeneratedColumn<String> payloadJson = GeneratedColumn<String>(
+      'payload_json', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _evidenceRefsMeta =
+      const VerificationMeta('evidenceRefs');
+  @override
+  late final GeneratedColumn<String> evidenceRefs = GeneratedColumn<String>(
+      'evidence_refs', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('[]'));
+  static const VerificationMeta _confidenceMeta =
+      const VerificationMeta('confidence');
+  @override
+  late final GeneratedColumn<double> confidence = GeneratedColumn<double>(
+      'confidence', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        collaborationRunId,
+        producerAgentRunId,
+        type,
+        payloadJson,
+        evidenceRefs,
+        confidence,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'collaboration_artifacts';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<CollaborationArtifact> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('collaboration_run_id')) {
+      context.handle(
+          _collaborationRunIdMeta,
+          collaborationRunId.isAcceptableOrUnknown(
+              data['collaboration_run_id']!, _collaborationRunIdMeta));
+    } else if (isInserting) {
+      context.missing(_collaborationRunIdMeta);
+    }
+    if (data.containsKey('producer_agent_run_id')) {
+      context.handle(
+          _producerAgentRunIdMeta,
+          producerAgentRunId.isAcceptableOrUnknown(
+              data['producer_agent_run_id']!, _producerAgentRunIdMeta));
+    } else if (isInserting) {
+      context.missing(_producerAgentRunIdMeta);
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+          _typeMeta, type.isAcceptableOrUnknown(data['type']!, _typeMeta));
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+          _payloadJsonMeta,
+          payloadJson.isAcceptableOrUnknown(
+              data['payload_json']!, _payloadJsonMeta));
+    } else if (isInserting) {
+      context.missing(_payloadJsonMeta);
+    }
+    if (data.containsKey('evidence_refs')) {
+      context.handle(
+          _evidenceRefsMeta,
+          evidenceRefs.isAcceptableOrUnknown(
+              data['evidence_refs']!, _evidenceRefsMeta));
+    }
+    if (data.containsKey('confidence')) {
+      context.handle(
+          _confidenceMeta,
+          confidence.isAcceptableOrUnknown(
+              data['confidence']!, _confidenceMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CollaborationArtifact map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CollaborationArtifact(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      collaborationRunId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}collaboration_run_id'])!,
+      producerAgentRunId: attachedDatabase.typeMapping.read(DriftSqlType.string,
+          data['${effectivePrefix}producer_agent_run_id'])!,
+      type: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
+      payloadJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}payload_json'])!,
+      evidenceRefs: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}evidence_refs'])!,
+      confidence: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}confidence']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $CollaborationArtifactsTable createAlias(String alias) {
+    return $CollaborationArtifactsTable(attachedDatabase, alias);
+  }
+}
+
+class CollaborationArtifact extends DataClass
+    implements Insertable<CollaborationArtifact> {
+  final String id;
+  final String collaborationRunId;
+  final String producerAgentRunId;
+  final String type;
+  final String payloadJson;
+  final String evidenceRefs;
+  final double? confidence;
+  final DateTime createdAt;
+  const CollaborationArtifact(
+      {required this.id,
+      required this.collaborationRunId,
+      required this.producerAgentRunId,
+      required this.type,
+      required this.payloadJson,
+      required this.evidenceRefs,
+      this.confidence,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['collaboration_run_id'] = Variable<String>(collaborationRunId);
+    map['producer_agent_run_id'] = Variable<String>(producerAgentRunId);
+    map['type'] = Variable<String>(type);
+    map['payload_json'] = Variable<String>(payloadJson);
+    map['evidence_refs'] = Variable<String>(evidenceRefs);
+    if (!nullToAbsent || confidence != null) {
+      map['confidence'] = Variable<double>(confidence);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CollaborationArtifactsCompanion toCompanion(bool nullToAbsent) {
+    return CollaborationArtifactsCompanion(
+      id: Value(id),
+      collaborationRunId: Value(collaborationRunId),
+      producerAgentRunId: Value(producerAgentRunId),
+      type: Value(type),
+      payloadJson: Value(payloadJson),
+      evidenceRefs: Value(evidenceRefs),
+      confidence: confidence == null && nullToAbsent
+          ? const Value.absent()
+          : Value(confidence),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CollaborationArtifact.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CollaborationArtifact(
+      id: serializer.fromJson<String>(json['id']),
+      collaborationRunId:
+          serializer.fromJson<String>(json['collaborationRunId']),
+      producerAgentRunId:
+          serializer.fromJson<String>(json['producerAgentRunId']),
+      type: serializer.fromJson<String>(json['type']),
+      payloadJson: serializer.fromJson<String>(json['payloadJson']),
+      evidenceRefs: serializer.fromJson<String>(json['evidenceRefs']),
+      confidence: serializer.fromJson<double?>(json['confidence']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'collaborationRunId': serializer.toJson<String>(collaborationRunId),
+      'producerAgentRunId': serializer.toJson<String>(producerAgentRunId),
+      'type': serializer.toJson<String>(type),
+      'payloadJson': serializer.toJson<String>(payloadJson),
+      'evidenceRefs': serializer.toJson<String>(evidenceRefs),
+      'confidence': serializer.toJson<double?>(confidence),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CollaborationArtifact copyWith(
+          {String? id,
+          String? collaborationRunId,
+          String? producerAgentRunId,
+          String? type,
+          String? payloadJson,
+          String? evidenceRefs,
+          Value<double?> confidence = const Value.absent(),
+          DateTime? createdAt}) =>
+      CollaborationArtifact(
+        id: id ?? this.id,
+        collaborationRunId: collaborationRunId ?? this.collaborationRunId,
+        producerAgentRunId: producerAgentRunId ?? this.producerAgentRunId,
+        type: type ?? this.type,
+        payloadJson: payloadJson ?? this.payloadJson,
+        evidenceRefs: evidenceRefs ?? this.evidenceRefs,
+        confidence: confidence.present ? confidence.value : this.confidence,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  CollaborationArtifact copyWithCompanion(
+      CollaborationArtifactsCompanion data) {
+    return CollaborationArtifact(
+      id: data.id.present ? data.id.value : this.id,
+      collaborationRunId: data.collaborationRunId.present
+          ? data.collaborationRunId.value
+          : this.collaborationRunId,
+      producerAgentRunId: data.producerAgentRunId.present
+          ? data.producerAgentRunId.value
+          : this.producerAgentRunId,
+      type: data.type.present ? data.type.value : this.type,
+      payloadJson:
+          data.payloadJson.present ? data.payloadJson.value : this.payloadJson,
+      evidenceRefs: data.evidenceRefs.present
+          ? data.evidenceRefs.value
+          : this.evidenceRefs,
+      confidence:
+          data.confidence.present ? data.confidence.value : this.confidence,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationArtifact(')
+          ..write('id: $id, ')
+          ..write('collaborationRunId: $collaborationRunId, ')
+          ..write('producerAgentRunId: $producerAgentRunId, ')
+          ..write('type: $type, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('evidenceRefs: $evidenceRefs, ')
+          ..write('confidence: $confidence, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, collaborationRunId, producerAgentRunId,
+      type, payloadJson, evidenceRefs, confidence, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CollaborationArtifact &&
+          other.id == this.id &&
+          other.collaborationRunId == this.collaborationRunId &&
+          other.producerAgentRunId == this.producerAgentRunId &&
+          other.type == this.type &&
+          other.payloadJson == this.payloadJson &&
+          other.evidenceRefs == this.evidenceRefs &&
+          other.confidence == this.confidence &&
+          other.createdAt == this.createdAt);
+}
+
+class CollaborationArtifactsCompanion
+    extends UpdateCompanion<CollaborationArtifact> {
+  final Value<String> id;
+  final Value<String> collaborationRunId;
+  final Value<String> producerAgentRunId;
+  final Value<String> type;
+  final Value<String> payloadJson;
+  final Value<String> evidenceRefs;
+  final Value<double?> confidence;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const CollaborationArtifactsCompanion({
+    this.id = const Value.absent(),
+    this.collaborationRunId = const Value.absent(),
+    this.producerAgentRunId = const Value.absent(),
+    this.type = const Value.absent(),
+    this.payloadJson = const Value.absent(),
+    this.evidenceRefs = const Value.absent(),
+    this.confidence = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CollaborationArtifactsCompanion.insert({
+    required String id,
+    required String collaborationRunId,
+    required String producerAgentRunId,
+    required String type,
+    required String payloadJson,
+    this.evidenceRefs = const Value.absent(),
+    this.confidence = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        collaborationRunId = Value(collaborationRunId),
+        producerAgentRunId = Value(producerAgentRunId),
+        type = Value(type),
+        payloadJson = Value(payloadJson),
+        createdAt = Value(createdAt);
+  static Insertable<CollaborationArtifact> custom({
+    Expression<String>? id,
+    Expression<String>? collaborationRunId,
+    Expression<String>? producerAgentRunId,
+    Expression<String>? type,
+    Expression<String>? payloadJson,
+    Expression<String>? evidenceRefs,
+    Expression<double>? confidence,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (collaborationRunId != null)
+        'collaboration_run_id': collaborationRunId,
+      if (producerAgentRunId != null)
+        'producer_agent_run_id': producerAgentRunId,
+      if (type != null) 'type': type,
+      if (payloadJson != null) 'payload_json': payloadJson,
+      if (evidenceRefs != null) 'evidence_refs': evidenceRefs,
+      if (confidence != null) 'confidence': confidence,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CollaborationArtifactsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? collaborationRunId,
+      Value<String>? producerAgentRunId,
+      Value<String>? type,
+      Value<String>? payloadJson,
+      Value<String>? evidenceRefs,
+      Value<double?>? confidence,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return CollaborationArtifactsCompanion(
+      id: id ?? this.id,
+      collaborationRunId: collaborationRunId ?? this.collaborationRunId,
+      producerAgentRunId: producerAgentRunId ?? this.producerAgentRunId,
+      type: type ?? this.type,
+      payloadJson: payloadJson ?? this.payloadJson,
+      evidenceRefs: evidenceRefs ?? this.evidenceRefs,
+      confidence: confidence ?? this.confidence,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (collaborationRunId.present) {
+      map['collaboration_run_id'] = Variable<String>(collaborationRunId.value);
+    }
+    if (producerAgentRunId.present) {
+      map['producer_agent_run_id'] = Variable<String>(producerAgentRunId.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (payloadJson.present) {
+      map['payload_json'] = Variable<String>(payloadJson.value);
+    }
+    if (evidenceRefs.present) {
+      map['evidence_refs'] = Variable<String>(evidenceRefs.value);
+    }
+    if (confidence.present) {
+      map['confidence'] = Variable<double>(confidence.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationArtifactsCompanion(')
+          ..write('id: $id, ')
+          ..write('collaborationRunId: $collaborationRunId, ')
+          ..write('producerAgentRunId: $producerAgentRunId, ')
+          ..write('type: $type, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('evidenceRefs: $evidenceRefs, ')
+          ..write('confidence: $confidence, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CollaborationMessagesTable extends CollaborationMessages
+    with TableInfo<$CollaborationMessagesTable, CollaborationMessage> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CollaborationMessagesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _collaborationRunIdMeta =
+      const VerificationMeta('collaborationRunId');
+  @override
+  late final GeneratedColumn<String> collaborationRunId =
+      GeneratedColumn<String>('collaboration_run_id', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _senderAgentRunIdMeta =
+      const VerificationMeta('senderAgentRunId');
+  @override
+  late final GeneratedColumn<String> senderAgentRunId = GeneratedColumn<String>(
+      'sender_agent_run_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _recipientRoleMeta =
+      const VerificationMeta('recipientRole');
+  @override
+  late final GeneratedColumn<String> recipientRole = GeneratedColumn<String>(
+      'recipient_role', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _roundMeta = const VerificationMeta('round');
+  @override
+  late final GeneratedColumn<int> round = GeneratedColumn<int>(
+      'round', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _contentDigestMeta =
+      const VerificationMeta('contentDigest');
+  @override
+  late final GeneratedColumn<String> contentDigest = GeneratedColumn<String>(
+      'content_digest', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _contentMeta =
+      const VerificationMeta('content');
+  @override
+  late final GeneratedColumn<String> content = GeneratedColumn<String>(
+      'content', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _artifactRefsMeta =
+      const VerificationMeta('artifactRefs');
+  @override
+  late final GeneratedColumn<String> artifactRefs = GeneratedColumn<String>(
+      'artifact_refs', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('[]'));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        collaborationRunId,
+        senderAgentRunId,
+        recipientRole,
+        round,
+        contentDigest,
+        content,
+        artifactRefs,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'collaboration_messages';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<CollaborationMessage> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('collaboration_run_id')) {
+      context.handle(
+          _collaborationRunIdMeta,
+          collaborationRunId.isAcceptableOrUnknown(
+              data['collaboration_run_id']!, _collaborationRunIdMeta));
+    } else if (isInserting) {
+      context.missing(_collaborationRunIdMeta);
+    }
+    if (data.containsKey('sender_agent_run_id')) {
+      context.handle(
+          _senderAgentRunIdMeta,
+          senderAgentRunId.isAcceptableOrUnknown(
+              data['sender_agent_run_id']!, _senderAgentRunIdMeta));
+    }
+    if (data.containsKey('recipient_role')) {
+      context.handle(
+          _recipientRoleMeta,
+          recipientRole.isAcceptableOrUnknown(
+              data['recipient_role']!, _recipientRoleMeta));
+    }
+    if (data.containsKey('round')) {
+      context.handle(
+          _roundMeta, round.isAcceptableOrUnknown(data['round']!, _roundMeta));
+    }
+    if (data.containsKey('content_digest')) {
+      context.handle(
+          _contentDigestMeta,
+          contentDigest.isAcceptableOrUnknown(
+              data['content_digest']!, _contentDigestMeta));
+    }
+    if (data.containsKey('content')) {
+      context.handle(_contentMeta,
+          content.isAcceptableOrUnknown(data['content']!, _contentMeta));
+    } else if (isInserting) {
+      context.missing(_contentMeta);
+    }
+    if (data.containsKey('artifact_refs')) {
+      context.handle(
+          _artifactRefsMeta,
+          artifactRefs.isAcceptableOrUnknown(
+              data['artifact_refs']!, _artifactRefsMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CollaborationMessage map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CollaborationMessage(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      collaborationRunId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}collaboration_run_id'])!,
+      senderAgentRunId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}sender_agent_run_id']),
+      recipientRole: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}recipient_role']),
+      round: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}round'])!,
+      contentDigest: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}content_digest'])!,
+      content: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}content'])!,
+      artifactRefs: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artifact_refs'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $CollaborationMessagesTable createAlias(String alias) {
+    return $CollaborationMessagesTable(attachedDatabase, alias);
+  }
+}
+
+class CollaborationMessage extends DataClass
+    implements Insertable<CollaborationMessage> {
+  final String id;
+  final String collaborationRunId;
+  final String? senderAgentRunId;
+  final String? recipientRole;
+  final int round;
+  final String contentDigest;
+  final String content;
+  final String artifactRefs;
+  final DateTime createdAt;
+  const CollaborationMessage(
+      {required this.id,
+      required this.collaborationRunId,
+      this.senderAgentRunId,
+      this.recipientRole,
+      required this.round,
+      required this.contentDigest,
+      required this.content,
+      required this.artifactRefs,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['collaboration_run_id'] = Variable<String>(collaborationRunId);
+    if (!nullToAbsent || senderAgentRunId != null) {
+      map['sender_agent_run_id'] = Variable<String>(senderAgentRunId);
+    }
+    if (!nullToAbsent || recipientRole != null) {
+      map['recipient_role'] = Variable<String>(recipientRole);
+    }
+    map['round'] = Variable<int>(round);
+    map['content_digest'] = Variable<String>(contentDigest);
+    map['content'] = Variable<String>(content);
+    map['artifact_refs'] = Variable<String>(artifactRefs);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CollaborationMessagesCompanion toCompanion(bool nullToAbsent) {
+    return CollaborationMessagesCompanion(
+      id: Value(id),
+      collaborationRunId: Value(collaborationRunId),
+      senderAgentRunId: senderAgentRunId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(senderAgentRunId),
+      recipientRole: recipientRole == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recipientRole),
+      round: Value(round),
+      contentDigest: Value(contentDigest),
+      content: Value(content),
+      artifactRefs: Value(artifactRefs),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CollaborationMessage.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CollaborationMessage(
+      id: serializer.fromJson<String>(json['id']),
+      collaborationRunId:
+          serializer.fromJson<String>(json['collaborationRunId']),
+      senderAgentRunId: serializer.fromJson<String?>(json['senderAgentRunId']),
+      recipientRole: serializer.fromJson<String?>(json['recipientRole']),
+      round: serializer.fromJson<int>(json['round']),
+      contentDigest: serializer.fromJson<String>(json['contentDigest']),
+      content: serializer.fromJson<String>(json['content']),
+      artifactRefs: serializer.fromJson<String>(json['artifactRefs']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'collaborationRunId': serializer.toJson<String>(collaborationRunId),
+      'senderAgentRunId': serializer.toJson<String?>(senderAgentRunId),
+      'recipientRole': serializer.toJson<String?>(recipientRole),
+      'round': serializer.toJson<int>(round),
+      'contentDigest': serializer.toJson<String>(contentDigest),
+      'content': serializer.toJson<String>(content),
+      'artifactRefs': serializer.toJson<String>(artifactRefs),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CollaborationMessage copyWith(
+          {String? id,
+          String? collaborationRunId,
+          Value<String?> senderAgentRunId = const Value.absent(),
+          Value<String?> recipientRole = const Value.absent(),
+          int? round,
+          String? contentDigest,
+          String? content,
+          String? artifactRefs,
+          DateTime? createdAt}) =>
+      CollaborationMessage(
+        id: id ?? this.id,
+        collaborationRunId: collaborationRunId ?? this.collaborationRunId,
+        senderAgentRunId: senderAgentRunId.present
+            ? senderAgentRunId.value
+            : this.senderAgentRunId,
+        recipientRole:
+            recipientRole.present ? recipientRole.value : this.recipientRole,
+        round: round ?? this.round,
+        contentDigest: contentDigest ?? this.contentDigest,
+        content: content ?? this.content,
+        artifactRefs: artifactRefs ?? this.artifactRefs,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  CollaborationMessage copyWithCompanion(CollaborationMessagesCompanion data) {
+    return CollaborationMessage(
+      id: data.id.present ? data.id.value : this.id,
+      collaborationRunId: data.collaborationRunId.present
+          ? data.collaborationRunId.value
+          : this.collaborationRunId,
+      senderAgentRunId: data.senderAgentRunId.present
+          ? data.senderAgentRunId.value
+          : this.senderAgentRunId,
+      recipientRole: data.recipientRole.present
+          ? data.recipientRole.value
+          : this.recipientRole,
+      round: data.round.present ? data.round.value : this.round,
+      contentDigest: data.contentDigest.present
+          ? data.contentDigest.value
+          : this.contentDigest,
+      content: data.content.present ? data.content.value : this.content,
+      artifactRefs: data.artifactRefs.present
+          ? data.artifactRefs.value
+          : this.artifactRefs,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationMessage(')
+          ..write('id: $id, ')
+          ..write('collaborationRunId: $collaborationRunId, ')
+          ..write('senderAgentRunId: $senderAgentRunId, ')
+          ..write('recipientRole: $recipientRole, ')
+          ..write('round: $round, ')
+          ..write('contentDigest: $contentDigest, ')
+          ..write('content: $content, ')
+          ..write('artifactRefs: $artifactRefs, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, collaborationRunId, senderAgentRunId,
+      recipientRole, round, contentDigest, content, artifactRefs, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CollaborationMessage &&
+          other.id == this.id &&
+          other.collaborationRunId == this.collaborationRunId &&
+          other.senderAgentRunId == this.senderAgentRunId &&
+          other.recipientRole == this.recipientRole &&
+          other.round == this.round &&
+          other.contentDigest == this.contentDigest &&
+          other.content == this.content &&
+          other.artifactRefs == this.artifactRefs &&
+          other.createdAt == this.createdAt);
+}
+
+class CollaborationMessagesCompanion
+    extends UpdateCompanion<CollaborationMessage> {
+  final Value<String> id;
+  final Value<String> collaborationRunId;
+  final Value<String?> senderAgentRunId;
+  final Value<String?> recipientRole;
+  final Value<int> round;
+  final Value<String> contentDigest;
+  final Value<String> content;
+  final Value<String> artifactRefs;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const CollaborationMessagesCompanion({
+    this.id = const Value.absent(),
+    this.collaborationRunId = const Value.absent(),
+    this.senderAgentRunId = const Value.absent(),
+    this.recipientRole = const Value.absent(),
+    this.round = const Value.absent(),
+    this.contentDigest = const Value.absent(),
+    this.content = const Value.absent(),
+    this.artifactRefs = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CollaborationMessagesCompanion.insert({
+    required String id,
+    required String collaborationRunId,
+    this.senderAgentRunId = const Value.absent(),
+    this.recipientRole = const Value.absent(),
+    this.round = const Value.absent(),
+    this.contentDigest = const Value.absent(),
+    required String content,
+    this.artifactRefs = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        collaborationRunId = Value(collaborationRunId),
+        content = Value(content),
+        createdAt = Value(createdAt);
+  static Insertable<CollaborationMessage> custom({
+    Expression<String>? id,
+    Expression<String>? collaborationRunId,
+    Expression<String>? senderAgentRunId,
+    Expression<String>? recipientRole,
+    Expression<int>? round,
+    Expression<String>? contentDigest,
+    Expression<String>? content,
+    Expression<String>? artifactRefs,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (collaborationRunId != null)
+        'collaboration_run_id': collaborationRunId,
+      if (senderAgentRunId != null) 'sender_agent_run_id': senderAgentRunId,
+      if (recipientRole != null) 'recipient_role': recipientRole,
+      if (round != null) 'round': round,
+      if (contentDigest != null) 'content_digest': contentDigest,
+      if (content != null) 'content': content,
+      if (artifactRefs != null) 'artifact_refs': artifactRefs,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CollaborationMessagesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? collaborationRunId,
+      Value<String?>? senderAgentRunId,
+      Value<String?>? recipientRole,
+      Value<int>? round,
+      Value<String>? contentDigest,
+      Value<String>? content,
+      Value<String>? artifactRefs,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return CollaborationMessagesCompanion(
+      id: id ?? this.id,
+      collaborationRunId: collaborationRunId ?? this.collaborationRunId,
+      senderAgentRunId: senderAgentRunId ?? this.senderAgentRunId,
+      recipientRole: recipientRole ?? this.recipientRole,
+      round: round ?? this.round,
+      contentDigest: contentDigest ?? this.contentDigest,
+      content: content ?? this.content,
+      artifactRefs: artifactRefs ?? this.artifactRefs,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (collaborationRunId.present) {
+      map['collaboration_run_id'] = Variable<String>(collaborationRunId.value);
+    }
+    if (senderAgentRunId.present) {
+      map['sender_agent_run_id'] = Variable<String>(senderAgentRunId.value);
+    }
+    if (recipientRole.present) {
+      map['recipient_role'] = Variable<String>(recipientRole.value);
+    }
+    if (round.present) {
+      map['round'] = Variable<int>(round.value);
+    }
+    if (contentDigest.present) {
+      map['content_digest'] = Variable<String>(contentDigest.value);
+    }
+    if (content.present) {
+      map['content'] = Variable<String>(content.value);
+    }
+    if (artifactRefs.present) {
+      map['artifact_refs'] = Variable<String>(artifactRefs.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CollaborationMessagesCompanion(')
+          ..write('id: $id, ')
+          ..write('collaborationRunId: $collaborationRunId, ')
+          ..write('senderAgentRunId: $senderAgentRunId, ')
+          ..write('recipientRole: $recipientRole, ')
+          ..write('round: $round, ')
+          ..write('contentDigest: $contentDigest, ')
+          ..write('content: $content, ')
+          ..write('artifactRefs: $artifactRefs, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8717,6 +11318,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $RunRecordsTable runRecords = $RunRecordsTable(this);
   late final $RunEventsTable runEvents = $RunEventsTable(this);
   late final $LogRecordsTable logRecords = $LogRecordsTable(this);
+  late final $CollaborationRunsTable collaborationRuns =
+      $CollaborationRunsTable(this);
+  late final $CollaborationAgentRunsTable collaborationAgentRuns =
+      $CollaborationAgentRunsTable(this);
+  late final $CollaborationArtifactsTable collaborationArtifacts =
+      $CollaborationArtifactsTable(this);
+  late final $CollaborationMessagesTable collaborationMessages =
+      $CollaborationMessagesTable(this);
   late final Index idxMessagesConversation = Index('idx_messages_conversation',
       'CREATE INDEX idx_messages_conversation ON messages (conversation_id)');
   late final Index idxRunEventsRunSequence = Index(
@@ -8728,6 +11337,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final Index idxLogRecordsLevelCreated = Index(
       'idx_log_records_level_created',
       'CREATE INDEX idx_log_records_level_created ON log_records (level, created_at)');
+  late final Index idxCollaborationRunsTaskUpdated = Index(
+      'idx_collaboration_runs_task_updated',
+      'CREATE INDEX idx_collaboration_runs_task_updated ON collaboration_runs (task_id, updated_at)');
+  late final Index idxCollaborationAgentRunsRunRound = Index(
+      'idx_collaboration_agent_runs_run_round',
+      'CREATE INDEX idx_collaboration_agent_runs_run_round ON collaboration_agent_runs (collaboration_run_id, round)');
+  late final Index idxCollaborationArtifactsRunCreated = Index(
+      'idx_collaboration_artifacts_run_created',
+      'CREATE INDEX idx_collaboration_artifacts_run_created ON collaboration_artifacts (collaboration_run_id, created_at)');
+  late final Index idxCollaborationMessagesRunRound = Index(
+      'idx_collaboration_messages_run_round',
+      'CREATE INDEX idx_collaboration_messages_run_round ON collaboration_messages (collaboration_run_id, round)');
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8752,10 +11373,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         runRecords,
         runEvents,
         logRecords,
+        collaborationRuns,
+        collaborationAgentRuns,
+        collaborationArtifacts,
+        collaborationMessages,
         idxMessagesConversation,
         idxRunEventsRunSequence,
         idxLogRecordsRunCreated,
-        idxLogRecordsLevelCreated
+        idxLogRecordsLevelCreated,
+        idxCollaborationRunsTaskUpdated,
+        idxCollaborationAgentRunsRunRound,
+        idxCollaborationArtifactsRunCreated,
+        idxCollaborationMessagesRunRound
       ];
 }
 
@@ -12183,6 +14812,10 @@ typedef $$RunRecordsTableCreateCompanionBuilder = RunRecordsCompanion Function({
   Value<int?> totalDurationMs,
   Value<int> retryCount,
   Value<int?> firstTokenDurationMs,
+  Value<int?> outputRateMilli,
+  Value<int?> maxStallDurationMs,
+  Value<int?> stallCount,
+  Value<int?> cancelDurationMs,
   Value<int> rowid,
 });
 typedef $$RunRecordsTableUpdateCompanionBuilder = RunRecordsCompanion Function({
@@ -12200,6 +14833,10 @@ typedef $$RunRecordsTableUpdateCompanionBuilder = RunRecordsCompanion Function({
   Value<int?> totalDurationMs,
   Value<int> retryCount,
   Value<int?> firstTokenDurationMs,
+  Value<int?> outputRateMilli,
+  Value<int?> maxStallDurationMs,
+  Value<int?> stallCount,
+  Value<int?> cancelDurationMs,
   Value<int> rowid,
 });
 
@@ -12256,6 +14893,21 @@ class $$RunRecordsTableFilterComposer
 
   ColumnFilters<int> get firstTokenDurationMs => $composableBuilder(
       column: $table.firstTokenDurationMs,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get outputRateMilli => $composableBuilder(
+      column: $table.outputRateMilli,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get maxStallDurationMs => $composableBuilder(
+      column: $table.maxStallDurationMs,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get stallCount => $composableBuilder(
+      column: $table.stallCount, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get cancelDurationMs => $composableBuilder(
+      column: $table.cancelDurationMs,
       builder: (column) => ColumnFilters(column));
 }
 
@@ -12315,6 +14967,21 @@ class $$RunRecordsTableOrderingComposer
   ColumnOrderings<int> get firstTokenDurationMs => $composableBuilder(
       column: $table.firstTokenDurationMs,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get outputRateMilli => $composableBuilder(
+      column: $table.outputRateMilli,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get maxStallDurationMs => $composableBuilder(
+      column: $table.maxStallDurationMs,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get stallCount => $composableBuilder(
+      column: $table.stallCount, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get cancelDurationMs => $composableBuilder(
+      column: $table.cancelDurationMs,
+      builder: (column) => ColumnOrderings(column));
 }
 
 class $$RunRecordsTableAnnotationComposer
@@ -12367,6 +15034,18 @@ class $$RunRecordsTableAnnotationComposer
 
   GeneratedColumn<int> get firstTokenDurationMs => $composableBuilder(
       column: $table.firstTokenDurationMs, builder: (column) => column);
+
+  GeneratedColumn<int> get outputRateMilli => $composableBuilder(
+      column: $table.outputRateMilli, builder: (column) => column);
+
+  GeneratedColumn<int> get maxStallDurationMs => $composableBuilder(
+      column: $table.maxStallDurationMs, builder: (column) => column);
+
+  GeneratedColumn<int> get stallCount => $composableBuilder(
+      column: $table.stallCount, builder: (column) => column);
+
+  GeneratedColumn<int> get cancelDurationMs => $composableBuilder(
+      column: $table.cancelDurationMs, builder: (column) => column);
 }
 
 class $$RunRecordsTableTableManager extends RootTableManager<
@@ -12406,6 +15085,10 @@ class $$RunRecordsTableTableManager extends RootTableManager<
             Value<int?> totalDurationMs = const Value.absent(),
             Value<int> retryCount = const Value.absent(),
             Value<int?> firstTokenDurationMs = const Value.absent(),
+            Value<int?> outputRateMilli = const Value.absent(),
+            Value<int?> maxStallDurationMs = const Value.absent(),
+            Value<int?> stallCount = const Value.absent(),
+            Value<int?> cancelDurationMs = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               RunRecordsCompanion(
@@ -12423,6 +15106,10 @@ class $$RunRecordsTableTableManager extends RootTableManager<
             totalDurationMs: totalDurationMs,
             retryCount: retryCount,
             firstTokenDurationMs: firstTokenDurationMs,
+            outputRateMilli: outputRateMilli,
+            maxStallDurationMs: maxStallDurationMs,
+            stallCount: stallCount,
+            cancelDurationMs: cancelDurationMs,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -12440,6 +15127,10 @@ class $$RunRecordsTableTableManager extends RootTableManager<
             Value<int?> totalDurationMs = const Value.absent(),
             Value<int> retryCount = const Value.absent(),
             Value<int?> firstTokenDurationMs = const Value.absent(),
+            Value<int?> outputRateMilli = const Value.absent(),
+            Value<int?> maxStallDurationMs = const Value.absent(),
+            Value<int?> stallCount = const Value.absent(),
+            Value<int?> cancelDurationMs = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               RunRecordsCompanion.insert(
@@ -12457,6 +15148,10 @@ class $$RunRecordsTableTableManager extends RootTableManager<
             totalDurationMs: totalDurationMs,
             retryCount: retryCount,
             firstTokenDurationMs: firstTokenDurationMs,
+            outputRateMilli: outputRateMilli,
+            maxStallDurationMs: maxStallDurationMs,
+            stallCount: stallCount,
+            cancelDurationMs: cancelDurationMs,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
@@ -13006,6 +15701,1153 @@ typedef $$LogRecordsTableProcessedTableManager = ProcessedTableManager<
     (LogRecord, BaseReferences<_$AppDatabase, $LogRecordsTable, LogRecord>),
     LogRecord,
     PrefetchHooks Function()>;
+typedef $$CollaborationRunsTableCreateCompanionBuilder
+    = CollaborationRunsCompanion Function({
+  required String id,
+  required String taskId,
+  required String mode,
+  required String status,
+  Value<int> budgetTokens,
+  Value<int> consumedTokens,
+  Value<int> maxAgents,
+  Value<int> maxRounds,
+  Value<int> currentRound,
+  Value<String> planJson,
+  Value<String?> resultJson,
+  Value<String?> error,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$CollaborationRunsTableUpdateCompanionBuilder
+    = CollaborationRunsCompanion Function({
+  Value<String> id,
+  Value<String> taskId,
+  Value<String> mode,
+  Value<String> status,
+  Value<int> budgetTokens,
+  Value<int> consumedTokens,
+  Value<int> maxAgents,
+  Value<int> maxRounds,
+  Value<int> currentRound,
+  Value<String> planJson,
+  Value<String?> resultJson,
+  Value<String?> error,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$CollaborationRunsTableFilterComposer
+    extends Composer<_$AppDatabase, $CollaborationRunsTable> {
+  $$CollaborationRunsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get budgetTokens => $composableBuilder(
+      column: $table.budgetTokens, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get consumedTokens => $composableBuilder(
+      column: $table.consumedTokens,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get maxAgents => $composableBuilder(
+      column: $table.maxAgents, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get maxRounds => $composableBuilder(
+      column: $table.maxRounds, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get currentRound => $composableBuilder(
+      column: $table.currentRound, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get planJson => $composableBuilder(
+      column: $table.planJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get resultJson => $composableBuilder(
+      column: $table.resultJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get error => $composableBuilder(
+      column: $table.error, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$CollaborationRunsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CollaborationRunsTable> {
+  $$CollaborationRunsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get budgetTokens => $composableBuilder(
+      column: $table.budgetTokens,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get consumedTokens => $composableBuilder(
+      column: $table.consumedTokens,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get maxAgents => $composableBuilder(
+      column: $table.maxAgents, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get maxRounds => $composableBuilder(
+      column: $table.maxRounds, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get currentRound => $composableBuilder(
+      column: $table.currentRound,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get planJson => $composableBuilder(
+      column: $table.planJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get resultJson => $composableBuilder(
+      column: $table.resultJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get error => $composableBuilder(
+      column: $table.error, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$CollaborationRunsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CollaborationRunsTable> {
+  $$CollaborationRunsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<String> get mode =>
+      $composableBuilder(column: $table.mode, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get budgetTokens => $composableBuilder(
+      column: $table.budgetTokens, builder: (column) => column);
+
+  GeneratedColumn<int> get consumedTokens => $composableBuilder(
+      column: $table.consumedTokens, builder: (column) => column);
+
+  GeneratedColumn<int> get maxAgents =>
+      $composableBuilder(column: $table.maxAgents, builder: (column) => column);
+
+  GeneratedColumn<int> get maxRounds =>
+      $composableBuilder(column: $table.maxRounds, builder: (column) => column);
+
+  GeneratedColumn<int> get currentRound => $composableBuilder(
+      column: $table.currentRound, builder: (column) => column);
+
+  GeneratedColumn<String> get planJson =>
+      $composableBuilder(column: $table.planJson, builder: (column) => column);
+
+  GeneratedColumn<String> get resultJson => $composableBuilder(
+      column: $table.resultJson, builder: (column) => column);
+
+  GeneratedColumn<String> get error =>
+      $composableBuilder(column: $table.error, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CollaborationRunsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $CollaborationRunsTable,
+    CollaborationRun,
+    $$CollaborationRunsTableFilterComposer,
+    $$CollaborationRunsTableOrderingComposer,
+    $$CollaborationRunsTableAnnotationComposer,
+    $$CollaborationRunsTableCreateCompanionBuilder,
+    $$CollaborationRunsTableUpdateCompanionBuilder,
+    (
+      CollaborationRun,
+      BaseReferences<_$AppDatabase, $CollaborationRunsTable, CollaborationRun>
+    ),
+    CollaborationRun,
+    PrefetchHooks Function()> {
+  $$CollaborationRunsTableTableManager(
+      _$AppDatabase db, $CollaborationRunsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CollaborationRunsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CollaborationRunsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CollaborationRunsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> taskId = const Value.absent(),
+            Value<String> mode = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<int> budgetTokens = const Value.absent(),
+            Value<int> consumedTokens = const Value.absent(),
+            Value<int> maxAgents = const Value.absent(),
+            Value<int> maxRounds = const Value.absent(),
+            Value<int> currentRound = const Value.absent(),
+            Value<String> planJson = const Value.absent(),
+            Value<String?> resultJson = const Value.absent(),
+            Value<String?> error = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationRunsCompanion(
+            id: id,
+            taskId: taskId,
+            mode: mode,
+            status: status,
+            budgetTokens: budgetTokens,
+            consumedTokens: consumedTokens,
+            maxAgents: maxAgents,
+            maxRounds: maxRounds,
+            currentRound: currentRound,
+            planJson: planJson,
+            resultJson: resultJson,
+            error: error,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String taskId,
+            required String mode,
+            required String status,
+            Value<int> budgetTokens = const Value.absent(),
+            Value<int> consumedTokens = const Value.absent(),
+            Value<int> maxAgents = const Value.absent(),
+            Value<int> maxRounds = const Value.absent(),
+            Value<int> currentRound = const Value.absent(),
+            Value<String> planJson = const Value.absent(),
+            Value<String?> resultJson = const Value.absent(),
+            Value<String?> error = const Value.absent(),
+            required DateTime createdAt,
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationRunsCompanion.insert(
+            id: id,
+            taskId: taskId,
+            mode: mode,
+            status: status,
+            budgetTokens: budgetTokens,
+            consumedTokens: consumedTokens,
+            maxAgents: maxAgents,
+            maxRounds: maxRounds,
+            currentRound: currentRound,
+            planJson: planJson,
+            resultJson: resultJson,
+            error: error,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CollaborationRunsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $CollaborationRunsTable,
+    CollaborationRun,
+    $$CollaborationRunsTableFilterComposer,
+    $$CollaborationRunsTableOrderingComposer,
+    $$CollaborationRunsTableAnnotationComposer,
+    $$CollaborationRunsTableCreateCompanionBuilder,
+    $$CollaborationRunsTableUpdateCompanionBuilder,
+    (
+      CollaborationRun,
+      BaseReferences<_$AppDatabase, $CollaborationRunsTable, CollaborationRun>
+    ),
+    CollaborationRun,
+    PrefetchHooks Function()>;
+typedef $$CollaborationAgentRunsTableCreateCompanionBuilder
+    = CollaborationAgentRunsCompanion Function({
+  required String id,
+  required String collaborationRunId,
+  required String role,
+  Value<String?> agentProfileId,
+  required String status,
+  Value<int> round,
+  Value<String> contextManifest,
+  Value<String> allowedTools,
+  Value<String> inputDigest,
+  Value<String?> outputSummary,
+  Value<String?> failureReason,
+  Value<int> inputTokens,
+  Value<int> outputTokens,
+  Value<int> cachedTokens,
+  Value<DateTime?> startedAt,
+  Value<DateTime?> finishedAt,
+  Value<int> rowid,
+});
+typedef $$CollaborationAgentRunsTableUpdateCompanionBuilder
+    = CollaborationAgentRunsCompanion Function({
+  Value<String> id,
+  Value<String> collaborationRunId,
+  Value<String> role,
+  Value<String?> agentProfileId,
+  Value<String> status,
+  Value<int> round,
+  Value<String> contextManifest,
+  Value<String> allowedTools,
+  Value<String> inputDigest,
+  Value<String?> outputSummary,
+  Value<String?> failureReason,
+  Value<int> inputTokens,
+  Value<int> outputTokens,
+  Value<int> cachedTokens,
+  Value<DateTime?> startedAt,
+  Value<DateTime?> finishedAt,
+  Value<int> rowid,
+});
+
+class $$CollaborationAgentRunsTableFilterComposer
+    extends Composer<_$AppDatabase, $CollaborationAgentRunsTable> {
+  $$CollaborationAgentRunsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get role => $composableBuilder(
+      column: $table.role, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get agentProfileId => $composableBuilder(
+      column: $table.agentProfileId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get round => $composableBuilder(
+      column: $table.round, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get contextManifest => $composableBuilder(
+      column: $table.contextManifest,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get allowedTools => $composableBuilder(
+      column: $table.allowedTools, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get inputDigest => $composableBuilder(
+      column: $table.inputDigest, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get outputSummary => $composableBuilder(
+      column: $table.outputSummary, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get failureReason => $composableBuilder(
+      column: $table.failureReason, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get inputTokens => $composableBuilder(
+      column: $table.inputTokens, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get outputTokens => $composableBuilder(
+      column: $table.outputTokens, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get cachedTokens => $composableBuilder(
+      column: $table.cachedTokens, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get finishedAt => $composableBuilder(
+      column: $table.finishedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$CollaborationAgentRunsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CollaborationAgentRunsTable> {
+  $$CollaborationAgentRunsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get role => $composableBuilder(
+      column: $table.role, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get agentProfileId => $composableBuilder(
+      column: $table.agentProfileId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get round => $composableBuilder(
+      column: $table.round, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get contextManifest => $composableBuilder(
+      column: $table.contextManifest,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get allowedTools => $composableBuilder(
+      column: $table.allowedTools,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get inputDigest => $composableBuilder(
+      column: $table.inputDigest, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get outputSummary => $composableBuilder(
+      column: $table.outputSummary,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get failureReason => $composableBuilder(
+      column: $table.failureReason,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get inputTokens => $composableBuilder(
+      column: $table.inputTokens, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get outputTokens => $composableBuilder(
+      column: $table.outputTokens,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get cachedTokens => $composableBuilder(
+      column: $table.cachedTokens,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+      column: $table.startedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get finishedAt => $composableBuilder(
+      column: $table.finishedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$CollaborationAgentRunsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CollaborationAgentRunsTable> {
+  $$CollaborationAgentRunsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId, builder: (column) => column);
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<String> get agentProfileId => $composableBuilder(
+      column: $table.agentProfileId, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get round =>
+      $composableBuilder(column: $table.round, builder: (column) => column);
+
+  GeneratedColumn<String> get contextManifest => $composableBuilder(
+      column: $table.contextManifest, builder: (column) => column);
+
+  GeneratedColumn<String> get allowedTools => $composableBuilder(
+      column: $table.allowedTools, builder: (column) => column);
+
+  GeneratedColumn<String> get inputDigest => $composableBuilder(
+      column: $table.inputDigest, builder: (column) => column);
+
+  GeneratedColumn<String> get outputSummary => $composableBuilder(
+      column: $table.outputSummary, builder: (column) => column);
+
+  GeneratedColumn<String> get failureReason => $composableBuilder(
+      column: $table.failureReason, builder: (column) => column);
+
+  GeneratedColumn<int> get inputTokens => $composableBuilder(
+      column: $table.inputTokens, builder: (column) => column);
+
+  GeneratedColumn<int> get outputTokens => $composableBuilder(
+      column: $table.outputTokens, builder: (column) => column);
+
+  GeneratedColumn<int> get cachedTokens => $composableBuilder(
+      column: $table.cachedTokens, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get finishedAt => $composableBuilder(
+      column: $table.finishedAt, builder: (column) => column);
+}
+
+class $$CollaborationAgentRunsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $CollaborationAgentRunsTable,
+    CollaborationAgentRun,
+    $$CollaborationAgentRunsTableFilterComposer,
+    $$CollaborationAgentRunsTableOrderingComposer,
+    $$CollaborationAgentRunsTableAnnotationComposer,
+    $$CollaborationAgentRunsTableCreateCompanionBuilder,
+    $$CollaborationAgentRunsTableUpdateCompanionBuilder,
+    (
+      CollaborationAgentRun,
+      BaseReferences<_$AppDatabase, $CollaborationAgentRunsTable,
+          CollaborationAgentRun>
+    ),
+    CollaborationAgentRun,
+    PrefetchHooks Function()> {
+  $$CollaborationAgentRunsTableTableManager(
+      _$AppDatabase db, $CollaborationAgentRunsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CollaborationAgentRunsTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CollaborationAgentRunsTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CollaborationAgentRunsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> collaborationRunId = const Value.absent(),
+            Value<String> role = const Value.absent(),
+            Value<String?> agentProfileId = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<int> round = const Value.absent(),
+            Value<String> contextManifest = const Value.absent(),
+            Value<String> allowedTools = const Value.absent(),
+            Value<String> inputDigest = const Value.absent(),
+            Value<String?> outputSummary = const Value.absent(),
+            Value<String?> failureReason = const Value.absent(),
+            Value<int> inputTokens = const Value.absent(),
+            Value<int> outputTokens = const Value.absent(),
+            Value<int> cachedTokens = const Value.absent(),
+            Value<DateTime?> startedAt = const Value.absent(),
+            Value<DateTime?> finishedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationAgentRunsCompanion(
+            id: id,
+            collaborationRunId: collaborationRunId,
+            role: role,
+            agentProfileId: agentProfileId,
+            status: status,
+            round: round,
+            contextManifest: contextManifest,
+            allowedTools: allowedTools,
+            inputDigest: inputDigest,
+            outputSummary: outputSummary,
+            failureReason: failureReason,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cachedTokens: cachedTokens,
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String collaborationRunId,
+            required String role,
+            Value<String?> agentProfileId = const Value.absent(),
+            required String status,
+            Value<int> round = const Value.absent(),
+            Value<String> contextManifest = const Value.absent(),
+            Value<String> allowedTools = const Value.absent(),
+            Value<String> inputDigest = const Value.absent(),
+            Value<String?> outputSummary = const Value.absent(),
+            Value<String?> failureReason = const Value.absent(),
+            Value<int> inputTokens = const Value.absent(),
+            Value<int> outputTokens = const Value.absent(),
+            Value<int> cachedTokens = const Value.absent(),
+            Value<DateTime?> startedAt = const Value.absent(),
+            Value<DateTime?> finishedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationAgentRunsCompanion.insert(
+            id: id,
+            collaborationRunId: collaborationRunId,
+            role: role,
+            agentProfileId: agentProfileId,
+            status: status,
+            round: round,
+            contextManifest: contextManifest,
+            allowedTools: allowedTools,
+            inputDigest: inputDigest,
+            outputSummary: outputSummary,
+            failureReason: failureReason,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            cachedTokens: cachedTokens,
+            startedAt: startedAt,
+            finishedAt: finishedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CollaborationAgentRunsTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $CollaborationAgentRunsTable,
+        CollaborationAgentRun,
+        $$CollaborationAgentRunsTableFilterComposer,
+        $$CollaborationAgentRunsTableOrderingComposer,
+        $$CollaborationAgentRunsTableAnnotationComposer,
+        $$CollaborationAgentRunsTableCreateCompanionBuilder,
+        $$CollaborationAgentRunsTableUpdateCompanionBuilder,
+        (
+          CollaborationAgentRun,
+          BaseReferences<_$AppDatabase, $CollaborationAgentRunsTable,
+              CollaborationAgentRun>
+        ),
+        CollaborationAgentRun,
+        PrefetchHooks Function()>;
+typedef $$CollaborationArtifactsTableCreateCompanionBuilder
+    = CollaborationArtifactsCompanion Function({
+  required String id,
+  required String collaborationRunId,
+  required String producerAgentRunId,
+  required String type,
+  required String payloadJson,
+  Value<String> evidenceRefs,
+  Value<double?> confidence,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$CollaborationArtifactsTableUpdateCompanionBuilder
+    = CollaborationArtifactsCompanion Function({
+  Value<String> id,
+  Value<String> collaborationRunId,
+  Value<String> producerAgentRunId,
+  Value<String> type,
+  Value<String> payloadJson,
+  Value<String> evidenceRefs,
+  Value<double?> confidence,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$CollaborationArtifactsTableFilterComposer
+    extends Composer<_$AppDatabase, $CollaborationArtifactsTable> {
+  $$CollaborationArtifactsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get producerAgentRunId => $composableBuilder(
+      column: $table.producerAgentRunId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get type => $composableBuilder(
+      column: $table.type, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get evidenceRefs => $composableBuilder(
+      column: $table.evidenceRefs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get confidence => $composableBuilder(
+      column: $table.confidence, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$CollaborationArtifactsTableOrderingComposer
+    extends Composer<_$AppDatabase, $CollaborationArtifactsTable> {
+  $$CollaborationArtifactsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get producerAgentRunId => $composableBuilder(
+      column: $table.producerAgentRunId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get type => $composableBuilder(
+      column: $table.type, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get evidenceRefs => $composableBuilder(
+      column: $table.evidenceRefs,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get confidence => $composableBuilder(
+      column: $table.confidence, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$CollaborationArtifactsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CollaborationArtifactsTable> {
+  $$CollaborationArtifactsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId, builder: (column) => column);
+
+  GeneratedColumn<String> get producerAgentRunId => $composableBuilder(
+      column: $table.producerAgentRunId, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => column);
+
+  GeneratedColumn<String> get evidenceRefs => $composableBuilder(
+      column: $table.evidenceRefs, builder: (column) => column);
+
+  GeneratedColumn<double> get confidence => $composableBuilder(
+      column: $table.confidence, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CollaborationArtifactsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $CollaborationArtifactsTable,
+    CollaborationArtifact,
+    $$CollaborationArtifactsTableFilterComposer,
+    $$CollaborationArtifactsTableOrderingComposer,
+    $$CollaborationArtifactsTableAnnotationComposer,
+    $$CollaborationArtifactsTableCreateCompanionBuilder,
+    $$CollaborationArtifactsTableUpdateCompanionBuilder,
+    (
+      CollaborationArtifact,
+      BaseReferences<_$AppDatabase, $CollaborationArtifactsTable,
+          CollaborationArtifact>
+    ),
+    CollaborationArtifact,
+    PrefetchHooks Function()> {
+  $$CollaborationArtifactsTableTableManager(
+      _$AppDatabase db, $CollaborationArtifactsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CollaborationArtifactsTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CollaborationArtifactsTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CollaborationArtifactsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> collaborationRunId = const Value.absent(),
+            Value<String> producerAgentRunId = const Value.absent(),
+            Value<String> type = const Value.absent(),
+            Value<String> payloadJson = const Value.absent(),
+            Value<String> evidenceRefs = const Value.absent(),
+            Value<double?> confidence = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationArtifactsCompanion(
+            id: id,
+            collaborationRunId: collaborationRunId,
+            producerAgentRunId: producerAgentRunId,
+            type: type,
+            payloadJson: payloadJson,
+            evidenceRefs: evidenceRefs,
+            confidence: confidence,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String collaborationRunId,
+            required String producerAgentRunId,
+            required String type,
+            required String payloadJson,
+            Value<String> evidenceRefs = const Value.absent(),
+            Value<double?> confidence = const Value.absent(),
+            required DateTime createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationArtifactsCompanion.insert(
+            id: id,
+            collaborationRunId: collaborationRunId,
+            producerAgentRunId: producerAgentRunId,
+            type: type,
+            payloadJson: payloadJson,
+            evidenceRefs: evidenceRefs,
+            confidence: confidence,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CollaborationArtifactsTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $CollaborationArtifactsTable,
+        CollaborationArtifact,
+        $$CollaborationArtifactsTableFilterComposer,
+        $$CollaborationArtifactsTableOrderingComposer,
+        $$CollaborationArtifactsTableAnnotationComposer,
+        $$CollaborationArtifactsTableCreateCompanionBuilder,
+        $$CollaborationArtifactsTableUpdateCompanionBuilder,
+        (
+          CollaborationArtifact,
+          BaseReferences<_$AppDatabase, $CollaborationArtifactsTable,
+              CollaborationArtifact>
+        ),
+        CollaborationArtifact,
+        PrefetchHooks Function()>;
+typedef $$CollaborationMessagesTableCreateCompanionBuilder
+    = CollaborationMessagesCompanion Function({
+  required String id,
+  required String collaborationRunId,
+  Value<String?> senderAgentRunId,
+  Value<String?> recipientRole,
+  Value<int> round,
+  Value<String> contentDigest,
+  required String content,
+  Value<String> artifactRefs,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$CollaborationMessagesTableUpdateCompanionBuilder
+    = CollaborationMessagesCompanion Function({
+  Value<String> id,
+  Value<String> collaborationRunId,
+  Value<String?> senderAgentRunId,
+  Value<String?> recipientRole,
+  Value<int> round,
+  Value<String> contentDigest,
+  Value<String> content,
+  Value<String> artifactRefs,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$CollaborationMessagesTableFilterComposer
+    extends Composer<_$AppDatabase, $CollaborationMessagesTable> {
+  $$CollaborationMessagesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get senderAgentRunId => $composableBuilder(
+      column: $table.senderAgentRunId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get recipientRole => $composableBuilder(
+      column: $table.recipientRole, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get round => $composableBuilder(
+      column: $table.round, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get contentDigest => $composableBuilder(
+      column: $table.contentDigest, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get artifactRefs => $composableBuilder(
+      column: $table.artifactRefs, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$CollaborationMessagesTableOrderingComposer
+    extends Composer<_$AppDatabase, $CollaborationMessagesTable> {
+  $$CollaborationMessagesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get senderAgentRunId => $composableBuilder(
+      column: $table.senderAgentRunId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get recipientRole => $composableBuilder(
+      column: $table.recipientRole,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get round => $composableBuilder(
+      column: $table.round, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get contentDigest => $composableBuilder(
+      column: $table.contentDigest,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get content => $composableBuilder(
+      column: $table.content, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get artifactRefs => $composableBuilder(
+      column: $table.artifactRefs,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$CollaborationMessagesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CollaborationMessagesTable> {
+  $$CollaborationMessagesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get collaborationRunId => $composableBuilder(
+      column: $table.collaborationRunId, builder: (column) => column);
+
+  GeneratedColumn<String> get senderAgentRunId => $composableBuilder(
+      column: $table.senderAgentRunId, builder: (column) => column);
+
+  GeneratedColumn<String> get recipientRole => $composableBuilder(
+      column: $table.recipientRole, builder: (column) => column);
+
+  GeneratedColumn<int> get round =>
+      $composableBuilder(column: $table.round, builder: (column) => column);
+
+  GeneratedColumn<String> get contentDigest => $composableBuilder(
+      column: $table.contentDigest, builder: (column) => column);
+
+  GeneratedColumn<String> get content =>
+      $composableBuilder(column: $table.content, builder: (column) => column);
+
+  GeneratedColumn<String> get artifactRefs => $composableBuilder(
+      column: $table.artifactRefs, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CollaborationMessagesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $CollaborationMessagesTable,
+    CollaborationMessage,
+    $$CollaborationMessagesTableFilterComposer,
+    $$CollaborationMessagesTableOrderingComposer,
+    $$CollaborationMessagesTableAnnotationComposer,
+    $$CollaborationMessagesTableCreateCompanionBuilder,
+    $$CollaborationMessagesTableUpdateCompanionBuilder,
+    (
+      CollaborationMessage,
+      BaseReferences<_$AppDatabase, $CollaborationMessagesTable,
+          CollaborationMessage>
+    ),
+    CollaborationMessage,
+    PrefetchHooks Function()> {
+  $$CollaborationMessagesTableTableManager(
+      _$AppDatabase db, $CollaborationMessagesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CollaborationMessagesTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CollaborationMessagesTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CollaborationMessagesTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> collaborationRunId = const Value.absent(),
+            Value<String?> senderAgentRunId = const Value.absent(),
+            Value<String?> recipientRole = const Value.absent(),
+            Value<int> round = const Value.absent(),
+            Value<String> contentDigest = const Value.absent(),
+            Value<String> content = const Value.absent(),
+            Value<String> artifactRefs = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationMessagesCompanion(
+            id: id,
+            collaborationRunId: collaborationRunId,
+            senderAgentRunId: senderAgentRunId,
+            recipientRole: recipientRole,
+            round: round,
+            contentDigest: contentDigest,
+            content: content,
+            artifactRefs: artifactRefs,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String collaborationRunId,
+            Value<String?> senderAgentRunId = const Value.absent(),
+            Value<String?> recipientRole = const Value.absent(),
+            Value<int> round = const Value.absent(),
+            Value<String> contentDigest = const Value.absent(),
+            required String content,
+            Value<String> artifactRefs = const Value.absent(),
+            required DateTime createdAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              CollaborationMessagesCompanion.insert(
+            id: id,
+            collaborationRunId: collaborationRunId,
+            senderAgentRunId: senderAgentRunId,
+            recipientRole: recipientRole,
+            round: round,
+            contentDigest: contentDigest,
+            content: content,
+            artifactRefs: artifactRefs,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$CollaborationMessagesTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $CollaborationMessagesTable,
+        CollaborationMessage,
+        $$CollaborationMessagesTableFilterComposer,
+        $$CollaborationMessagesTableOrderingComposer,
+        $$CollaborationMessagesTableAnnotationComposer,
+        $$CollaborationMessagesTableCreateCompanionBuilder,
+        $$CollaborationMessagesTableUpdateCompanionBuilder,
+        (
+          CollaborationMessage,
+          BaseReferences<_$AppDatabase, $CollaborationMessagesTable,
+              CollaborationMessage>
+        ),
+        CollaborationMessage,
+        PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -13048,4 +16890,14 @@ class $AppDatabaseManager {
       $$RunEventsTableTableManager(_db, _db.runEvents);
   $$LogRecordsTableTableManager get logRecords =>
       $$LogRecordsTableTableManager(_db, _db.logRecords);
+  $$CollaborationRunsTableTableManager get collaborationRuns =>
+      $$CollaborationRunsTableTableManager(_db, _db.collaborationRuns);
+  $$CollaborationAgentRunsTableTableManager get collaborationAgentRuns =>
+      $$CollaborationAgentRunsTableTableManager(
+          _db, _db.collaborationAgentRuns);
+  $$CollaborationArtifactsTableTableManager get collaborationArtifacts =>
+      $$CollaborationArtifactsTableTableManager(
+          _db, _db.collaborationArtifacts);
+  $$CollaborationMessagesTableTableManager get collaborationMessages =>
+      $$CollaborationMessagesTableTableManager(_db, _db.collaborationMessages);
 }

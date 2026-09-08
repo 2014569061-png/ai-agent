@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/tools/command_tool.dart';
@@ -19,11 +21,23 @@ class _TerminalSheetState extends State<TerminalSheet> {
   final _scrollController = ScrollController();
   String _output = '';
   bool _running = false;
+  String _runtimeLabel = '正在检测 Linux Runtime…';
 
   @override
   void initState() {
     super.initState();
     _service = TerminalCommandService(workspacePath: widget.workspacePath);
+    unawaited(_loadRuntimeInfo());
+  }
+
+  Future<void> _loadRuntimeInfo() async {
+    final info = await _service.inspectRuntime();
+    if (!mounted) return;
+    setState(() {
+      _runtimeLabel = info.available
+          ? '${info.label} · ${info.detail}'
+          : '${info.label} 不可用 · ${info.detail}';
+    });
   }
 
   @override
@@ -104,6 +118,16 @@ class _TerminalSheetState extends State<TerminalSheet> {
               child: Text(widget.workspacePath,
                   style: theme.textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '运行时：$_runtimeLabel',
+                style: theme.textTheme.bodySmall,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
             const SizedBox(height: 10),
             Expanded(

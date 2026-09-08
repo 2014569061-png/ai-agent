@@ -21,7 +21,6 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../application/chat_controller.dart';
 import '../../application/app_lock_service.dart';
-import '../../application/audit_service.dart';
 import '../../application/providers.dart';
 import '../../application/tts_service.dart';
 import '../../domain/models.dart';
@@ -30,7 +29,9 @@ import '../../infrastructure/files/conversation_exporter.dart';
 import '../../infrastructure/share/deep_link_service.dart';
 import '../../infrastructure/share/sharing_service.dart';
 import '../agents/agents_page.dart';
+import '../dashboard/dashboard_page.dart';
 import '../history/history_page.dart';
+import '../tasks/development_tasks_page.dart';
 import '../memory/memory_page.dart';
 import '../mcp/mcp_servers_page.dart';
 import '../prompts/prompt_library_page.dart';
@@ -49,10 +50,11 @@ import 'widgets/chat_empty_state.dart';
 import 'widgets/chat_message_list.dart';
 import 'widgets/model_picker_sheet.dart';
 import 'widgets/tool_activity_section.dart';
-import 'widgets/tool_approval_sheet.dart';
 import 'widgets/chat_catalog_drawer.dart';
 import '../widgets/immersive_sheet.dart';
+import '../widgets/immersive_action_sheet.dart';
 import '../widgets/immersive_surface.dart';
+import '../widgets/tool_approval_helper.dart';
 import '../theme/app_tokens.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -139,14 +141,80 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final _recorder = AudioRecorder();
   final _scrollController = ScrollController();
   bool _showScrollToBottom = false;
+  bool _followTailScheduled = false;
+  bool _followTailAnimate = false;
   bool _listening = false;
   bool _recording = false;
   bool _longPressHintShown = false;
+  final Map<String, String> _draftsByConversation = <String, String>{};
   StreamSubscription<String>? _shareSub;
+  String _pendingTaskType = 'general';
+  String _pendingSourceType = 'manual';
 
   ChatController get _chat => ref.read(chatControllerProvider.notifier);
 
   final BackgroundService _backgroundService = BackgroundService();
+
+  void _rememberCurrentDraft() {
+    final conversationId = ref.read(chatControllerProvider).conversationId;
+    if (conversationId == null) return;
+    final draft = _controller.text;
+    if (draft.trim().isEmpty) {
+      _draftsByConversation.remove(conversationId);
+    } else {
+      _draftsByConversation[conversationId] = draft;
+    }
+  }
+
+  void _clearCurrentDraft() {
+    final conversationId = ref.read(chatControllerProvider).conversationId;
+    if (conversationId != null) {
+      _draftsByConversation.remove(conversationId);
+    }
+  }
+
+  void _restoreDraft(String? conversationId) {
+    final draft = conversationId == null
+        ? ''
+        : (_draftsByConversation[conversationId] ?? '');
+    _controller.value = TextEditingValue(
+      text: draft,
+      selection: TextSelection.collapsed(offset: draft.length),
+    );
+  }
+
+  Future<void> _startNewConversation({String? initialText}) async {
+    _rememberCurrentDraft();
+    await _chat.newConversation();
+    if (!mounted) return;
+    _attachments.clear();
+    _restoreDraft(ref.read(chatControllerProvider).conversationId);
+    if (initialText != null && initialText.isNotEmpty) {
+      _controller.value = TextEditingValue(
+        text: initialText,
+        selection: TextSelection.collapsed(offset: initialText.length),
+      );
+    }
+  }
+
+  Future<void> _startNewConversationWithAttachment(
+    PlatformFile attachment,
+  ) async {
+    await _startNewConversation();
+    if (!mounted) return;
+    setState(() => _attachments.add(attachment));
+  }
+
+  Future<void> _switchConversation(Conversation conversation) async {
+    _rememberCurrentDraft();
+    await _chat.switchConversation(conversation);
+    if (!mounted ||
+        ref.read(chatControllerProvider).conversationId != conversation.id) {
+      return;
+    }
+    _attachments.clear();
+    _restoreDraft(conversation.id);
+  }
 
   @override
   void initState() {
@@ -175,7 +243,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (!_scrollController.hasClients) return;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final currentScroll = _scrollController.position.pixels;
-    final show = maxScroll - currentScroll > 250;
+    // 灵敏检测：用户上滑离开底部超过 100px 立即唤出回底胶囊，避免抢屏
+    final show = maxScroll - currentScroll > 100;
     if (show != _showScrollToBottom) {
       setState(() => _showScrollToBottom = show);
     }
@@ -183,19 +252,63 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
+    HapticFeedback.lightImpact();
+    setState(() => _showScrollToBottom = false);
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
     );
+  }
+
+  bool _isNearBottom() {
+    if (!_scrollController.hasClients) return false;
+    return _scrollController.position.extentAfter <= 120;
+  }
+
+  /// 合并同一帧内的流式滚动请求，避免每次文本刷新都重启动画。
+  void _scheduleFollowTail({required bool animate}) {
+    if (!_scrollController.hasClients) return;
+    if (!_isNearBottom()) {
+      if (!_showScrollToBottom && mounted) {
+        setState(() => _showScrollToBottom = true);
+      }
+      return;
+    }
+    _followTailAnimate = _followTailAnimate || animate;
+    if (_followTailScheduled) return;
+    _followTailScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _followTailScheduled = false;
+      if (!mounted || !_scrollController.hasClients) return;
+      if (!_isNearBottom()) {
+        if (!_showScrollToBottom) {
+          setState(() => _showScrollToBottom = true);
+        }
+        _followTailAnimate = false;
+        return;
+      }
+      final target = _scrollController.position.maxScrollExtent;
+      final animate =
+          _followTailAnimate && !ref.read(chatControllerProvider).running;
+      _followTailAnimate = false;
+      if ((target - _scrollController.position.pixels).abs() < 2) return;
+      if (animate) {
+        _scrollController.animateTo(
+          target,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+        );
+      } else {
+        _scrollController.jumpTo(target);
+      }
+    });
   }
 
   void _consumeDeepLink() {
     final prompt = DeepLinkService.instance.drainPrompt();
     if (prompt != null && prompt.isNotEmpty) {
-      _chat.newConversation();
-      _controller.text = prompt;
-      _controller.selection = TextSelection.collapsed(offset: prompt.length);
+      _startNewConversation(initialText: prompt);
     }
     if (DeepLinkService.instance.drainMemory()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -230,8 +343,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (resume == true && mounted) {
         await _chat.resumeTask(tasks.first.id, approveTool: _approveTool);
       }
-    } catch (_) {
-      // 恢复检测失败不阻断启动。
+    } catch (e, stack) {
+      debugPrint('恢复检测失败: $e\n$stack');
     }
   }
 
@@ -292,22 +405,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 处理系统分享内容：图片转附件，文本/URL 预填输入框；均自动新建会话。
   void _onSharedText(String shared) {
     if (!mounted) return;
+    _pendingSourceType = 'share';
     if (shared.startsWith('data:image/')) {
       try {
         final comma = shared.indexOf(',');
         final bytes = base64Decode(shared.substring(comma + 1));
-        _chat.newConversation();
-        setState(() => _attachments.add(
-            PlatformFile(name: '分享图片.jpg', size: bytes.length, bytes: bytes)));
-        FloatingToast.show(context, '已接收图片，可点击发送', tone: ToastTone.success);
+        _startNewConversationWithAttachment(
+          PlatformFile(name: '分享图片.jpg', size: bytes.length, bytes: bytes),
+        ).then((_) {
+          if (mounted) {
+            FloatingToast.show(context, '已接收图片，可点击发送', tone: ToastTone.success);
+          }
+        });
       } catch (e) {
         FloatingToast.error(context, '图片分享解析失败', rawDetail: e.toString());
       }
       return;
     }
-    _chat.newConversation();
-    _controller.text = shared;
-    _controller.selection = TextSelection.collapsed(offset: shared.length);
+    _startNewConversation(initialText: shared);
   }
 
   // --- 操作 ---
@@ -318,11 +433,21 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // 纯附件（无文本）同样允许发送，与输入框可发送状态一致（文档 7.4）。
     final canSend = text.isNotEmpty || _attachments.isNotEmpty;
     if (!canSend || state.running || state.loading) return;
+    _clearCurrentDraft();
     _controller.clear();
     final attachments = List<PlatformFile>.of(_attachments);
     _attachments.clear();
+    final taskType = _pendingTaskType;
+    final sourceType = _pendingSourceType;
+    _pendingTaskType = 'general';
+    _pendingSourceType = 'manual';
     await _chat.send(
-        text: text, attachments: attachments, approveTool: _approveTool);
+      text: text,
+      attachments: attachments,
+      approveTool: _approveTool,
+      taskType: taskType,
+      sourceType: sourceType,
+    );
   }
 
   void _regenerate() {
@@ -388,14 +513,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
     showImmersiveSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (context) => SessionContextSheet(
+      builder: (sheetContext) => SessionContextSheet(
         state: ref.read(chatControllerProvider),
-        onSelectModel: _switchProvider,
-        onSelectAgent: _selectAgent,
-        onPickWorkspace: _pickWorkspace,
-        onClearWorkspace: () =>
-            ref.read(chatControllerProvider.notifier).setWorkspace(null),
-        onReasoningEffort: _showReasoningEffortSheet,
+        onSelectModel: () {
+          Navigator.pop(sheetContext);
+          _switchProvider();
+        },
+        onSelectAgent: () {
+          Navigator.pop(sheetContext);
+          _selectAgent();
+        },
+        onPickWorkspace: () {
+          Navigator.pop(sheetContext);
+          _pickWorkspace();
+        },
+        onClearWorkspace: () {
+          ref.read(chatControllerProvider.notifier).setWorkspace(null);
+          Navigator.pop(sheetContext);
+          FloatingToast.show(context, '已解绑工作区', tone: ToastTone.success);
+        },
+        onReasoningEffort: () {
+          Navigator.pop(sheetContext);
+          _showReasoningEffortSheet();
+        },
         onTogglePlanMode: () {
           ref
               .read(chatControllerProvider.notifier)
@@ -443,97 +583,87 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _showAvatarMenu() {
     final state = ref.read(chatControllerProvider);
-    showImmersiveSheet<void>(
+    showImmersiveActionSheet<void>(
       context: context,
-      builder: (context) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * .72,
+      title: '更多操作',
+      scrollable: true,
+      items: [
+        ActionSheetItem(
+          icon: Icons.tune_rounded,
+          title: '会话上下文',
+          onTap: _showSessionContext,
         ),
-        child: ListView(
-          shrinkWrap: true,
-          padding: EdgeInsets.zero,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.tune_rounded),
-              title: const Text('会话上下文'),
-              onTap: () {
-                Navigator.pop(context);
-                _showSessionContext();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.tune),
-              title: const Text(AppStrings.switchModel),
-              onTap: () {
-                Navigator.pop(context);
-                _switchProvider();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.refresh),
-              title: const Text(AppStrings.regenerate),
-              enabled: !state.running &&
-                  state.messages.isNotEmpty &&
-                  state.messages.last.role == MessageRole.assistant,
-              onTap: () {
-                Navigator.pop(context);
-                _regenerate();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.content_copy_outlined),
-              title: const Text(AppStrings.copyConversation),
-              enabled: state.messages.isNotEmpty,
-              onTap: () {
-                Navigator.pop(context);
-                _copyConversation();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.ios_share),
-              title: const Text(AppStrings.exportMarkdown),
-              enabled: state.messages.isNotEmpty,
-              onTap: () {
-                Navigator.pop(context);
-                _exportConversation();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text('分享会话'),
-              enabled: state.messages.isNotEmpty,
-              onTap: () {
-                Navigator.pop(context);
-                _shareConversation();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.smart_toy_outlined),
-              title: const Text('Agent 管理'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AgentsPage()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text('设置'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const SettingsPage()));
-              },
-            ),
-          ],
+        ActionSheetItem(
+          icon: Icons.tune,
+          title: AppStrings.switchModel,
+          onTap: _switchProvider,
         ),
-      ),
+        ActionSheetItem(
+          icon: Icons.refresh,
+          title: AppStrings.regenerate,
+          enabled: !state.running &&
+              state.messages.isNotEmpty &&
+              state.messages.last.role == MessageRole.assistant,
+          onTap: _regenerate,
+        ),
+        ActionSheetItem(
+          icon: Icons.content_copy_outlined,
+          title: AppStrings.copyConversation,
+          enabled: state.messages.isNotEmpty,
+          onTap: _copyConversation,
+        ),
+        ActionSheetItem(
+          icon: Icons.ios_share,
+          title: AppStrings.exportMarkdown,
+          enabled: state.messages.isNotEmpty,
+          onTap: _exportConversation,
+        ),
+        ActionSheetItem(
+          icon: Icons.share_outlined,
+          title: '分享会话',
+          enabled: state.messages.isNotEmpty,
+          onTap: _shareConversation,
+        ),
+        ActionSheetItem(
+          icon: Icons.task_alt_outlined,
+          title: '开发任务',
+          subtitle: '查看任务状态、结果与恢复记录',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DevelopmentTasksPage(
+                  onConversationSelected: (conversation) async {
+                    Navigator.of(context).pop();
+                    await _switchConversation(conversation);
+                  },
+                ),
+              ),
+            );
+          },
+        ),
+        ActionSheetItem(
+          icon: Icons.smart_toy_outlined,
+          title: 'Agent 管理',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AgentsPage()),
+            );
+          },
+        ),
+        ActionSheetItem(
+          icon: Icons.settings_outlined,
+          title: '设置',
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SettingsPage()),
+            );
+          },
+        ),
+      ],
     );
   }
 
   Future<void> _pickFiles() async {
-    final state = ref.read(chatControllerProvider);
-    if (state.running) return;
     final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         withData: true,
@@ -585,39 +715,41 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// 附件入口：底部菜单在「拍照 / 相册 / 多图 / 文件 / 录音 / 粘贴图片」间选择。
   Future<void> _showAttachmentMenu() async {
-    final state = ref.read(chatControllerProvider);
-    if (state.running) return;
-    final choice = await showImmersiveSheet<String>(
+    final choice = await showImmersiveActionSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-              leading: const Icon(Icons.photo_camera_outlined),
-              title: const Text(AppStrings.takePhoto),
-              onTap: () => Navigator.pop(context, 'camera')),
-          ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: const Text(AppStrings.fromGallery),
-              onTap: () => Navigator.pop(context, 'gallery')),
-          ListTile(
-              leading: const Icon(Icons.collections_outlined),
-              title: const Text('多图选择'),
-              onTap: () => Navigator.pop(context, 'multi')),
-          ListTile(
-              leading: const Icon(Icons.attach_file),
-              title: const Text(AppStrings.addFile),
-              onTap: () => Navigator.pop(context, 'file')),
-          ListTile(
-              leading: Icon(
-                  _recording ? Icons.stop_circle_outlined : Icons.mic_none),
-              title: Text(_recording ? '停止录音' : '录音'),
-              onTap: () => Navigator.pop(context, 'record')),
-          ListTile(
-              leading: const Icon(Icons.content_paste_outlined),
-              title: const Text('粘贴图片'),
-              onTap: () => Navigator.pop(context, 'paste')),
-        ]),
-      ),
+      title: '添加附件',
+      items: [
+        const ActionSheetItem(
+          icon: Icons.photo_camera_outlined,
+          title: AppStrings.takePhoto,
+          value: 'camera',
+        ),
+        const ActionSheetItem(
+          icon: Icons.photo_library_outlined,
+          title: AppStrings.fromGallery,
+          value: 'gallery',
+        ),
+        const ActionSheetItem(
+          icon: Icons.collections_outlined,
+          title: '多图选择',
+          value: 'multi',
+        ),
+        const ActionSheetItem(
+          icon: Icons.attach_file,
+          title: AppStrings.addFile,
+          value: 'file',
+        ),
+        ActionSheetItem(
+          icon: _recording ? Icons.stop_circle_outlined : Icons.mic_none,
+          title: _recording ? '停止录音' : '录音',
+          value: 'record',
+        ),
+        const ActionSheetItem(
+          icon: Icons.content_paste_outlined,
+          title: '粘贴图片',
+          value: 'paste',
+        ),
+      ],
     );
     if (!mounted || choice == null) return;
     switch (choice) {
@@ -699,30 +831,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _showMessageActions(int messageIndex) async {
     final message = ref.read(chatControllerProvider).messages[messageIndex];
     final isUser = message.role == MessageRole.user;
-    final action = await showImmersiveSheet<String>(
+    final action = await showImmersiveActionSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (isUser)
-            ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('编辑并重发'),
-                subtitle: const Text('替换此消息，并重新生成其后的回复'),
-                onTap: () => Navigator.pop(context, 'edit')),
-          ListTile(
-              leading: const Icon(Icons.volume_up_outlined),
-              title: const Text('朗读'),
-              onTap: () => Navigator.pop(context, 'read')),
-          ListTile(
-              leading: const Icon(Icons.stop_circle_outlined),
-              title: const Text('停止朗读'),
-              onTap: () => Navigator.pop(context, 'stop')),
-          ListTile(
-              leading: const Icon(Icons.copy_outlined),
-              title: const Text('复制全文'),
-              onTap: () => Navigator.pop(context, 'copy')),
-        ]),
-      ),
+      title: '消息操作',
+      items: [
+        if (isUser)
+          const ActionSheetItem(
+            icon: Icons.edit_outlined,
+            title: '编辑并重发',
+            subtitle: '替换此消息，并重新生成其后的回复',
+            value: 'edit',
+          ),
+        const ActionSheetItem(
+          icon: Icons.volume_up_outlined,
+          title: '朗读',
+          value: 'read',
+        ),
+        const ActionSheetItem(
+          icon: Icons.stop_circle_outlined,
+          title: '停止朗读',
+          value: 'stop',
+        ),
+        const ActionSheetItem(
+          icon: Icons.copy_outlined,
+          title: '复制全文',
+          value: 'copy',
+        ),
+      ],
     );
     if (!mounted || action == null) return;
     if (action == 'edit') {
@@ -773,10 +908,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ],
       ),
     );
+    final newText = controller.text;
+    // Dialog 路由退出动画结束前，TextField 仍可能访问 controller；延后一帧释放，
+    // 避免快速点击保存/取消时出现 "used after disposed"。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.dispose();
+    });
     if (submitted != true || !mounted) return;
     await _chat.editAndResend(
       messageIndex: messageIndex,
-      newText: controller.text,
+      newText: newText,
       approveTool: _approveTool,
     );
   }
@@ -870,67 +1011,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
         setState(() {});
         FloatingToast.show(context, '录音中，再次点击停止');
       }
-    } catch (_) {
+    } catch (e, stack) {
+      debugPrint('录音启动失败: $e\n$stack');
       _recording = false;
       if (mounted) FloatingToast.error(context, '录音不可用');
     }
   }
 
-  Future<ToolApproval> _approveTool(ToolCall call, ToolRisk risk) async {
-    if (!mounted) return ToolApproval.reject;
-    final trust = await ref.read(toolTrustStoreProvider.future);
-    if (!mounted) return ToolApproval.reject;
-    // 信任清单直通：命中（含本会话允许）直接放行，不再打断用户。
-    if (trust.isTrusted(call.name, risk)) {
-      return ToolApproval.allowAlways;
-    }
-    final decision = await showImmersiveSheet<ToolApproval>(
-      context: context,
-      builder: (context) => ToolApprovalSheet(call: call, risk: risk),
-    );
-    // 记录会话级/始终允许的授予，便于审计追溯；授予失败不阻断主流程。
-    if (decision == ToolApproval.allowAlways ||
-        decision == ToolApproval.allowSession) {
-      if (decision == ToolApproval.allowAlways) {
-        await trust.allowAlways(call.name);
-      } else {
-        trust.allowSession(call.name);
-      }
-      _recordToolGrant(call, risk, decision!);
-    }
-    return decision ?? ToolApproval.reject;
-  }
+  Future<ToolApproval> _approveTool(ToolCall call, ToolRisk risk) =>
+      promptToolApproval(context, ref, call, risk);
 
   Future<void> _selectApprovalMode() async {
-    if (ref.read(chatControllerProvider).running) return;
-    final selected = await showImmersiveSheet<ApprovalMode>(
+    final currentMode = ref.read(chatControllerProvider).approvalMode;
+    final selected = await showImmersiveActionSheet<ApprovalMode>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 8, 20, 12),
-              child: Text('操作权限',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            ),
-            for (final mode in ApprovalMode.values)
-              ListTile(
-                leading: Icon(mode == ApprovalMode.fullAccess
-                    ? Icons.shield_outlined
-                    : Icons.verified_user_outlined),
-                title: Text(_approvalModeTitle(mode)),
-                subtitle: Text(_approvalModeDescription(mode)),
-                trailing: ref.read(chatControllerProvider).approvalMode == mode
-                    ? const Icon(Icons.check_rounded)
-                    : null,
-                onTap: () => Navigator.pop(context, mode),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+      title: '操作权限',
+      items: [
+        for (final mode in ApprovalMode.values)
+          ActionSheetItem(
+            icon: mode == ApprovalMode.fullAccess
+                ? Icons.shield_outlined
+                : Icons.verified_user_outlined,
+            title: _approvalModeTitle(mode),
+            subtitle: _approvalModeDescription(mode),
+            selected: currentMode == mode,
+            value: mode,
+          ),
+      ],
     );
     if (selected != null && mounted) {
       ref.read(chatControllerProvider.notifier).setApprovalMode(selected);
@@ -950,20 +1057,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       };
 
   /// 把「始终允许 / 本会话允许」的授予写入审计，溯源决策链路。
-  void _recordToolGrant(ToolCall call, ToolRisk risk, ToolApproval decision) {
-    final audit = ref.read(auditServiceProvider);
-    final db = ref.read(databaseProvider.future);
-    db.then((database) {
-      audit.log(
-        database,
-        type: 'tool_grant',
-        detail: call.name,
-        decision: decision.name,
-        risk: risk.name,
-        conversationId: ref.read(chatControllerProvider).conversationId,
-      );
-    });
-  }
+  /// 注：审批弹窗已收敛到 tool_approval_helper.dart，此处保留审计记录
+  /// 供聊天页独有场景（如直接授权后回执）扩展；当前未引用时勿删审计约定。
 
   Future<void> _selectAgent() async {
     final state = ref.read(chatControllerProvider);
@@ -999,13 +1094,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _openHistory() async {
-    final state = ref.read(chatControllerProvider);
-    if (state.running) return;
     final selected = await Navigator.of(context).push<Conversation>(
       MaterialPageRoute(builder: (_) => const HistoryPage()),
     );
     if (selected == null || !mounted) return;
-    await _chat.switchConversation(selected);
+    await _switchConversation(selected);
   }
 
   Future<void> _openPromptLibrary() async {
@@ -1092,6 +1185,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   // --- 渲染 ---
 
   void _fillSuggestion(String text) {
+    _pendingSourceType = 'quick_action';
+    _pendingTaskType = _taskTypeForSuggestion(text);
     final state = ref.read(chatControllerProvider);
     final needsWorkspace =
         !(state.currentWorkspacePath?.trim().isNotEmpty ?? false) &&
@@ -1101,6 +1196,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
       return;
     }
     _fillInput(text);
+  }
+
+  String _taskTypeForSuggestion(String text) {
+    if (text.contains('项目') || text.contains('工作区')) {
+      return 'project_analysis';
+    }
+    if (text.contains('修复') || text.contains('问题')) return 'bug_fix';
+    if (text.contains('审查') || text.contains('代码')) return 'code_review';
+    if (text.contains('发布')) return 'release_check';
+    return 'general';
   }
 
   Future<void> _pickWorkspaceAndFill(String text) async {
@@ -1128,21 +1233,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  String? _currentRunningStage(ChatState state) {
+    if (!state.running) {
+      if (state.planState != null && !state.planState!.isConfirmed) {
+        return '等待确认计划';
+      }
+      return null;
+    }
+    if (state.toolActivities.any((a) => a.status == 'running')) {
+      return '工具执行中…';
+    }
+    return '生成中…';
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen(chatControllerProvider, (previous, next) {
       if (previous == null) return;
-      if ((next.running || next.messages.length > previous.messages.length) &&
-          !_showScrollToBottom) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            );
-          }
-        });
+      final messageAdded = next.messages.length > previous.messages.length;
+      final completed = previous.running && !next.running;
+      if (next.running || messageAdded || completed) {
+        _scheduleFollowTail(
+            animate: (messageAdded || completed) && !next.running);
       }
     });
 
@@ -1158,15 +1270,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
           key: _scaffoldKey,
           backgroundColor: Colors.transparent, // Background handled by stack
           drawer: ChatCatalogDrawer(
+            currentConversationId: state.conversationId,
             currentWorkspacePath: state.currentWorkspacePath,
             contextTokens: state.contextTokens,
+            liveContextTokens: state.liveContextTokens,
             activeModel: state.activeModel,
             activeProviderName: state.activeProviderName,
             messages: state.messages,
             isRunning: state.running,
             planModeEnabled: state.planMode,
-            onNewConversation: () => _chat.newConversation(),
-            onSelectConversation: (conv) => _chat.switchConversation(conv),
+            approvalMode: state.approvalMode,
+            onApprovalModeTap: _selectApprovalMode,
+            onNewConversation: () => _startNewConversation(),
+            onSelectConversation: (conv) => _switchConversation(conv),
             onWorkspaceTap: _handleTopBarWorkspace,
             onModelTap: _switchProvider,
             onMcpMenu: () => Navigator.of(context).push(
@@ -1261,7 +1377,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                           state.messages.isEmpty
                               ? _emptyState(context)
                               : ChatMessageList(
+                                  sessionKey: state.conversationId,
                                   messages: state.messages,
+                                  liveReply: state.liveReply,
                                   controller: _scrollController,
                                   running: state.running,
                                   onLongPress: (index) {
@@ -1304,15 +1422,75 @@ class _ChatPageState extends ConsumerState<ChatPage>
                             Positioned(
                               right: 16,
                               bottom: 16,
-                              child: FloatingActionButton.small(
-                                onPressed: _scrollToBottom,
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .primaryContainer,
-                                child: Icon(Icons.arrow_downward,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onPrimaryContainer),
+                              child: ImmersiveSurface(
+                                level: ImmersiveMaterialLevel.thick,
+                                borderRadius: BorderRadius.circular(20),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: _scrollToBottom,
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: state.running ? 10 : 8,
+                                        vertical: 7,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primaryContainer
+                                            .withValues(alpha: 0.90),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary
+                                              .withValues(alpha: 0.35),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (state.running) ...[
+                                            SizedBox(
+                                              width: 12,
+                                              height: 12,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<
+                                                        Color>(
+                                                  Theme.of(context)
+                                                      .colorScheme
+                                                      .primary,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              '生成中 · 回到底部',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onPrimaryContainer,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 2),
+                                          ],
+                                          Icon(
+                                            Icons.arrow_downward_rounded,
+                                            size: 16,
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .onPrimaryContainer,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                         ],
@@ -1394,6 +1572,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     FloatingCapsuleInput(
                       controller: _controller,
                       isRunning: state.running,
+                      runningStage: _currentRunningStage(state),
                       onSend: _send,
                       onStop: _stop,
                       onAttachmentMenu: _showAttachmentMenu,
@@ -1409,6 +1588,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       onApprovalModeTap: _selectApprovalMode,
                       onTerminalPreview: _openTerminal,
                       onEnvSetup: _openEnvSetup,
+                      onOpenDashboard: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DashboardPage(
+                            onConversationSelected: (c) =>
+                                _switchConversation(c),
+                          ),
+                        ),
+                      ),
                       planModeEnabled: state.planMode,
                       approvalMode: state.approvalMode,
                       onVoiceToggle: _toggleVoice,
@@ -1425,6 +1612,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       onModelTap: _switchProvider,
                       onWorkspaceTap: _handleTopBarWorkspace,
                       hasAttachments: _attachments.isNotEmpty,
+                      attachmentCount: _attachments.length,
                     ),
                   ]);
                   if (wide) {
@@ -1494,18 +1682,24 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       : (state.activeProviderName.isEmpty
                           ? null
                           : state.activeProviderName),
+                  sessionTitle: state.conversationTitle,
+                  runningStage: _currentRunningStage(state),
                   statusActive: state.running,
-                  currentContextTokens: state.messages.reversed
-                          .where((m) => m.usage != null)
-                          .map((m) =>
-                              m.usage!.promptTokens + m.usage!.completionTokens)
-                          .firstOrNull ??
-                      0,
+                  currentContextTokens: state.liveContextTokens > 0
+                      ? state.liveContextTokens
+                      : state.messages.reversed
+                              .where((m) => m.usage != null)
+                              .map((m) =>
+                                  m.usage!.promptTokens +
+                                  m.usage!.completionTokens)
+                              .firstOrNull ??
+                          0,
                   onMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                  onNewChat: () => _chat.newConversation(),
+                  onNewChat: () => _startNewConversation(),
                   onContextGaugeTap: () =>
                       _scaffoldKey.currentState?.openDrawer(),
                   onTitleTap: _showSessionContext,
+                  onWorkspaceTap: _handleTopBarWorkspace,
                 ),
               ),
             ], // Stack children

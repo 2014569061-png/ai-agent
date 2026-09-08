@@ -11,6 +11,9 @@ enum RunStatus {
   completed,
   failed,
   cancelled,
+
+  /// 预算耗尽（达到 maxSteps）：不是真实失败，可携带上下文续跑。
+  paused,
 }
 
 enum ToolRisk { safe, requiresConfirmation, dangerous }
@@ -82,6 +85,29 @@ class ChatMessage {
   final Duration? ttft;
   final String? reasoning;
 
+  ChatMessage copyWith({
+    MessageRole? role,
+    List<MessagePart>? parts,
+    String? toolCallId,
+    List<ToolCall>? toolCalls,
+    String? modelName,
+    Usage? usage,
+    Duration? elapsed,
+    Duration? ttft,
+    String? reasoning,
+  }) =>
+      ChatMessage(
+        role: role ?? this.role,
+        parts: parts ?? this.parts,
+        toolCallId: toolCallId ?? this.toolCallId,
+        toolCalls: toolCalls ?? this.toolCalls,
+        modelName: modelName ?? this.modelName,
+        usage: usage ?? this.usage,
+        elapsed: elapsed ?? this.elapsed,
+        ttft: ttft ?? this.ttft,
+        reasoning: reasoning ?? this.reasoning,
+      );
+
   String get text => parts.map((part) {
         if (part.type == 'image') return '[图片]';
         if (part.type == 'file') return '[文件]';
@@ -89,6 +115,21 @@ class ChatMessage {
         if (part.type == 'video') return '[视频]';
         return part.value;
       }).join();
+}
+
+/// Ephemeral assistant content shown while a response is still streaming.
+/// It is intentionally kept outside the persisted message list so each
+/// incremental update does not copy the entire conversation history.
+class LiveReply {
+  const LiveReply({
+    required this.messageIndex,
+    required this.text,
+    this.reasoning,
+  });
+
+  final int messageIndex;
+  final String text;
+  final String? reasoning;
 }
 
 class Usage {

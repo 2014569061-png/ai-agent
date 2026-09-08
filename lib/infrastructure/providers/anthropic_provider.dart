@@ -6,6 +6,7 @@ import '../../domain/models.dart';
 import 'http_client.dart';
 import 'llm_provider.dart';
 import 'provider_config.dart';
+import 'sse_decoder.dart';
 
 /// Anthropic Messages API 原生适配器。
 ///
@@ -92,8 +93,7 @@ class AnthropicProvider implements LlmProvider {
         return;
       }
 
-      var buffer = '';
-      final decoder = utf8.decoder;
+      final sse = SseDecoder();
       final toolAccumulators = <int, _AnthropicToolAcc>{};
       var inputTokens = 0;
       var cacheCreationTokens = 0;
@@ -112,11 +112,8 @@ class AnthropicProvider implements LlmProvider {
       }
 
       await for (final chunk in stream) {
-        buffer += decoder.convert(chunk);
-        final lines = buffer.split('\n');
-        buffer = lines.removeLast();
-        for (final line in lines) {
-          final json = _parseSseLine(line.trim());
+        for (final data in sse.add(chunk)) {
+          final json = _parseSseData(data);
           if (json == null) continue;
           final type = json['type'] as String?;
           if (type == 'message_start') {
@@ -155,11 +152,12 @@ class AnthropicProvider implements LlmProvider {
           }
         }
       }
-      buffer += decoder.convert(const <int>[]);
-      final trailing = _parseSseLine(buffer.trim());
-      if (trailing != null && trailing['type'] == 'message_delta') {
-        final usage = trailing['usage'] as Map<String, dynamic>? ?? const {};
-        updateUsage(usage);
+      for (final data in sse.close()) {
+        final trailing = _parseSseData(data);
+        if (trailing != null && trailing['type'] == 'message_delta') {
+          final usage = trailing['usage'] as Map<String, dynamic>? ?? const {};
+          updateUsage(usage);
+        }
       }
 
       final sortedIndexes = toolAccumulators.keys.toList()..sort();
@@ -270,9 +268,8 @@ class AnthropicProvider implements LlmProvider {
     return value;
   }
 
-  Map<String, dynamic>? _parseSseLine(String line) {
-    if (!line.startsWith('data:')) return null;
-    final data = line.substring(5).trim();
+  Map<String, dynamic>? _parseSseData(String data) {
+    data = data.trim();
     if (data.isEmpty || data == '[DONE]') return null;
     try {
       return jsonDecode(data) as Map<String, dynamic>;

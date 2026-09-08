@@ -9,10 +9,22 @@ abstract final class AppTokens {
   static const spacingLg = 16.0;
   static const spacingXl = 24.0;
 
-  static const smallControlRadius = 14.0;
-  static const capsuleRadius = 24.0;
-  static const cardRadius = 20.0;
-  static const modalRadius = 20.0;
+  // 几何圆角 Token
+  static const radiusControl = 14.0;
+  static const radiusCapsule = 24.0;
+  static const radiusCard = 20.0;
+  static const radiusModal = 20.0;
+  static const radiusBubble = 16.0;
+  static const radiusBubbleTail = 4.0;
+
+  // 兼容历史别名
+  static const smallControlRadius = radiusControl;
+  static const capsuleRadius = radiusCapsule;
+  static const cardRadius = radiusCard;
+  static const modalRadius = radiusModal;
+
+  // 顶栏高度常量
+  static const kCapsuleTopBarHeight = 56.0;
 
   static double blurSigma(ImmersiveMaterialLevel level) => switch (level) {
         ImmersiveMaterialLevel.ultraThin => 8,

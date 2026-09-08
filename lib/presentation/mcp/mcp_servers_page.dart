@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../application/mcp_service.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
 
@@ -61,45 +63,164 @@ class _McpServersPageState extends State<McpServersPage> {
       kind: McpServerKind.http,
       url: url.text.trim(),
     ));
+    HapticFeedback.mediumImpact();
     await _reload();
+    if (mounted) {
+      FloatingToast.show(context, '已添加 MCP 服务器', tone: ToastTone.success);
+    }
+  }
+
+  Future<void> _deleteServer(McpServerConfig server) async {
+    final confirmed = await showImmersiveDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除 MCP 服务器'),
+        content: Text('确定删除服务器“${server.name}”吗？此操作不可撤销。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    HapticFeedback.mediumImpact();
+    await _service.delete(server.id);
+    await _reload();
+    if (mounted) {
+      FloatingToast.show(context, '已删除服务器', tone: ToastTone.success);
+    }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('MCP 服务器')),
-        body: _servers.isEmpty
-            ? const EmptyStateView(
-                icon: Icons.dns_outlined,
-                title: '尚未配置 MCP 服务器',
-                message: '点击右下角按钮添加你的第一个 MCP 服务。',
-              )
-            : ListView.separated(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                itemCount: _servers.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final server = _servers[index];
-                  return SectionCard(
-                    child: SwitchListTile(
-                      secondary: Icon(server.kind == McpServerKind.http
-                          ? Icons.dns_outlined
-                          : Icons.terminal),
-                      title: Text(server.name),
-                      subtitle: Text(server.url ?? server.command ?? ''),
-                      value: server.enabled,
-                      onChanged: (enabled) async {
-                        await _service.toggleServer(server.id, enabled);
-                        await _reload();
-                      },
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('MCP 服务器')),
+      body: _servers.isEmpty
+          ? const EmptyStateView(
+              icon: Icons.dns_outlined,
+              title: '尚未配置 MCP 服务器',
+              message: '点击右下角按钮添加你的第一个 MCP 服务。',
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _servers.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final server = _servers[index];
+                return SectionCard(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 8),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: (server.enabled
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.outline)
+                              .withValues(alpha: 0.12),
+                          child: Icon(
+                            server.kind == McpServerKind.http
+                                ? Icons.dns_outlined
+                                : Icons.terminal_rounded,
+                            size: 18,
+                            color: server.enabled
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.outline,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      server.name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: theme
+                                          .colorScheme.surfaceContainerHighest,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      server.kind == McpServerKind.http
+                                          ? 'HTTP'
+                                          : 'STDIO',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                server.url ?? server.command ?? '未指定地址',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: server.enabled,
+                          onChanged: (enabled) async {
+                            HapticFeedback.selectionClick();
+                            await _service.toggleServer(server.id, enabled);
+                            await _reload();
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded,
+                              size: 20),
+                          tooltip: '删除此服务',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _deleteServer(server),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
-        floatingActionButton: FloatingActionButton(
-          onPressed: _add,
-          tooltip: '新增 MCP 服务器',
-          child: const Icon(Icons.add),
-        ),
-      );
+                  ),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _add,
+        tooltip: '新增 MCP 服务器',
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
 }

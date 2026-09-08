@@ -6,6 +6,7 @@ import '../../domain/models.dart';
 import 'http_client.dart';
 import 'llm_provider.dart';
 import 'provider_config.dart';
+import 'sse_decoder.dart';
 
 /// Google Gemini generateContent 原生适配器。
 ///
@@ -108,8 +109,7 @@ class GeminiProvider implements LlmProvider {
         return;
       }
 
-      var buffer = '';
-      final decoder = utf8.decoder;
+      final sse = SseDecoder();
       final pendingCalls = <ToolCall>[];
       var promptTokens = 0;
       var completionTokens = 0;
@@ -126,11 +126,8 @@ class GeminiProvider implements LlmProvider {
       }
 
       await for (final chunk in stream) {
-        buffer += decoder.convert(chunk);
-        final lines = buffer.split('\n');
-        buffer = lines.removeLast();
-        for (final line in lines) {
-          final json = _parseSseLine(line.trim());
+        for (final data in sse.add(chunk)) {
+          final json = _parseSseData(data);
           if (json == null) continue;
           final usage = json['usageMetadata'];
           if (usage is Map<String, dynamic>) {
@@ -165,12 +162,13 @@ class GeminiProvider implements LlmProvider {
           }
         }
       }
-      buffer += decoder.convert(const <int>[]);
-      final trailing = _parseSseLine(buffer.trim());
-      if (trailing != null) {
-        final usage = trailing['usageMetadata'];
-        if (usage is Map<String, dynamic>) {
-          updateUsage(usage);
+      for (final data in sse.close()) {
+        final trailing = _parseSseData(data);
+        if (trailing != null) {
+          final usage = trailing['usageMetadata'];
+          if (usage is Map<String, dynamic>) {
+            updateUsage(usage);
+          }
         }
       }
 
@@ -251,9 +249,8 @@ class GeminiProvider implements LlmProvider {
     return value;
   }
 
-  Map<String, dynamic>? _parseSseLine(String line) {
-    if (!line.startsWith('data:')) return null;
-    final data = line.substring(5).trim();
+  Map<String, dynamic>? _parseSseData(String data) {
+    data = data.trim();
     if (data.isEmpty || data == '[DONE]') return null;
     try {
       return jsonDecode(data) as Map<String, dynamic>;

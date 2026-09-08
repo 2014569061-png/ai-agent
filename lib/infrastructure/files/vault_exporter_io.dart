@@ -16,9 +16,10 @@ import '../sync/sync_service.dart';
 /// v2 起额外包含 Provider 配置（含 API Key）、工具密钥与 MCP 服务器配置；
 /// 旧版备份文件缺少这些段时按原样跳过。
 
-Future<String?> exportVaultFile(AppDatabase db, String password) async {
+Future<String?> exportVaultFile(AppDatabase db, String password,
+    {bool includeSecrets = false}) async {
   try {
-    final json = await buildVaultJson(db);
+    final json = await buildVaultJson(db, includeSecrets: includeSecrets);
     final plaintext = jsonEncode(json);
     final cipher = await SyncService().encryptWithPassword(plaintext, password);
     final dir = await getApplicationDocumentsDirectory();
@@ -54,7 +55,7 @@ Future<String> importVaultBytes(AppDatabase db, Uint8List bytes, String password
 }
 
 Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
-    {ProviderConfigStore? providerStore}) async {
+    {ProviderConfigStore? providerStore, bool includeSecrets = false}) async {
   final store = providerStore ?? ProviderConfigStore();
   final conversations = await db.recentConversations();
   final messages = <Map<String, dynamic>>[];
@@ -80,21 +81,23 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
     'plugins': (await db.allPlugins()).map((p) => p.toJson()).toList(),
     'skillPacks': (await db.allSkillPacks()).map((s) => s.toJson()).toList(),
     'skillFiles': await _collectSkillFiles(db),
-    'providerProfiles': profiles
-        .map((p) => {
-              'id': p.id,
-              'name': p.name,
-              'baseUrl': p.baseUrl,
-              'model': p.model,
-              'type': p.type.name,
-              'apiKey': p.apiKey,
-              'reasoningEffort': p.reasoningEffort.name,
-              'contextTokens': p.contextTokens,
-            })
-        .toList(),
-    'toolKeys': {
-      'tavily': await store.readToolKey('tavily'),
-    },
+    if (includeSecrets)
+      'providerProfiles': profiles
+          .map((p) => {
+                'id': p.id,
+                'name': p.name,
+                'baseUrl': p.baseUrl,
+                'model': p.model,
+                'type': p.type.name,
+                'apiKey': p.apiKey,
+                'reasoningEffort': p.reasoningEffort.name,
+                'contextTokens': p.contextTokens,
+              })
+          .toList(),
+    if (includeSecrets)
+      'toolKeys': {
+        'tavily': await store.readToolKey('tavily'),
+      },
     'mcpServers': (await db.allMcpServers()).map((s) => s.toJson()).toList(),
   };
 }

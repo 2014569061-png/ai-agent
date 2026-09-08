@@ -1,7 +1,7 @@
 name: mobile_agent
 description: A mobile-first multi-provider AI Agent client.
 publish_to: "none"
-version: 0.7.2+72
+version: 0.8.5+85
 
 environment:
   sdk: ^3.5.0
@@ -63,3 +63,5 @@ flutter:
   assets:
     - assets/branding/nexus_mark.png
     - assets/images/bg_default.jpg
+    - assets/linux/alpine-minirootfs-3.22.5-aarch64.tar.gz
+    - assets/linux/libtalloc.so.2

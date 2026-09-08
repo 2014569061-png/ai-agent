@@ -81,7 +81,17 @@ class ProviderConfigStore {
     _activeId = preferences.getString(_activeKey);
     final raw = preferences.getString(_profilesKey);
     if (raw == null) return [];
-    final ids = (jsonDecode(raw) as List<dynamic>).cast<Map<String, dynamic>>();
+    dynamic decoded;
+    try {
+      decoded = jsonDecode(raw);
+    } catch (_) {
+      // A partial write or an old schema must not make Settings unusable.
+      return [];
+    }
+    if (decoded is! List) return [];
+    final ids = decoded.whereType<Map>().map(
+          (item) => Map<String, dynamic>.from(item),
+        );
     final result = <ProviderConfig>[];
     for (final item in ids) {
       final id = item['id'] as String? ?? 'default';
@@ -122,8 +132,7 @@ class ProviderConfigStore {
     final profiles = await loadAll();
     final updated = [...profiles.where((item) => item.id != config.id), config];
     await preferences.setString(
-        _profilesKey,
-        jsonEncode(updated.map(_profileMeta).toList()));
+        _profilesKey, jsonEncode(updated.map(_profileMeta).toList()));
     await preferences.setString(_activeKey, config.id);
     await preferences.setString(_baseUrlKey, config.baseUrl.trim());
     await preferences.setString(_modelKey, config.model.trim());

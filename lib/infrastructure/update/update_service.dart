@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -46,11 +47,14 @@ class UpdateService {
       }
 
       String? apkUrl;
+      String? apkDigest;
       for (final asset in (data['assets'] as List<dynamic>? ?? const [])) {
         final map = asset as Map<String, dynamic>;
         final name = (map['name'] as String?) ?? '';
         if (name.toLowerCase().endsWith('.apk')) {
           apkUrl = map['browser_download_url'] as String?;
+          final digest = map['digest'] as String?;
+          apkDigest = digest?.replaceFirst(RegExp(r'^sha256:'), '');
           break;
         }
       }
@@ -69,6 +73,7 @@ class UpdateService {
           version: version,
           notes: (data['body'] as String?) ?? '',
           apkUrl: apkUrl,
+          sha256: apkDigest,
         ),
       );
     } on DioException catch (e) {
@@ -106,6 +111,7 @@ class UpdateService {
   Future<UpdateInstallResult> downloadAndInstallDetailed(
     String url, {
     void Function(double progress)? onProgress,
+    String? expectedSha256,
   }) async {
     if (kIsWeb) {
       return const UpdateInstallResult.failure('Web 平台不支持应用内更新');
@@ -146,6 +152,12 @@ class UpdateService {
 
       if (!await _isValidApk(partFile)) {
         return const UpdateInstallResult.failure('下载的更新文件无效，请重试');
+      }
+      if (expectedSha256 != null && expectedSha256.trim().isNotEmpty) {
+        final actual = await _sha256(partFile);
+        if (actual != expectedSha256.trim().toLowerCase()) {
+          return const UpdateInstallResult.failure('更新文件校验失败，请重新检测更新');
+        }
       }
 
       if (await apkFile.exists()) {
@@ -199,6 +211,11 @@ class UpdateService {
     } finally {
       await handle.close();
     }
+  }
+
+  static Future<String> _sha256(File file) async {
+    final digest = await sha256.bind(file.openRead()).first;
+    return digest.toString();
   }
 
   static UpdateInstallResult _parseInstallResult(dynamic raw) {
@@ -282,11 +299,13 @@ class UpdateCheckResult {
 }
 
 class UpdateInfo {
-  const UpdateInfo({required this.version, required this.notes, this.apkUrl});
+  const UpdateInfo({required this.version, required this.notes, this.apkUrl,
+    this.sha256});
 
   final String version;
   final String notes;
   final String? apkUrl;
+  final String? sha256;
 }
 
 class UpdateInstallResult {

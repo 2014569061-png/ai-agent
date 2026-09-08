@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'app_tokens.dart';
 
 abstract final class AppTheme {
   static const brand = Color(0xFF0A59F7);
@@ -20,10 +21,10 @@ abstract final class AppTheme {
   static const warning = Color(0xFFF5A623);
   static const success = Color(0xFF2BA471);
 
-  static const radiusSmall = 14.0;
-  static const radiusCapsule = 24.0;
-  static const radiusCard = 20.0;
-  static const radiusModal = 20.0;
+  static const radiusSmall = AppTokens.radiusControl;
+  static const radiusCapsule = AppTokens.radiusCapsule;
+  static const radiusCard = AppTokens.radiusCard;
+  static const radiusModal = AppTokens.radiusModal;
 
   static const lightFloating = Color(0xEFFFFFFF);
   static const darkFloating = Color(0xE61E2635);
@@ -266,6 +267,7 @@ class AppSemanticColors {
     required this.userBubbleGlow,
     required this.onGlass,
     required this.mutedOnGlass,
+    required this.surfaceTint,
   });
 
   final Color canvas;
@@ -300,6 +302,9 @@ class AppSemanticColors {
   /// 玻璃表面上的弱化文字/署名（比 textMuted 更贴玻璃材质的一档）。
   final Color mutedOnGlass;
 
+  /// 玻璃面/悬浮面浅色遮罩叠加色（消除越过语义层的手写透明度）。
+  final Color surfaceTint;
+
   static const light = AppSemanticColors(
     canvas: AppTheme.background,
     surface: AppTheme.lightElevated,
@@ -308,7 +313,7 @@ class AppSemanticColors {
     modalSurface: Color(0xFFFDFEFF),
     border: AppTheme.lightBorder,
     textPrimary: AppTheme.textPrimary,
-    textMuted: AppTheme.textSecondary,
+    textMuted: Color(0xFF51617A), // P2-5: 提升对比度至 5.2:1 (符合 WCAG AA 4.5:1)
     chatUser: Color(0xFF0A59F7),
     chatAssistant: Color(0xFFEFF4FB),
     danger: AppTheme.danger,
@@ -322,6 +327,7 @@ class AppSemanticColors {
     userBubbleGlow: Color(0x00000000),
     onGlass: AppTheme.textPrimary,
     mutedOnGlass: AppTheme.mutedOnGlassLight,
+    surfaceTint: Color(0x8CFFFFFF), // Colors.white @ 0.55
   );
 
   static const dark = AppSemanticColors(
@@ -346,5 +352,6 @@ class AppSemanticColors {
     userBubbleGlow: Color(0x4D9333EA),
     onGlass: Colors.white,
     mutedOnGlass: AppTheme.mutedOnGlassDark,
+    surfaceTint: Color(0x14FFFFFF), // Colors.white @ 0.08
   );
 }
