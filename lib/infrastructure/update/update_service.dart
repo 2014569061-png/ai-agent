@@ -39,7 +39,7 @@ class UpdateService {
       final data = response.data as Map<String, dynamic>;
       final tagName = (data['tag_name'] as String?) ?? '';
       final version = tagName.startsWith('v') ? tagName.substring(1) : tagName;
-      if (!_isNewer(version, info.version)) {
+      if (!isNewer(version, info.version)) {
         return UpdateCheckResult(
           status: UpdateCheckStatus.upToDate,
           currentVersion: info.version,
@@ -310,11 +310,16 @@ class UpdateService {
         : null;
   }
 
-  static bool _isNewer(String version, String current) {
+  @visibleForTesting
+  static bool isNewer(String version, String current) {
     final a = _parse(version);
     final b = _parse(current);
-    for (var i = 0; i < 3; i++) {
-      if (a[i] != b[i]) return a[i] > b[i];
+    // 支持 4 段及以上版本号（如 0.8.6.1）：两侧缺位视为 0，逐段比较。
+    final len = a.length > b.length ? a.length : b.length;
+    for (var i = 0; i < len; i++) {
+      final av = i < a.length ? a[i] : 0;
+      final bv = i < b.length ? b[i] : 0;
+      if (av != bv) return av > bv;
     }
     return false;
   }
