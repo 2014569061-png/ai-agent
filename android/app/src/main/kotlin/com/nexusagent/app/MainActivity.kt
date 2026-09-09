@@ -180,6 +180,14 @@ class MainActivity : FlutterFragmentActivity() {
             return
         }
 
+        MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "nexus/accessibility").setMethodCallHandler { call, result ->
+            if (call.method == "isEnabled") {
+                val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+                    ?.split(':')?.any { it.contains(packageName, ignoreCase = true) } == true
+                result.success(enabled)
+            } else result.notImplemented()
+        }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !packageManager.canRequestPackageInstalls()
         ) {

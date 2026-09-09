@@ -41,7 +41,7 @@ HumanizedError humanizeError(String raw) {
       text.contains('server error')) {
     summary = '模型服务暂时不可用，请稍后再试。';
   } else {
-    summary = '出错了，可重试；详情见技术细节。';
+    summary = '遇到未预期的错误，可点右上角重试；仍失败可展开下方技术细节反馈。';
   }
   return HumanizedError(summary: summary, detail: raw);
 }

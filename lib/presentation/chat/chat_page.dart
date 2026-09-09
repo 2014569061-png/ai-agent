@@ -36,6 +36,7 @@ import '../memory/memory_page.dart';
 import '../mcp/mcp_servers_page.dart';
 import '../prompts/prompt_library_page.dart';
 import 'widgets/plan_panel.dart';
+import '../settings/provider_list_page.dart';
 import '../settings/settings_page.dart';
 import 'chat_layout_controller.dart';
 import '../workspace/file_tree_sheet.dart';
@@ -68,7 +69,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  void _pickWorkspace() async {
+  Future<void> _pickWorkspace() async {
     await ref.read(chatControllerProvider.notifier).pickWorkspace();
   }
 
@@ -76,9 +77,39 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final ws = ref.read(chatControllerProvider).currentWorkspacePath;
     if (ws == null || ws.isEmpty) {
       _pickWorkspace();
-    } else {
-      _openFileTree();
+      return;
     }
+    // 已有工作区：弹出操作面板，提供浏览 / 重选 / 解绑三条路径，
+    // 修复“选定工作区后主界面无重新选择入口”的问题（复用会话上下文菜单同款能力）。
+    showImmersiveActionSheet<void>(
+      context: context,
+      title: '当前工作区',
+      subtitle: ws,
+      items: [
+        ActionSheetItem(
+          title: '浏览文件树',
+          subtitle: '在应用内查看与导航项目目录',
+          icon: Icons.folder_open_rounded,
+          onTap: _openFileTree,
+        ),
+        ActionSheetItem(
+          title: '重新选择工作区',
+          subtitle: '调用系统目录选择器更换目录',
+          icon: Icons.drive_folder_upload_rounded,
+          onTap: _pickWorkspace,
+        ),
+        ActionSheetItem(
+          title: '解绑当前工作区',
+          subtitle: '清除绑定，回到无工作区状态',
+          icon: Icons.link_off_rounded,
+          destructive: true,
+          onTap: () {
+            ref.read(chatControllerProvider.notifier).setWorkspace(null);
+            FloatingToast.show(context, '已解绑工作区', tone: ToastTone.success);
+          },
+        ),
+      ],
+    );
   }
 
   void _openModelConfig() {
@@ -97,11 +128,27 @@ class _ChatPageState extends ConsumerState<ChatPage>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => SizedBox(
+      builder: (sheetContext) => SizedBox(
         height: MediaQuery.of(context).size.height * 0.75,
-        child: FileTreeSheet(workspacePath: ws),
+        child: FileTreeSheet(
+          workspacePath: ws,
+          onReselectWorkspace: () =>
+              _reselectWorkspaceFromSheet(sheetContext, ws),
+        ),
       ),
     );
+  }
+
+  /// 文件树面板内的“重新选择工作区”：关面板 → 重新选择 → 目录变化则重开文件树。
+  Future<void> _reselectWorkspaceFromSheet(
+      BuildContext sheetContext, String oldWs) async {
+    Navigator.pop(sheetContext);
+    await _pickWorkspace();
+    if (!mounted) return;
+    final newWs = ref.read(chatControllerProvider).currentWorkspacePath;
+    if (newWs != null && newWs.isNotEmpty && newWs != oldWs) {
+      _openFileTree();
+    }
   }
 
   // G1 开发环境引导:检测/安装 Termux、授权、Go 工具链。
@@ -127,9 +174,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (_) => SizedBox(
+      builder: (sheetContext) => SizedBox(
         height: MediaQuery.of(context).size.height * 0.9,
-        child: TerminalSheet(workspacePath: ws),
+        child: TerminalSheet(
+          workspacePath: ws,
+          onReselectWorkspace: () =>
+              _reselectWorkspaceFromSheet(sheetContext, ws),
+        ),
       ),
     );
   }
@@ -427,12 +478,52 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   // --- 操作 ---
 
+  Future<bool> _ensureProviderConfigured() async {
+    final store = ref.read(providerConfigStoreProvider);
+    final config = await store.load();
+    if (config.isConfigured) return true;
+
+    if (!mounted) return false;
+    final gotoConfig = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('尚未配置模型服务'),
+        content: const Text('尚未配置模型服务，先去填入 API Key 或连接本地模型？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('去配置'),
+          ),
+        ],
+      ),
+    );
+
+    if (gotoConfig == true && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ProviderListPage()),
+      );
+      await _chat.reloadProviderConfig();
+      final reloaded = await store.load();
+      return reloaded.isConfigured;
+    }
+    return false;
+  }
+
   Future<void> _send() async {
     final state = ref.read(chatControllerProvider);
     final text = _controller.text.trim();
     // 纯附件（无文本）同样允许发送，与输入框可发送状态一致（文档 7.4）。
     final canSend = text.isNotEmpty || _attachments.isNotEmpty;
     if (!canSend || state.running || state.loading) return;
+
+    final configured = await _ensureProviderConfigured();
+    if (!configured) return;
+
     _clearCurrentDraft();
     _controller.clear();
     final attachments = List<PlatformFile>.of(_attachments);
@@ -678,7 +769,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
           'md',
           'csv',
           'json',
-          'pdf',
           'mp3',
           'm4a',
           'wav',
@@ -1184,18 +1274,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   // --- 渲染 ---
 
-  void _fillSuggestion(String text) {
+  void _fillSuggestion(QuickAction action) {
     _pendingSourceType = 'quick_action';
-    _pendingTaskType = _taskTypeForSuggestion(text);
+    _pendingTaskType = _taskTypeForSuggestion(action.label);
     final state = ref.read(chatControllerProvider);
     final needsWorkspace =
         !(state.currentWorkspacePath?.trim().isNotEmpty ?? false) &&
-            (text == '解读项目' || text == '修复问题' || text == '解读工作区');
+            (action.label == '解读项目' ||
+                action.label == '修复问题' ||
+                action.label == '解读工作区');
     if (needsWorkspace) {
-      _pickWorkspaceAndFill(text);
+      _pickWorkspaceAndFill(action.prompt);
       return;
     }
-    _fillInput(text);
+    _fillInput(action.prompt);
   }
 
   String _taskTypeForSuggestion(String text) {
@@ -1216,14 +1308,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _fillInput(String text) {
     _controller.text = text;
-    _controller.selection = TextSelection.collapsed(offset: text.length);
+    final bracketIndex = text.indexOf('「');
+    if (bracketIndex >= 0 && text.contains('」')) {
+      _controller.selection = TextSelection.collapsed(offset: bracketIndex + 1);
+    } else {
+      _controller.selection = TextSelection.collapsed(offset: text.length);
+    }
   }
 
   Widget _emptyState(BuildContext context) {
     final state = ref.read(chatControllerProvider);
     final ws = state.currentWorkspacePath;
     final hasWorkspace = ws != null && ws.isNotEmpty;
-    final suggestions = const ['解读项目', '修复问题', '头脑风暴', '解读工作区'];
+    const suggestions = [
+      QuickAction(label: '解读项目'),
+      QuickAction(label: '修复问题'),
+      QuickAction(
+        label: '头脑风暴',
+        prompt:
+            '帮我头脑风暴一下「」的创意方向。要求：先提出 3~5 个角度，再挑一个最有潜力的展开，最后给出下一步行动建议。',
+      ),
+      QuickAction(label: '解读工作区'),
+    ];
     final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
     return ChatEmptyState(
       suggestions: suggestions,
@@ -1405,6 +1511,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                               _chat.respondToPlan(true),
                                           onCancel: () =>
                                               _chat.respondToPlan(false),
+                                          onResume: () => _chat
+                                              .resumeFromBudgetPause(
+                                                  approveTool: _approveTool),
                                         ),
                                       ),
                                     if (state.toolActivities.isNotEmpty)

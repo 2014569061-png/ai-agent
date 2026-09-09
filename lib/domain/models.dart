@@ -164,12 +164,17 @@ class UnifiedTool {
     required this.description,
     required this.parametersSchema,
     required this.risk,
+    this.sensitive = false,
   });
 
   final String name;
   final String description;
   final Map<String, dynamic> parametersSchema;
   final ToolRisk risk;
+
+  /// 敏感操作标记：无论审批模式或信任状态如何，都强制要求用户显式审批，
+  /// 不允许通过 fullAccess / 全局信任等渠道自动放行。
+  final bool sensitive;
 
   Map<String, dynamic> toOpenAiSchema() => {
         'type': 'function',

@@ -1,0 +1,398 @@
+import 'package:flutter/material.dart';
+
+import '../../domain/models.dart';
+import '../../infrastructure/providers/anthropic_provider.dart';
+import '../../infrastructure/providers/gemini_provider.dart';
+import '../../infrastructure/providers/openai_compatible_provider.dart';
+import '../../infrastructure/providers/provider_config.dart';
+import '../../infrastructure/providers/provider_config_store.dart';
+import '../widgets/floating_toast.dart';
+import '../widgets/nexus_page_header.dart';
+import 'model_list_page.dart';
+import 'provider_presets.dart';
+import 'settings_components.dart';
+
+class ProviderDetailPage extends StatefulWidget {
+  const ProviderDetailPage({super.key, this.config, this.preset});
+  final ProviderConfig? config;
+  final ProviderPreset? preset;
+
+  @override
+  State<ProviderDetailPage> createState() => _ProviderDetailPageState();
+}
+
+class _ProviderDetailPageState extends State<ProviderDetailPage> {
+  late final TextEditingController _name;
+  late final TextEditingController _baseUrl;
+  late final TextEditingController _model;
+  late final TextEditingController _apiKey;
+  late final TextEditingController _contextTokens;
+  final _store = ProviderConfigStore();
+  late ProviderType _type;
+  ReasoningEffort _reasoning = ReasoningEffort.medium;
+  bool _obscure = true;
+  bool _saving = false;
+  bool _testing = false;
+  bool _advanced = false;
+  String? _status;
+
+  @override
+  void initState() {
+    super.initState();
+    final config = widget.config;
+    final preset = widget.preset;
+    _name =
+        TextEditingController(text: config?.name ?? preset?.name ?? 'Provider');
+    _baseUrl =
+        TextEditingController(text: config?.baseUrl ?? preset?.baseUrl ?? '');
+    _model = TextEditingController(
+        text: config?.model ?? preset?.defaultModel ?? '');
+    _apiKey = TextEditingController(text: config?.apiKey ?? '');
+    _contextTokens =
+        TextEditingController(text: config?.contextTokens.toString() ?? '');
+    _type = config?.type ?? preset?.type ?? ProviderType.openaiCompatible;
+    _reasoning = config?.reasoningEffort ?? ReasoningEffort.medium;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _baseUrl.dispose();
+    _model.dispose();
+    _apiKey.dispose();
+    _contextTokens.dispose();
+    super.dispose();
+  }
+
+  ProviderConfig get _config => ProviderConfig(
+        id: widget.config?.id ??
+            'provider-${DateTime.now().millisecondsSinceEpoch}',
+        name: _name.text.trim().isEmpty ? 'Provider' : _name.text.trim(),
+        baseUrl: _baseUrl.text.trim(),
+        model: _model.text.trim(),
+        apiKey: _apiKey.text.trim(),
+        type: _type,
+        reasoningEffort: _reasoning,
+        contextTokens: (int.tryParse(_contextTokens.text.trim()) ??
+                ProviderConfig.defaultContextTokens)
+            .clamp(4000, 2000000)
+            .toInt(),
+      );
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    try {
+      final config = _config;
+      await _store.save(config);
+      if (mounted) {
+        FloatingToast.show(context, '配置已保存');
+        Navigator.pop(context, config);
+      }
+    } catch (error) {
+      if (mounted) FloatingToast.error(context, error.toString());
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _test() async {
+    setState(() {
+      _testing = true;
+      _status = '正在测试连接…';
+    });
+    try {
+      final config = _config;
+      final result = switch (config.type) {
+        ProviderType.anthropic =>
+          await AnthropicProvider(config: config).testConnection(),
+        ProviderType.gemini =>
+          await GeminiProvider(config: config).testConnection(),
+        _ => await OpenAiCompatibleProvider(config: config).testConnection(),
+      };
+      if (mounted) {
+        setState(() => _status = result == null ? '连接测试成功' : '连接失败：$result');
+      }
+    } catch (error) {
+      if (mounted) setState(() => _status = '连接失败：$error');
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
+  Future<void> _chooseModel() async {
+    final selected = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ModelListPage(
+                config: _config,
+                preset: widget.preset ?? presetForConfig(_config))));
+    if (selected != null && mounted) setState(() => _model.text = selected);
+  }
+
+  bool get _hasChanges {
+    final origName = widget.config?.name ?? widget.preset?.name ?? 'Provider';
+    final origBaseUrl = widget.config?.baseUrl ?? widget.preset?.baseUrl ?? '';
+    final origModel = widget.config?.model ?? widget.preset?.defaultModel ?? '';
+    final origApiKey = widget.config?.apiKey ?? '';
+    final origType = widget.config?.type ?? widget.preset?.type ?? ProviderType.openaiCompatible;
+    final origReasoning = widget.config?.reasoningEffort ?? ReasoningEffort.medium;
+    return _name.text != origName ||
+        _baseUrl.text != origBaseUrl ||
+        _model.text != origModel ||
+        _apiKey.text != origApiKey ||
+        _type != origType ||
+        _reasoning != origReasoning;
+  }
+
+  Future<bool> _showDiscardConfirm() async {
+    final res = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('放弃未保存的修改？'),
+        content: const Text('当前服务商配置尚未保存，离开后修改将丢失。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('继续编辑'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('放弃修改'),
+          ),
+        ],
+      ),
+    );
+    return res ?? false;
+  }
+
+  Future<void> _handlePop() async {
+    if (!_hasChanges || _saving) {
+      Navigator.pop(context);
+      return;
+    }
+    final shouldDiscard = await _showDiscardConfirm();
+    if (shouldDiscard && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preset = widget.preset ?? presetForConfig(_config);
+    return PopScope(
+      canPop: !_hasChanges || _saving,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldDiscard = await _showDiscardConfirm();
+        if (shouldDiscard && context.mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: settingsBgColor(context),
+        appBar: NexusPageHeader(
+          title: _name.text.isEmpty ? '服务商配置' : _name.text,
+          subtitle: preset?.description,
+          onBack: _handlePop,
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+          children: [
+            const SettingsSectionTitle('基础配置'),
+            SettingsGroupCard(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              children: [
+                TextField(
+                  controller: _name,
+                  decoration: const InputDecoration(labelText: '服务商名称'),
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<ProviderType>(
+                  initialValue: _type,
+                  decoration: const InputDecoration(labelText: '协议类型'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: ProviderType.openaiCompatible,
+                      child: Text('OpenAI 兼容'),
+                    ),
+                    DropdownMenuItem(
+                      value: ProviderType.anthropic,
+                      child: Text('Anthropic'),
+                    ),
+                    DropdownMenuItem(
+                      value: ProviderType.gemini,
+                      child: Text('Gemini'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _type = value ?? _type),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _baseUrl,
+                  decoration: const InputDecoration(labelText: 'Base URL'),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: _apiKey,
+                  obscureText: _obscure,
+                  decoration: InputDecoration(
+                    labelText: 'API Key',
+                    suffixIcon: IconButton(
+                      icon: Icon(_obscure
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined),
+                      onPressed: () =>
+                          setState(() => _obscure = !_obscure),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SettingsSectionTitle('模型选择'),
+            SettingsGroupCard(
+              children: [
+                SettingsTile(
+                  icon: Icons.view_list_rounded,
+                  iconColor: const Color(0xFF007AFF),
+                  title: _model.text.isEmpty ? '选择模型' : _model.text,
+                  subtitle: '查看预设模型、远端模型或添加自定义模型',
+                  onTap: _chooseModel,
+                ),
+              ],
+            ),
+            if (_status != null) ...[
+              const SizedBox(height: 12),
+              SettingsGroupCard(
+                children: [
+                  SettingsTile(
+                    icon: _status!.startsWith('连接测试成功')
+                        ? Icons.check_circle_rounded
+                        : Icons.info_rounded,
+                    iconColor: _status!.startsWith('连接测试成功')
+                        ? const Color(0xFF34C759)
+                        : const Color(0xFFFF3B30),
+                    title: _status!,
+                    showChevron: false,
+                  ),
+                ],
+              ),
+            ],
+            const SettingsSectionTitle('高级设置'),
+            SettingsGroupCard(
+              children: [
+                SettingsTile(
+                  icon: Icons.tune_rounded,
+                  iconColor: const Color(0xFF5856D6),
+                  title: '高级参数',
+                  subtitle: _advanced ? '点击收起' : '调整思考程度与上下文窗口',
+                  showChevron: false,
+                  trailingWidget: Icon(
+                    _advanced ? Icons.expand_less : Icons.expand_more,
+                    color: settingsMutedColor(context),
+                  ),
+                  onTap: () => setState(() => _advanced = !_advanced),
+                ),
+                if (_advanced) ...[
+                  const SettingsDivider(indent: 16),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '思考程度',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: settingsMutedColor(context),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SegmentedButton<ReasoningEffort>(
+                          segments: const [
+                            ButtonSegment(
+                              value: ReasoningEffort.low,
+                              label: Text('低'),
+                            ),
+                            ButtonSegment(
+                              value: ReasoningEffort.medium,
+                              label: Text('中'),
+                            ),
+                            ButtonSegment(
+                              value: ReasoningEffort.high,
+                              label: Text('高'),
+                            ),
+                          ],
+                          selected: {_reasoning},
+                          onSelectionChanged: (value) =>
+                              setState(() => _reasoning = value.first),
+                        ),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _contextTokens,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: '上下文窗口上限（Token）',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: _testing ? null : _test,
+                        icon: _testing
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.wifi_tethering),
+                        label: const Text('测试连接'),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 44,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF007AFF),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: _saving ? null : _save,
+                        icon: const Icon(Icons.save_outlined),
+                        label: Text(_saving ? '保存中…' : '保存并启用'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

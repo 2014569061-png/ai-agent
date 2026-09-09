@@ -1,3 +1,5 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../domain/models.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/anthropic_provider.dart';
@@ -95,7 +97,12 @@ class HeadlessExecutor {
     registerIfAllowed(GetTimeTool());
     registerIfAllowed(JsonQueryTool());
     registerIfAllowed(ImageGenTool(config: config));
-    if (workspacePath != null && workspacePath.trim().isNotEmpty) {
+    final terminalFileEnabled = (await SharedPreferences.getInstance())
+            .getBool('settings.tool.terminal_file') ??
+        true;
+    if (workspacePath != null &&
+        workspacePath.trim().isNotEmpty &&
+        terminalFileEnabled) {
       final sandbox = WorkspaceSandbox(workspacePath);
       registerIfAllowed(ReadFileTool(sandbox: sandbox));
       registerIfAllowed(ListDirectoryTool(sandbox: sandbox));

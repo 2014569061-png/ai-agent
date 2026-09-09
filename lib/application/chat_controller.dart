@@ -3,10 +3,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:dio/dio.dart' show CancelToken;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:drift/drift.dart' show Value;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'mojibake_repair.dart';
 import 'autonomous_delegation.dart';
@@ -21,6 +22,7 @@ import '../infrastructure/providers/openai_compatible_provider.dart';
 import '../infrastructure/providers/proxy_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
 import '../infrastructure/tools/core_tools.dart';
+import '../infrastructure/tools/device_tools.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/tools/sub_agent_tool.dart';
 import '../infrastructure/tools/plan_tool.dart';
@@ -63,6 +65,34 @@ class ToolActivity {
         status: status ?? this.status,
         result: result ?? this.result,
       );
+}
+
+/// 「设置 → 工具」页面的全局工具开关快照，由 [_loadToolSettings] 从
+/// SharedPreferences（settings.tool.*）读取并在此处统一消费。
+/// 关闭的开关会对应地从工具注册表中剔除对应工具。
+class ToolSettings {
+  const ToolSettings({
+    this.webBrowsing = true,
+    this.deviceDirect = true,
+    this.sensitiveRead = false,
+    this.sensitiveAction = false,
+    this.terminalFile = true,
+  });
+
+  /// 网页浏览（web_search）。
+  final bool webBrowsing;
+
+  /// 设备直达总开关（device_info / device_action 的父级开关）。
+  final bool deviceDirect;
+
+  /// 读取敏感设备信息（device_info）。
+  final bool sensitiveRead;
+
+  /// 敏感设备操作（device_action）。
+  final bool sensitiveAction;
+
+  /// 终端 / 工作区文件工具。
+  final bool terminalFile;
 }
 
 /// 鑱婂ぉ椤电殑瀹屾暣涓嶅彲鍙樼姸鎬?
@@ -428,6 +458,7 @@ class ChatController extends Notifier<ChatState> {
     String tavilyKey,
     ProviderConfig config,
     ToolRisk subAgentRisk,
+    ToolSettings settings,
   ) {
     final registry = ToolRegistry();
     if (enabledTools.contains('calculator')) {
@@ -438,11 +469,22 @@ class ChatController extends Notifier<ChatState> {
     if (enabledTools.contains('http_request')) {
       registry.register(HttpRequestTool());
     }
-    if (enabledTools.contains('web_search')) {
+    if (settings.webBrowsing && enabledTools.contains('web_search')) {
       registry.register(WebSearchTool(apiKey: tavilyKey));
     }
     if (enabledTools.contains('generate_image')) {
       registry.register(ImageGenTool(config: config));
+    }
+
+    // 设备直达工具：仅当「设备直达」总开关开启时才挂载，具体敏感工具再各自
+    // 受「读取敏感设备信息」/「敏感设备操作」开关与强制逐次审批约束。
+    if (settings.deviceDirect) {
+      if (settings.sensitiveRead) {
+        registry.register(const DeviceInfoTool());
+      }
+      if (settings.sensitiveAction) {
+        registry.register(const DeviceActionTool());
+      }
     }
 
     // 记忆写入：回调懒加载 DB，写入"手动来源"记忆。
@@ -454,7 +496,7 @@ class ChatController extends Notifier<ChatState> {
     registry.register(ManagePlanTool(onPlanUpdated: _onPlanUpdated));
 
     final wsPath = state.currentWorkspacePath;
-    if (wsPath != null && wsPath.isNotEmpty) {
+    if (settings.terminalFile && wsPath != null && wsPath.isNotEmpty) {
       final sandbox = WorkspaceSandbox(wsPath);
       registry.register(ReadFileTool(sandbox: sandbox));
       registry.register(WriteFileTool(sandbox: sandbox));
@@ -471,6 +513,25 @@ class ChatController extends Notifier<ChatState> {
     }
 
     return registry;
+  }
+
+  /// 读取「设置 → 工具」页面上各工具开关的当前值。开关写在
+  /// SharedPreferences（settings.tool.*），由 [ToolSettings] 统一消费，
+  /// 关闭的开关会对应地从工具注册表中剔除。
+  static Future<ToolSettings> _loadToolSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return ToolSettings(
+        webBrowsing: prefs.getBool('settings.tool.web_browsing') ?? true,
+        deviceDirect: prefs.getBool('settings.tool.device_direct') ?? true,
+        sensitiveRead: prefs.getBool('settings.tool.sensitive_read') ?? false,
+        sensitiveAction:
+            prefs.getBool('settings.tool.sensitive_action') ?? false,
+        terminalFile: prefs.getBool('settings.tool.terminal_file') ?? true,
+      );
+    } catch (_) {
+      return const ToolSettings();
+    }
   }
 
   /// 把已启用的 MCP 服务器工具并入 registry。
@@ -519,7 +580,17 @@ class ChatController extends Notifier<ChatState> {
         double topP
       })> _prepareRun(AppDatabase database) async {
     final store = ref.read(providerConfigStoreProvider);
-    final config = await store.load();
+    var config = await store.load();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final deepReasoning =
+          prefs.getBool('settings.llm.deep_reasoning') ?? true;
+      if (!deepReasoning) {
+        config = config.copyWith(reasoningEffort: ReasoningEffort.off);
+      }
+    } catch (_) {
+      // Keep the provider's configured reasoning level if preferences fail.
+    }
     final tavilyKey = await store.readToolKey('tavily');
     var enabledTools = <String>{'calculator', 'get_time', 'json_query'};
     // 前台单次预算默认提高到 16，预算耗尽现在是可恢复的暂停而非失败。
@@ -549,8 +620,9 @@ class ChatController extends Notifier<ChatState> {
         await AutonomousDelegationService().isEnabled();
     final subAgentRisk =
         autonomousDelegation ? ToolRisk.safe : ToolRisk.requiresConfirmation;
-    final registry =
-        _buildRegistry(enabledTools, tavilyKey, config, subAgentRisk);
+    final toolSettings = await _loadToolSettings();
+    final registry = _buildRegistry(
+        enabledTools, tavilyKey, config, subAgentRisk, toolSettings);
     await _mergeMcpTools(registry);
     await _mergePluginTools(registry);
     final model = config.isConfigured ? config.model : 'demo-model';
@@ -609,7 +681,7 @@ class ChatController extends Notifier<ChatState> {
         parts.add(MessagePart.text('\n\n附件 ${file.name} 超过 8MB，已跳过'));
         continue;
       }
-      final isTextAttachment = const {'txt', 'md', 'csv', 'json', 'pdf'}
+      final isTextAttachment = const {'txt', 'md', 'csv', 'json'}
           .contains(file.extension?.toLowerCase());
       if (bytes != null && mime != null) {
         parts.add(MessagePart.image('data:$mime;base64,${base64Encode(bytes)}',
@@ -623,10 +695,6 @@ class ChatController extends Notifier<ChatState> {
       final content =
           _documentExtractor.extractText(fileName: file.name, bytes: bytes) ??
               '';
-      if (content.isEmpty && file.extension == 'pdf') {
-        parts.add(MessagePart.text('\n\nPDF 文件 ${file.name} 未提取到可用文本'));
-        continue;
-      }
       final truncated = content.length > _maxTextAttachmentChars;
       final visibleContent = truncated
           ? '${content.substring(0, _maxTextAttachmentChars)}\n[内容已截断'
@@ -1030,7 +1098,11 @@ class ChatController extends Notifier<ChatState> {
     _cancelledRunGenerations.remove(runGeneration);
     // 追加一个助手占位消息承载续跑输出；实际模型输入用保存的上下文。
     final assistantIndex = state.messages.length;
+    final pausedPlan = state.planState;
     state = state.copyWith(
+      planState: pausedPlan?.status == 'paused'
+          ? pausedPlan!.copyWith(status: 'executing')
+          : pausedPlan,
       messages: [
         ...state.messages,
         ChatMessage(
@@ -1198,11 +1270,122 @@ class ChatController extends Notifier<ChatState> {
       steps[targetIdx] = steps[targetIdx].copyWith(status: status);
       state = state.copyWith(planState: plan.copyWith(steps: steps));
     }
+
+    // 步骤全部走到终态后，顶层计划状态必须随之收敛，避免“所有步骤已完成
+    // 但顶层仍显示 executing”。
+    _reconcilePlanTopLevel();
+  }
+
+  /// 依据步骤终态收敛计划顶层状态：
+  /// - 全部步骤 completed → 顶层 completed；
+  /// - 任一步骤 failed 且无 pending/running → 顶层 failed；
+  /// - 仅当步骤都还活跃时保持当前执行态。
+  void _reconcilePlanTopLevel() {
+    final plan = state.planState;
+    if (plan == null ||
+        !plan.isConfirmed ||
+        plan.status == 'completed' ||
+        plan.status == 'cancelled' ||
+        plan.steps.isEmpty) {
+      return;
+    }
+    final next = resolvePlanTerminalStatus(
+        steps: plan.steps, currentStatus: plan.status);
+    if (next != null && next != plan.status) {
+      state = state.copyWith(planState: plan.copyWith(status: next));
+    }
+  }
+
+  /// 运行收尾终态收敛 + 残留步骤归一化（独立于 ownsRun，防止代次失效时残留 executing）。
+  /// - 终态 completed → 残留 running / pending 步骤置为 completed；
+  /// - 终态 failed / cancelled → 残留 running / pending 步骤置为 failed；
+  /// - 终态 paused → 步骤保持原样（供“继续执行”从断点续跑）。
+  void _convergePlanToTerminal({
+    required String? runStatus,
+    required bool cancelled,
+  }) {
+    final plan = state.planState;
+    if (plan == null ||
+        plan.status == 'completed' ||
+        plan.status == 'cancelled' ||
+        plan.status == 'failed') {
+      return;
+    }
+    final terminal = resolvePlanTerminalStatus(
+      steps: plan.steps,
+      currentStatus: plan.status,
+      runStatus: runStatus,
+      cancelled: cancelled,
+    );
+    if (terminal == null) return;
+    state = state.copyWith(
+      planState: plan.copyWith(
+        status: terminal,
+        steps: normalizePlanStepsForTerminal(plan.steps, terminal),
+      ),
+    );
+  }
+
+  /// 纯函数：按计划终态归一化残留步骤（@visibleForTesting 便于单测）。
+  /// - completed → running / pending 置为 completed；
+  /// - failed / cancelled → running / pending 置为 failed；
+  /// - 其他（paused 等）保持不变。
+  @visibleForTesting
+  static List<PlanStep> normalizePlanStepsForTerminal(
+      List<PlanStep> steps, String terminal) {
+    final String? replacement;
+    if (terminal == 'completed') {
+      replacement = 'completed';
+    } else if (terminal == 'failed' || terminal == 'cancelled') {
+      replacement = 'failed';
+    } else {
+      replacement = null;
+    }
+    if (replacement == null) return steps;
+    return [
+      for (final step in steps)
+        if (step.status == 'running' || step.status == 'pending')
+          step.copyWith(status: replacement)
+        else
+          step,
+    ];
+  }
+
+  /// 纯函数：依据步骤终态与运行结果，解析计划应进入的顶层状态。
+  /// - [runStatus] 为 null 表示运行尚未结束，只依据步骤终态收敛；
+  ///   否则按运行结果解析（含步骤全完成对 paused 的覆盖）。
+  @visibleForTesting
+  static String? resolvePlanTerminalStatus({
+    required List<PlanStep> steps,
+    required String currentStatus,
+    String? runStatus,
+    bool cancelled = false,
+  }) {
+    if (steps.isEmpty) return null;
+    final allCompleted = steps.every((step) => step.status == 'completed');
+    final allTerminal = steps
+        .every((step) => step.status == 'completed' || step.status == 'failed');
+    final anyFailed = steps.any((step) => step.status == 'failed');
+
+    // 运行尚未结束：仅在步骤全部走到终态时收敛，避免提前改态。
+    if (runStatus == null) {
+      if (allCompleted) return 'completed';
+      if (allTerminal && anyFailed) return 'failed';
+      return null;
+    }
+
+    // 运行已结束：按运行结果解析。
+    if (cancelled || runStatus == 'cancelled') return 'cancelled';
+    if (runStatus == 'success') return 'completed';
+    if (allCompleted) return 'completed';
+    if (runStatus == 'paused') return 'paused';
+    return 'failed';
   }
 
   void respondToPlan(bool approved) {
     final completer = _planCompleter;
     _planCompleter = null;
+    final wasConfirmed = state.planState?.isConfirmed ?? false;
     state = state.copyWith(
         planState: state.planState
             ?.copyWith(status: approved ? 'executing' : 'cancelled'),
@@ -1212,6 +1395,10 @@ class ChatController extends Notifier<ChatState> {
         ]);
     if (completer != null && !completer.isCompleted) {
       completer.complete(approved);
+    } else if (!approved && wasConfirmed) {
+      // 计划已确认并正在执行，此时点击“停止执行计划”不仅要标记为取消，
+      // 还必须真正中断底层运行，避免顶层残留 executing / 后台继续执行。
+      _invalidateActiveRun();
     }
   }
 
@@ -1908,6 +2095,12 @@ class ChatController extends Notifier<ChatState> {
     );
     final runCancelled = _cancelledRunGenerations.contains(runGeneration) ||
         runStatus == 'cancelled';
+    // 计划收敛不依赖 ownsRun()：即使运行代次已失效（会话切换 / 中断 / 取消），
+    // 也要对当前会话 planState 执行一次终态收敛与步骤归一化，
+    // 避免 plan.status 残留 executing 导致“计划一直显示正在运行”。
+    // 切换会话时 planState 会被清空（newConversation / switchConversation 均带
+    // clearPlanState: true），因此外提不会污染其他会话的计划状态。
+    _convergePlanToTerminal(runStatus: runStatus, cancelled: runCancelled);
     if (ownsRun()) {
       if (assistantIndex < state.messages.length) {
         state =
@@ -1920,18 +2113,6 @@ class ChatController extends Notifier<ChatState> {
         );
       } else {
         state = state.copyWith(running: false, clearLiveReply: true);
-      }
-      final plan = state.planState;
-      if (plan != null && plan.status == 'executing') {
-        state = state.copyWith(
-          planState: plan.copyWith(
-            status: runStatus == 'success'
-                ? 'completed'
-                : (runCancelled
-                    ? 'cancelled'
-                    : (runStatus == 'paused' ? 'paused' : 'failed')),
-          ),
-        );
       }
       try {
         await _persistMessage(assistantMessage);
@@ -2146,6 +2327,20 @@ class ChatController extends Notifier<ChatState> {
   /// 切换"思考程度"档位（已保存到 ProviderConfig），更新 state 以便 UI 立即反映。
   void setReasoningEffort(ReasoningEffort effort) {
     state = state.copyWith(activeReasoningEffort: effort);
+  }
+
+  /// 重新加载当前生效的服务商配置（如用户从设置页配置 Key 返回后）。
+  Future<void> reloadProviderConfig() async {
+    final store = ref.read(providerConfigStoreProvider);
+    final config = await store.load();
+    state = state.copyWith(
+      activeModel: config.model,
+      activeProviderName: config.name,
+      activeProviderId: config.id,
+      contextTokens: config.contextTokens,
+      activeReasoningEffort: config.reasoningEffort,
+      providerConfigured: config.isConfigured,
+    );
   }
 
   // --- 鐘舵€佽緟'---

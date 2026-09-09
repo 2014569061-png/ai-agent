@@ -1,14 +1,21 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:workmanager/workmanager.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/headless_executor.dart';
 import '../../application/scheduled_task_service.dart';
 import '../database/app_database.dart';
 import '../notifications/notification_service.dart';
 import '../providers/provider_config_store.dart';
+import '../files/vault_exporter_io.dart';
+import '../sync/sync_service.dart';
 
 /// C5 定时任务的后台入口（WorkManager 回调）。
 /// 在独立 isolate 中打开数据库、取到点任务、无 UI 运行 Agent、写入结果并弹通知。
@@ -19,6 +26,7 @@ void scheduledTaskCallbackDispatcher() {
     AppDatabase? db;
     try {
       db = await openAppDatabase();
+      await _runAutomaticBackup(db);
       final due = await ScheduledTaskService().dueTasks(db, DateTime.now());
       if (due.isEmpty) return true;
       final config = await ProviderConfigStore().load();
@@ -71,4 +79,28 @@ void scheduledTaskCallbackDispatcher() {
     }
     return true;
   });
+}
+
+Future<void> _runAutomaticBackup(AppDatabase db) async {
+  final prefs = await SharedPreferences.getInstance();
+  if (!(prefs.getBool('settings.backup.auto') ?? false)) return;
+  final last = DateTime.tryParse(
+    prefs.getString('settings.backup.last_time') ?? '',
+  );
+  if (last != null && DateTime.now().difference(last).inHours < 24) return;
+
+  final snapshot = jsonEncode(await buildVaultJson(db));
+  final encrypted = await SyncService().encryptString(snapshot);
+  final dir = await getApplicationDocumentsDirectory();
+  final backupDir = Directory(p.join(dir.path, 'backups'));
+  await backupDir.create(recursive: true);
+  final path = p.join(
+    backupDir.path,
+    'nexus-auto-${DateTime.now().millisecondsSinceEpoch}.nexusauto',
+  );
+  await File(path).writeAsString(encrypted, flush: true);
+  await prefs.setString(
+    'settings.backup.last_time',
+    DateTime.now().toIso8601String(),
+  );
 }

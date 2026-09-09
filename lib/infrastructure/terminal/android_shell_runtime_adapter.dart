@@ -51,8 +51,9 @@ class AndroidShellRuntimeAdapter implements LinuxRuntimeAdapter {
     final output = StringBuffer();
     var timedOut = false;
     try {
+      final shellBinary = _shellBinary(request.shell);
       final process = await Process.start(
-        '/system/bin/sh',
+        shellBinary,
         ['-c', request.commandLine],
         workingDirectory: workingDirectory,
         runInShell: false,
@@ -84,6 +85,18 @@ class AndroidShellRuntimeAdapter implements LinuxRuntimeAdapter {
   @override
   void stop() {
     _process?.kill(ProcessSignal.sigterm);
+  }
+
+  /// 把用户在环境页选择的 Shell 映射到 Android 可用的解释器路径；
+  /// 未知或不存在的 Shell 一律回退到系统自带的 /system/bin/sh。
+  String _shellBinary(String shell) {
+    final bin = switch (shell.trim()) {
+      'zsh' => '/system/bin/zsh',
+      'bash' => '/system/bin/bash',
+      _ => null,
+    };
+    if (bin != null && File(bin).existsSync()) return bin;
+    return '/system/bin/sh';
   }
 
   Future<void> _collect(Stream<List<int>> stream, StringBuffer output) async {

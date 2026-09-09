@@ -142,8 +142,9 @@ class DashboardService {
         );
       }
     }
+    final todayKey = _dayKey(now);
     final weeklyUsage = dailyTokensMap.values
-        .map((b) => b.toUsageDaily())
+        .map((b) => b.toUsageDaily(isToday: b.day == todayKey))
         .toList(growable: false);
 
     // 3. 任务状态与成功率（近 7 天窗口）
@@ -169,8 +170,8 @@ class DashboardService {
     }
 
     final totalFinished = completedCount + failedCount;
-    final double successRate = totalFinished == 0
-        ? 100.0
+    final double? successRate = totalFinished == 0
+        ? null
         : ((completedCount / totalFinished) * 100).clamp(0.0, 100.0);
 
     // 4. 最近运行项 (取前 6 条)
@@ -288,7 +289,7 @@ class _DailyTokenBucket {
     cost += costCents;
   }
 
-  UsageDaily toUsageDaily() => UsageDaily(
+  UsageDaily toUsageDaily({bool isToday = false}) => UsageDaily(
         // 展示层沿用 MM-dd 短格式；桶 key 用完整 yyyy-MM-dd 保证跨年正确。
         day: _shortDay(day),
         calls: calls,
@@ -297,6 +298,7 @@ class _DailyTokenBucket {
         cachedTokens: cached,
         spendCents: cost,
         costCents: cost,
+        isToday: isToday,
       );
 }
 

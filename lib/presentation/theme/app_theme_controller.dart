@@ -16,9 +16,18 @@ class AppThemeController {
     };
   }
 
-  static Future<void> setDayMode(bool enabled) async {
-    mode.value = enabled ? ThemeMode.light : ThemeMode.dark;
+  static Future<void> setMode(ThemeMode newMode) async {
+    mode.value = newMode;
     final preferences = await SharedPreferences.getInstance();
-    await preferences.setString('app.theme_mode', enabled ? 'light' : 'dark');
+    final str = switch (newMode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    };
+    await preferences.setString('app.theme_mode', str);
+  }
+
+  static Future<void> setDayMode(bool enabled) async {
+    await setMode(enabled ? ThemeMode.light : ThemeMode.dark);
   }
 }

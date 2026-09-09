@@ -140,6 +140,35 @@ class ProviderConfigStore {
     await _writeKey(_apiKeyKey, config.apiKey.trim());
   }
 
+  Future<void> setActive(String id) async {
+    final preferences = await SharedPreferences.getInstance();
+    final profiles = await loadAll();
+    final target = profiles.firstWhere((p) => p.id == id, orElse: () => profiles.first);
+    await preferences.setString(_activeKey, target.id);
+    await preferences.setString(_baseUrlKey, target.baseUrl.trim());
+    await preferences.setString(_modelKey, target.model.trim());
+    await _writeKey(_apiKeyKey, target.apiKey.trim());
+    _activeId = target.id;
+  }
+
+  Future<bool> deleteProfile(String id) async {
+    final preferences = await SharedPreferences.getInstance();
+    final profiles = await loadAll();
+    final updated = profiles.where((p) => p.id != id).toList();
+    await preferences.setString(
+        _profilesKey, jsonEncode(updated.map(_profileMeta).toList()));
+    await _deleteKey('provider.api_key.$id');
+    if (_activeId == id) {
+      if (updated.isNotEmpty) {
+        await setActive(updated.first.id);
+      } else {
+        await preferences.remove(_activeKey);
+        _activeId = null;
+      }
+    }
+    return true;
+  }
+
   /// 保险箱恢复：整体重建 Provider 配置与密钥。与逐条 [save] 不同，
   /// 这里以备份文件为准整表覆盖，activeId 指定恢复后激活的配置。
   Future<void> restoreProfiles(List<ProviderConfig> configs,

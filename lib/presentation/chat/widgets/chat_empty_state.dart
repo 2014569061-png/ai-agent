@@ -5,6 +5,17 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/brand_mark.dart';
 
+/// 快捷操作项：展示标签与点击填入的完整提示词模板。
+class QuickAction {
+  const QuickAction({
+    required this.label,
+    String? prompt,
+  }) : prompt = prompt ?? label;
+
+  final String label;
+  final String prompt;
+}
+
 /// 对话页空态：品牌图标 + 动态问候语 + 三个独立快捷操作卡片。
 /// 键盘弹出时收敛为仅问候语（文档 9），短屏压缩间距并缩小品牌图标。
 class ChatEmptyState extends StatelessWidget {
@@ -16,8 +27,8 @@ class ChatEmptyState extends StatelessWidget {
     this.keyboardVisible = false,
   });
 
-  final List<String> suggestions;
-  final ValueChanged<String> onSuggestionTap;
+  final List<QuickAction> suggestions;
+  final ValueChanged<QuickAction> onSuggestionTap;
   final bool hasWorkspace;
 
   /// 键盘弹出时隐藏品牌图标与快捷卡片，仅保留问候语（文档 9）。
@@ -85,10 +96,10 @@ class ChatEmptyState extends StatelessWidget {
           ),
           itemCount: suggestions.length,
           itemBuilder: (context, index) {
-            final text = suggestions[index];
+            final action = suggestions[index];
             return _SuggestionChip(
-              label: text,
-              onTap: () => onSuggestionTap(text),
+              label: action.label,
+              onTap: () => onSuggestionTap(action),
             );
           },
         ),

@@ -11,6 +11,7 @@ import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import 'skill_market_page.dart';
 
@@ -28,9 +29,10 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: AppBar(
-          title: const Text('插件'),
-          bottom: const TabBar(
+        appBar: const NexusPageHeader(
+          title: 'Skills 与插件',
+          subtitle: '声明式工具包与 GitHub Skill 市场',
+          bottom: TabBar(
             tabs: [
               Tab(text: '声明式插件'),
               Tab(text: 'Skill 市场'),

@@ -22,9 +22,11 @@ import 'infrastructure/share/sharing_service.dart';
 import 'infrastructure/widgets/nexus_widget.dart';
 import 'presentation/chat/chat_layout_controller.dart';
 import 'presentation/navigation/app_shell.dart';
+import 'presentation/l10n/app_locale_controller.dart';
 import 'presentation/onboarding/onboarding_page.dart';
 import 'presentation/theme/app_theme.dart';
 import 'presentation/theme/app_theme_controller.dart';
+import 'presentation/theme/app_appearance_controller.dart';
 import 'presentation/widgets/immersive_background.dart';
 
 void main() {
@@ -32,6 +34,8 @@ void main() {
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   AppThemeController.load();
   ChatLayoutController.load();
+  AppLocaleController.load();
+  AppAppearanceController.load();
 
   // The first Flutter frame must not wait for platform services or storage.
   runApp(const ProviderScope(child: MobileAgentApp()));
@@ -137,40 +141,43 @@ class MobileAgentApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppThemeController.mode,
-      builder: (context, themeMode, _) => MaterialApp(
-        title: 'NEXUS Agent',
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('zh'),
-        supportedLocales: const [Locale('zh'), Locale('en')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: themeMode,
-        builder: (context, child) {
-          final isDark = Theme.of(context).brightness == Brightness.dark;
-          return AnnotatedRegion<SystemUiOverlayStyle>(
-            value: SystemUiOverlayStyle(
-              statusBarColor: Colors.transparent,
-              systemNavigationBarColor: Colors.transparent,
-              statusBarIconBrightness:
-                  isDark ? Brightness.light : Brightness.dark,
-              systemNavigationBarIconBrightness:
-                  isDark ? Brightness.light : Brightness.dark,
-              systemStatusBarContrastEnforced: false,
-              systemNavigationBarContrastEnforced: false,
-            ),
-            child: ImmersiveBackground(
-              child: child ?? const SizedBox.shrink(),
-            ),
-          );
-        },
-        home: showOnboarding == null
-            ? const StartupGate()
-            : (showOnboarding! ? const OnboardingPage() : const AppShell()),
+      builder: (context, themeMode, _) => ValueListenableBuilder<Locale?>(
+        valueListenable: AppLocaleController.locale,
+        builder: (context, locale, _) => MaterialApp(
+          title: 'NEXUS Agent',
+          debugShowCheckedModeBanner: false,
+          locale: locale,
+          supportedLocales: const [Locale('zh'), Locale('en')],
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          themeMode: themeMode,
+          builder: (context, child) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                systemNavigationBarColor: Colors.transparent,
+                statusBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
+                systemNavigationBarIconBrightness:
+                    isDark ? Brightness.light : Brightness.dark,
+                systemStatusBarContrastEnforced: false,
+                systemNavigationBarContrastEnforced: false,
+              ),
+              child: ImmersiveBackground(
+                child: child ?? const SizedBox.shrink(),
+              ),
+            );
+          },
+          home: showOnboarding == null
+              ? const StartupGate()
+              : (showOnboarding! ? const OnboardingPage() : const AppShell()),
+        ),
       ),
     );
   }

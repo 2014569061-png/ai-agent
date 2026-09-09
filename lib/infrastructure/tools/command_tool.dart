@@ -1,4 +1,7 @@
+import 'dart:async';
 import 'dart:io';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models.dart';
 import '../terminal/linux_runtime.dart';
@@ -18,11 +21,28 @@ class TerminalCommandService {
   TerminalCommandService({
     required this.workspacePath,
     LinuxRuntimeAdapter? runtime,
-  }) : _runtime = runtime ?? createDefaultLinuxRuntime();
+    String? shellType,
+    String? defaultWorkingDirectory,
+  })  : _runtime = runtime ?? createDefaultLinuxRuntime(),
+        _shellTypeOverride = shellType,
+        _defaultWorkDirOverride = defaultWorkingDirectory {
+    unawaited(_loadEnvironmentSettings());
+  }
 
   static const defaultTimeout = Duration(seconds: 30);
+
+  /// 与 Linux 环境页共用同一组 SharedPreferences Key，确保用户在此页面做的
+  /// 选择能真实作用到终端执行。
+  static const _shellTypeKey = 'settings.linux.shell_type';
+  static const _workDirKey = 'settings.linux.default_work_dir';
+
   final String workspacePath;
   final LinuxRuntimeAdapter _runtime;
+  final String? _shellTypeOverride;
+  final String? _defaultWorkDirOverride;
+
+  String _shellType = 'bash';
+  String? _defaultWorkDir;
 
   static const _allowedCommands = {
     'cat',
@@ -69,7 +89,15 @@ class TerminalCommandService {
       return const CommandResult(output: '不允许通过路径指定可执行文件', exitCode: 126);
     }
 
-    final cwd = _resolveWorkingDirectory(workingDirectory);
+    // 未显式指定工作目录时，尝试使用用户在环境页配置的默认工作目录；若该目录
+    // 不在工作区内（如桌面端的 Termux 路径）则回退到工作区根目录。
+    final String? cwd;
+    if (workingDirectory == null || workingDirectory.trim().isEmpty) {
+      final configured = _resolveWorkingDirectory(_defaultWorkDir);
+      cwd = configured ?? _resolveWorkingDirectory('.');
+    } else {
+      cwd = _resolveWorkingDirectory(workingDirectory);
+    }
     if (cwd == null) {
       return const CommandResult(output: '工作目录必须位于当前工作区内', exitCode: 126);
     }
@@ -79,6 +107,7 @@ class TerminalCommandService {
       executable: parsed.first,
       normalizedCommand: command,
       arguments: List<String>.unmodifiable(parsed.skip(1)),
+      shell: _shellType,
     );
 
     final evalFlag = _inlineEvalFlag(command, parsed.skip(1));
@@ -112,6 +141,31 @@ class TerminalCommandService {
   }
 
   void stop() => _runtime.stop();
+
+  /// 读取 Linux 环境页保存的 Shell 类型与默认工作目录。显式传入的覆盖优先；
+  /// 其余情况回退到 SharedPreferences，最终回退到默认值。
+  Future<void> _loadEnvironmentSettings() async {
+    final shell = _shellTypeOverride;
+    final workDir = _defaultWorkDirOverride;
+    if (shell != null) _shellType = shell;
+    if (workDir != null) _defaultWorkDir = workDir;
+    if (shell != null && workDir != null) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_shellTypeOverride == null) {
+        _shellType = prefs.getString(_shellTypeKey) ?? 'bash';
+      }
+      if (_defaultWorkDirOverride == null) {
+        final dir = prefs.getString(_workDirKey);
+        if (dir != null && dir.trim().isNotEmpty) {
+          _defaultWorkDir = dir.trim();
+        }
+      }
+    } catch (_) {
+      // SharedPreferences 不可用（例如测试环境）时保留默认值，不影响执行。
+    }
+  }
 
   String? _resolveWorkingDirectory(String? requested) {
     final sandbox = WorkspaceSandbox(workspacePath);

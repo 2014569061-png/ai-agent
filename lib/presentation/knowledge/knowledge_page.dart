@@ -82,7 +82,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     final result = await FilePicker.platform.pickFiles(
       withData: true,
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'txt', 'md', 'csv', 'json'],
+      allowedExtensions: ['txt', 'md', 'csv', 'json'],
     );
     if (result == null || !mounted) return;
     for (final file in result.files) {

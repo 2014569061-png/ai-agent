@@ -20,6 +20,7 @@ class TokenTrend extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final semantic = AppTheme.semanticOf(context);
 
     if (days.isEmpty) {
@@ -48,19 +49,26 @@ class TokenTrend extends StatelessWidget {
           const SizedBox(height: 12),
         ],
         ...days.map((day) {
+          final isNoData = day.totalTokens == 0;
           final ratio = maxTotal == 0 ? 0.0 : day.totalTokens / maxTotal;
           final cacheRatio = day.promptTokens == 0
               ? 0.0
               : (day.cachedTokens / day.promptTokens).clamp(0.0, 1.0);
+          final dayLabel = day.isToday ? '${day.day} 今天' : day.day;
           return Padding(
             padding: const EdgeInsets.only(bottom: 9),
             child: Row(children: [
               SizedBox(
-                width: 76,
+                width: 86,
                 child: Text(
-                  day.day,
+                  dayLabel,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        day.isToday ? FontWeight.w600 : FontWeight.normal,
+                    color: day.isToday ? theme.colorScheme.primary : null,
+                  ),
                 ),
               ),
               Expanded(
@@ -90,7 +98,9 @@ class TokenTrend extends StatelessWidget {
               SizedBox(
                 width: 100,
                 child: Text(
-                  '${day.totalTokens} · ${AppStrings.cached} ${day.cachedTokens}',
+                  isNoData
+                      ? '无数据'
+                      : '${day.totalTokens} · ${AppStrings.cached} ${day.cachedTokens}',
                   style: TextStyle(
                     fontSize: 11,
                     color: semantic.mutedOnGlass,

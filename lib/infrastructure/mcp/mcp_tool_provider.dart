@@ -30,6 +30,54 @@ class McpToolProvider {
     }
   }
 
+  /// 仅测试连接连通性与可用的工具数量，不缓存、不映射 AgentTool。
+  /// 返回 null 表示连接失败，否则返回 (是否可用, 工具数量, 错误消息)。
+  Future<({bool ok, int toolCount, String? error})> testConnection(
+      McpServerConfig server) async {
+    if (server.kind == McpServerKind.stdio && kIsWeb) {
+      return (ok: false, toolCount: 0, error: 'Web 平台不支持 stdio 型服务器');
+    }
+    mcp.McpClient? client;
+    try {
+      client = mcp.McpClient(
+        mcp.Implementation(name: 'nexus-agent', version: '0.1.0'),
+        options: const mcp.McpClientOptions(protocol: mcp.McpProtocol.legacy),
+      );
+      switch (server.kind) {
+        case McpServerKind.http:
+          final url = server.url?.trim() ?? '';
+          if (url.isEmpty) {
+            return (ok: false, toolCount: 0, error: '未配置 HTTP URL');
+          }
+          final transport = mcp.StreamableHttpClientTransport(Uri.parse(url));
+          await client.connect(transport);
+        case McpServerKind.stdio:
+          final transport = mcp.StdioClientTransport(
+            mcp.StdioServerParameters(
+              command: server.command ?? 'npx',
+              args: server.args,
+              includeParentEnvironment: true,
+            ),
+          );
+          await client.connect(transport);
+      }
+      final result = await client.listTools();
+      return (
+        ok: true,
+        toolCount: result.tools.length,
+        error: result.tools.isEmpty ? '连接成功，但未发现任何工具' : null,
+      );
+    } catch (error) {
+      return (ok: false, toolCount: 0, error: '$error');
+    } finally {
+      if (client != null) {
+        try {
+          await client.close();
+        } catch (_) {}
+      }
+    }
+  }
+
   Future<mcp.McpClient> _connect(McpServerConfig server) async {
     final existing = _clients[server.id];
     if (existing != null) return existing;

@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 
 import '../../application/mcp_service.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
+import '../../infrastructure/mcp/mcp_tool_provider.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
 /// 独立的 MCP 服务器管理页，供设置页和深链接复用。
@@ -18,7 +20,9 @@ class McpServersPage extends StatefulWidget {
 
 class _McpServersPageState extends State<McpServersPage> {
   final _service = McpService();
+  final _toolProvider = McpToolProvider();
   List<McpServerConfig> _servers = const [];
+  final Map<String, bool> _testing = {};
 
   @override
   void initState() {
@@ -70,6 +74,88 @@ class _McpServersPageState extends State<McpServersPage> {
     }
   }
 
+  @override
+  void dispose() {
+    _toolProvider.dispose();
+    super.dispose();
+  }
+
+  Future<void> _edit(McpServerConfig server) async {
+    final name = TextEditingController(text: server.name);
+    final url = TextEditingController(text: server.url);
+    final command = TextEditingController(text: server.command);
+    final args = TextEditingController(text: server.args.join(' '));
+    final ok = await showImmersiveDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('编辑 MCP 服务器'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: '名称')),
+          const SizedBox(height: 4),
+          if (server.kind == McpServerKind.http)
+            TextField(
+                controller: url,
+                decoration: const InputDecoration(labelText: 'HTTP URL'))
+          else ...[
+            TextField(
+                controller: command,
+                decoration: const InputDecoration(labelText: '启动命令')),
+            TextField(
+                controller: args,
+                decoration: const InputDecoration(labelText: '参数（空格分隔）')),
+          ],
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('保存')),
+        ],
+      ),
+    );
+    if (ok != true || name.text.trim().isEmpty) return;
+
+    final isHttp = server.kind == McpServerKind.http;
+    if (isHttp && url.text.trim().isEmpty) return;
+    if (!isHttp && command.text.trim().isEmpty) return;
+
+    await _service.save(server.copyWith(
+      name: name.text.trim(),
+      url: isHttp ? url.text.trim() : null,
+      command: isHttp ? null : command.text.trim(),
+      args: isHttp
+          ? server.args
+          : args.text
+              .split(RegExp(r'\s+'))
+              .where((arg) => arg.isNotEmpty)
+              .toList(),
+    ));
+    HapticFeedback.mediumImpact();
+    await _reload();
+    if (mounted) {
+      FloatingToast.show(context, '已保存修改', tone: ToastTone.success);
+    }
+  }
+
+  Future<void> _testConnection(McpServerConfig server) async {
+    if (_testing[server.id] == true) return;
+    setState(() => _testing[server.id] = true);
+    final result = await _toolProvider.testConnection(server);
+    if (!mounted) return;
+    setState(() => _testing[server.id] = false);
+    FloatingToast.show(
+      context,
+      result.ok
+          ? '连接成功：发现 ${result.toolCount} 个工具'
+          : '连接失败：${result.error}',
+      tone: result.ok ? ToastTone.success : ToastTone.danger,
+    );
+  }
+
   Future<void> _deleteServer(McpServerConfig server) async {
     final confirmed = await showImmersiveDialog<bool>(
       context: context,
@@ -106,7 +192,17 @@ class _McpServersPageState extends State<McpServersPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('MCP 服务器')),
+      appBar: NexusPageHeader(
+        title: 'MCP 服务器',
+        subtitle: 'Model Context Protocol 协议扩展与工具注入',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: '新增服务器',
+            onPressed: _add,
+          ),
+        ],
+      ),
       body: _servers.isEmpty
           ? const EmptyStateView(
               icon: Icons.dns_outlined,
@@ -202,6 +298,26 @@ class _McpServersPageState extends State<McpServersPage> {
                             await _service.toggleServer(server.id, enabled);
                             await _reload();
                           },
+                        ),
+                        IconButton(
+                          icon: _testing[server.id] == true
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Icon(Icons.wifi_tethering_rounded,
+                                  size: 20),
+                          tooltip: '测试连接',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _testConnection(server),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 20),
+                          tooltip: '编辑此服务',
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _edit(server),
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete_outline_rounded,

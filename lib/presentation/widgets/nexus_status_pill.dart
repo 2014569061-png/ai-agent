@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 enum NexusStatusType {
   draft,
   running,
+  paused,
   waitingApproval,
   completed,
   failed,
@@ -36,6 +37,7 @@ class NexusStatusPill extends StatelessWidget {
     final type = switch (statusStr?.toLowerCase().trim()) {
       'draft' || 'pending' => NexusStatusType.draft,
       'running' || 'executing' => NexusStatusType.running,
+      'paused' => NexusStatusType.paused,
       'waiting_approval' || 'awaiting_approval' || 'approval' =>
         NexusStatusType.waitingApproval,
       'completed' || 'success' || 'done' => NexusStatusType.completed,
@@ -74,6 +76,11 @@ class NexusStatusPill extends StatelessWidget {
           '执行中',
           Icons.play_circle_outline_rounded,
           AppTheme.warning,
+        ),
+      NexusStatusType.paused => (
+          '已暂停',
+          Icons.pause_circle_outline_rounded,
+          isDark ? const Color(0xFF90B4FE) : AppTheme.brandBright,
         ),
       NexusStatusType.waitingApproval => (
           '等待审批',

@@ -190,6 +190,7 @@ class AgentExecutor {
         final decision = const ApprovalPolicy().decide(
           mode: approvalMode,
           risk: tool.manifest.risk,
+          sensitive: tool.manifest.sensitive,
           trusted:
               isToolTrusted?.call(tool.manifest.name, tool.manifest.risk) ??
                   false,

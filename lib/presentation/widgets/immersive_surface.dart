@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import '../theme/app_appearance_controller.dart';
 
 class ImmersiveSurface extends StatelessWidget {
   const ImmersiveSurface({
@@ -33,12 +34,27 @@ class ImmersiveSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<double>(
+      valueListenable: AppAppearanceController.glassIntensity,
+      builder: (_, __, ___) => ValueListenableBuilder<String>(
+        valueListenable: AppAppearanceController.effects,
+        builder: (_, __, ___) => _buildSurface(context),
+      ),
+    );
+  }
+
+  Widget _buildSurface(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final radius = borderRadius ?? BorderRadius.circular(AppTokens.cardRadius);
     final base = isDark ? AppTheme.darkElevated : AppTheme.lightElevated;
     final border = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
-    final enabled = blur && !MediaQuery.of(context).disableAnimations;
+    final intensity = AppAppearanceController.glassIntensity.value;
+    final effectMode = AppAppearanceController.effects.value;
+    final enabled = blur &&
+        intensity > 0 &&
+        effectMode != 'off' &&
+        !MediaQuery.of(context).disableAnimations;
     final shadow =
         boxShadow ?? (showGlow ? AppTheme.floatingShadow(isDark) : null);
     final content = Container(
@@ -60,8 +76,8 @@ class ImmersiveSurface extends StatelessWidget {
       child: enabled
           ? BackdropFilter(
               filter: ImageFilter.blur(
-                sigmaX: AppTokens.blurSigma(level),
-                sigmaY: AppTokens.blurSigma(level),
+                sigmaX: AppTokens.blurSigma(level) * intensity,
+                sigmaY: AppTokens.blurSigma(level) * intensity,
               ),
               child: content,
             )

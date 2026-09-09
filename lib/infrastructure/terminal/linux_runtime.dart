@@ -30,12 +30,18 @@ class LinuxCommandRequest {
     required this.executable,
     required this.normalizedCommand,
     required this.arguments,
+    this.shell = 'bash',
   });
 
   final String commandLine;
   final String executable;
   final String normalizedCommand;
   final List<String> arguments;
+
+  /// 用户在「Linux 工具环境」中选择的 Shell（bash / zsh / sh）。
+  /// 仅在支持完整 shell 语法的运行时（Android 侧）生效；桌面受限进程 Adapter
+  /// 不理会该字段，仍走命令白名单。
+  final String shell;
 }
 
 class CommandResult {

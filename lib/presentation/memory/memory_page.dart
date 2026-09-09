@@ -9,6 +9,7 @@ import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
 /// 长期记忆管理页：查看 / 编辑 / 删除 / 添加，以及注入总开关。
@@ -168,7 +169,17 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text(AppStrings.memoryEntry)),
+      appBar: NexusPageHeader(
+        title: AppStrings.memoryEntry,
+        subtitle: '跨会话事实与个性化偏好存储',
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_rounded),
+            tooltip: '添加记忆',
+            onPressed: () => _addOrEdit(),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _addOrEdit(),
         child: const Icon(Icons.add),

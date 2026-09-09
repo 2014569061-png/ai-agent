@@ -21,6 +21,7 @@ class PlanPanel extends StatefulWidget {
   final VoidCallback onApprove;
   final VoidCallback onCancel;
   final VoidCallback? onRetry;
+  final VoidCallback? onResume;
 
   const PlanPanel({
     super.key,
@@ -29,6 +30,7 @@ class PlanPanel extends StatefulWidget {
     required this.onApprove,
     required this.onCancel,
     this.onRetry,
+    this.onResume,
   });
 
   @override
@@ -41,8 +43,12 @@ class _PlanPanelState extends State<PlanPanel> {
   @override
   void initState() {
     super.initState();
-    // 未确认时展开方便审核；执行完成后默认紧凑收起，避免遮挡消息
-    _expanded = !widget.plan.isConfirmed && widget.plan.status != 'completed';
+    // 未确认时展开方便审核；执行完成后默认紧凑收起，避免遮挡消息；
+    // 暂停态默认展开以展示“继续执行”入口。
+    _expanded = !widget.plan.isConfirmed &&
+        widget.plan.status != 'completed' &&
+        widget.plan.status != 'paused' ||
+        widget.plan.status == 'paused';
   }
 
   @override
@@ -66,6 +72,7 @@ class _PlanPanelState extends State<PlanPanel> {
   bool get _isCompleted => widget.plan.status == 'completed';
   bool get _isExecuting => widget.plan.status == 'executing';
   bool get _isFailed => widget.plan.status == 'failed';
+  bool get _isPaused => widget.plan.status == 'paused';
 
   @override
   Widget build(BuildContext context) {
@@ -370,6 +377,29 @@ class _PlanPanelState extends State<PlanPanel> {
               ),
             ),
           )
+        else if (includeActions && _isPaused)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: widget.onCancel,
+                    child: const Text('终止计划'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed: widget.onResume ?? widget.onApprove,
+                    icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                    label: const Text('继续执行'),
+                  ),
+                ),
+              ],
+            ),
+          )
         else if (includeActions && _isFailed)
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
@@ -461,6 +491,30 @@ class _PlanPanelState extends State<PlanPanel> {
         ),
       );
     }
+    if (_isPaused) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: widget.onCancel,
+                child: const Text('终止计划'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                onPressed: widget.onResume ?? widget.onApprove,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('继续执行'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
     if (_isFailed) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
@@ -492,6 +546,9 @@ class _PlanPanelState extends State<PlanPanel> {
   Widget _buildStepRow(PlanStep step, Color muted) {
     final isCurrent = step.status == 'running' ||
         (step.status == 'pending' && step == _currentStep);
+    // 仅当计划处于活跃执行态（executing）时才显示步骤转圈；
+    // 进入 completed / failed / cancelled / paused 后不再转圈。
+    final showSpinner = isCurrent && _isExecuting;
     final isDone = step.status == 'completed';
     final isFailed = step.status == 'failed';
 
@@ -534,7 +591,7 @@ class _PlanPanelState extends State<PlanPanel> {
               ),
             ),
           ),
-          if (isCurrent)
+          if (showSpinner)
             const SizedBox(
               width: 12,
               height: 12,

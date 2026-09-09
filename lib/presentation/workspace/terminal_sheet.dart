@@ -7,9 +7,16 @@ import '../widgets/immersive_sheet.dart';
 import 'file_tree_sheet.dart';
 
 class TerminalSheet extends StatefulWidget {
-  const TerminalSheet({super.key, required this.workspacePath});
+  const TerminalSheet({
+    super.key,
+    required this.workspacePath,
+    this.onReselectWorkspace,
+  });
 
   final String workspacePath;
+
+  /// 透传给文件树的“重新选择工作区”回调。
+  final VoidCallback? onReselectWorkspace;
 
   @override
   State<TerminalSheet> createState() => _TerminalSheetState();
@@ -100,8 +107,10 @@ class _TerminalSheetState extends State<TerminalSheet> {
                       context: context,
                       builder: (_) => SizedBox(
                         height: MediaQuery.of(context).size.height * .75,
-                        child:
-                            FileTreeSheet(workspacePath: widget.workspacePath),
+                        child: FileTreeSheet(
+                          workspacePath: widget.workspacePath,
+                          onReselectWorkspace: widget.onReselectWorkspace,
+                        ),
                       ),
                     );
                   },

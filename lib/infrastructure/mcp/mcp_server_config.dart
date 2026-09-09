@@ -62,13 +62,20 @@ class McpServerConfig {
         enabled: json['enabled'] as bool? ?? true,
       );
 
-  McpServerConfig copyWith({bool? enabled}) => McpServerConfig(
+  McpServerConfig copyWith({
+    String? name,
+    String? url,
+    String? command,
+    List<String>? args,
+    bool? enabled,
+  }) =>
+      McpServerConfig(
         id: id,
-        name: name,
+        name: name ?? this.name,
         kind: kind,
-        url: url,
-        command: command,
-        args: args,
+        url: url ?? this.url,
+        command: command ?? this.command,
+        args: args ?? this.args,
         enabled: enabled ?? this.enabled,
       );
 }

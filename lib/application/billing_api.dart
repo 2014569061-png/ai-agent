@@ -49,7 +49,8 @@ class UsageDaily {
       required this.completionTokens,
       required this.cachedTokens,
       required this.spendCents,
-      required this.costCents});
+      required this.costCents,
+      this.isToday = false});
   final String day;
   final int calls;
   final int promptTokens;
@@ -57,6 +58,7 @@ class UsageDaily {
   final int cachedTokens;
   final int spendCents;
   final int costCents;
+  final bool isToday;
   int get totalTokens => promptTokens + completionTokens;
 }
 

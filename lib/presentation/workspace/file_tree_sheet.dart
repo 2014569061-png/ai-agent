@@ -9,9 +9,16 @@ import '../widgets/immersive_sheet.dart';
 /// G1 工作区文件树:目录导航模式(进入子目录 / 后退 / 前进),
 /// 替代旧版"递归平铺 + 网页预览"。
 class FileTreeSheet extends StatefulWidget {
-  const FileTreeSheet({super.key, required this.workspacePath});
+  const FileTreeSheet({
+    super.key,
+    required this.workspacePath,
+    this.onReselectWorkspace,
+  });
 
   final String workspacePath;
+
+  /// 可选的“重新选择工作区”回调（面板内就地切换根目录）。
+  final VoidCallback? onReselectWorkspace;
 
   @override
   State<FileTreeSheet> createState() => _FileTreeSheetState();
@@ -46,7 +53,12 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
     }
     final dir = Directory(_currentDir);
     if (!dir.existsSync()) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = '目录不存在或已不可访问：$_currentDir';
+        });
+      }
       return;
     }
     try {
@@ -78,23 +90,41 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
 
   void _openDir(String path) {
     if (path == _currentDir) return;
-    _back.add(_currentDir);
-    _forward.clear();
-    _currentDir = path;
+    setState(() {
+      _back.add(_currentDir);
+      _forward.clear();
+      _currentDir = path;
+    });
     _loadDirectory();
   }
 
   void _goBack() {
     if (_back.isEmpty) return;
-    _forward.add(_currentDir);
-    _currentDir = _back.removeLast();
+    setState(() {
+      _forward.add(_currentDir);
+      _currentDir = _back.removeLast();
+    });
     _loadDirectory();
   }
 
   void _goForward() {
     if (_forward.isEmpty) return;
-    _back.add(_currentDir);
-    _currentDir = _forward.removeLast();
+    setState(() {
+      _back.add(_currentDir);
+      _currentDir = _forward.removeLast();
+    });
+    _loadDirectory();
+  }
+
+  /// 上溯到上级目录（可越过工作区根），原目录压入后退栈以便连续返回。
+  void _goUp() {
+    final parent = p.dirname(_currentDir);
+    if (parent == _currentDir) return;
+    setState(() {
+      _back.add(_currentDir);
+      _forward.clear();
+      _currentDir = parent;
+    });
     _loadDirectory();
   }
 
@@ -190,6 +220,12 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                   ),
                 ),
                 IconButton(
+                  icon: const Icon(Icons.arrow_upward_rounded, size: 18),
+                  tooltip: '上级目录',
+                  onPressed:
+                      p.dirname(_currentDir) == _currentDir ? null : _goUp,
+                ),
+                IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
                   tooltip: '后退',
                   onPressed: _back.isEmpty ? null : _goBack,
@@ -204,6 +240,13 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                   tooltip: '刷新当前目录',
                   onPressed: _loadDirectory,
                 ),
+                if (widget.onReselectWorkspace != null)
+                  IconButton(
+                    icon:
+                        const Icon(Icons.drive_folder_upload_rounded, size: 20),
+                    tooltip: '重新选择工作区',
+                    onPressed: widget.onReselectWorkspace,
+                  ),
               ],
             ),
           ),
