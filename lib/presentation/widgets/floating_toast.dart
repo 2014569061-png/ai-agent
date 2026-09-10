@@ -296,7 +296,6 @@ class _ToastViewState extends State<_ToastView>
                         level: ImmersiveMaterialLevel.thick,
                         borderRadius:
                             BorderRadius.circular(AppTokens.radiusPill),
-                        showGlow: false,
                         padding: EdgeInsets.fromLTRB(
                             16, 10, widget.persistent ? 8 : 16, 10),
                         child: Row(

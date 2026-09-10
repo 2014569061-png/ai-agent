@@ -4,25 +4,19 @@ import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
-/// 降级为平面的 Surface 容器组件。
-/// 保留所有公开参数以保持向后兼容，内部不再渲染高斯模糊、渐变与彩色阴影。
+/// 平面 Surface 容器：用 1px hairline 描边与极轻浮层阴影表达层级。
+///
+/// 内部**不渲染**高斯模糊、渐变与彩色阴影（见 DESIGN.md §6 禁用清单）。
+/// 注意 [level] 表达的是**表面层级**（内嵌 / 卡片 / 浮起），
+/// 不是旧实现里的「材质模糊档位」——枚举名 `ImmersiveMaterialLevel` 是历史遗留词汇。
 class ImmersiveSurface extends StatelessWidget {
   const ImmersiveSurface({
     super.key,
     required this.child,
-    @Deprecated('视觉规范已改为平面，该参数已忽略')
     this.level = ImmersiveMaterialLevel.regular,
     this.borderRadius,
     this.padding,
     this.margin,
-    @Deprecated('视觉规范已改为平面，勿再传入')
-    this.showGlow = false,
-    @Deprecated('视觉规范已改为平面，勿再传入')
-    this.blur = true,
-    @Deprecated('视觉规范已改为平面，勿再传入')
-    this.gradient,
-    @Deprecated('视觉规范已改为平面，勿再传入')
-    this.boxShadow,
   });
 
   final Widget child;
@@ -30,10 +24,6 @@ class ImmersiveSurface extends StatelessWidget {
   final BorderRadius? borderRadius;
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
-  final bool showGlow;
-  final bool blur;
-  final Gradient? gradient;
-  final List<BoxShadow>? boxShadow;
 
   @override
   Widget build(BuildContext context) {

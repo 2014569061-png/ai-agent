@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
-import '../widgets/immersive_effects_controller.dart';
 
-/// 沉浸式底部导航：选中项使用小范围光晕 indicator 而非厚重的实心胶囊色块。
-/// 图标/标签随选中态切换颜色，配合淡入的径向光晕表达「选中」。
+/// 底部导航：选中项使用品牌浅色胶囊指示（平面，无光晕/模糊）。
+/// 图标与标签随选中态切换颜色。
 class ImmersiveNavigationBar extends StatelessWidget {
   const ImmersiveNavigationBar({
     super.key,
@@ -25,8 +24,6 @@ class ImmersiveNavigationBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = AppTheme.semanticOf(context);
-    final effect = ImmersiveEffectsController.resolve(context);
-    final glowEnabled = ImmersiveEffectsController.glowEnabled(effect);
 
     return SizedBox(
       height: height,
@@ -42,7 +39,6 @@ class ImmersiveNavigationBar extends StatelessWidget {
               selected: selected,
               color: colors,
               primary: theme.colorScheme.primary,
-              glowEnabled: glowEnabled,
               onTap: () {
                 if (!selected) onDestinationSelected(i);
               },
@@ -74,7 +70,6 @@ class _NavItem extends StatelessWidget {
     required this.selected,
     required this.color,
     required this.primary,
-    required this.glowEnabled,
     required this.onTap,
   });
 
@@ -83,7 +78,6 @@ class _NavItem extends StatelessWidget {
   final bool selected;
   final AppSemanticColors color;
   final Color primary;
-  final bool glowEnabled;
   final VoidCallback onTap;
 
   @override

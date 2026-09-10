@@ -4,19 +4,24 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 多设备加密云同步（D1，Pro 卖点）。
+/// 本地加解密服务：为隐私保险箱、本地数据备份与定时任务快照提供加解密原语。
 ///
-/// 设计要点：
-/// - 密钥本地派生：`scrypt(passphrase + salt)`，passphrase 为用户设置的恢复码，salt 本地生成。
-/// - AES-256-GCM 加密，每份文档随机 nonce，服务端只存密文。
-/// - 网络同步依赖 v0.3 托管后端；未配置端点时优雅降级为「仅本地加密打包」，
-///   与 G3 隐私保险箱共用同一套加解密原语。
-class SyncService {
-  SyncService({FlutterSecureStorage? secureStorage})
+/// 前身是 [SyncService]（多设备加密云同步，D1 卖点）。多设备云同步已于
+/// 2026-09-10 移除，本类保留其**本地加解密能力**：
+/// - [encryptWithPassword] / [decryptWithPassword]：用户口令派生密钥（G3 隐私保险箱）
+/// - [encryptString] / [decryptString]：设备本机密钥（本地备份、定时任务快照）
+///
+/// 密码学实现：Pbkdf2-HMAC-SHA256（100k 次迭代）派生密钥 + AES-256-GCM，
+/// 每份密文携带随机 nonce 与认证标签。
+///
+/// 注意：Secure Storage 中的密钥名沿用旧的 `sync.salt` / `sync.secret`，
+/// 这是**有意保留**——已有设备上用设备密钥加密的备份/快照依赖它们，改名会导致无法解密。
+class LocalCryptoService {
+  LocalCryptoService({FlutterSecureStorage? secureStorage})
       : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
+  // 沿用旧名以保持既有加密数据的可解密性（见类注释）。
   static const _keySalt = 'sync.salt';
   static const _keySecret = 'sync.secret';
 
@@ -25,8 +30,6 @@ class SyncService {
   // memory/time-hard KDF，密钥派生语义与文档一致（passphrase + salt → 32B 密钥）。
   final _kdf = Pbkdf2.hmacSha256(iterations: 100000, bits: 256);
   final _aes = AesGcm.with256bits();
-
-  // --- 密钥与恢复码 ---
 
   /// 由用户口令派生 32B 密钥。口令为空时使用随机盐生成设备本机密钥。
   Future<SecretKey> _deriveKey(String passphrase, List<int> salt) async {
@@ -49,30 +52,7 @@ class SyncService {
     return bytes;
   }
 
-  /// 导出恢复码：`base64(passphrase).base64(salt)`，跨设备唯一凭据。
-  Future<String> exportRecoveryCode(String passphrase) async {
-    final salt = await _salt();
-    return '${base64Encode(utf8.encode(passphrase))}.${base64Encode(salt)}';
-  }
-
-  /// 导入恢复码并派生密钥，缓存到安全存储。
-  Future<bool> importRecoveryCode(String code) async {
-    final parts = code.split('.');
-    if (parts.length != 2) return false;
-    try {
-      final passphrase = utf8.decode(base64Decode(parts[0]));
-      final salt = base64Decode(parts[1]);
-      final key = await _deriveKey(passphrase, salt);
-      await _secureStorage.write(
-          key: _keySecret, value: base64Encode(await key.extractBytes()));
-      await _secureStorage.write(key: _keySalt, value: base64Encode(salt));
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// 取当前有效密钥（优先已导入的恢复码密钥，否则用本机盐派生设备密钥）。
+  /// 取当前有效密钥（设备本机密钥，缓存于安全存储）。
   Future<SecretKey> _secretKey() async {
     final cached = await _secureStorage.read(key: _keySecret);
     if (cached != null && cached.isNotEmpty) {
@@ -82,7 +62,7 @@ class SyncService {
     return _deriveKey('', salt);
   }
 
-  // --- 加解密原语（与 G3 共用） ---
+  // --- 加解密原语 ---
 
   /// 加密纯文本，返回 `nonce:mac:cipherText` 的 base64 组合串（AES-GCM 需携带认证标签）。
   Future<String> encryptString(String plaintext) async {
@@ -135,27 +115,4 @@ class SyncService {
     return Uint8List.fromList(
         List<int>.generate(length, (_) => random.nextInt(256)));
   }
-
-  // --- 网络同步（V1 桩：无后端时优雅降级） ---
-
-  String? _endpoint;
-
-  /// 设置同步后端地址；为空表示未配置后端。
-  void configureEndpoint(String? endpoint) => _endpoint = endpoint;
-
-  bool get isConfigured => _endpoint != null && _endpoint!.trim().isNotEmpty;
-
-  /// 推送本地变更（V1 桩：未配置后端时静默跳过）。
-  Future<void> push() async {
-    if (!isConfigured) return;
-    // 预留：遍历 SyncMeta 中 dirty=1 的行，逐行 AES-GCM 加密后 PUT /v1/sync/objects。
-  }
-
-  /// 拉取远端变更（V1 桩：未配置后端时静默跳过）。
-  Future<void> pull() async {
-    if (!isConfigured) return;
-    // 预留：GET 版本号 > 本地的对象 → 解密 → 写库。
-  }
 }
-
-final syncServiceProvider = Provider<SyncService>((ref) => SyncService());

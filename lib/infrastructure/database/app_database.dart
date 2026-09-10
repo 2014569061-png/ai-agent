@@ -194,7 +194,9 @@ class CollaborationMessages extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
-/// 云同步元数据（D1）：记录各业务行的版本号与脏标记，用于增量密文同步。
+/// 云同步元数据（D1）：记录各业务行的版本号与脏标记。
+/// 注：多设备云同步功能已于 2026-09-10 移除，此表保留未启用（避免
+/// schemaVersion 迁移风险），未来若重新启用同步可继续复用。
 class SyncMeta extends Table {
   TextColumn get objectId => text()();
   TextColumn get table => text()();
@@ -949,16 +951,8 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // --- 云同步元数据（D1）---
-
-  Future<List<SyncMetaData>> dirtySyncRows() =>
-      (select(syncMeta)..where((row) => row.dirty.equals(true))).get();
-
-  Future<void> saveSyncMeta(SyncMetaData meta) =>
-      into(syncMeta).insertOnConflictUpdate(meta);
-
-  Future<SyncMetaData?> findSyncMeta(String objectId) =>
-      (select(syncMeta)..where((row) => row.objectId.equals(objectId)))
-          .getSingleOrNull();
+  // 注：云同步功能已移除。原 dirtySyncRows / saveSyncMeta / findSyncMeta
+  // 访问器因无任何调用方已一并删除；SyncMeta 表保留未启用（见表注释）。
 
   // --- 知识库（C4）---
 

@@ -10,7 +10,7 @@ import '../../domain/models.dart';
 import '../../application/sensitive_tool_policy.dart';
 import '../providers/provider_config.dart';
 import '../providers/provider_config_store.dart';
-import '../sync/sync_service.dart';
+import 'local_crypto_service.dart';
 
 /// G3 隐私保险箱：把全量本地数据打包为单个 AES-256-GCM 加密文件（.nexusvault）。
 /// 导入时先备份现有库再覆盖写入，密码丢失无法恢复。
@@ -22,7 +22,7 @@ Future<String?> exportVaultFile(AppDatabase db, String password,
   try {
     final json = await buildVaultJson(db, includeSecrets: includeSecrets);
     final plaintext = jsonEncode(json);
-    final cipher = await SyncService().encryptWithPassword(plaintext, password);
+    final cipher = await LocalCryptoService().encryptWithPassword(plaintext, password);
     final dir = await getApplicationDocumentsDirectory();
     final file = File(p.join(
         dir.path, 'nexus-${DateTime.now().millisecondsSinceEpoch}.nexusvault'));
@@ -38,7 +38,7 @@ Future<String> importVaultBytes(
     AppDatabase db, Uint8List bytes, String password,
     {ProviderConfigStore? providerStore}) async {
   final cipher = utf8.decode(bytes);
-  final plaintext = await SyncService().decryptWithPassword(cipher, password);
+  final plaintext = await LocalCryptoService().decryptWithPassword(cipher, password);
   final json = jsonDecode(plaintext) as Map<String, dynamic>;
   if (json['version'] is! int) throw const FormatException('无效的备份文件');
   await restoreVault(db, json, providerStore: providerStore);

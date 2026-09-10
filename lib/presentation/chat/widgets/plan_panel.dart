@@ -86,7 +86,6 @@ class _PlanPanelState extends State<PlanPanel> {
       constraints: const BoxConstraints(maxWidth: 380, maxHeight: 420),
       child: ImmersiveSurface(
         level: ImmersiveMaterialLevel.ultraThick,
-        showGlow: true,
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Material(
           color: Colors.transparent,

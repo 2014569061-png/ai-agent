@@ -15,7 +15,7 @@ import '../database/app_database.dart';
 import '../notifications/notification_service.dart';
 import '../providers/provider_config_store.dart';
 import '../files/vault_exporter_io.dart';
-import '../sync/sync_service.dart';
+import '../files/local_crypto_service.dart';
 
 /// C5 定时任务的后台入口（WorkManager 回调）。
 /// 在独立 isolate 中打开数据库、取到点任务、无 UI 运行 Agent、写入结果并弹通知。
@@ -90,7 +90,7 @@ Future<void> _runAutomaticBackup(AppDatabase db) async {
   if (last != null && DateTime.now().difference(last).inHours < 24) return;
 
   final snapshot = jsonEncode(await buildVaultJson(db));
-  final encrypted = await SyncService().encryptString(snapshot);
+  final encrypted = await LocalCryptoService().encryptString(snapshot);
   final dir = await getApplicationDocumentsDirectory();
   final backupDir = Directory(p.join(dir.path, 'backups'));
   await backupDir.create(recursive: true);

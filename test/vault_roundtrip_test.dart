@@ -6,7 +6,7 @@ import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/files/vault_exporter_io.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config_store.dart';
-import 'package:mobile_agent/infrastructure/sync/sync_service.dart';
+import 'package:mobile_agent/infrastructure/files/local_crypto_service.dart';
 
 class _FakeStore extends ProviderConfigStore {
   _FakeStore({required this.configs, this.toolKeys = const {}});
@@ -41,7 +41,7 @@ class _RecordingStore extends _FakeStore {
 
 void main() {
   test('vault encryption round-trips with the correct password', () async {
-    final service = SyncService();
+    final service = LocalCryptoService();
     final cipher =
         await service.encryptWithPassword('{"version":2}', 'secret-123');
     expect(await service.decryptWithPassword(cipher, 'secret-123'),

@@ -69,7 +69,6 @@ class ToolCallCard extends StatelessWidget {
       child: ImmersiveSurface(
         level: ImmersiveMaterialLevel.regular,
         borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-        showGlow: false,
         child: Container(
           decoration: BoxDecoration(
             border: Border.all(

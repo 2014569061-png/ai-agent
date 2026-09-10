@@ -9,7 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/providers.dart';
 import '../../infrastructure/files/vault_exporter.dart';
-import '../../infrastructure/sync/sync_service.dart';
+import '../../infrastructure/files/local_crypto_service.dart';
 import '../vault/vault_page.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
@@ -70,7 +70,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
       final content = picked.bytes != null
           ? utf8.decode(picked.bytes!)
           : await File(picked.path!).readAsString();
-      final plaintext = await SyncService().decryptString(content);
+      final plaintext = await LocalCryptoService().decryptString(content);
       final json = jsonDecode(plaintext) as Map<String, dynamic>;
       final db = await ref.read(databaseProvider.future);
       await restoreVault(db, json);
