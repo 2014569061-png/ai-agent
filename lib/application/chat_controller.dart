@@ -33,6 +33,7 @@ import '../infrastructure/tools/workspace_tools.dart';
 import '../infrastructure/tools/command_tool.dart';
 import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
+import 'run_coordinator.dart';
 import 'context_window.dart';
 import 'error_humanizer.dart';
 import 'headless_executor.dart';
@@ -279,20 +280,16 @@ class ChatController extends Notifier<ChatState> {
   static const _maxTextAttachmentChars = 100000;
   static const _documentExtractor = DocumentExtractor();
 
-  AgentCancellationToken? _cancellationToken;
-  CancelToken? _dioCancelToken;
-  AgentRunController? _runController;
   DateTime? _cancelRequestedAt;
-  int _runGeneration = 0;
-  final Set<int> _cancelledRunGenerations = <int>{};
   final Set<String> _resumingTaskIds = <String>{};
   int? _activePlanGeneration;
 
-  /// 预算暂停时保存的 Agent 内部上下文；用于从断点续跑而非重提原始 prompt。
-  List<ChatMessage>? _lastBudgetPauseContext;
+  /// 单次运行的代次 / 取消 / 预算断点状态（见 RunCoordinator）。
+  late final RunCoordinator _runs =
+      RunCoordinator(currentConversationId: () => state.conversationId);
 
   /// 最近一次预算暂停保存的续跑上下文（可能为空）。
-  List<ChatMessage>? get budgetPauseContext => _lastBudgetPauseContext;
+  List<ChatMessage>? get budgetPauseContext => _runs.budgetPauseContext;
 
   @override
   ChatState build() {
@@ -794,8 +791,7 @@ class ChatController extends Notifier<ChatState> {
         state.loading) return;
     final conversationId = state.conversationId;
     final workspacePath = state.currentWorkspacePath;
-    final runGeneration = ++_runGeneration;
-    _cancelledRunGenerations.remove(runGeneration);
+    final runGeneration = _runs.beginRun();
 
     final parts = <MessagePart>[MessagePart.text(trimmed)];
     for (final file in attachments) {
@@ -864,7 +860,7 @@ class ChatController extends Notifier<ChatState> {
     // 持久化失败不阻断对话：吞掉异常，后续 _runAgent 内的兜底 catch 会恢复 running 状态。
     try {
       final database = await ref.read(databaseProvider.future);
-      if (!_ownsRun(runGeneration, conversationId)) return;
+      if (!_runs.ownsRun(runGeneration, conversationId)) return;
       try {
         await _persistMessage(userMessage);
         if (conversationId != null) {
@@ -877,7 +873,7 @@ class ChatController extends Notifier<ChatState> {
       } catch (_) {}
 
       final prep = await _prepareRun(database);
-      if (!_ownsRun(runGeneration, conversationId)) return;
+      if (!_runs.ownsRun(runGeneration, conversationId)) return;
       // C2 断点恢复：注册一个"运行中"任务，App 被杀后可在启动时提示继续执行。
       String? runningTaskId;
       try {
@@ -902,7 +898,7 @@ class ChatController extends Notifier<ChatState> {
         runningTaskId = task.id;
       } catch (_) {} // 任务登记失败不阻断执行。
 
-      if (!_ownsRun(runGeneration, conversationId)) return;
+      if (!_runs.ownsRun(runGeneration, conversationId)) return;
       await _runAgent(
           assistantIndex,
           prep.model,
@@ -918,7 +914,7 @@ class ChatController extends Notifier<ChatState> {
           runGeneration,
           conversationId);
     } catch (error) {
-      if (_ownsRun(runGeneration, conversationId)) {
+      if (_runs.ownsRun(runGeneration, conversationId)) {
         final failed = ChatMessage(
           role: MessageRole.assistant,
           parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
@@ -945,8 +941,7 @@ class ChatController extends Notifier<ChatState> {
 
     final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
-    final runGeneration = ++_runGeneration;
-    _cancelledRunGenerations.remove(runGeneration);
+    final runGeneration = _runs.beginRun();
     if (conversationId != null) {
       await database.deleteTrailingAssistantAndTool(conversationId);
     }
@@ -967,7 +962,7 @@ class ChatController extends Notifier<ChatState> {
     );
 
     final prep = await _prepareRun(database);
-    if (!_ownsRun(runGeneration, conversationId)) return;
+    if (!_runs.ownsRun(runGeneration, conversationId)) return;
     await _runAgent(
         assistantIndex,
         prep.model,
@@ -1009,8 +1004,7 @@ class ChatController extends Notifier<ChatState> {
     // 以第 ordinal 条用户行作为锚点，更新内容并截断其后所有行。
     final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
-    final runGeneration = ++_runGeneration;
-    _cancelledRunGenerations.remove(runGeneration);
+    final runGeneration = _runs.beginRun();
     if (conversationId != null) {
       var ordinal = 0;
       for (var i = 0; i <= messageIndex; i++) {
@@ -1029,7 +1023,7 @@ class ChatController extends Notifier<ChatState> {
       }
     }
 
-    if (!_ownsRun(runGeneration, conversationId)) return;
+    if (!_runs.ownsRun(runGeneration, conversationId)) return;
 
     final assistantIndex = messageIndex + 1;
     state = state.copyWith(
@@ -1050,7 +1044,7 @@ class ChatController extends Notifier<ChatState> {
     );
 
     final prep = await _prepareRun(database);
-    if (!_ownsRun(runGeneration, conversationId)) return;
+    if (!_runs.ownsRun(runGeneration, conversationId)) return;
     await _runAgent(
         assistantIndex,
         prep.model,
@@ -1126,8 +1120,7 @@ class ChatController extends Notifier<ChatState> {
         uiConversationId = linkedConversation.id;
       }
 
-      runGeneration = ++_runGeneration;
-      _cancelledRunGenerations.remove(runGeneration);
+      runGeneration = _runs.beginRun();
       final runApprovalMode = state.approvalMode;
       if (uiConversationId != null) {
         state = state.copyWith(
@@ -1139,13 +1132,9 @@ class ChatController extends Notifier<ChatState> {
           clearLiveReply: true,
         );
       }
-      bool ownsRun() =>
-          runGeneration == _runGeneration &&
-          !_cancelledRunGenerations.contains(runGeneration) &&
-          (uiConversationId == null ||
-              state.conversationId == uiConversationId);
+      bool ownsRun() => _runs.ownsRunUnbound(runGeneration, uiConversationId);
       cancellationToken = AgentCancellationToken();
-      _cancellationToken = cancellationToken;
+      _runs.cancellationToken = cancellationToken;
       await TaskService().markResumed(db, taskId);
       await TaskService().updateStatus(db, taskId, 'running');
 
@@ -1234,21 +1223,17 @@ class ChatController extends Notifier<ChatState> {
         } catch (_) {}
       }
       if (runGeneration != 0 &&
-          runGeneration == _runGeneration &&
-          !_cancelledRunGenerations.contains(runGeneration) &&
-          (uiConversationId == null ||
-              state.conversationId == uiConversationId)) {
+          _runs.ownsRunUnbound(runGeneration, uiConversationId)) {
         state =
             state.copyWith(running: false, paused: false, clearLiveReply: true);
       }
     } finally {
       _resumingTaskIds.remove(taskId);
-      if (cancellationToken != null &&
-          identical(_cancellationToken, cancellationToken)) {
-        _cancellationToken = null;
+      if (cancellationToken != null) {
+        _runs.clearCancellationTokenIf(cancellationToken);
       }
       if (runGeneration != 0) {
-        _cancelledRunGenerations.remove(runGeneration);
+        _runs.forget(runGeneration);
       }
     }
   }
@@ -1258,14 +1243,13 @@ class ChatController extends Notifier<ChatState> {
     required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
         approveTool,
   }) async {
-    final context = _lastBudgetPauseContext;
+    final context = _runs.budgetPauseContext;
     if (context == null || context.isEmpty || state.running || state.loading) {
       return;
     }
     final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
-    final runGeneration = ++_runGeneration;
-    _cancelledRunGenerations.remove(runGeneration);
+    final runGeneration = _runs.beginRun();
     // 追加一个助手占位消息承载续跑输出；实际模型输入用保存的上下文。
     final assistantIndex = state.messages.length;
     final pausedPlan = state.planState;
@@ -1286,7 +1270,7 @@ class ChatController extends Notifier<ChatState> {
     );
     try {
       final prep = await _prepareRun(database);
-      if (!_ownsRun(runGeneration, conversationId)) return;
+      if (!_runs.ownsRun(runGeneration, conversationId)) return;
       await _runAgent(
         assistantIndex,
         prep.model,
@@ -1304,7 +1288,7 @@ class ChatController extends Notifier<ChatState> {
         resumeContext: context,
       );
     } catch (error) {
-      if (_ownsRun(runGeneration, conversationId)) {
+      if (_runs.ownsRun(runGeneration, conversationId)) {
         final failed = ChatMessage(
           role: MessageRole.assistant,
           parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
@@ -1530,7 +1514,7 @@ class ChatController extends Notifier<ChatState> {
   Future<void> _onPlanUpdated(List<PlanStep> steps) async {
     if (steps.isEmpty) return;
     final generation = _activePlanGeneration;
-    if (generation == null || generation != _runGeneration) return;
+    if (generation == null || generation != _runs.generation) return;
     state = state.copyWith(planState: PlanState(steps: steps));
   }
 
@@ -1703,7 +1687,7 @@ class ChatController extends Notifier<ChatState> {
 
   Future<bool> _confirmPlan(List<ToolCall> calls, String planText) async {
     final generation = _activePlanGeneration;
-    if (generation == null || generation != _runGeneration) return false;
+    if (generation == null || generation != _runs.generation) return false;
     _planCompleter?.complete(false);
     final completer = Completer<bool>();
     _planCompleter = completer;
@@ -1731,19 +1715,10 @@ class ChatController extends Notifier<ChatState> {
     return completer.future;
   }
 
-  bool _ownsRun(int generation, String? conversationId) =>
-      generation == _runGeneration &&
-      state.conversationId == conversationId &&
-      !_cancelledRunGenerations.contains(generation);
-
   void _invalidateActiveRun() {
-    final generation = _runGeneration;
-    _cancelledRunGenerations.add(generation);
-    _lastBudgetPauseContext = null;
-    _runGeneration++;
-    _runController?.cancel();
-    _cancellationToken?.cancel();
-    _dioCancelToken?.cancel();
+    // 代次、取消令牌与预算断点统一交给 RunCoordinator 处理。
+    _runs.invalidateActiveRun();
+    // 计划回调与计划代次属于计划状态机，暂留此处（A-1 第 3 步再抽 PlanStateMachine）。
     final completer = _planCompleter;
     _planCompleter = null;
     _activePlanGeneration = null;
@@ -1780,14 +1755,14 @@ class ChatController extends Notifier<ChatState> {
     /// 预算暂停后从断点续跑时传入的 Agent 内部上下文；为空则沿用会话消息。
     List<ChatMessage>? resumeContext,
   }) async {
-    if (!_ownsRun(runGeneration, runConversationId)) return;
+    if (!_runs.ownsRun(runGeneration, runConversationId)) return;
     _activePlanGeneration = runGeneration;
     final runHistory = resumeContext ??
         List<ChatMessage>.of(state.messages.take(assistantIndex));
     final runPlanMode = state.planMode;
     final runApprovalMode = state.approvalMode;
     final runSystemPrompt = state.systemPrompt;
-    bool ownsRun() => _ownsRun(runGeneration, runConversationId);
+    bool ownsRun() => _runs.ownsRun(runGeneration, runConversationId);
     final runId = 'run-${DateTime.now().microsecondsSinceEpoch}';
     final logService = ref.read(logServiceProvider);
     final runStartedAt = DateTime.now();
@@ -1863,9 +1838,9 @@ class ChatController extends Notifier<ChatState> {
     final runController = AgentRunController(
       onCancel: () => dioCancelToken.cancel(),
     );
-    _cancellationToken = cancellationToken;
-    _dioCancelToken = dioCancelToken;
-    _runController = runController;
+    _runs.cancellationToken = cancellationToken;
+    _runs.dioCancelToken = dioCancelToken;
+    _runs.runController = runController;
     final answer = StringBuffer();
     final reasoning = StringBuffer();
     var usage = const Usage();
@@ -2101,7 +2076,7 @@ class ChatController extends Notifier<ChatState> {
         } else if (event is AgentBudgetExhaustedEvent) {
           // 达到 maxSteps：可恢复的预算暂停，不是失败。保存续跑上下文与原因。
           runStatus = 'paused';
-          _lastBudgetPauseContext = List<ChatMessage>.of(event.context);
+          _runs.budgetPauseContext = List<ChatMessage>.of(event.context);
           runCheckpoint = {
             'version': 1,
             'runId': runId,
@@ -2355,7 +2330,7 @@ class ChatController extends Notifier<ChatState> {
       stopwatch.stop();
       try {
         final runDb = await ref.read(databaseProvider.future);
-        if (_cancelledRunGenerations.contains(runGeneration)) {
+        if (_runs.wasCancelled(runGeneration)) {
           runStatus = 'cancelled';
         }
         if (runStatus == 'running') runStatus = 'failed';
@@ -2425,7 +2400,7 @@ class ChatController extends Notifier<ChatState> {
       elapsed: stopwatch.elapsed,
       ttft: ttft,
     );
-    final runCancelled = _cancelledRunGenerations.contains(runGeneration) ||
+    final runCancelled = _runs.wasCancelled(runGeneration) ||
         runStatus == 'cancelled';
     // 计划收敛不依赖 ownsRun()：即使运行代次已失效（会话切换 / 中断 / 取消），
     // 也要对当前会话 planState 执行一次终态收敛与步骤归一化，
@@ -2489,21 +2464,15 @@ class ChatController extends Notifier<ChatState> {
     if (_activePlanGeneration == runGeneration) {
       _activePlanGeneration = null;
     }
-    if (identical(_cancellationToken, cancellationToken)) {
-      _cancellationToken = null;
-    }
-    if (identical(_dioCancelToken, dioCancelToken)) {
-      _dioCancelToken = null;
-    }
+    _runs.clearCancellationTokenIf(cancellationToken);
+    _runs.clearDioCancelTokenIf(dioCancelToken);
     runController.seal();
-    if (identical(_runController, runController)) {
-      _runController = null;
-    }
-    _cancelledRunGenerations.remove(runGeneration);
+    _runs.clearRunControllerIf(runController);
+    _runs.forget(runGeneration);
     _cancelRequestedAt = null;
     // 完成或取消后清除续跑上下文，避免残留一个旧的暂停快照。
     if (runStatus == 'success' || runStatus == 'cancelled') {
-      _lastBudgetPauseContext = null;
+      _runs.budgetPauseContext = null;
     }
   }
 
@@ -2554,7 +2523,7 @@ class ChatController extends Notifier<ChatState> {
   /// 暂停只在下一个 Agent 检查点生效，不打断当前模型流或工具调用。
   bool pause() {
     if (!state.running) return false;
-    final controller = _runController;
+    final controller = _runs.runController;
     if (controller == null || !controller.pause()) return false;
     state = state.copyWith(
       activityLog: [...state.activityLog, '运行已暂停，等待检查点'],
@@ -2564,7 +2533,7 @@ class ChatController extends Notifier<ChatState> {
 
   /// 恢复已暂停的 Agent；重复恢复保持幂等。
   bool resume() {
-    final controller = _runController;
+    final controller = _runs.runController;
     if (controller == null || !controller.resume()) return false;
     state = state.copyWith(
       paused: false,
@@ -2576,7 +2545,7 @@ class ChatController extends Notifier<ChatState> {
   /// 把补充指令排入当前 turn 边界，不打断正在执行的工具批次。
   bool steer(String text) {
     if (!state.running) return false;
-    final controller = _runController;
+    final controller = _runs.runController;
     if (controller == null || !controller.steer(text)) return false;
     state = state.copyWith(
       activityLog: [...state.activityLog, '补充指令已排队，将在下一轮生效'],
@@ -2589,7 +2558,7 @@ class ChatController extends Notifier<ChatState> {
     _cancelRequestedAt = DateTime.now();
     _invalidateActiveRun();
     // 真正中断底层 HTTP 流（Dio 层），避免连接与带宽继续被占用。
-    _dioCancelToken?.cancel();
+    _runs.dioCancelToken?.cancel();
   }
 
   /// Preserve text already visible when the user explicitly stops generation.
@@ -2618,10 +2587,10 @@ class ChatController extends Notifier<ChatState> {
 
   Future<void> newConversation() async {
     _invalidateActiveRun();
-    final newGeneration = _runGeneration;
+    final newGeneration = _runs.generation;
     final database = await ref.read(databaseProvider.future);
     final conversation = await _createConversation(database);
-    if (newGeneration != _runGeneration) return;
+    if (newGeneration != _runs.generation) return;
     state = state.copyWith(
       conversationId: conversation.id,
       conversationTitle: conversation.title,
@@ -2638,10 +2607,10 @@ class ChatController extends Notifier<ChatState> {
 
   Future<void> switchConversation(Conversation conversation) async {
     _invalidateActiveRun();
-    final switchGeneration = _runGeneration;
+    final switchGeneration = _runs.generation;
     final database = await ref.read(databaseProvider.future);
     final stored = await database.messagesFor(conversation.id);
-    if (switchGeneration != _runGeneration) return;
+    if (switchGeneration != _runs.generation) return;
     var agentName = state.agentName;
     var systemPrompt = state.systemPrompt;
     var agentId = conversation.agentId;
@@ -2652,7 +2621,7 @@ class ChatController extends Notifier<ChatState> {
         systemPrompt = agent.systemPrompt;
       }
     }
-    if (switchGeneration != _runGeneration) return;
+    if (switchGeneration != _runs.generation) return;
     final restored = _restoreFromMessages(stored);
     state = state.copyWith(
       conversationId: conversation.id,
