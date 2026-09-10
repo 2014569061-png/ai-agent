@@ -1,0 +1,47 @@
+name: CI
+
+# 日常提交的质量门。
+#
+# 此前仓库只有 release.yml（触发条件仅为 push tag v*），也就是说：main/feature
+# 分支的日常提交没有任何强制门禁，而 README/交接文档宣称的"flutter analyze 零
+# 告警 + 测试全绿"只由开发者本机习惯保证。本工作流把同一组命令搬到 CI。
+#
+# 触发条件说明：日常开发分支是 feature/*（当前为 feature/mature-agent），因此
+# 只挂 main 等于门禁形同虚设，故同时覆盖 feature/** 与所有 PR。
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      # 与本地一致的命令（本机必须经 tool/test.sh 修正环境）。
+      - name: Analyze
+        run: flutter analyze --no-pub
+
+      - name: Test
+        run: flutter test
