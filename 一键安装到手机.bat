@@ -1,115 +1,234 @@
 @echo off
-chcp 936 >nul
-title mobile_agent Ò»¼ü°²×°µ½ÊÖ»ú
-setlocal
+chcp 65001 >nul
+setlocal EnableExtensions
+title NEXUS Agent - ä¸€é”®å®‰è£…åˆ°æ‰‹æœº
 cd /d "%~dp0"
 
-rem ¿ÉÑ¡²ÎÊı: Ò»¼ü°²×°µ½ÊÖ»ú.bat [debug]
-rem   debug  Ìø¹ı Release »ìÏı´ò°ü£¬±àÒë¸ü¿ì£¬ÊÊºÏ¿ìËÙÑéÖ¤ UI ¸Ä¶¯
+rem ============================================================
+rem  NEXUS Agent æ„å»ºå¹¶å®‰è£…åˆ° USB æ‰‹æœº
+rem
+rem  ç”¨æ³•ï¼š
+rem    ä¸€é”®å®‰è£…åˆ°æ‰‹æœº.bat                release æ„å»º â†’ å®‰è£… â†’ å¯åŠ¨
+rem    ä¸€é”®å®‰è£…åˆ°æ‰‹æœº.bat debug          æ„å»º debug åŒ…ï¼ˆç‹¬ç«‹åŒ…å .debugï¼‰â†’ å®‰è£… â†’ å¯åŠ¨
+rem    ä¸€é”®å®‰è£…åˆ°æ‰‹æœº.bat dryrun         åªæ„å»ºä¸é¢„æ£€è®¾å¤‡ï¼Œä¸å®é™…å®‰è£…
+rem    ä¸€é”®å®‰è£…åˆ°æ‰‹æœº.bat nopause        ç»“æŸä¸æš‚åœ
+rem    ä¸€é”®å®‰è£…åˆ°æ‰‹æœº.bat <è®¾å¤‡åºåˆ—å·>   æŒ‡å®šè®¾å¤‡ï¼ˆå¤šè®¾å¤‡æ—¶å¿…é¡»ï¼‰
+rem    ä¹Ÿå¯ç”¨ç¯å¢ƒå˜é‡ï¼šset NEXUS_DEVICE=<åºåˆ—å·>
+rem
+rem  ç›¸æ¯”æ—§è„šæœ¬çš„æ”¹åŠ¨ï¼š
+rem    Â· ä¸å†ç¡¬ç¼–ç è®¾å¤‡åºåˆ—å·ï¼ˆæ—§è„šæœ¬å†™æ­» d29380b2ï¼Œæ¢æ‰‹æœºå³å¤±æ•ˆï¼‰ï¼›
+rem      ç°åœ¨è‡ªåŠ¨è¯†åˆ«å”¯ä¸€è®¾å¤‡ï¼Œå¤šè®¾å¤‡æ—¶åˆ—å‡ºå€™é€‰å¹¶è¦æ±‚æ˜¾å¼æŒ‡å®šï¼›
+rem    Â· æ˜ç¡®åŒºåˆ† unauthorized / offline / æ— è®¾å¤‡ï¼Œå¹¶ç»™å‡ºå¯¹åº”å¤„ç†åŠæ³•ï¼›
+rem    Â· release æ¨¡å¼å¤ç”¨ç­¾åé¢„æ£€ï¼šç¼º key.properties æ—¶ç›´æ¥æ‹¦ä¸‹ï¼ˆå¦åˆ™ä¼šé™é»˜
+rem      è£…ä¸Š debug ç­¾åçš„"æ­£å¼åŒ…"ï¼Œè¦†ç›–å®‰è£…å·²å‘å¸ƒç‰ˆæœ¬å¿…ç„¶å¤±è´¥ï¼‰ï¼›
+rem    Â· æ–‡ä»¶ç¼–ç ç»Ÿä¸€ä¸º UTF-8ï¼ˆæ—§è„šæœ¬æ˜¯ GBKï¼Œè·¨æœºå™¨/locale ä¼šä¹±ç ï¼‰ã€‚
+rem ============================================================
+
+set "MODE=release"
+set "DRYRUN=0"
+set "PAUSE=1"
+set "SERIAL=%NEXUS_DEVICE%"
+for %%A in (%*) do call :classify "%%~A"
+
+set "APK_REL=build\app\outputs\flutter-apk\app-release.apk"
 set "PACKAGE=com.nexusagent.app"
-set "BUILD_MODE=release"
 set "BUILD_ARGS=build apk --release --split-debug-info=build\symbols --obfuscate"
-set "APK_PATH=build\app\outputs\flutter-apk\app-release.apk"
-if /i "%~1"=="debug" (
-    set "BUILD_MODE=debug"
+if /i "%MODE%"=="debug" (
+    set "APK_REL=build\app\outputs\flutter-apk\app-debug.apk"
+    set "PACKAGE=com.nexusagent.app.debug"
     set "BUILD_ARGS=build apk --debug"
-    set "APK_PATH=build\app\outputs\flutter-apk\app-debug.apk"
 )
+set "APK=%CD%\%APK_REL%"
+set "GRADLE_USER_HOME=%USERPROFILE%\.gradle"
 
-echo =========================================
-echo  mobile_agent Ò»¼ü°²×°µ½ÊÖ»ú (%BUILD_MODE%)
-echo =========================================
+echo ========================================================
+echo       NEXUS Agent ä¸€é”®å®‰è£…åˆ°æ‰‹æœºï¼ˆ%MODE%ï¼‰
+echo ========================================================
+
 echo.
-
-rem ---- 1. »·¾³Ô¤¼ì ----
-where adb >nul 2>nul || (echo [¡Á] Î´ÕÒµ½ adb£¬ÇëÈ·ÈÏ Android Æ½Ì¨¹¤¾ßÒÑ°²×°²¢¼ÓÈë PATH¡£ & goto :fail)
-where flutter >nul 2>nul || (echo [¡Á] Î´ÕÒµ½ flutter£¬ÇëÈ·ÈÏ Flutter SDK ÒÑ¼ÓÈë PATH¡£ & goto :fail)
-
-adb start-server >nul 2>nul
-
-rem ---- 2. Éè±¸Ô¤¼ì£¨Ã»Á¬ÊÖ»ú¾ÍÖ±½ÓÍË³ö£¬±ÜÃâ°×µÈ¼¸·ÖÖÓ±àÒë£©----
-set /a DEVICE_COUNT=0, UNAUTHORIZED=0, OFFLINE=0
-for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
-    if /i "%%B"=="device" set /a DEVICE_COUNT+=1
-    if /i "%%B"=="unauthorized" set /a UNAUTHORIZED+=1
-    if /i "%%B"=="offline" set /a OFFLINE+=1
-)
-if %UNAUTHORIZED% gtr 0 (
-    echo [¡Á] ÊÖ»úÒÑÁ¬½Óµ«Î´ÊÚÈ¨ USB µ÷ÊÔ¡£
-    echo     Çë½âËøÊÖ»ú£¬ÔÚµ¯´°ÖĞµã¡¸ÔÊĞí USB µ÷ÊÔ¡¹ºóÖØÊÔ¡£
+echo [1/5] æ£€æŸ¥å·¥å…·é“¾
+call :find_flutter
+if not defined FLUTTER_EXE (
+    echo        [é”™è¯¯] æœªæ‰¾åˆ° flutterï¼Œè¯·æŠŠ Flutter bin åŠ å…¥ PATH
     goto :fail
 )
-if %OFFLINE% gtr 0 (
-    echo [¡Á] ÊÖ»ú´¦ÓÚ offline ×´Ì¬£¬ÇëÖØĞÂ²å°ÎÊı¾İÏß»ò¹Ø±ÕÔÙ´ò¿ª USB µ÷ÊÔ¡£
+call :find_adb
+if not defined ADB_EXE (
+    echo        [é”™è¯¯] æœªæ‰¾åˆ° adbï¼šè¯·å®‰è£… Android å¹³å°å·¥å…·å¹¶åŠ å…¥ PATHï¼Œ
+    echo              æˆ–æ”¾åˆ° %%LOCALAPPDATA%%\Android\Sdk\platform-tools\
     goto :fail
 )
-if %DEVICE_COUNT%==0 (
-    echo [¡Á] Î´¼ì²âµ½ÒÑÁ¬½ÓµÄÊÖ»ú¡£
-    echo     Çë²åÉÏ USB Êı¾İÏß£¬²¢È·ÈÏÊÖ»úÒÑ¿ªÆô¡¸¿ª·¢ÕßÑ¡Ïî - USB µ÷ÊÔ¡¹¡£
+echo        flutter : %FLUTTER_EXE%
+echo        adb     : %ADB_EXE%
+
+echo.
+echo [2/5] é¢„æ£€è®¾å¤‡
+"%ADB_EXE%" start-server >nul 2>nul
+"%ADB_EXE%" devices | findstr /i /r /c:"unauthorized$" >nul 2>nul
+if not errorlevel 1 (
+    echo        [é”™è¯¯] æ‰‹æœºå·²è¿æ¥ä½†æœªæˆæƒ USB è°ƒè¯•ã€‚
+    echo               è¯·åœ¨æ‰‹æœºå±å¹•ä¸Šç‚¹ã€Œå…è®¸ USB è°ƒè¯•ã€ï¼Œç„¶åé‡è·‘æœ¬è„šæœ¬ã€‚
     goto :fail
 )
-set "ADB_TARGET=adb"
-if %DEVICE_COUNT% gtr 1 (
-    echo [!] ¼ì²âµ½ %DEVICE_COUNT% Ì¨Éè±¸£¬½«°²×°µ½ USB Á¬½ÓµÄÊÖ»ú£¨Ä£ÄâÆ÷»á±»ºöÂÔ£©¡£
-    set "ADB_TARGET=adb -d"
+"%ADB_EXE%" devices | findstr /i /r /c:"offline$" >nul 2>nul
+if not errorlevel 1 (
+    echo        [é”™è¯¯] è®¾å¤‡å¤„äº offline çŠ¶æ€ï¼šè¯·é‡æ–°æ’æ‹”æ•°æ®çº¿ï¼Œæˆ–å…³é—­å†æ‰“å¼€ USB è°ƒè¯•ã€‚
+    goto :fail
 )
-adb devices
-echo.
+set "DEV_COUNT=0"
+set "FOUND_SERIAL="
+for /f "tokens=1,2" %%A in ('"%ADB_EXE%" devices ^| findstr /r /c:"device$"') do (
+    set /a DEV_COUNT+=1
+    if not defined FOUND_SERIAL set "FOUND_SERIAL=%%A"
+)
+if %DEV_COUNT%==0 (
+    echo        [é”™è¯¯] æ²¡æœ‰æ£€æµ‹åˆ°å·²è¿æ¥çš„æ‰‹æœºã€‚
+    echo               è¯·æ’å¥½ USB æ•°æ®çº¿ï¼Œå¹¶åœ¨æ‰‹æœºä¸Šé€‰æ‹©ã€Œæ–‡ä»¶ä¼ è¾“ / USB è°ƒè¯•ã€æ¨¡å¼ã€‚
+    goto :fail
+)
+if %DEV_COUNT% GTR 1 (
+    if not defined SERIAL (
+        echo        [é”™è¯¯] æ£€æµ‹åˆ° %DEV_COUNT% å°è®¾å¤‡ï¼Œæ— æ³•ç¡®å®šè£…åˆ°å“ªå°ï¼š
+        "%ADB_EXE%" devices
+        echo.
+        echo        è¯·æ˜¾å¼æŒ‡å®šï¼Œä¾‹å¦‚ï¼šä¸€é”®å®‰è£…åˆ°æ‰‹æœº.bat ^<è®¾å¤‡åºåˆ—å·^>
+        goto :fail
+    )
+)
+if not defined SERIAL set "SERIAL=%FOUND_SERIAL%"
+"%ADB_EXE%" -s %SERIAL% get-state >nul 2>nul
+if errorlevel 1 (
+    echo        [é”™è¯¯] æŒ‡å®šè®¾å¤‡ä¸å¯ç”¨ï¼š%SERIAL%
+    "%ADB_EXE%" devices
+    goto :fail
+)
+echo        ç›®æ ‡è®¾å¤‡ï¼š%SERIAL%
 
-rem ---- 3. ±àÒë ----
-set "START_TIME=%time%"
-echo [%time%] ¿ªÊ¼±àÒë %BUILD_MODE% APK£¨Ê×´Î±àÒë½ÏÂı£¬ÊôÕı³£ÏÖÏó£©...
+if /i "%MODE%"=="debug" goto :skip_sign_check
 echo.
-if not exist "build\symbols" mkdir "build\symbols"
+echo [3/5] æ ¡éªŒæ­£å¼ç­¾åé…ç½®
+call :check_signing
+if defined SIGN_PROBLEM (
+    echo        [è‡´å‘½] %SIGN_PROBLEM%
+    echo.
+    echo        ç»§ç»­å®‰è£…ä¼šè£…ä¸Š debug ç­¾åçš„"æ­£å¼åŒ…"ï¼šèƒ½åœ¨æœ¬æœºè·‘ï¼Œä½†æ— æ³•è¦†ç›–å®‰è£…
+    echo        ä½ å·²å‘å¸ƒçš„æ­£å¼ç‰ˆï¼ˆç­¾åä¸ä¸€è‡´ï¼Œå®‰è£…ä¼šå¤±è´¥ï¼‰ã€‚
+    echo        è‹¥ç¡®å®åªæƒ³æœ¬æœºè°ƒè¯•ï¼Œè¯·æ”¹ç”¨ï¼šä¸€é”®å®‰è£…åˆ°æ‰‹æœº.bat debug
+    goto :fail
+)
+echo        æ­£å¼ç­¾åé…ç½®å®Œæ•´
+goto :build
 
-call flutter %BUILD_ARGS%
+:skip_sign_check
+echo.
+echo [3/5] debug æ¨¡å¼ï¼šè·³è¿‡æ­£å¼ç­¾åæ ¡éªŒï¼ˆä½¿ç”¨ debug ç­¾å + .debug åŒ…åï¼‰
+
+:build
+echo.
+echo [4/5] æ„å»º APK
+call "%FLUTTER_EXE%" pub get
+if errorlevel 1 (
+    echo        [é”™è¯¯] flutter pub get å¤±è´¥
+    goto :fail
+)
+call "%FLUTTER_EXE%" analyze --no-pub
+if errorlevel 1 (
+    echo        [é”™è¯¯] flutter analyze æœ‰å‘Šè­¦ï¼Œå·²ä¸­æ­¢ï¼ˆå…ˆä¿®å‘Šè­¦å†è£…åˆ°æ‰‹æœºï¼‰
+    goto :fail
+)
+echo        flutter analyze é›¶å‘Šè­¦
+call "%FLUTTER_EXE%" %BUILD_ARGS%
+if errorlevel 1 (
+    echo        [é”™è¯¯] æ„å»ºå¤±è´¥
+    goto :fail
+)
+if not exist "%APK%" (
+    echo        [é”™è¯¯] æ‰¾ä¸åˆ°äº§ç‰©ï¼š%APK_REL%
+    goto :fail
+)
+
+if not "%DRYRUN%"=="1" goto :install
+echo.
+echo [5/5] dryrunï¼šè·³è¿‡å®‰è£…ä¸å¯åŠ¨ï¼ˆæ„å»ºä¸è®¾å¤‡é¢„æ£€å·²å®Œæˆï¼‰
+echo        å°†å®‰è£…   : %APK_REL%
+echo        ç›®æ ‡è®¾å¤‡ : %SERIAL%
+goto :done
+
+:install
+echo.
+echo [5/5] å®‰è£…å¹¶å¯åŠ¨
+"%ADB_EXE%" -s %SERIAL% install -r -d "%APK%"
 if errorlevel 1 (
     echo.
-    echo [¡Á] ´ò°üÊ§°Ü£¬Çë¼ì²éÉÏÃæµÄ´íÎóĞÅÏ¢¡£
+    echo        [é”™è¯¯] å®‰è£…å¤±è´¥ã€‚å¸¸è§åŸå› ï¼š
+    echo                Â· æ‰‹æœºä¸Šæœªå…è®¸ã€Œé€šè¿‡ USB å®‰è£…åº”ç”¨ã€
+    echo                Â· å·²å®‰è£…çš„æ˜¯ä¸åŒç­¾åçš„åŒåŒ…ååº”ç”¨ï¼ˆå…ˆå¸è½½å†è£…ï¼‰
+    echo                Â· æ‰‹æœºå­˜å‚¨ç©ºé—´ä¸è¶³
     goto :fail
 )
-call :elapsed "%START_TIME%" "%time%"
-
-rem ---- 4. °²×°£¨-r ¸²¸Ç°²×°£¬-d ÔÊĞí°æ±¾»ØÍË£©----
-echo.
-echo ÕıÔÚ°²×°µ½ÊÖ»ú...
-%ADB_TARGET% install -r -d "%APK_PATH%"
+"%ADB_EXE%" -s %SERIAL% shell monkey -p %PACKAGE% -c android.intent.category.LAUNCHER 1 >nul 2>nul
 if errorlevel 1 (
-    echo.
-    echo [¡Á] °²×°Ê§°Ü£ºÇë½âËøÊÖ»úÆÁÄ»£¬ÈôÊÖ»úµ¯³ö°²×°È·ÈÏÇëµã¡¸ÔÊĞí¡¹£¬È»ºóÖØÊÔ¡£
-    goto :fail
-)
-
-rem ---- 5. ×Ô¶¯À­Æğ App ----
-adb shell monkey -p %PACKAGE% -c android.intent.category.LAUNCHER 1 >nul 2>nul
-if errorlevel 1 (
-    echo [¡Ì] °²×°Íê³É£¡Çëµ½ÊÖ»úÉÏ´ò¿ª App¡£
+    echo        å®‰è£…å®Œæˆï¼Œä½†è‡ªåŠ¨å¯åŠ¨å¤±è´¥ï¼šè¯·åˆ°æ‰‹æœºä¸Šç‚¹å¼€ App
 ) else (
-    echo [¡Ì] °²×°Íê³É£¬App ÒÑÔÚÊÖ»úÉÏÆô¶¯£¡
+    echo        å®‰è£…å®Œæˆï¼Œå·²åœ¨æ‰‹æœºä¸Šå¯åŠ¨ï¼ˆ%PACKAGE%ï¼‰
 )
 goto :done
 
+rem ==================== å­è¿‡ç¨‹ ====================
+
+rem è§£æå‚æ•°ï¼šdebug / release / dryrun / nopause / å…¶å®ƒè§†ä¸ºè®¾å¤‡åºåˆ—å·
+:classify
+if /i "%~1"=="debug"   ( set "MODE=debug" & goto :eof )
+if /i "%~1"=="release" ( set "MODE=release" & goto :eof )
+if /i "%~1"=="dryrun"  ( set "DRYRUN=1" & goto :eof )
+if /i "%~1"=="nopause" ( set "PAUSE=0" & goto :eof )
+set "SERIAL=%~1"
+goto :eof
+
+:find_flutter
+if exist "C:\src\flutter\bin\flutter.bat" (
+    set "FLUTTER_EXE=C:\src\flutter\bin\flutter.bat"
+    goto :eof
+)
+for /f "delims=" %%F in ('where flutter 2^>nul') do if not defined FLUTTER_EXE set "FLUTTER_EXE=%%F"
+goto :eof
+
+:find_adb
+set "ADB_EXE="
+for /f "delims=" %%P in ('where adb 2^>nul') do if not defined ADB_EXE set "ADB_EXE=%%P"
+if defined ADB_EXE goto :eof
+set "SDK_DIR=%LOCALAPPDATA%\Android\Sdk"
+if defined ANDROID_HOME set "SDK_DIR=%ANDROID_HOME%"
+if defined ANDROID_SDK_ROOT set "SDK_DIR=%ANDROID_SDK_ROOT%"
+if exist "%SDK_DIR%\platform-tools\adb.exe" set "ADB_EXE=%SDK_DIR%\platform-tools\adb.exe"
+goto :eof
+
+rem æ£€æŸ¥ android\key.properties ä¸ keystoreï¼›é—®é¢˜å†™å…¥ SIGN_PROBLEM
+:check_signing
+set "SIGN_PROBLEM="
+set "K_STORE="
+if not exist "android\key.properties" (
+    set "SIGN_PROBLEM=æ‰¾ä¸åˆ° android\key.properties"
+    goto :eof
+)
+findstr /r /b "keyAlias=." "android\key.properties" >nul 2>nul || set "SIGN_PROBLEM=key.properties é‡Œ keyAlias ç¼ºå¤±æˆ–ä¸ºç©º"
+findstr /r /b "storePassword=." "android\key.properties" >nul 2>nul || set "SIGN_PROBLEM=key.properties é‡Œ storePassword ç¼ºå¤±æˆ–ä¸ºç©º"
+findstr /r /b "keyPassword=." "android\key.properties" >nul 2>nul || set "SIGN_PROBLEM=key.properties é‡Œ keyPassword ç¼ºå¤±æˆ–ä¸ºç©º"
+findstr /r /b "storeFile=." "android\key.properties" >nul 2>nul || set "SIGN_PROBLEM=key.properties é‡Œ storeFile ç¼ºå¤±æˆ–ä¸ºç©º"
+for /f "tokens=2 delims==" %%V in ('findstr /b "storeFile=" "android\key.properties"') do set "K_STORE=%%V"
+if defined SIGN_PROBLEM goto :eof
+if exist "android\app\%K_STORE%" goto :eof
+if exist "android\%K_STORE%" goto :eof
+set "SIGN_PROBLEM=keystore æ–‡ä»¶ä¸å­˜åœ¨ï¼š%K_STORE%ï¼ˆGradle ä»¥ android\app\ ä¸ºåŸºå‡†è§£æï¼‰"
+goto :eof
+
 :fail
 echo.
-pause
+echo æœªå®Œæˆã€‚
+if "%PAUSE%"=="1" pause
 exit /b 1
 
 :done
 echo.
-pause
+if "%PAUSE%"=="1" pause
 exit /b 0
-
-rem ---- ºÄÊ±¼ÆËã: :elapsed "ÆğÊ¼Ê±¼ä" "½áÊøÊ±¼ä" ----
-:elapsed
-setlocal
-set "T1=%~1"
-set "T2=%~2"
-set "T1=%T1: =0%"
-set "T2=%T2: =0%"
-for /f "tokens=1-4 delims=:.," %%a in ("%T1%") do set /a S1=((1%%a-100)*3600+(1%%b-100)*60+(1%%c-100))*100+(1%%d-10)
-for /f "tokens=1-4 delims=:.," %%a in ("%T2%") do set /a S2=((1%%a-100)*3600+(1%%b-100)*60+(1%%c-100))*100+(1%%d-10)
-if %S2% lss %S1% set /a S2+=8640000
-set /a D=S2-S1, M=D/6000, S=D/100%%60
-echo     ±¾½×¶ÎºÄÊ± %M% ·Ö %S% Ãë
-endlocal
-goto :eof
