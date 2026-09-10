@@ -70,7 +70,7 @@ void main() {
     runs.dioCancelToken = dioToken;
     runs.runController = controller;
     runs.budgetPauseContext = [
-      ChatMessage(role: MessageRole.user, parts: [MessagePart.text('预算暂停上下文')])
+      ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('预算暂停上下文')])
     ];
 
     runs.invalidateActiveRun();

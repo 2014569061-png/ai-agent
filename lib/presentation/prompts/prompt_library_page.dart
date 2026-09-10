@@ -236,9 +236,9 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
             child: TextField(
               controller: _searchController,
               onChanged: (value) => setState(() => _query = value),
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: '搜索 Prompt',
-                prefixIcon: const Icon(Icons.search),
+                prefixIcon: Icon(Icons.search),
                 isDense: true,
               ),
             ),

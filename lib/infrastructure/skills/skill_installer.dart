@@ -360,7 +360,7 @@ class SkillInstaller {
 
   Archive _decodeTarGz(Uint8List bytes) {
     try {
-      final gz = GZipDecoder().decodeBytes(bytes);
+      final gz = const GZipDecoder().decodeBytes(bytes);
       return TarDecoder().decodeBytes(gz);
     } catch (_) {
       throw SkillValidationException('无法解压 GitHub 归档包');

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -157,7 +158,7 @@ class _HistoryPageState extends State<HistoryPage> {
     await db.deleteConversation(conversation.id);
     await _reload();
     if (mounted) {
-      HapticFeedback.mediumImpact();
+      unawaited(HapticFeedback.mediumImpact());
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -490,13 +491,13 @@ class _HistoryPageState extends State<HistoryPage> {
     );
     switch (action) {
       case 'pin':
-        _togglePinned(conversation);
+        unawaited(_togglePinned(conversation));
       case 'favorite':
-        _toggleFavorite(conversation);
+        unawaited(_toggleFavorite(conversation));
       case 'rename':
-        _rename(conversation);
+        unawaited(_rename(conversation));
       case 'delete':
-        _delete(conversation);
+        unawaited(_delete(conversation));
     }
   }
 

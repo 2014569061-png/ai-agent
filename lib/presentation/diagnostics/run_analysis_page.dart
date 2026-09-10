@@ -837,11 +837,11 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
   Widget _buildAuditSection() {
     final report = _auditReport;
     if (report.entries.isEmpty) {
-      return SectionCard(
+      return const SectionCard(
         child: ListTile(
-          leading: const Icon(Icons.verified_user_outlined),
-          title: const Text('副作用审计'),
-          subtitle: const Text('本次运行没有记录到文件、终端或设备副作用。'),
+          leading: Icon(Icons.verified_user_outlined),
+          title: Text('副作用审计'),
+          subtitle: Text('本次运行没有记录到文件、终端或设备副作用。'),
         ),
       );
     }

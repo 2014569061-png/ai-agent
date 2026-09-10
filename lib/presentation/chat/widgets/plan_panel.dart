@@ -427,14 +427,14 @@ class _PlanPanelState extends State<PlanPanel> {
 
         // 底部署名
         const Divider(height: 1, thickness: 0.8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 7),
           child: Row(
             children: [
-              const Icon(Icons.auto_awesome_rounded,
+              Icon(Icons.auto_awesome_rounded,
                   size: 13, color: AppTheme.brandBright),
-              const SizedBox(width: 5),
-              const Text(
+              SizedBox(width: 5),
+              Text(
                 'NEXUS 智能协同执行引擎',
                 style: TextStyle(
                   fontSize: 11,

@@ -90,7 +90,7 @@ void main() {
         'runId': 'run-applied',
         'context': encodeChatContextForPersistence([
           ChatMessage(
-              role: MessageRole.user, parts: [MessagePart.text('CHECKPOINT')])
+              role: MessageRole.user, parts: [const MessagePart.text('CHECKPOINT')])
         ]),
       },
     );
@@ -157,10 +157,10 @@ void main() {
         'context': encodeChatContextForPersistence([
           ChatMessage(
               role: MessageRole.user,
-              parts: [MessagePart.text('CHECKPOINT_MARKER')]),
+              parts: [const MessagePart.text('CHECKPOINT_MARKER')]),
           ChatMessage(
               role: MessageRole.assistant,
-              parts: [MessagePart.text('已算到中间结果')]),
+              parts: [const MessagePart.text('已算到中间结果')]),
         ]),
       },
     );

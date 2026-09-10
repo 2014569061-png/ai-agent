@@ -50,7 +50,7 @@ void main() {
   });
 
   testWidgets('TokenUsageHero 无数据时展示 -- 而不是崩溃', (tester) async {
-    await tester.pumpWidget(wrap(TokenUsageHero(days: <UsageDaily>[])));
+    await tester.pumpWidget(wrap(const TokenUsageHero(days: <UsageDaily>[])));
     expect(find.text('--'), findsOneWidget);
   });
 

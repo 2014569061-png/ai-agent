@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -78,7 +79,7 @@ class _McpServersPageState extends State<McpServersPage> {
       kind: McpServerKind.http,
       url: url.text.trim(),
     ));
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     await _reload();
     if (mounted) {
       FloatingToast.show(context, '已添加 MCP 服务器', tone: ToastTone.success);
@@ -154,7 +155,7 @@ class _McpServersPageState extends State<McpServersPage> {
               .where((arg) => arg.isNotEmpty)
               .toList(),
     ));
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     await _reload();
     if (mounted) {
       FloatingToast.show(context, '已保存修改', tone: ToastTone.success);
@@ -197,7 +198,7 @@ class _McpServersPageState extends State<McpServersPage> {
       ),
     );
     if (confirmed != true) return;
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     await _service.delete(server.id);
     await _reload();
     if (mounted) {
@@ -341,7 +342,7 @@ class _McpServersPageState extends State<McpServersPage> {
                         Switch(
                           value: server.enabled,
                           onChanged: (enabled) async {
-                            HapticFeedback.selectionClick();
+                            unawaited(HapticFeedback.selectionClick());
                             await _service.toggleServer(server.id, enabled);
                             await _reload();
                           },

@@ -441,7 +441,7 @@ class AgentExecutor {
         messages.add(ChatMessage(
           role: MessageRole.user,
           parts: [
-            MessagePart.text(
+            const MessagePart.text(
               '[计划已确认] 用户已批准执行以上计划。请继续按照计划执行剩余步骤；需要工具时直接调用工具，不要只输出计划或提前结束。完成全部步骤后再总结结果。',
             )
           ],

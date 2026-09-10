@@ -193,7 +193,7 @@ void main() {
         role: MessageRole.assistant,
         parts: const [],
         toolCalls: [
-          ToolCall(
+          const ToolCall(
             id: 'clip-1',
             // terminal 是真实存在的、参数与结果都需要持久化脱敏的工具；
             // 旧的 clipboard_read 是已删除的死条目，不能再用作夹具。
@@ -205,7 +205,7 @@ void main() {
       ChatMessage(
         role: MessageRole.tool,
         toolCallId: 'clip-1',
-        parts: [MessagePart.text('{"text":"验证码-SECRET"}')],
+        parts: [const MessagePart.text('{"text":"验证码-SECRET"}')],
       ),
     ];
 

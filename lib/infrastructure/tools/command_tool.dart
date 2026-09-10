@@ -322,7 +322,7 @@ class TerminalCommandService {
     }
     final result = daemon.result;
     if (result == null) {
-      return TerminalSessionExecution(
+      return const TerminalSessionExecution(
           ok: false,
           code: ToolCodes.outcomeUnknown,
           message: '后台进程结果无法确认',

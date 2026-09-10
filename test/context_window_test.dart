@@ -61,7 +61,7 @@ void main() {
       _assistant(_repeat('回复一')),
       _user(_repeat('第二问')),
       _assistant(_repeat('调用工具'),
-          calls: [ToolCall(id: 't1', name: 'calc', arguments: const {})]),
+          calls: [const ToolCall(id: 't1', name: 'calc', arguments: {})]),
       _tool('t1', _repeat('42')),
       _user(_repeat('第三问')),
     ];
@@ -81,7 +81,7 @@ void main() {
     final messages = [
       _user(_repeat('问一')),
       _assistant(_repeat('执行工具'),
-          calls: [ToolCall(id: 't1', name: 'calc', arguments: const {})]),
+          calls: [const ToolCall(id: 't1', name: 'calc', arguments: {})]),
       _tool('t1', _repeat('结果')),
       _user(_repeat('问二')),
     ];
@@ -130,7 +130,7 @@ void main() {
     final messages = [
       _user('问'),
       _assistant('调用',
-          calls: [ToolCall(id: 't1', name: 'http', arguments: const {})]),
+          calls: [const ToolCall(id: 't1', name: 'http', arguments: {})]),
       _tool('t1', 'x' * 1000),
     ];
     final applied = window.apply(messages);
@@ -181,7 +181,7 @@ void main() {
       final window = _windowWithBudget(70);
       final applied = window.apply([
         ChatMessage(
-            role: MessageRole.system, parts: [MessagePart.text('身份设定')]),
+            role: MessageRole.system, parts: [const MessagePart.text('身份设定')]),
         _user(_repeat('第一问')),
         _assistant(_repeat('回复一')),
         _user(_repeat('第二问')),
@@ -237,7 +237,7 @@ void main() {
       final applied = window.apply([
         _user('问'),
         _assistant('调用', calls: [
-          ToolCall(id: 't1', name: 'calc', arguments: const {'a': 1}),
+          const ToolCall(id: 't1', name: 'calc', arguments: {'a': 1}),
         ]),
       ]);
       expect(applied.last.toolCalls.single.arguments, {'a': 1});
@@ -248,9 +248,9 @@ void main() {
       final applied = window.apply([
         _user('问'),
         _assistant('批量调用', calls: [
-          ToolCall(id: 't1', name: 'calc', arguments: const {}),
-          ToolCall(id: 't2', name: 'calc', arguments: const {}),
-          ToolCall(id: 't3', name: 'calc', arguments: const {}),
+          const ToolCall(id: 't1', name: 'calc', arguments: {}),
+          const ToolCall(id: 't2', name: 'calc', arguments: {}),
+          const ToolCall(id: 't3', name: 'calc', arguments: {}),
         ]),
         _tool('t1', '1'),
         _tool('t2', '2'),

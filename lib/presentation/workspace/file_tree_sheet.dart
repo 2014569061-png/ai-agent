@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -134,7 +135,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
     try {
       final content = await file.readAsString();
       if (!mounted) return;
-      showImmersiveDialog(
+      unawaited(showImmersiveDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(p.basename(file.path),
@@ -166,7 +167,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
             ),
           ],
         ),
-      );
+      ));
     } catch (e) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('无法以文本读取此文件: $e')));

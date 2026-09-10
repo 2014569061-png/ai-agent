@@ -36,27 +36,27 @@ class SessionMetricsBar extends StatelessWidget {
   /// 分组优先级顺序固定，裁切时从尾部丢弃。
   List<_Group> _buildGroups() {
     final groups = <_Group>[
-      _Group(const [
+      const _Group([
         _Segment('rounds', isValue: true),
         _Segment('轮'),
         _Segment('·'),
         _Segment('steps', isValue: true),
         _Segment('步'),
       ]),
-      _Group([
-        const _Segment('LLM'),
+      const _Group([
+        _Segment('LLM'),
         _Segment('llm', isValue: true),
-        const _Segment('·'),
-        const _Segment('工具'),
+        _Segment('·'),
+        _Segment('工具'),
         _Segment('tool', isValue: true),
       ]),
       if (metrics.cacheHitRate != null)
-        _Group([
-          const _Segment('缓存命中'),
+        const _Group([
+          _Segment('缓存命中'),
           _Segment('cache', isValue: true),
         ]),
       if (metrics.totalTokens > 0)
-        _Group(const [
+        const _Group([
           _Segment('输入'),
           _Segment('in', isValue: true),
           _Segment('·'),
@@ -64,7 +64,7 @@ class SessionMetricsBar extends StatelessWidget {
           _Segment('out', isValue: true),
         ]),
       if (metrics.avgTtft != null || metrics.tokensPerSecond > 0)
-        _Group(const [
+        const _Group([
           _Segment('首 token'),
           _Segment('ttft', isValue: true),
           _Segment('·'),

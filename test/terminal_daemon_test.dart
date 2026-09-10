@@ -198,7 +198,7 @@ void main() {
       startResult: DetachedCommandHandle(
         pid: 99,
         completion: Future<CommandResult>.value(
-          CommandResult(output: 'ok', exitCode: 0),
+          const CommandResult(output: 'ok', exitCode: 0),
         ),
       ),
     );

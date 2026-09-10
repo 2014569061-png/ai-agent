@@ -572,9 +572,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
     if (!mounted) return;
     if (retry == true) {
-      _maybeLock();
+      unawaited(_maybeLock());
     } else {
-      SystemNavigator.pop();
+      unawaited(SystemNavigator.pop());
     }
   }
 
@@ -1116,7 +1116,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: message.text));
       if (mounted) {
-        HapticFeedback.lightImpact();
+        unawaited(HapticFeedback.lightImpact());
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('已复制全文'),
@@ -1342,10 +1342,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                const Icon(Icons.psychology_outlined),
-                const SizedBox(width: 12),
-                const Expanded(
+              const Row(children: [
+                Icon(Icons.psychology_outlined),
+                SizedBox(width: 12),
+                Expanded(
                     child: Text('思考程度',
                         style: TextStyle(
                             fontSize: 16, fontWeight: FontWeight.w500))),

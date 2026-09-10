@@ -156,8 +156,8 @@ void main() {
   });
 
   group('PlanPanel paused UI', () {
-    PlanState pausedPlan() => PlanState(
-          steps: const [
+    PlanState pausedPlan() => const PlanState(
+          steps: [
             PlanStep(id: 's1', description: '第一步', status: 'completed'),
             PlanStep(id: 's2', description: '第二步', status: 'running'),
           ],

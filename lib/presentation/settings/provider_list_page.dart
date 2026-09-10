@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
@@ -46,7 +47,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
       context,
       MaterialPageRoute(builder: (_) => ProviderDetailPage(preset: preset)),
     );
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _openConfig(ProviderConfig config) async {
@@ -59,7 +60,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
         ),
       ),
     );
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _activate(ProviderConfig config) async {
@@ -68,7 +69,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
     if (mounted) {
       FloatingToast.show(context, '已切换激活服务商：${config.name}');
     }
-    _load();
+    unawaited(_load());
   }
 
   Future<void> _delete(ProviderConfig config) async {
@@ -106,7 +107,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
       if (mounted) {
         FloatingToast.show(context, '已删除服务商 ${config.name}');
       }
-      _load();
+      unawaited(_load());
     }
   }
 

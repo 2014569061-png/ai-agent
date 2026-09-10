@@ -180,7 +180,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
     final pending = a.status == '等待确认';
     final failed = a.status == '执行失败';
     final args = a.call.arguments.toString();
-    final description = ToolHumanizer().summaryOf(a.call);
+    final description = const ToolHumanizer().summaryOf(a.call);
     final argsBrief =
         description ?? (args.length > 48 ? '${args.substring(0, 48)}…' : args);
     final effect = a.effect;

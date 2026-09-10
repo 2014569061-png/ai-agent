@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -226,7 +227,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     if (!mounted) return;
     if (!launched) {
       FloatingToast.show(context, '当前系统不支持直接拉起，请手动前往电池设置');
-      openAppSettings();
+      unawaited(openAppSettings());
     }
   }
 
@@ -235,10 +236,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     if (!mounted) return;
     switch (result.status) {
       case UpdateCheckStatus.update:
-        showImmersiveSheet(
+        unawaited(showImmersiveSheet(
           context: context,
           builder: (_) => UpdateSheet(info: result.info!),
-        );
+        ));
       case UpdateCheckStatus.upToDate:
         FloatingToast.show(
           context,
@@ -738,7 +739,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     builder: (_) => const ProviderListPage(),
                   ),
                 );
-                _loadAll();
+                unawaited(_loadAll());
               },
             ),
             _buildDivider(context),
@@ -764,7 +765,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                           builder: (_) => const ProviderListPage(),
                         ),
                       );
-                      _loadAll();
+                      unawaited(_loadAll());
                     },
             ),
           ],
@@ -799,7 +800,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   context,
                   MaterialPageRoute(builder: (_) => const MemoryPage()),
                 );
-                _loadAll();
+                unawaited(_loadAll());
               },
             ),
             _buildDivider(context),
@@ -814,7 +815,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   context,
                   MaterialPageRoute(builder: (_) => const PluginsPage()),
                 );
-                _loadAll();
+                unawaited(_loadAll());
               },
             ),
             _buildDivider(context),
@@ -829,7 +830,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   context,
                   MaterialPageRoute(builder: (_) => const McpServersPage()),
                 );
-                _loadAll();
+                unawaited(_loadAll());
               },
             ),
           ],
@@ -1007,7 +1008,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                   context,
                   MaterialPageRoute(builder: (_) => const LanguagePage()),
                 );
-                _loadAll();
+                unawaited(_loadAll());
               },
             ),
             _buildDivider(context),

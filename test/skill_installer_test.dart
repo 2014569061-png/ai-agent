@@ -25,7 +25,7 @@ Archive _archive() {
 
 Uint8List _tarGz(Archive archive) {
   final tar = TarEncoder().encode(archive);
-  return Uint8List.fromList(GZipEncoder().encode(tar));
+  return Uint8List.fromList(const GZipEncoder().encode(tar));
 }
 
 GithubSkillRef _ref() => GithubSkillRef(

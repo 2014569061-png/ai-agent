@@ -17,7 +17,7 @@ void main() {
     final executor = AgentExecutor(provider: provider, tools: registry);
     await executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [MessagePart.text('hi')])
+        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
       model: 'test',
     ).drain();

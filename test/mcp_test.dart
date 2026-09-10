@@ -68,7 +68,7 @@ void main() {
   group('McpTool 映射', () {
     test('manifest 带服务器前缀且默认需确认', () {
       final client = mcp.McpClient(
-        mcp.Implementation(name: 'nexus-agent', version: '0.1.0'),
+        const mcp.Implementation(name: 'nexus-agent', version: '0.1.0'),
       );
       final tool = mcp.Tool(
         name: 'get_weather',

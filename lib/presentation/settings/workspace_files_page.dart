@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../theme/app_palette.dart';
 import 'dart:io';
 
@@ -52,7 +53,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
     try {
       final selected = await FilePicker.platform.getDirectoryPath();
       if (selected != null && mounted) {
-        ref.read(chatControllerProvider.notifier).setWorkspace(selected);
+        unawaited(ref.read(chatControllerProvider.notifier).setWorkspace(selected));
         final prefs = await SharedPreferences.getInstance();
         final updated = [selected, ..._recentDirs.where((d) => d != selected)]
             .take(5)

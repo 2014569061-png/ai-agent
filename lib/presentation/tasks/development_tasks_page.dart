@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -389,7 +390,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
         ),
       ),
     );
-    if (mounted) _load();
+    if (mounted) unawaited(_load());
   }
 
   String _relativeTime(DateTime time) {

@@ -42,7 +42,7 @@ class McpToolProvider {
     mcp.McpClient? client;
     try {
       client = mcp.McpClient(
-        mcp.Implementation(name: 'nexus-agent', version: '0.1.0'),
+        const mcp.Implementation(name: 'nexus-agent', version: '0.1.0'),
         options: const mcp.McpClientOptions(protocol: mcp.McpProtocol.legacy),
       );
       switch (server.kind) {
@@ -85,7 +85,7 @@ class McpToolProvider {
     if (existing != null) return existing;
 
     final client = mcp.McpClient(
-      mcp.Implementation(name: 'nexus-agent', version: '0.1.0'),
+      const mcp.Implementation(name: 'nexus-agent', version: '0.1.0'),
       options: const mcp.McpClientOptions(protocol: mcp.McpProtocol.legacy),
     );
     switch (server.kind) {

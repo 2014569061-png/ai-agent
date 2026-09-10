@@ -155,8 +155,8 @@ void main() {
         ));
 
     // 待确认计划
-    final planState = PlanState(
-      steps: const [
+    final planState = const PlanState(
+      steps: [
         PlanStep(id: 's1', description: '执行数据库迁移'),
       ],
       status: 'planning',

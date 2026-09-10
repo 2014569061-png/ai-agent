@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -127,7 +128,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
 
   /// 长按会话：弹出操作表。
   Future<void> _showConversationActions(Conversation conversation) async {
-    HapticFeedback.mediumImpact();
+    unawaited(HapticFeedback.mediumImpact());
     final action = await showImmersiveActionSheet<String>(
       context: context,
       title: conversation.title.isEmpty ? '新会话' : conversation.title,
@@ -172,7 +173,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
       await db.deleteConversation(conversation.id);
       widget.onConversationDeleted?.call(conversation.id);
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
+      unawaited(HapticFeedback.mediumImpact());
       FloatingToast.show(context, '已删除会话', tone: ToastTone.success);
       await _loadData();
     } catch (_) {

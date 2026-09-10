@@ -21,7 +21,7 @@ class _TestChatController extends ChatController {
         messages: [
           ChatMessage(
             role: MessageRole.user,
-            parts: [MessagePart.text('你好')],
+            parts: [const MessagePart.text('你好')],
           ),
           ChatMessage(
             role: MessageRole.assistant,

@@ -138,7 +138,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                             style: TextStyle(fontWeight: FontWeight.w500)),
                         Text(
                           '${(_glassIntensity * 100).round()}%',
-                          style: TextStyle(
+                          style: const TextStyle(
                             color: AppPalette.brand,
                             fontWeight: FontWeight.w500,
                           ),
@@ -218,7 +218,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                                   const Text('自定义气泡最大宽度比例'),
                                   Text(
                                     '${(widthFactor * 100).round()}%',
-                                    style: TextStyle(
+                                    style: const TextStyle(
                                       color: AppPalette.brand,
                                       fontWeight: FontWeight.w500,
                                     ),

@@ -87,11 +87,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   test('structured collaboration models preserve plan and result data', () {
-    final plan = CollaborationPlan(
+    final plan = const CollaborationPlan(
       runId: 'run-1',
       taskId: 'task-1',
       mode: CollaborationMode.parallel,
-      agents: const [
+      agents: [
         CollaborationAgentSpec(
           id: 'a1',
           role: CollaborationAgentRole.analyzer,
@@ -104,7 +104,7 @@ void main() {
       maxRounds: 1,
       estimatedTokens: 1000,
       estimatedDurationSeconds: 30,
-      contextManifest: const ['task.prompt'],
+      contextManifest: ['task.prompt'],
       riskLevel: 'read_only',
     );
     final decoded = CollaborationPlan.decode(plan.encode());
@@ -130,7 +130,7 @@ void main() {
       history: [
         ChatMessage(
           role: MessageRole.user,
-          parts: [MessagePart.text('请审查文件')],
+          parts: [const MessagePart.text('请审查文件')],
         ),
       ],
       model: 'demo-model',

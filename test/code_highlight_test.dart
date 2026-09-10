@@ -53,7 +53,7 @@ void main() {
 
   testWidgets('code block renders before and after deferred highlighting',
       (tester) async {
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
           child: CodeBlockWidget(

@@ -20,8 +20,8 @@ void main() {
     };
     addTearDown(() => FlutterError.onError = previousErrorHandler);
 
-    await tester.pumpWidget(_Harness(
-      activities: const [
+    await tester.pumpWidget(const _Harness(
+      activities: [
         ToolActivity(
           call: ToolCall(
             id: 'terminal-1',
@@ -49,8 +49,8 @@ void main() {
 
   testWidgets('summarizes confirmed side effects after completion',
       (tester) async {
-    await tester.pumpWidget(_Harness(
-      activities: const [
+    await tester.pumpWidget(const _Harness(
+      activities: [
         ToolActivity(
           call: ToolCall(
             id: 'write-1',
