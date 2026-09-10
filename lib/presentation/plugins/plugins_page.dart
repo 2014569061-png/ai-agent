@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/plugins/plugin_store.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
@@ -26,14 +28,25 @@ class PluginsPage extends ConsumerStatefulWidget {
 class _PluginsPageState extends ConsumerState<PluginsPage> {
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: const NexusPageHeader(
+        backgroundColor:
+            isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+        appBar: NexusPageHeader(
           title: 'Skills 与插件',
           subtitle: '声明式工具包与 GitHub Skill 市场',
           bottom: TabBar(
-            tabs: [
+            indicatorColor: AppPalette.brand,
+            labelColor: isDark ? AppPalette.darkText : AppPalette.lightText,
+            unselectedLabelColor:
+                isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
+            indicatorSize: TabBarIndicatorSize.label,
+            dividerColor:
+                isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+            tabs: const [
               Tab(text: '声明式插件'),
               Tab(text: 'Skill 市场'),
             ],
@@ -142,6 +155,8 @@ class _DeclarativePluginsViewState
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Stack(
       children: [
         AsyncStateView(
@@ -162,9 +177,35 @@ class _DeclarativePluginsViewState
                     final plugin = _plugins[index];
                     return SectionCard(
                       child: ListTile(
-                        leading: const Icon(Icons.extension_outlined),
-                        title: Text(plugin.name),
-                        subtitle: Text('${plugin.kind} · v${plugin.version}'),
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppPalette.brandSoftDark
+                                : AppPalette.brandSoftLight,
+                            borderRadius: BorderRadius.circular(
+                                AppTokens.radiusControl),
+                          ),
+                          child: const Icon(Icons.extension_outlined,
+                              size: 20, color: AppPalette.brand),
+                        ),
+                        title: Text(
+                          plugin.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${plugin.kind} · v${plugin.version}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? AppPalette.darkTextMuted
+                                : AppPalette.lightTextMuted,
+                          ),
+                        ),
                         trailing:
                             Row(mainAxisSize: MainAxisSize.min, children: [
                           Switch(
@@ -183,9 +224,19 @@ class _DeclarativePluginsViewState
           right: 16,
           bottom: 16,
           child: FloatingActionButton.extended(
-              onPressed: _import,
-              icon: const Icon(Icons.upload_file),
-              label: const Text('导入插件')),
+            onPressed: _import,
+            backgroundColor: AppPalette.brand,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            focusElevation: 0,
+            hoverElevation: 0,
+            highlightElevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            ),
+            icon: const Icon(Icons.upload_file),
+            label: const Text('导入插件'),
+          ),
         ),
       ],
     );

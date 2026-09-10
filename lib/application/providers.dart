@@ -5,9 +5,22 @@ import '../infrastructure/database/database_provider.dart';
 import '../infrastructure/mcp/mcp_tool_provider.dart';
 import '../infrastructure/providers/provider_config_store.dart';
 import '../infrastructure/providers/tool_trust_store.dart';
-import 'account_services.dart';
-import 'billing_api.dart';
 import 'mcp_service.dart';
+
+/// Agent 网络重试参数。生产环境保留指数退避；测试或离线模式可注入零等待，
+/// 避免把外部网络不可用误差放大成整组测试的长等待。
+class AgentRetrySettings {
+  const AgentRetrySettings({
+    this.maxRetries = 3,
+    this.retryBackoff = const Duration(seconds: 2),
+  });
+
+  final int maxRetries;
+  final Duration retryBackoff;
+}
+
+final agentRetrySettingsProvider =
+    Provider<AgentRetrySettings>((ref) => const AgentRetrySettings());
 
 /// 数据库注入点（可在测试中 override 为内存数据库）。
 final databaseProvider =
@@ -16,30 +29,6 @@ final databaseProvider =
 /// Provider 配置存储注入点（可在测试中 override）。
 final providerConfigStoreProvider =
     Provider<ProviderConfigStore>((ref) => ProviderConfigStore());
-
-/// 后端地址（可由编译期常量覆盖，测试中亦可 override）。
-final backendBaseUrlProvider =
-    Provider<String>((ref) => defaultBackendBaseUrl());
-
-/// 后端 HTTP 客户端。
-final billingApiProvider = Provider<BillingApi>(
-    (ref) => BillingApi(baseUrl: ref.watch(backendBaseUrlProvider)));
-
-/// 权益判定（托管 Key → Pro）。
-final entitlementServiceProvider =
-    Provider<EntitlementService>((ref) => EntitlementService());
-
-/// 账号服务（注册/登录/会话/设备/注销）。
-final accountServiceProvider = Provider<AccountService>(
-    (ref) => AccountService(api: ref.watch(billingApiProvider)));
-
-/// 远程配置（Feature Flag）服务。
-final remoteConfigServiceProvider = Provider<RemoteConfigService>(
-    (ref) => RemoteConfigService(api: ref.watch(billingApiProvider)));
-
-/// 当前是否 Pro（是否存在已配置托管 Key）。
-final isProProvider = FutureProvider<bool>(
-    (ref) => ref.watch(entitlementServiceProvider).isPro());
 
 /// 全局「始终允许」工具信任清单注入点。等待初值加载完成，避免写入覆盖竞态。
 final toolTrustStoreProvider = FutureProvider<ToolTrustStore>((ref) async {

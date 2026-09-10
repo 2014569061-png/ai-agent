@@ -159,13 +159,52 @@ class MainActivity : FlutterFragmentActivity() {
                             maxOutputBytes = maxOutputBytes,
                         ) { response -> result.success(response) }
                     }
+                    "startDetached" -> {
+                        val command = call.argument<String>("command")
+                        val workingDirectory = call.argument<String>("workingDirectory")
+                        val rootfsPath = call.argument<String>("rootfsPath")
+                        val runtimeLibraryPath = call.argument<String>("runtimeLibraryPath")
+                        val ownerToken = call.argument<String>("ownerToken")
+                        val logPath = call.argument<String>("logPath")
+                        val completionPath = call.argument<String>("completionPath")
+                        if (command == null || workingDirectory == null || rootfsPath == null ||
+                            runtimeLibraryPath == null || ownerToken == null || logPath == null ||
+                            completionPath == null
+                        ) {
+                            result.error("INVALID_ARGS", "detached 参数不完整", null)
+                            return@setMethodCallHandler
+                        }
+                        val timeoutMs = (call.argument<Number>("timeoutMs") ?: 86400000L).toLong()
+                        result.success(
+                            runner.startDetached(
+                                command = command,
+                                workingDirectory = workingDirectory,
+                                rootfsPath = rootfsPath,
+                                runtimeLibraryPath = runtimeLibraryPath,
+                                timeoutMs = timeoutMs,
+                                ownerToken = ownerToken,
+                                logPath = logPath,
+                                completionPath = completionPath,
+                            ),
+                        )
+                    }
+                    "verifyDetached" -> {
+                        val pid = (call.argument<Number>("pid") ?: 0).toInt()
+                        val ownerToken = call.argument<String>("ownerToken") ?: ""
+                        result.success(runner.verifyDetached(pid, ownerToken))
+                    }
+                    "stopDetached" -> {
+                        val pid = (call.argument<Number>("pid") ?: 0).toInt()
+                        val ownerToken = call.argument<String>("ownerToken") ?: ""
+                        result.success(runner.stopDetached(pid, ownerToken))
+                    }
                     "stop" -> {
                         runner.stop()
                         result.success(true)
                     }
                     else -> result.notImplemented()
                 }
-            }
+        }
     }
 
     override fun onDestroy() {
@@ -178,14 +217,6 @@ class MainActivity : FlutterFragmentActivity() {
         if (!file.exists() || !file.isFile || file.length() < 4L) {
             result.error("INVALID_APK", "更新文件不存在或不完整", null)
             return
-        }
-
-        MethodChannel(flutterEngine!!.dartExecutor.binaryMessenger, "nexus/accessibility").setMethodCallHandler { call, result ->
-            if (call.method == "isEnabled") {
-                val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-                    ?.split(':')?.any { it.contains(packageName, ignoreCase = true) } == true
-                result.success(enabled)
-            } else result.notImplemented()
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&

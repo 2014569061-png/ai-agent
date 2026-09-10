@@ -1,47 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../domain/models.dart';
-import '../../theme/app_theme.dart';
+import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
-import '../../widgets/floating_toast.dart';
-import '../../widgets/immersive_surface.dart';
-import 'input_tool_grid_sheet.dart';
 
-/// 悬浮胶囊输入框 (FloatingCapsuleInput)
-/// 严格依据 NEXUS UI 设计优化规范重构：
-/// 1. 一级常驻动作：附件、计划模式开关、审批策略、发送/停止。
-/// 2. 二级动作收纳进“更多工具”：提示词库、MCP 服务、终端预览、开发环境、语音。
-/// 3. 计划模式开启时展示顶部提示条：“计划模式已开启 · 首轮需要确认”。
-/// 4. 生成中在顶部展示当前阶段提示。
-/// 5. 空输入点击发送时给予轻量提示，避免无反馈。
+/// 首页输入区（对标 DeepSeek App）。
+///
+/// 结构：
+///   外层 24px 大圆角 + surface 底色，聚焦时描边转 brand
+///   ├─ 输入行：最小高 44px，占位符「发消息或按住说话」
+///   └─ 操作行：高 30px
+///        ├─ 左：深度思考 / 智能搜索 两个能力 chip（胶囊）
+///        └─ 右：「＋」圆形描边按钮 + 语音按钮（有输入内容时切换为发送键）
 class FloatingCapsuleInput extends StatefulWidget {
-  final TextEditingController controller;
-  final bool isRunning;
-  final String? runningStage;
-  final VoidCallback onSend;
-  final VoidCallback onStop;
-  final VoidCallback onAttachmentMenu;
-  final VoidCallback onCommandMenu;
-  final VoidCallback onMcpMenu;
-  final VoidCallback onPlanModeToggle;
-  final VoidCallback onApprovalModeTap;
-  final VoidCallback onTerminalPreview;
-  final VoidCallback onEnvSetup;
-  final bool planModeEnabled;
-  final ApprovalMode approvalMode;
-  final VoidCallback? onVoiceToggle;
-  final bool isListening;
-  final bool hasAttachments;
-  final int attachmentCount;
-  final VoidCallback? onOpenDashboard;
-
-  // 兼容性预留字段
-  final String? modelLabel;
-  final String? workspaceLabel;
-  final VoidCallback? onModelTap;
-  final VoidCallback? onWorkspaceTap;
-
   const FloatingCapsuleInput({
     super.key,
     required this.controller,
@@ -50,56 +21,45 @@ class FloatingCapsuleInput extends StatefulWidget {
     required this.onSend,
     required this.onStop,
     required this.onAttachmentMenu,
-    required this.onCommandMenu,
-    required this.onMcpMenu,
-    required this.onPlanModeToggle,
-    required this.onApprovalModeTap,
-    required this.onTerminalPreview,
-    required this.onEnvSetup,
-    required this.planModeEnabled,
-    this.approvalMode = ApprovalMode.ask,
-    this.onVoiceToggle,
-    this.isListening = false,
+    this.onVoiceInput,
+    this.deepThinking = true,
+    this.onDeepThinkingToggle,
+    this.webSearch = true,
+    this.onWebSearchToggle,
+    this.planModeEnabled = false,
     this.hasAttachments = false,
-    this.attachmentCount = 0,
-    this.onOpenDashboard,
-    this.modelLabel,
-    this.workspaceLabel,
-    this.onModelTap,
-    this.onWorkspaceTap,
   });
+
+  final TextEditingController controller;
+  final bool isRunning;
+  final String? runningStage;
+  final VoidCallback onSend;
+  final VoidCallback onStop;
+
+  /// 「＋」按钮：附件与更多工具
+  final VoidCallback onAttachmentMenu;
+
+  /// 语音输入（长按按住说话）
+  final VoidCallback? onVoiceInput;
+
+  final bool deepThinking;
+  final VoidCallback? onDeepThinkingToggle;
+  final bool webSearch;
+  final VoidCallback? onWebSearchToggle;
+
+  final bool planModeEnabled;
+  final bool hasAttachments;
 
   @override
   State<FloatingCapsuleInput> createState() => _FloatingCapsuleInputState();
 }
 
-class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
-    with SingleTickerProviderStateMixin {
-  static const _focusBorder = AppTheme.brandBright;
-
+class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
   bool _focused = false;
   final FocusNode _focusNode = FocusNode();
 
   bool get _canSend =>
       widget.controller.text.trim().isNotEmpty || widget.hasAttachments;
-
-  void _openToolsSheet() {
-    _focusNode.unfocus();
-    InputToolGridSheet.show(
-      context,
-      onCommandMenu: widget.onCommandMenu,
-      onMcpMenu: widget.onMcpMenu,
-      onTerminalPreview: widget.onTerminalPreview,
-      onEnvSetup: widget.onEnvSetup,
-      onVoiceToggle: widget.onVoiceToggle,
-      isListening: widget.isListening,
-      onOpenDashboard: widget.onOpenDashboard,
-      planModeEnabled: widget.planModeEnabled,
-      onPlanModeToggle: widget.onPlanModeToggle,
-      approvalMode: widget.approvalMode,
-      onApprovalModeTap: widget.onApprovalModeTap,
-    );
-  }
 
   @override
   void initState() {
@@ -141,10 +101,14 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final foreground =
-        isDark ? AppTheme.darkSemantic.textPrimary : AppTheme.textPrimary;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final textFaint =
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+
     final bottomPadding = MediaQuery.viewInsetsOf(context).bottom > 0
         ? 8.0
         : MediaQuery.paddingOf(context).bottom + 8.0;
@@ -154,279 +118,99 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
       curve: AppTokens.curveStandard,
       padding: EdgeInsets.only(bottom: bottomPadding),
       child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 2, 12, 0),
+        margin: const EdgeInsets.symmetric(horizontal: 12),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 状态指示条（计划模式提示 / 生成阶段提示）
-            if (widget.isRunning && widget.runningStage != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.brandBright.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.brandBright.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 10,
-                      height: 10,
-                      child: CircularProgressIndicator(strokeWidth: 1.5),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      widget.runningStage!,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.brandBright,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else if (widget.planModeEnabled && !widget.isRunning)
-              Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.warning.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppTheme.warning.withValues(alpha: 0.25),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      Icons.front_hand_rounded,
-                      size: 11,
-                      color: AppTheme.warning,
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      '计划模式已开启 · 首轮执行前需确认',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.warning,
-                      ),
-                    ),
-                  ],
-                ),
+            // 运行状态提示（仅生成 / 计划模式时出现，首页态不显示）
+            _buildStatusLine(textMuted),
+
+            // 外层容器：24px 圆角 + surface 底色，聚焦时描边转 brand
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius:
+                    BorderRadius.circular(AppTokens.radiusComposer),
+                border: _focused
+                    ? Border.all(color: AppPalette.brand, width: 1.0)
+                    : null,
               ),
-
-            // 主胶囊输入面
-            ImmersiveSurface(
-              level: ImmersiveMaterialLevel.thick,
-              borderRadius: BorderRadius.circular(22),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(22),
-                  border: _focused
-                      ? Border.all(color: _focusBorder.withValues(alpha: 0.8), width: 1.2)
-                      : null,
-                ),
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeOutCubic,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 输入文本域
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 8, 10, 0),
-                        child: TextField(
-                          focusNode: _focusNode,
-                          controller: widget.controller,
-                          minLines: 1,
-                          maxLines: 4,
-                          textInputAction: TextInputAction.newline,
-                          onTapOutside: (_) => _focusNode.unfocus(),
-                          decoration: const InputDecoration(
-                            hintText: '输入任务或问题，Shift+Enter 换行…',
-                            hintStyle: TextStyle(
-                              color: AppTheme.textSecondary,
-                              fontSize: 15,
-                            ),
-                            border: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            filled: false,
-                            contentPadding: EdgeInsets.symmetric(vertical: 4),
-                          ),
-                          style: TextStyle(
-                            color: foreground,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 输入行：最小高 44px
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(
+                        minHeight: AppTokens.kControlHeight),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextField(
+                        focusNode: _focusNode,
+                        controller: widget.controller,
+                        minLines: 1,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.newline,
+                        onTapOutside: (_) => _focusNode.unfocus(),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          height: 1.6,
+                          color: textColor,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '发消息或按住说话',
+                          hintStyle: TextStyle(
                             fontSize: 15,
-                            height: 1.35,
+                            fontWeight: FontWeight.w400,
+                            color: textFaint,
                           ),
+                          isDense: true,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          contentPadding: EdgeInsets.zero,
                         ),
                       ),
-
-                      // 底部一级常驻动作行
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 2, 8, 8),
-                        child: Row(
-                          children: [
-                            // 1. 工作台小工具面板呼出按钮 (8 宫格面板)
-                            _ToolButton(
-                              icon: Icons.add_circle_outline_rounded,
-                              tooltip: '更多工具',
-                              color: theme.colorScheme.primary,
-                              onTap: _openToolsSheet,
-                            ),
-
-                            // 2. 附件按钮
-                            Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                _ToolButton(
-                                  icon: Icons.attach_file_rounded,
-                                  tooltip: '添加附件',
-                                  color: widget.hasAttachments
-                                      ? theme.colorScheme.primary
-                                      : null,
-                                  onTap: widget.onAttachmentMenu,
-                                ),
-                                if (widget.hasAttachments)
-                                  Positioned(
-                                    right: 4,
-                                    top: 4,
-                                    child: Container(
-                                      width: 7,
-                                      height: 7,
-                                      decoration: BoxDecoration(
-                                        color: theme.colorScheme.primary,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-
-                            // 3. 计划模式即时指示胶囊 (若开启则醒目高亮呈现，点击可切换)
-                            if (widget.planModeEnabled) ...[
-                              const SizedBox(width: 4),
-                              InkWell(
-                                onTap: widget.onPlanModeToggle,
-                                borderRadius: BorderRadius.circular(999),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        AppTheme.warning.withValues(alpha: 0.14),
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(
-                                      color: AppTheme.warning
-                                          .withValues(alpha: 0.35),
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.front_hand_rounded,
-                                          size: 11, color: AppTheme.warning),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '计划',
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: AppTheme.warning,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-
-                            const Spacer(),
-
-                            // 4. 发送 / 停止生成按钮 (一级常驻)
-                            Semantics(
-                              label: widget.isRunning
-                                  ? '停止生成'
-                                  : (_canSend ? '发送' : '发送(不可用)'),
-                              child: GestureDetector(
-                                onTap: () {
-                                  if (widget.isRunning) {
-                                    HapticFeedback.mediumImpact();
-                                    widget.onStop();
-                                  } else if (_canSend) {
-                                    HapticFeedback.mediumImpact();
-                                    widget.onSend();
-                                  } else {
-                                    HapticFeedback.selectionClick();
-                                    FloatingToast.show(
-                                        context, '请输入任务内容或添加附件');
-                                  }
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 180),
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    gradient: widget.isRunning
-                                        ? null
-                                        : (_canSend
-                                            ? const LinearGradient(
-                                                colors: [
-                                                  AppTheme.brandGradientStart,
-                                                  AppTheme.brandGradientEnd
-                                                ],
-                                                begin: Alignment.topLeft,
-                                                end: Alignment.bottomRight,
-                                              )
-                                            : null),
-                                    color: widget.isRunning
-                                        ? AppTheme.danger
-                                        : (_canSend
-                                            ? null
-                                            : theme.colorScheme
-                                                .surfaceContainerHighest
-                                                .withValues(alpha: 0.6)),
-                                    shape: BoxShape.circle,
-                                    boxShadow: _canSend && !widget.isRunning
-                                        ? [
-                                            BoxShadow(
-                                              color: AppTheme.brandGradientEnd
-                                                  .withValues(alpha: 0.35),
-                                              blurRadius: 10,
-                                              spreadRadius: 1,
-                                            )
-                                          ]
-                                        : null,
-                                  ),
-                                  child: widget.isRunning
-                                      ? const Icon(Icons.stop_rounded,
-                                          color: Colors.white, size: 20)
-                                      : Icon(
-                                          Icons.arrow_upward_rounded,
-                                          color: _canSend
-                                              ? Colors.white
-                                              : theme.colorScheme.onSurface
-                                                  .withValues(alpha: 0.35),
-                                          size: 20,
-                                        ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+
+                  const SizedBox(height: 10),
+
+                  // 操作行：高 30px
+                  SizedBox(
+                    height: AppTokens.composerChipHeight,
+                    child: Row(
+                      children: [
+                        _ModeChip(
+                          label: '深度思考',
+                          icon: Icons.auto_awesome_outlined,
+                          selected: widget.deepThinking,
+                          onTap: widget.onDeepThinkingToggle,
+                        ),
+                        const SizedBox(width: 8),
+                        _ModeChip(
+                          label: '智能搜索',
+                          icon: Icons.language_rounded,
+                          selected: widget.webSearch,
+                          onTap: widget.onWebSearchToggle,
+                        ),
+                        const Spacer(),
+                        // 「＋」：附件与更多工具
+                        _CircleIconButton(
+                          icon: Icons.add_rounded,
+                          iconSize: 18,
+                          semanticLabel: '添加附件或更多工具',
+                          onTap: widget.onAttachmentMenu,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildTrailingAction(textMuted, textFaint, isDark),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -434,32 +218,240 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
       ),
     );
   }
+
+  /// 生成中 → 停止键；有内容 → 发送键；否则 → 语音键。
+  Widget _buildTrailingAction(Color textMuted, Color textFaint, bool isDark) {
+    if (widget.isRunning) {
+      return _FilledCircleButton(
+        color: AppPalette.danger,
+        icon: Icons.stop_rounded,
+        semanticLabel: '停止生成',
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          widget.onStop();
+        },
+      );
+    }
+    if (_canSend) {
+      return _FilledCircleButton(
+        color: AppPalette.brand,
+        icon: Icons.arrow_upward_rounded,
+        semanticLabel: '发送',
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          widget.onSend();
+        },
+      );
+    }
+    return _CircleIconButton(
+      icon: Icons.graphic_eq_rounded,
+      iconSize: 18,
+      color: textMuted,
+      semanticLabel: '按住说话',
+      onTap: widget.onVoiceInput == null
+          ? null
+          : () {
+              HapticFeedback.selectionClick();
+              widget.onVoiceInput!();
+            },
+    );
+  }
+
+  Widget _buildStatusLine(Color textMuted) {
+    if (widget.isRunning && widget.runningStage != null) {
+      return Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: AppPalette.brand,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              widget.runningStage!,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: textMuted,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (widget.planModeEnabled && !widget.isRunning) {
+      return const Padding(
+        padding: EdgeInsets.only(left: 4, bottom: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_rounded,
+                size: 12, color: AppPalette.warning),
+            SizedBox(width: 4),
+            Text(
+              '计划模式开启 · 需执行确认',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
+                color: AppPalette.warning,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
 }
 
-class _ToolButton extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-  final Color? color;
-
-  const _ToolButton({
+/// 能力 chip（深度思考 / 智能搜索）。
+/// 选中：brandSoft 底 + 品牌色文字图标；未选中：白底 + hairline 描边 + 灰字。
+class _ModeChip extends StatelessWidget {
+  const _ModeChip({
+    required this.label,
     required this.icon,
-    required this.tooltip,
-    required this.onTap,
-    this.color,
+    required this.selected,
+    this.onTap,
   });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return IconButton(
-      icon: Icon(icon, size: 20),
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
-      color: color ?? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-      onPressed: onTap,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
+    final brandSoft =
+        isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    final bg = selected ? brandSoft : canvas;
+    final color = selected ? AppPalette.brand : textMuted;
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+        child: Container(
+          height: AppTokens.composerChipHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+            border: selected
+                ? null
+                : Border.all(color: hairline, width: 1.0),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w400,
+                  height: 1.4,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 圆形描边按钮（「＋」与语音键）。
+class _CircleIconButton extends StatelessWidget {
+  const _CircleIconButton({
+    required this.icon,
+    required this.iconSize,
+    required this.semanticLabel,
+    this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final double iconSize;
+  final String semanticLabel;
+  final VoidCallback? onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final resolved = color ?? (isDark ? AppPalette.darkText : AppPalette.lightText);
+
+    return Semantics(
+      label: semanticLabel,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: AppTokens.composerCircleButton,
+          height: AppTokens.composerCircleButton,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: resolved, width: 1.5),
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, size: iconSize, color: resolved),
+        ),
+      ),
+    );
+  }
+}
+
+/// 实心圆形按钮（发送 / 停止）。
+class _FilledCircleButton extends StatelessWidget {
+  const _FilledCircleButton({
+    required this.color,
+    required this.icon,
+    required this.semanticLabel,
+    required this.onTap,
+  });
+
+  final Color color;
+  final IconData icon;
+  final String semanticLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: semanticLabel,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: AppTokens.durationFast,
+          curve: AppTokens.curveStandard,
+          width: AppTokens.composerCircleButton,
+          height: AppTokens.composerCircleButton,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+          alignment: Alignment.center,
+          child: Icon(icon, size: 18, color: Colors.white),
+        ),
+      ),
     );
   }
 }

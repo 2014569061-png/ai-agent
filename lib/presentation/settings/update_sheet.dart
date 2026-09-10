@@ -59,7 +59,7 @@ class _UpdateSheetState extends State<UpdateSheet> {
             const SizedBox(width: 8),
             Text('发现新版本 v${widget.info.version}',
                 style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+                    ?.copyWith(fontWeight: FontWeight.w500)),
           ]),
           const Divider(height: 20),
           if (widget.info.notes.trim().isNotEmpty)

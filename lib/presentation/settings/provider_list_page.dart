@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/providers/provider_config.dart';
@@ -132,7 +133,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.api_rounded,
-                      iconColor: const Color(0xFF007AFF),
+                      iconColor: settingsMutedColor(context),
                       title: '新增 OpenAI-compatible',
                       subtitle: '支持 GPT、DeepSeek、Kimi、GLM、Qwen 等',
                       onTap: () => _openPreset(providerPresets.first),
@@ -140,7 +141,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.auto_awesome_rounded,
-                      iconColor: const Color(0xFFFF9500),
+                      iconColor: AppPalette.warning,
                       title: '新增官方 API',
                       subtitle: 'Anthropic Claude 或 Google Gemini',
                       onTap: () => _openPreset(
@@ -176,8 +177,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
                           onActivate: () => _activate(_profiles[i]),
                           onDelete: () => _delete(_profiles[i]),
                         ),
-                        if (i < _profiles.length - 1)
-                          const SettingsDivider(),
+                        if (i < _profiles.length - 1) const SettingsDivider(),
                       ],
                     ],
                   ),
@@ -191,7 +191,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
                             width: 28,
                             height: 28,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF5856D6),
+                              color: AppPalette.lightTextMuted,
                               borderRadius: BorderRadius.circular(7),
                             ),
                             alignment: Alignment.center,
@@ -200,7 +200,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
-                                fontWeight: FontWeight.bold,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
@@ -210,12 +210,11 @@ class _ProviderListPageState extends State<ProviderListPage> {
                           trailingWidget: const Icon(
                             Icons.add_circle_outline_rounded,
                             size: 20,
-                            color: Color(0xFF007AFF),
+                            color: AppPalette.brand,
                           ),
                           onTap: () => _openPreset(available[i]),
                         ),
-                        if (i < available.length - 1)
-                          const SettingsDivider(),
+                        if (i < available.length - 1) const SettingsDivider(),
                       ],
                     ],
                   ),
@@ -261,8 +260,10 @@ class _ProviderTile extends StatelessWidget {
                 height: 28,
                 decoration: BoxDecoration(
                   color: active
-                      ? const Color(0xFF007AFF)
-                      : (isDark ? const Color(0xFF38383A) : const Color(0xFFE5E5EA)),
+                      ? AppPalette.brand
+                      : (isDark
+                          ? AppPalette.darkHairline
+                          : AppPalette.lightHairline),
                   borderRadius: BorderRadius.circular(7),
                 ),
                 alignment: Alignment.center,
@@ -273,7 +274,7 @@ class _ProviderTile extends StatelessWidget {
                         ? Colors.white
                         : (isDark ? Colors.white70 : Colors.black87),
                     fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
@@ -292,7 +293,8 @@ class _ProviderTile extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                              fontWeight:
+                                  active ? FontWeight.w500 : FontWeight.w400,
                               color: isDark ? Colors.white : Colors.black,
                             ),
                           ),
@@ -300,17 +302,19 @@ class _ProviderTile extends StatelessWidget {
                         if (active) ...[
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF34C759).withValues(alpha: 0.15),
+                              color: AppPalette.success
+                                  .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
                               '激活中',
                               style: TextStyle(
                                 fontSize: 10,
-                                color: Color(0xFF34C759),
-                                fontWeight: FontWeight.w600,
+                                color: AppPalette.success,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),
@@ -340,7 +344,9 @@ class _ProviderTile extends StatelessWidget {
                   active
                       ? Icons.check_circle_rounded
                       : Icons.radio_button_unchecked_rounded,
-                  color: active ? const Color(0xFF007AFF) : settingsMutedColor(context),
+                  color: active
+                      ? AppPalette.brand
+                      : settingsMutedColor(context),
                 ),
                 onPressed: onActivate,
               ),
@@ -360,7 +366,8 @@ class _ProviderTile extends StatelessWidget {
                   const PopupMenuItem(value: 'edit', child: Text('编辑配置')),
                   const PopupMenuItem(
                     value: 'delete',
-                    child: Text('删除', style: TextStyle(color: Color(0xFFFF3B30))),
+                    child:
+                        Text('删除', style: TextStyle(color: AppPalette.danger)),
                   ),
                 ],
               ),

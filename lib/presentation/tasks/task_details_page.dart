@@ -1,12 +1,19 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
+import '../../application/run_audit_report.dart';
 import '../../application/task_service.dart';
 import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../../infrastructure/files/conversation_exporter.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
+import '../diagnostics/run_analysis_page.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
@@ -38,11 +45,120 @@ class TaskDetailsPage extends ConsumerStatefulWidget {
 
 class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   late DevelopmentTaskInfo _task;
+  RunRecord? _run;
+  RunAuditReport? _auditReport;
+  bool _auditLoading = false;
+  Object? _auditError;
 
   @override
   void initState() {
     super.initState();
     _task = widget.task;
+    _loadAudit();
+  }
+
+  Future<void> _loadAudit() async {
+    final runId = _task.runId;
+    if (runId == null || runId.isEmpty) return;
+    setState(() {
+      _auditLoading = true;
+      _auditError = null;
+    });
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final run = await db.findRunRecord(runId);
+      final events = await db.eventsForRun(runId, limit: 2000);
+      if (!mounted) return;
+      setState(() {
+        _run = run;
+        _auditReport = RunAuditReport.fromEvents(events);
+        _auditLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _auditError = error;
+        _auditLoading = false;
+      });
+    }
+  }
+
+  Future<void> _exportAuditJson() async {
+    final report = _auditReport;
+    final runId = _task.runId;
+    if (report == null || runId == null || runId.isEmpty) return;
+    final payload = {
+      'taskId': _task.id,
+      'runId': runId,
+      'task': _task.title,
+      'run': _run == null
+          ? null
+          : {
+              'status': _run!.status,
+              'model': _run!.model,
+              'startedAt': _run!.startedAt.toIso8601String(),
+              'endedAt': _run!.endedAt?.toIso8601String(),
+              'retryCount': _run!.retryCount,
+              'inputTokens': _run!.inputTokens,
+              'outputTokens': _run!.outputTokens,
+              'cachedTokens': _run!.cachedTokens,
+              'estimatedCostCents': _run!.estimatedCostCents,
+            },
+      'audit': report.toJson(),
+    };
+    final path = await exportConversationJson('task-audit-$runId',
+        const JsonEncoder.withIndent('  ').convert(payload));
+    if (!mounted) return;
+    FloatingToast.show(
+      context,
+      path.isEmpty ? '当前平台不支持文件导出' : '审计 JSON 已导出：$path',
+      tone: path.isEmpty ? ToastTone.warning : ToastTone.success,
+    );
+  }
+
+  Future<void> _openRunReport() async {
+    final run = _run;
+    if (run == null || !mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => RunDetailPage(run: run)),
+    );
+  }
+
+  Future<void> _rollbackAuditEntry(RunAuditEntry entry) async {
+    final workspacePath = _task.workspacePath;
+    if (workspacePath == null || workspacePath.isEmpty) {
+      FloatingToast.show(context, '当前任务没有可用工作区', tone: ToastTone.warning);
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('回滚文件修改？'),
+        content: Text('将尝试恢复 ${entry.path ?? '目标文件'} 在该步骤之前的内容。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('回滚'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final result = await AuditRollbackService().rollbackEditFile(
+      workspacePath: workspacePath,
+      entry: entry,
+    );
+    if (!mounted) return;
+    FloatingToast.show(
+      context,
+      result.message,
+      tone: result.ok ? ToastTone.success : ToastTone.warning,
+    );
+    if (result.ok) await _loadAudit();
   }
 
   String _formatDate(DateTime time) {
@@ -146,6 +262,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: _task.title,
         statusPill: NexusStatusPill.fromString(_task.status, isCompact: true),
@@ -186,13 +303,13 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 decoration: BoxDecoration(
                                   color: theme.colorScheme.primary
                                       .withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                                 ),
                                 child: Text(
                                   '类型：${_task.type}',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                     color: theme.colorScheme.primary,
                                   ),
                                 ),
@@ -205,7 +322,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                   color: theme
                                       .colorScheme.surfaceContainerHighest
                                       .withValues(alpha: 0.6),
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                                 ),
                                 child: Text(
                                   '来源：${_task.sourceType}',
@@ -256,7 +373,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 const Text('工作区：',
                                     style: TextStyle(
                                         fontSize: 12,
-                                        fontWeight: FontWeight.w600)),
+                                        fontWeight: FontWeight.w500)),
                                 Expanded(
                                   child: SelectableText(
                                     _task.workspacePath!,
@@ -330,12 +447,12 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                               const Row(
                                 children: [
                                   Icon(Icons.lightbulb_outline_rounded,
-                                      size: 16, color: AppTheme.warning),
+                                      size: 16, color: AppPalette.warning),
                                   SizedBox(width: 6),
                                   Text('关键发现',
                                       style: TextStyle(
                                           fontSize: 13,
-                                          fontWeight: FontWeight.w700)),
+                                          fontWeight: FontWeight.w500)),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -353,7 +470,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                     children: [
                                       const Text('• ',
                                           style: TextStyle(
-                                              fontWeight: FontWeight.w700)),
+                                              fontWeight: FontWeight.w500)),
                                       Expanded(
                                           child: SelectableText(text,
                                               style: const TextStyle(
@@ -368,12 +485,12 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                               const Row(
                                 children: [
                                   Icon(Icons.check_circle_outline_rounded,
-                                      size: 16, color: AppTheme.success),
+                                      size: 16, color: AppPalette.success),
                                   SizedBox(width: 6),
                                   Text('建议采取动作',
                                       style: TextStyle(
                                           fontSize: 13,
-                                          fontWeight: FontWeight.w700)),
+                                          fontWeight: FontWeight.w500)),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -388,7 +505,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                             const Text('• ',
                                                 style: TextStyle(
                                                     fontWeight:
-                                                        FontWeight.w700)),
+                                                        FontWeight.w500)),
                                             Expanded(
                                                 child: SelectableText(a,
                                                     style: const TextStyle(
@@ -403,12 +520,12 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                               const Row(
                                 children: [
                                   Icon(Icons.arrow_forward_rounded,
-                                      size: 16, color: AppTheme.brandBright),
+                                      size: 16, color: AppPalette.brand),
                                   SizedBox(width: 6),
                                   Text('下一步实施计划',
                                       style: TextStyle(
                                           fontSize: 13,
-                                          fontWeight: FontWeight.w700)),
+                                          fontWeight: FontWeight.w500)),
                                 ],
                               ),
                               const SizedBox(height: 6),
@@ -423,7 +540,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                             const Text('• ',
                                                 style: TextStyle(
                                                     fontWeight:
-                                                        FontWeight.w700)),
+                                                        FontWeight.w500)),
                                             Expanded(
                                                 child: SelectableText(s,
                                                     style: const TextStyle(
@@ -437,6 +554,11 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                       ),
                     ),
                   ],
+
+                  if (_task.runId != null && _task.runId!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    _buildAuditSection(),
+                  ],
                 ],
               ),
             ),
@@ -447,12 +569,10 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               decoration: BoxDecoration(
-                color: isDark
-                    ? AppTheme.darkElevated.withValues(alpha: 0.95)
-                    : AppTheme.lightElevated.withValues(alpha: 0.95),
+                color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? AppTheme.darkBorder : AppTheme.lightBorder,
+                    color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
                   ),
                 ),
               ),
@@ -465,7 +585,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                         style: FilledButton.styleFrom(
                           minimumSize: const Size(0, 44),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                           ),
                         ),
                         onPressed: _openConversation,
@@ -482,7 +602,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 44),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                             ),
                           ),
                           onPressed: _startCollaboration,
@@ -496,7 +616,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 44),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                             ),
                           ),
                           onPressed: _task.conversationId.isEmpty
@@ -513,6 +633,143 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAuditSection() {
+    if (_auditLoading) {
+      return const SectionCard(
+        child: ListTile(
+          leading: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          title: Text('副作用审计'),
+          subtitle: Text('正在读取本次运行的结构化轨迹…'),
+        ),
+      );
+    }
+    if (_auditError != null) {
+      return SectionCard(
+        child: ListTile(
+          leading: const Icon(Icons.warning_amber_outlined),
+          title: const Text('副作用审计暂不可用'),
+          subtitle: Text('读取运行轨迹失败：$_auditError'),
+          trailing: IconButton(
+            tooltip: '重试',
+            onPressed: _loadAudit,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ),
+      );
+    }
+    final report = _auditReport;
+    if (report == null) return const SizedBox.shrink();
+    final metrics = report.metrics;
+    return SectionCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fact_check_outlined, size: 18),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text('副作用审计',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+              ),
+              IconButton(
+                tooltip: '导出审计 JSON',
+                onPressed: _exportAuditJson,
+                icon: const Icon(Icons.data_object, size: 19),
+              ),
+              if (_run != null)
+                IconButton(
+                  tooltip: '打开完整运行报告',
+                  onPressed: _openRunReport,
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                ),
+            ],
+          ),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              Text('输入 ${metrics.promptTokens} tok'),
+              Text('输出 ${metrics.completionTokens} tok'),
+              Text('缓存 ${metrics.cachedTokens} tok'),
+              Text('重试 ${metrics.retryCount} 次'),
+              if (metrics.estimatedCostCents != null)
+                Text('预计 ${metrics.estimatedCostCents} 分'),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (report.entries.isEmpty)
+            const Text('本次运行没有记录到文件、终端或设备副作用。',
+                style: TextStyle(fontSize: 12.5))
+          else
+            ...report.entries.map((entry) => _auditEntry(entry)),
+        ],
+      ),
+    );
+  }
+
+  Widget _auditEntry(RunAuditEntry entry) {
+    final color = switch (entry.effect) {
+      'applied' => AppPalette.success,
+      'unknown' => AppPalette.warning,
+      _ => AppTheme.textSecondary,
+    };
+    final details = <String>[
+      if (entry.path != null && entry.path!.isNotEmpty) entry.path!,
+      if (entry.code.isNotEmpty) entry.code,
+      if (entry.evidence != null && entry.evidence!.isNotEmpty) entry.evidence!,
+    ].join(' · ');
+    final canRollback = entry.tool == 'edit_file' &&
+        entry.operation == 'edit' &&
+        entry.effect == 'applied' &&
+        entry.path != null &&
+        (entry.metadata['diff']?.toString().isNotEmpty ?? false);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            entry.effect == 'applied'
+                ? Icons.check_circle_outline
+                : entry.effect == 'unknown'
+                    ? Icons.help_outline
+                    : Icons.remove_circle_outline,
+            color: color,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${entry.tool} · effect=${entry.effect}',
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w500)),
+                if (details.isNotEmpty)
+                  Text(details,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          ),
+          if (canRollback)
+            IconButton(
+              tooltip: '回滚此编辑',
+              onPressed: () => _rollbackAuditEntry(entry),
+              icon: const Icon(Icons.undo_rounded, size: 18),
+            ),
+        ],
       ),
     );
   }

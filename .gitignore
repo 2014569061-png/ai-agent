@@ -80,8 +80,11 @@ windows/flutter/generated_plugin_registrant.h
 scripts/flutter_hot_daemon.ps1
 
 # Local-only development material; keep the GitHub repository runnable and lean.
+# 注：/test/ 已于 2026-09-10 移出忽略列表 —— 40+ 文件 / 7500+ 行测试是重要资产，
+#     此前仅存在于本机、一旦丢失不可恢复，且 CI 依赖它们却拉不到。
+#     另注：/.github/ 与 analysis_options.yaml 仍在此列表中，存在同样的矛盾
+#     （CI 工作流与 lint 配置不进版本控制），待确认后再处理。
 /docs/
-/test/
 /.github/
 UI_REVIEW_FIX_GUIDE.txt
 current_home*.png

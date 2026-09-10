@@ -2,8 +2,30 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models.dart';
 import '../infrastructure/database/app_database.dart';
-import 'billing_api.dart';
 import 'task_service.dart';
+
+/// 本地运行统计日聚合，不依赖账户或计费服务。
+class UsageDaily {
+  const UsageDaily({
+    required this.day,
+    required this.calls,
+    required this.promptTokens,
+    required this.completionTokens,
+    required this.cachedTokens,
+    required this.spendCents,
+    required this.costCents,
+    required this.isToday,
+  });
+
+  final String day;
+  final int calls;
+  final int promptTokens;
+  final int completionTokens;
+  final int cachedTokens;
+  final int spendCents;
+  final int costCents;
+  final bool isToday;
+}
 
 /// 仪表盘核心 KPI 指标集
 class DashboardKpis {

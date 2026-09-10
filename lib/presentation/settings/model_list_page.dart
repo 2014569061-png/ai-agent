@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/providers/openai_compatible_provider.dart';
@@ -94,7 +95,7 @@ class _ModelListPageState extends State<ModelListPage> {
             children: [
               SettingsTile(
                 icon: Icons.cloud_download_rounded,
-                iconColor: const Color(0xFF007AFF),
+                iconColor: settingsMutedColor(context),
                 title: '从远端自动获取',
                 subtitle: _loading
                     ? '正在读取 /models…'
@@ -107,14 +108,14 @@ class _ModelListPageState extends State<ModelListPage> {
                     : const Icon(
                         Icons.chevron_right_rounded,
                         size: 20,
-                        color: Color(0xFF8E8E93),
+                        color: AppPalette.lightTextFaint,
                       ),
                 onTap: _loading ? null : _loadRemote,
               ),
               const SettingsDivider(),
               SettingsTile(
                 icon: Icons.add_rounded,
-                iconColor: const Color(0xFF34C759),
+                iconColor: AppPalette.success,
                 title: '添加自定义模型',
                 subtitle: '手动填写展示名称与 Model ID',
                 onTap: _addCustomModel,
@@ -128,7 +129,8 @@ class _ModelListPageState extends State<ModelListPage> {
             child: Container(
               height: 36,
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFE5E5EA),
+                color:
+                    isDark ? AppPalette.lightText : AppPalette.lightHairline,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: TextField(
@@ -173,7 +175,7 @@ class _ModelListPageState extends State<ModelListPage> {
               children: [
                 SettingsTile(
                   icon: Icons.error_outline_rounded,
-                  iconColor: const Color(0xFFFF3B30),
+                  iconColor: AppPalette.danger,
                   title: '远端模型获取失败',
                   subtitle: _error!,
                   showChevron: false,
@@ -207,8 +209,7 @@ class _ModelListPageState extends State<ModelListPage> {
                     selected: models[i].id == widget.config.model,
                     onTap: () => Navigator.pop(context, models[i].id),
                   ),
-                  if (i < models.length - 1)
-                    const SettingsDivider(indent: 16),
+                  if (i < models.length - 1) const SettingsDivider(indent: 16),
                 ],
               ],
             ),
@@ -312,7 +313,8 @@ class _ModelTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 15,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight:
+                            selected ? FontWeight.w500 : FontWeight.w400,
                         color: isDark ? Colors.white : Colors.black,
                       ),
                     ),
@@ -340,8 +342,8 @@ class _ModelTile extends StatelessWidget {
                                 ),
                                 decoration: BoxDecoration(
                                   color: isDark
-                                      ? const Color(0xFF2C2C2E)
-                                      : const Color(0xFFE5E5EA),
+                                      ? AppPalette.darkHairline
+                                      : AppPalette.lightHairline,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
@@ -364,7 +366,7 @@ class _ModelTile extends StatelessWidget {
                 const Icon(
                   Icons.check_rounded,
                   size: 20,
-                  color: Color(0xFF007AFF),
+                  color: AppPalette.brand,
                 ),
               ],
             ],

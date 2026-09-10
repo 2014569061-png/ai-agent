@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mcp_dart/mcp_dart.dart' as mcp;
 
 import '../../domain/models.dart';
+import '../../domain/tool_codes.dart';
+import '../../domain/tool_result.dart';
 import '../tools/tool_registry.dart';
 import 'mcp_server_config.dart';
 
@@ -140,8 +142,9 @@ class McpTool implements AgentTool {
   final McpServerConfig server;
   final mcp.Tool tool;
 
-  /// 工具名带服务器前缀，避免与内置工具（calculator 等）冲突。
-  String get qualifiedName => '${server.name}.${tool.name}';
+  /// 工具名带稳定的 MCP 前缀与服务器前缀，避免与内置工具冲突，
+  /// 同时让持久化/日志出口可以按命名空间统一脱敏。
+  String get qualifiedName => 'mcp_${server.name}.${tool.name}';
 
   @override
   UnifiedTool get manifest => UnifiedTool(
@@ -150,10 +153,11 @@ class McpTool implements AgentTool {
         parametersSchema: tool.inputSchema.toJson(),
         // MCP 远端工具可执行任意操作，默认需要用户确认。
         risk: ToolRisk.requiresConfirmation,
+        sensitive: true,
       );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     try {
       final result = await client.callTool(
         mcp.CallToolRequest(name: tool.name, arguments: arguments),
@@ -162,15 +166,30 @@ class McpTool implements AgentTool {
           .whereType<mcp.TextContent>()
           .map((content) => content.text)
           .join('\n');
-      final prefix = result.isError ? '工具执行失败：' : '';
-      if (text.isNotEmpty) return '$prefix$text';
       final structured = result.structuredContent;
-      if (structured != null && structured.isNotEmpty) {
-        return '$prefix${jsonEncode(structured)}';
+      final payload = text.isNotEmpty
+          ? text
+          : (structured != null && structured.isNotEmpty
+              ? jsonEncode(structured)
+              : '');
+      if (result.isError) {
+        return ToolResult.failure(
+          code: ToolCodes.toolError,
+          message: payload.isEmpty ? 'MCP 工具执行失败（无返回内容）' : payload,
+          // 远端已收到调用，失败响应无法证明是否产生了副作用。
+          effect: ToolEffect.unknown,
+        );
       }
-      return result.isError ? '工具执行失败（无返回内容）' : '工具已执行（无返回内容）';
+      return ToolResult.text(
+        payload.isEmpty ? '工具已执行（无返回内容）' : payload,
+        effect: ToolEffect.applied,
+      );
     } catch (error) {
-      return '工具执行失败：$error';
+      return ToolResult.failure(
+        code: ToolCodes.networkUnavailable,
+        message: 'MCP 工具调用失败：$error；远端可能已执行，请先确认状态再决定是否重试',
+        effect: ToolEffect.unknown,
+      );
     }
   }
 }

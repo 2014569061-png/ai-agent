@@ -4,7 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../application/scheduled_task_service.dart';
 import '../../infrastructure/database/app_database.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
@@ -154,7 +155,9 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
               Text('不选则每天执行',
                   style: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.semanticOf(context).mutedOnGlass)),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted)),
             ]),
           ),
           actions: [
@@ -162,6 +165,15 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('取消')),
             FilledButton(
+                style: FilledButton.styleFrom(
+                  elevation: 0,
+                  backgroundColor: AppPalette.brand,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                  ),
+                ),
                 onPressed: () => Navigator.pop(context, true),
                 child: const Text('创建')),
           ],
@@ -182,7 +194,10 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(title: const Text('定时任务')),
       body: AsyncStateView(
         loading: _loading,
@@ -193,8 +208,10 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                 icon: Icons.schedule_outlined,
                 title: '无定时任务',
                 message: '还没有定时任务，点击右下角新建')
-            : ListView.builder(
+            : ListView.separated(
+                padding: const EdgeInsets.all(16),
                 itemCount: _tasks.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final task = _tasks[index];
                   final spec = ScheduleSpec.fromCron(task.cron);
@@ -205,9 +222,22 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                       leading: Switch(
                           value: task.enabled,
                           onChanged: (v) => _toggle(task, v)),
-                      title: Text(task.name),
+                      title: Text(
+                        task.name,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       subtitle: Text(
-                          '$daysLabel ${spec.hour}:${spec.minute.toString().padLeft(2, '0')} · ${task.prompt}'),
+                        '$daysLabel ${spec.hour}:${spec.minute.toString().padLeft(2, '0')} · ${task.prompt}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark
+                              ? AppPalette.darkTextMuted
+                              : AppPalette.lightTextMuted,
+                        ),
+                      ),
                       trailing: IconButton(
                           icon: const Icon(Icons.delete_outline),
                           onPressed: () => _delete(task)),
@@ -217,7 +247,18 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
               ),
       ),
       floatingActionButton: FloatingActionButton(
-          onPressed: _create, child: const Icon(Icons.add)),
+        onPressed: _create,
+        backgroundColor: AppPalette.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        ),
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }

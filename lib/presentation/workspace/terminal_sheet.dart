@@ -96,7 +96,7 @@ class _TerminalSheetState extends State<TerminalSheet> {
                 const Expanded(
                   child: Text('终端管理',
                       style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
                 ),
                 IconButton(
                   tooltip: '查看文件树',

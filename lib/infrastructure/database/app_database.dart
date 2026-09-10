@@ -628,6 +628,15 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> deleteConversation(String id) async {
     await transaction(() async {
+      final linkedTasks = await (select(tasks)
+            ..where((row) => row.conversationId.equals(id)))
+          .get();
+      final taskIds =
+          linkedTasks.map((task) => task.id).toList(growable: false);
+      await _deleteCollaborationForTasks(taskIds);
+      if (taskIds.isNotEmpty) {
+        await (delete(tasks)..where((row) => row.id.isIn(taskIds))).go();
+      }
       final runs = await (select(runRecords)
             ..where((row) => row.conversationId.equals(id)))
           .get();
@@ -637,6 +646,9 @@ class AppDatabase extends _$AppDatabase {
         await (delete(runEvents)..where((row) => row.runId.isIn(runIds))).go();
         await (delete(runRecords)..where((row) => row.runId.isIn(runIds))).go();
       }
+      // 会话删除必须同步清理审批/敏感工具轨迹，避免导出和审计页残留可关联信息。
+      await (delete(auditLogs)..where((row) => row.conversationId.equals(id)))
+          .go();
       await (delete(messages)..where((row) => row.conversationId.equals(id)))
           .go();
       await (delete(conversations)..where((row) => row.id.equals(id))).go();
@@ -909,8 +921,32 @@ class AppDatabase extends _$AppDatabase {
     ));
   }
 
-  Future<void> deleteTask(String id) =>
-      (delete(tasks)..where((row) => row.id.equals(id))).go();
+  Future<void> deleteTask(String id) => transaction(() async {
+        await _deleteCollaborationForTasks([id]);
+        await (delete(tasks)..where((row) => row.id.equals(id))).go();
+      });
+
+  /// 协作表没有依赖数据库外键，必须在删除任务时显式清理，避免审计导出
+  /// 或协作时间线继续暴露已经删除任务的只读上下文与结果。
+  Future<void> _deleteCollaborationForTasks(Iterable<String> taskIds) async {
+    final ids = taskIds.toList(growable: false);
+    if (ids.isEmpty) return;
+    final runs = await (select(collaborationRuns)
+          ..where((row) => row.taskId.isIn(ids)))
+        .get();
+    final runIds = runs.map((run) => run.id).toList(growable: false);
+    if (runIds.isEmpty) return;
+    await (delete(collaborationMessages)
+          ..where((row) => row.collaborationRunId.isIn(runIds)))
+        .go();
+    await (delete(collaborationArtifacts)
+          ..where((row) => row.collaborationRunId.isIn(runIds)))
+        .go();
+    await (delete(collaborationAgentRuns)
+          ..where((row) => row.collaborationRunId.isIn(runIds)))
+        .go();
+    await (delete(collaborationRuns)..where((row) => row.id.isIn(runIds))).go();
+  }
 
   // --- 云同步元数据（D1）---
 
@@ -1229,6 +1265,11 @@ class AppDatabase extends _$AppDatabase {
   /// 保留 tasks / syncMeta（运行态元数据）。
   Future<void> clearAllUserData() async {
     await transaction(() async {
+      await delete(collaborationMessages).go();
+      await delete(collaborationArtifacts).go();
+      await delete(collaborationAgentRuns).go();
+      await delete(collaborationRuns).go();
+      await delete(tasks).go();
       await delete(messages).go();
       await delete(conversations).go();
       await delete(memories).go();

@@ -112,7 +112,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                     child: Text(
                       '选择模型',
                       style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -181,7 +181,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                                 entry.key,
                                 style: theme.textTheme.labelLarge?.copyWith(
                                   color: colors.textMuted,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
@@ -314,7 +314,7 @@ class _ModelTile extends StatelessWidget {
             profile.model,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+            style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           subtitle: Text(
             profile.isConfigured ? profile.name : '${profile.name} · 未配置',

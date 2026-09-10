@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
-import '../../widgets/attachment_player.dart';
 
 /// 消息附件条：把 image/audio/video 类型的 MessagePart 渲染成缩略图或播放器。
 /// 文本部分由 MessageBubble 单独渲染，避免 base64 字符串被当作文本显示。
@@ -20,11 +19,9 @@ class AttachmentStrip extends StatelessWidget {
         case 'image':
           attachments.add(_ImageAttachment(dataUri: part.value));
         case 'audio':
-          attachments.add(AttachmentPlayer(
-              source: part.value, mime: part.mimeType ?? 'audio/mpeg'));
         case 'video':
-          attachments.add(AttachmentPlayer(
-              source: part.value, mime: part.mimeType ?? 'video/mp4'));
+          // 音视频不属于移动端开发工作台的核心附件类型。
+          break;
       }
     }
     return Column(

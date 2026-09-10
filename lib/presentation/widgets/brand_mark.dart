@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 
 /// NEXUS Agent 统一品牌标志。
 ///
@@ -30,30 +29,6 @@ class BrandMark extends StatelessWidget {
       semanticLabel: 'NEXUS Agent Logo',
     );
 
-    if (!withGlow) {
-      return Padding(padding: EdgeInsets.all(padding), child: image);
-    }
-
-    return Container(
-      width: size + padding * 2,
-      height: size + padding * 2,
-      padding: EdgeInsets.all(padding),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.brandGradientStart.withValues(alpha: .28),
-            blurRadius: size * .42,
-            spreadRadius: size * .06,
-          ),
-          BoxShadow(
-            color: AppTheme.brandGradientEnd.withValues(alpha: .22),
-            blurRadius: size * .55,
-            spreadRadius: size * .08,
-          ),
-        ],
-      ),
-      child: image,
-    );
+    return Padding(padding: EdgeInsets.all(padding), child: image);
   }
 }

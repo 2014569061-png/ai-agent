@@ -5,6 +5,8 @@ import '../../application/memory_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../l10n/app_strings.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
@@ -168,7 +170,10 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: AppStrings.memoryEntry,
         subtitle: '跨会话事实与个性化偏好存储',
@@ -182,6 +187,15 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _addOrEdit(),
+        backgroundColor: AppPalette.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        ),
         child: const Icon(Icons.add),
       ),
       body: AsyncStateView(
@@ -193,16 +207,46 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
           children: [
             SectionCard(
               child: SwitchListTile(
-                secondary: const Icon(Icons.psychology_outlined),
-                title: const Text(AppStrings.memoryEnabled),
-                subtitle: const Text(AppStrings.memoryEnabledHint),
+                secondary: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppPalette.brandSoftDark
+                        : AppPalette.brandSoftLight,
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                  ),
+                  child: const Icon(Icons.psychology_outlined,
+                      size: 20, color: AppPalette.brand),
+                ),
+                title: const Text(
+                  AppStrings.memoryEnabled,
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+                ),
+                subtitle: Text(
+                  AppStrings.memoryEnabledHint,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: isDark
+                        ? AppPalette.darkTextMuted
+                        : AppPalette.lightTextMuted,
+                  ),
+                ),
                 value: _enabled,
                 onChanged: _toggleEnabled,
               ),
             ),
             const SizedBox(height: 8),
-            Text(AppStrings.memoryHint,
-                style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              AppStrings.memoryHint,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted,
+              ),
+            ),
             const SizedBox(height: 12),
             if (_memories.isEmpty)
               const EmptyStateView(
@@ -211,21 +255,61 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                 message: '还没有记忆，Agent 会在聊天中自动为您沉淀长期记忆，或点击右下角手动添加',
               )
             else
-              ..._memories.map((memory) => SectionCard(
-                    child: ListTile(
-                      leading: const Icon(Icons.bookmark_outline),
-                      title: Text(memory.content,
-                          maxLines: 3, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(
-                          '${memory.category} · 权重 ${memory.importance} · ${memory.sourceType == "auto" ? "自动" : "手动"}'),
-                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                        IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            onPressed: () => _addOrEdit(memory)),
-                        IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            onPressed: () => _delete(memory)),
-                      ]),
+              ..._memories.map((memory) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: SectionCard(
+                      child: ListTile(
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppPalette.darkSurface
+                                : AppPalette.lightSurface,
+                            borderRadius: BorderRadius.circular(
+                                AppTokens.radiusControl),
+                            border: Border.all(
+                              color: isDark
+                                  ? AppPalette.darkHairline
+                                  : AppPalette.lightHairline,
+                            ),
+                          ),
+                          child: Icon(
+                            Icons.bookmark_outline,
+                            size: 18,
+                            color: isDark
+                                ? AppPalette.darkText
+                                : AppPalette.lightText,
+                          ),
+                        ),
+                        title: Text(
+                          memory.content,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${memory.category} · 权重 ${memory.importance} · ${memory.sourceType == "auto" ? "自动" : "手动"}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? AppPalette.darkTextMuted
+                                : AppPalette.lightTextMuted,
+                          ),
+                        ),
+                        trailing:
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                          IconButton(
+                              icon: const Icon(Icons.edit_outlined),
+                              onPressed: () => _addOrEdit(memory)),
+                          IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => _delete(memory)),
+                        ]),
+                      ),
                     ),
                   )),
           ],

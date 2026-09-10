@@ -1,4 +1,3 @@
-
 /// 人话化错误摘要 + 保留原文的技术细节。
 class HumanizedError {
   const HumanizedError({required this.summary, required this.detail});
@@ -65,7 +64,10 @@ String formatErrorForMessage(String raw) {
   // 旧版消息兜底：错误段落超长且无标记时折叠后半段，避免整屏技术文本。
   final head = text.indexOf('\n错误：');
   if (head >= 0 && text.length - head > 200) {
-    return (main: text.substring(0, head).trimRight(), detail: text.substring(head + 1));
+    return (
+      main: text.substring(0, head).trimRight(),
+      detail: text.substring(head + 1)
+    );
   }
   return (main: text, detail: null);
 }

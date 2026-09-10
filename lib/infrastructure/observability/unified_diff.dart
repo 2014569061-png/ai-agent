@@ -93,6 +93,103 @@ UnifiedDiffResult buildUnifiedDiff(
   );
 }
 
+/// Applies a previously generated unified diff to [current].
+///
+/// The audit UI uses the reverse direction to undo an `edit_file` operation.
+/// Hunks are matched against the current file before writing so a later manual
+/// edit is never silently overwritten. `null` means the patch is stale or
+/// malformed and the caller should ask the user to inspect the file manually.
+String? applyUnifiedDiff(
+  String current,
+  String diff, {
+  bool reverse = false,
+}) {
+  final lines = diff.split('\n');
+  final hunks = <_UnifiedHunk>[];
+  for (var index = 0; index < lines.length; index++) {
+    final line = lines[index];
+    if (!line.startsWith('@@ ')) continue;
+    final match = RegExp(
+      r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@',
+    ).firstMatch(line);
+    if (match == null) return null;
+    final oldStart = int.parse(match.group(1)!);
+    final oldCount = int.tryParse(match.group(2) ?? '1') ?? 1;
+    final newStart = int.parse(match.group(3)!);
+    final newCount = int.tryParse(match.group(4) ?? '1') ?? 1;
+    final body = <String>[];
+    index++;
+    while (index < lines.length && !lines[index].startsWith('@@ ')) {
+      final bodyLine = lines[index];
+      if (bodyLine == r'\ No newline at end of file') {
+        index++;
+        continue;
+      }
+      if (bodyLine.isEmpty || !const {' ', '+', '-'}.contains(bodyLine[0])) {
+        return null;
+      }
+      body.add(bodyLine);
+      index++;
+    }
+    index--;
+
+    final oldLines = <String>[];
+    final newLines = <String>[];
+    for (final bodyLine in body) {
+      final content = bodyLine.substring(1);
+      switch (bodyLine[0]) {
+        case ' ':
+          oldLines.add(content);
+          newLines.add(content);
+        case '-':
+          oldLines.add(content);
+        case '+':
+          newLines.add(content);
+      }
+    }
+    if (oldLines.length != oldCount || newLines.length != newCount) {
+      return null;
+    }
+    hunks.add(_UnifiedHunk(
+      oldStart: oldStart,
+      newStart: newStart,
+      oldLines: oldLines,
+      newLines: newLines,
+    ));
+  }
+  if (hunks.isEmpty) return null;
+
+  final hadTrailingNewline = current.endsWith('\n');
+  final result = _lines(current).toList();
+  for (final hunk in hunks.reversed) {
+    final expected = reverse ? hunk.newLines : hunk.oldLines;
+    final replacement = reverse ? hunk.oldLines : hunk.newLines;
+    final start = (reverse ? hunk.newStart : hunk.oldStart) - 1;
+    if (start < 0 || start + expected.length > result.length) return null;
+    for (var offset = 0; offset < expected.length; offset++) {
+      if (result[start + offset] != expected[offset]) return null;
+    }
+    result.replaceRange(start, start + expected.length, replacement);
+  }
+  final restored = result.join('\n');
+  if (hadTrailingNewline && restored.isNotEmpty) return '$restored\n';
+  return restored;
+}
+
+class _UnifiedHunk {
+  const _UnifiedHunk({
+    required this.oldStart,
+    required this.newStart,
+    required this.oldLines,
+    required this.newLines,
+  });
+
+  final int oldStart;
+  final int newStart;
+  final List<String> oldLines;
+  final List<String> newLines;
+}
+
 enum _DiffKind { equal, delete, insert }
 
 class _DiffOp {

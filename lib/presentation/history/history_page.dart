@@ -4,7 +4,8 @@ import 'package:flutter/services.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
@@ -56,9 +57,7 @@ class _HistoryPageState extends State<HistoryPage> {
     }
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return list;
-    return list
-        .where((c) => c.title.toLowerCase().contains(query))
-        .toList();
+    return list.where((c) => c.title.toLowerCase().contains(query)).toList();
   }
 
   String _timeGroup(DateTime date) {
@@ -208,27 +207,26 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Widget _filterChip(String label, String value, IconData icon) {
     final selected = _filterType == value;
-    final theme = Theme.of(context);
-    final semantic = AppTheme.semanticOf(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return InkWell(
       onTap: () {
         HapticFeedback.selectionClick();
         setState(() => _filterType = value);
       },
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: selected
-              ? theme.colorScheme.primary.withValues(alpha: 0.15)
-              : semantic.surfaceTint.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(16),
+              ? (isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight)
+              : (isDark ? AppPalette.darkSurface : AppPalette.lightSurface),
+          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
           border: Border.all(
             color: selected
-                ? theme.colorScheme.primary.withValues(alpha: 0.5)
-                : semantic.border.withValues(alpha: 0.4),
+                ? AppPalette.brand
+                : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
           ),
         ),
         child: Row(
@@ -238,18 +236,22 @@ class _HistoryPageState extends State<HistoryPage> {
               icon,
               size: 14,
               color: selected
-                  ? theme.colorScheme.primary
-                  : semantic.textMuted,
+                  ? AppPalette.brand
+                  : (isDark
+                      ? AppPalette.darkTextMuted
+                      : AppPalette.lightTextMuted),
             ),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: FontWeight.w500,
                 color: selected
-                    ? theme.colorScheme.primary
-                    : semantic.textMuted,
+                    ? AppPalette.brand
+                    : (isDark
+                        ? AppPalette.darkTextMuted
+                        : AppPalette.lightTextMuted),
               ),
             ),
           ],
@@ -262,12 +264,22 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final grouped = _groupConversations(filtered);
-    final semantic = AppTheme.semanticOf(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(title: const Text('历史会话')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _newConversation,
+        backgroundColor: AppPalette.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        ),
         icon: const Icon(Icons.add_comment_outlined),
         label: const Text('新建会话'),
       ),
@@ -334,26 +346,38 @@ class _HistoryPageState extends State<HistoryPage> {
                                   Text(
                                     entry.key,
                                     style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: semantic.textMuted,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDark
+                                          ? AppPalette.darkTextMuted
+                                          : AppPalette.lightTextMuted,
                                       letterSpacing: 0.2,
                                     ),
                                   ),
                                   const SizedBox(width: 6),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 5, vertical: 1),
+                                        horizontal: 6, vertical: 1),
                                     decoration: BoxDecoration(
-                                      color: semantic.surfaceTint,
-                                      borderRadius: BorderRadius.circular(10),
+                                      color: isDark
+                                          ? AppPalette.darkSurface
+                                          : AppPalette.lightSurface,
+                                      borderRadius: BorderRadius.circular(
+                                          AppTokens.radiusPill),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? AppPalette.darkHairline
+                                            : AppPalette.lightHairline,
+                                      ),
                                     ),
                                     child: Text(
                                       '${entry.value.length}',
                                       style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color: semantic.textMuted,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? AppPalette.darkTextMuted
+                                            : AppPalette.lightTextMuted,
                                       ),
                                     ),
                                   ),
@@ -375,20 +399,22 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Widget _conversationTile(Conversation conversation) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return SectionCard(
       margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       child: ListTile(
         leading: Icon(
           conversation.isPinned ? Icons.push_pin : Icons.chat_bubble_outline,
           color: conversation.isPinned
-              ? theme.colorScheme.primary
-              : theme.colorScheme.outline,
+              ? AppPalette.brand
+              : (isDark
+                  ? AppPalette.darkTextMuted
+                  : AppPalette.lightTextMuted),
         ),
         title: Row(
           children: [
             if (conversation.isFavorite) ...[
-              Icon(Icons.star, size: 16, color: Colors.amber.shade600),
+              const Icon(Icons.star, size: 16, color: AppPalette.warning),
               const SizedBox(width: 6),
             ],
             Expanded(
@@ -396,11 +422,23 @@ class _HistoryPageState extends State<HistoryPage> {
                 conversation.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
           ],
         ),
-        subtitle: Text(_relativeTime(conversation.updatedAt)),
+        subtitle: Text(
+          _relativeTime(conversation.updatedAt),
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark
+                ? AppPalette.darkTextMuted
+                : AppPalette.lightTextMuted,
+          ),
+        ),
         trailing: IconButton(
           icon: const Icon(Icons.more_vert),
           tooltip: '更多操作',

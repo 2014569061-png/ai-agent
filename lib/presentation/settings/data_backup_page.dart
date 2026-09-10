@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -161,7 +162,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.shield_rounded,
-                      iconColor: const Color(0xFF5856D6),
+                      iconColor: settingsMutedColor(context),
                       title: '隐私保险箱 (加密导出/导入)',
                       subtitle: '端到端高强度主密码加密备份',
                       onTap: () {
@@ -176,7 +177,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.backup_rounded,
-                      iconColor: const Color(0xFF34C759),
+                      iconColor: AppPalette.success,
                       title: '自动备份',
                       subtitle: '应用处于空闲状态时自动创建增量快照',
                       trailingWidget: SettingsSwitch(
@@ -187,7 +188,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.history_rounded,
-                      iconColor: const Color(0xFF8E8E93),
+                      iconColor: settingsMutedColor(context),
                       title: '最近备份时间',
                       subtitle: _lastBackupTime,
                       trailingWidget: IconButton(
@@ -209,7 +210,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.restore_rounded,
-                      iconColor: const Color(0xFF007AFF),
+                      iconColor: settingsMutedColor(context),
                       title: '恢复自动备份',
                       subtitle: '选择 .nexusauto 文件并恢复本机数据',
                       onTap: _restoreAutomaticBackup,
@@ -223,7 +224,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                     Text(
                       '备份包将完整包含以下内容：',
                       style: TextStyle(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         fontSize: 13,
                         color: theme.colorScheme.onSurface,
                       ),
@@ -249,9 +250,9 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.delete_forever_rounded,
-                      iconColor: const Color(0xFFFF3B30),
+                      iconColor: AppPalette.danger,
                       title: '清除本地全部数据',
-                      titleColor: const Color(0xFFFF3B30),
+                      titleColor: AppPalette.danger,
                       subtitle: '永久抹除本机数据库中的所有数据（不可撤销）',
                       onTap: _clearLocalData,
                     ),

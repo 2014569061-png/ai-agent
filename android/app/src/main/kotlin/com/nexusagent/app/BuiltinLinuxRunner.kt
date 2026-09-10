@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.Process as AndroidProcess
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -67,6 +68,120 @@ class BuiltinLinuxRunner(context: Context) {
         }
     }
 
+    /**
+     * 启动真正脱离 Flutter 调用生命周期的后台进程。普通 run 会使用
+     * --kill-on-exit 保证停止语义；daemon 则必须去掉该参数，并把退出状态
+     * 写入应用私有文件，App 重启后才能按 owner token 重新认领。
+     */
+    fun startDetached(
+        command: String,
+        workingDirectory: String,
+        rootfsPath: String,
+        runtimeLibraryPath: String,
+        timeoutMs: Long,
+        ownerToken: String,
+        logPath: String,
+        completionPath: String,
+    ): Map<String, Any> {
+        val processBuilder = createProcessBuilder(
+            command = command,
+            workingDirectory = workingDirectory,
+            rootfsPath = rootfsPath,
+            runtimeLibraryPath = runtimeLibraryPath,
+            detached = true,
+            ownerToken = ownerToken,
+        ) ?: return failure("[builtin-proot] rootfs 或工作区路径无效。")
+        val log = File(logPath)
+        val completion = File(completionPath)
+        return try {
+            log.parentFile?.mkdirs()
+            completion.parentFile?.mkdirs()
+            if (completion.exists()) completion.delete()
+            processBuilder.redirectOutput(ProcessBuilder.Redirect.to(log))
+            val process = processBuilder.start()
+            executor.execute {
+                var timedOut = false
+                var exitCode = 127
+                try {
+                    if (!process.waitFor(
+                            timeoutMs.coerceIn(1L, 24L * 60L * 60L * 1000L),
+                            TimeUnit.MILLISECONDS,
+                        )
+                    ) {
+                        timedOut = true
+                        process.destroy()
+                        if (!process.waitFor(500L, TimeUnit.MILLISECONDS)) {
+                            process.destroyForcibly()
+                        }
+                    }
+                    if (!timedOut) exitCode = process.exitValue()
+                } catch (_: Exception) {
+                    timedOut = true
+                    process.destroy()
+                } finally {
+                    writeCompletion(completion, exitCode, timedOut)
+                }
+            }
+            // Android 的 java.lang.Process 在当前编译 API 中没有暴露 pid()。
+            // detached 进程会继承唯一 owner token，通过 /proc 环境反查真实 PID，
+            // 避免把 Process.toString() 或本地实现细节当作进程身份。
+            mapOf("pid" to (findPidByOwner(ownerToken) ?: -1))
+        } catch (error: Exception) {
+            failure("[builtin-proot] 后台进程启动失败：${error.message ?: error.javaClass.simpleName}")
+        }
+    }
+
+    fun verifyDetached(pid: Int, ownerToken: String): Boolean {
+        if (pid <= 0 || ownerToken.isBlank()) return false
+        val proc = File("/proc/$pid")
+        if (!proc.isDirectory) return false
+        return try {
+            val environment = File(proc, "environ").readBytes().toString(Charsets.UTF_8)
+            environment.split('\u0000').contains("NEXUS_DAEMON_OWNER=$ownerToken")
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun stopDetached(pid: Int, ownerToken: String): Boolean {
+        if (!verifyDetached(pid, ownerToken)) return false
+        return try {
+            AndroidProcess.killProcess(pid)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun findPidByOwner(ownerToken: String): Int? {
+        if (ownerToken.isBlank()) return null
+        val marker = "NEXUS_DAEMON_OWNER=$ownerToken"
+        repeat(20) {
+            val pid = File("/proc").listFiles()
+                .orEmpty()
+                .asSequence()
+                .mapNotNull { it.name.toIntOrNull() }
+                .firstOrNull { candidate ->
+                    try {
+                        File("/proc/$candidate/environ")
+                            .readBytes()
+                            .toString(Charsets.UTF_8)
+                            .split('\u0000')
+                            .contains(marker)
+                    } catch (_: Exception) {
+                        false
+                    }
+                }
+            if (pid != null) return pid
+            try {
+                Thread.sleep(25L)
+            } catch (_: InterruptedException) {
+                return null
+            }
+        }
+        return null
+    }
+
     private fun execute(
         command: String,
         workingDirectory: String,
@@ -106,38 +221,14 @@ class BuiltinLinuxRunner(context: Context) {
 
         val proot = File(nativeDirectory, "libproot.so")
         val bind = "${workspace.canonicalPath}:/workspace"
-        val processBuilder = ProcessBuilder(
-            proot.absolutePath,
-            "-0",
-            "--kill-on-exit",
-            "-r",
-            rootfs.canonicalPath,
-            "-b",
-            bind,
-            "-w",
-            "/workspace",
-            "/bin/sh",
-            "-lc",
-            command,
-        )
-        processBuilder.directory(appContext.filesDir)
-        processBuilder.redirectErrorStream(true)
-        processBuilder.environment().apply {
-            put(
-                "LD_LIBRARY_PATH",
-                "${runtimeLibraries.absolutePath}:${nativeDirectory.absolutePath}",
-            )
-            // The bundled file keeps talloc's SONAME (libtalloc.so.2) while
-            // using the .so suffix required by Android's native packaging.
-            put("LD_PRELOAD", File(nativeDirectory, "libtalloc.so").absolutePath)
-            put("PROOT_LOADER", prootLoader.canonicalPath)
-            put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-            put("HOME", "/root")
-            put("TMPDIR", "/tmp")
-            put("PROOT_TMP_DIR", appContext.cacheDir.absolutePath)
-            put("LANG", "C.UTF-8")
-            put("TERM", "xterm-256color")
-        }
+        val processBuilder = createProcessBuilder(
+            command = command,
+            workingDirectory = workingDirectory,
+            rootfsPath = rootfsPath,
+            runtimeLibraryPath = runtimeLibraryPath,
+            detached = false,
+            ownerToken = null,
+        ) ?: return failure("[builtin-proot] rootfs 或工作区路径无效。")
 
         val process = try {
             processBuilder.start()
@@ -188,6 +279,89 @@ class BuiltinLinuxRunner(context: Context) {
             synchronized(processLock) {
                 if (activeProcess === process) activeProcess = null
             }
+        }
+    }
+
+    private fun createProcessBuilder(
+        command: String,
+        workingDirectory: String,
+        rootfsPath: String,
+        runtimeLibraryPath: String,
+        detached: Boolean,
+        ownerToken: String?,
+    ): ProcessBuilder? {
+        val inspection = inspect()
+        if (inspection["available"] != true) return null
+        val rootfs = File(rootfsPath)
+        val workspace = File(workingDirectory)
+        val runtimeLibraries = File(runtimeLibraryPath)
+        val rootfsLoader = File(rootfs, "lib/ld-musl-aarch64.so.1")
+        val shell = File(rootfs, "bin/sh")
+        val talloc = File(runtimeLibraries, "libtalloc.so.2")
+        if (!rootfs.isDirectory || !workspace.isDirectory || !runtimeLibraries.isDirectory ||
+            !talloc.isFile || !rootfsLoader.isFile || !shell.isFile
+        ) return null
+
+        val nativeDirectory = File(appContext.applicationInfo.nativeLibraryDir)
+        val prootLoader = File(nativeDirectory, "libproot_loader.so")
+        prootLoader.setReadable(true, false)
+        prootLoader.setExecutable(true, false)
+        rootfsLoader.setReadable(true, false)
+        rootfsLoader.setExecutable(true, false)
+        shell.setReadable(true, false)
+        shell.setExecutable(true, false)
+        File(rootfs, "bin/busybox").setExecutable(true, false)
+        File(rootfs, "sbin/apk").setExecutable(true, false)
+        val proot = File(nativeDirectory, "libproot.so")
+        val bind = "${workspace.canonicalPath}:/workspace"
+        val args = mutableListOf(
+            proot.absolutePath,
+            "-0",
+        )
+        if (!detached) args += "--kill-on-exit"
+        args += listOf(
+            "-r",
+            rootfs.canonicalPath,
+            "-b",
+            bind,
+            "-w",
+            "/workspace",
+            "/bin/sh",
+            "-lc",
+            command,
+        )
+        return ProcessBuilder(args).apply {
+            directory(appContext.filesDir)
+            redirectErrorStream(true)
+            environment().apply {
+                put(
+                    "LD_LIBRARY_PATH",
+                    "${runtimeLibraries.absolutePath}:${nativeDirectory.absolutePath}",
+                )
+                put("LD_PRELOAD", File(nativeDirectory, "libtalloc.so").absolutePath)
+                put("PROOT_LOADER", prootLoader.canonicalPath)
+                put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+                put("HOME", "/root")
+                put("TMPDIR", "/tmp")
+                put("PROOT_TMP_DIR", appContext.cacheDir.absolutePath)
+                put("LANG", "C.UTF-8")
+                put("TERM", "dumb")
+                if (ownerToken != null) put("NEXUS_DAEMON_OWNER", ownerToken)
+            }
+        }
+    }
+
+    private fun writeCompletion(file: File, exitCode: Int, timedOut: Boolean) {
+        try {
+            val temp = File(file.parentFile, "${file.name}.part")
+            temp.writeText(
+                "{\"exitCode\":$exitCode,\"timedOut\":$timedOut}",
+                Charsets.UTF_8,
+            )
+            if (file.exists()) file.delete()
+            temp.renameTo(file)
+        } catch (_: Exception) {
+            // 完成文件只是认领协议的补充，日志与 /proc 仍可用于安全降级。
         }
     }
 

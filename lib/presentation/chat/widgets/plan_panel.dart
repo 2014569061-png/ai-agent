@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_sheet.dart';
@@ -46,8 +47,8 @@ class _PlanPanelState extends State<PlanPanel> {
     // 未确认时展开方便审核；执行完成后默认紧凑收起，避免遮挡消息；
     // 暂停态默认展开以展示“继续执行”入口。
     _expanded = !widget.plan.isConfirmed &&
-        widget.plan.status != 'completed' &&
-        widget.plan.status != 'paused' ||
+            widget.plan.status != 'completed' &&
+            widget.plan.status != 'paused' ||
         widget.plan.status == 'paused';
   }
 
@@ -134,7 +135,7 @@ class _PlanPanelState extends State<PlanPanel> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   color: AppTheme.success,
                 ),
               ),
@@ -160,13 +161,13 @@ class _PlanPanelState extends State<PlanPanel> {
 
     return InkWell(
       onTap: () => setState(() => _expanded = true),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(AppTokens.radiusCard),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         child: Row(
           children: [
             const Icon(Icons.checklist_rounded,
-                size: 18, color: AppTheme.brandBright),
+                size: 18, color: AppPalette.brand),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -179,7 +180,7 @@ class _PlanPanelState extends State<PlanPanel> {
                         '进度 $done/$total',
                         style: TextStyle(
                           fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           color: muted,
                         ),
                       ),
@@ -197,7 +198,7 @@ class _PlanPanelState extends State<PlanPanel> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -234,12 +235,12 @@ class _PlanPanelState extends State<PlanPanel> {
           child: Row(
             children: [
               const Icon(Icons.checklist_rounded,
-                  size: 18, color: AppTheme.brandBright),
+                  size: 18, color: AppPalette.brand),
               const SizedBox(width: 8),
               Text(
                 '执行计划',
                 style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   fontSize: 15,
                 ),
               ),
@@ -282,8 +283,8 @@ class _PlanPanelState extends State<PlanPanel> {
                   const Text('执行目标',
                       style: TextStyle(
                           fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppTheme.brandBright)),
+                          fontWeight: FontWeight.w500,
+                          color: AppPalette.brand)),
                   const SizedBox(height: 3),
                   Text(
                     widget.goal!,
@@ -305,7 +306,7 @@ class _PlanPanelState extends State<PlanPanel> {
             children: [
               Text('完成度 $done/$total',
                   style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w600)),
+                      fontSize: 12, fontWeight: FontWeight.w500)),
               const SizedBox(width: 10),
               Expanded(
                 child: ClipRRect(
@@ -586,7 +587,7 @@ class _PlanPanelState extends State<PlanPanel> {
                         ? AppTheme.success
                         : (isFailed ? AppTheme.danger : muted)),
                 fontWeight:
-                    (isCurrent || isDone) ? FontWeight.w600 : FontWeight.normal,
+                    (isCurrent || isDone) ? FontWeight.w500 : FontWeight.normal,
                 decoration: isDone ? TextDecoration.lineThrough : null,
               ),
             ),

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../../domain/models.dart';
+import '../../domain/tool_codes.dart';
+import '../../domain/tool_result.dart';
 import '../database/app_database.dart';
 import '../tools/tool_registry.dart';
 
@@ -121,10 +123,17 @@ class DeclarativeTool implements AgentTool {
   final UnifiedTool manifest;
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     final url = (_request['url'] as String? ?? '').trim();
-    if (url.isEmpty || !url.startsWith('http')) return '插件工具未配置有效 URL';
+    if (url.isEmpty || !url.startsWith('http')) {
+      return ToolResult.failure(
+        code: ToolCodes.notConfigured,
+        message: '插件工具未配置有效 URL',
+      );
+    }
     final method = (_request['method'] as String? ?? 'GET').toUpperCase();
+    // 只读方法可确定没有改动外部世界；其余方法一旦发出就可能已生效。
+    final readOnly = method == 'GET' || method == 'HEAD';
     try {
       final dio = Dio(BaseOptions(
           connectTimeout: const Duration(seconds: 10),
@@ -132,9 +141,17 @@ class DeclarativeTool implements AgentTool {
       final response = method == 'POST'
           ? await dio.post<dynamic>(url, data: arguments)
           : await dio.get<dynamic>(url, queryParameters: arguments);
-      return jsonEncode({'status': response.statusCode, 'data': response.data});
+      return ToolResult.text(
+        jsonEncode({'status': response.statusCode, 'data': response.data}),
+        effect: readOnly ? ToolEffect.none : ToolEffect.applied,
+      );
     } catch (error) {
-      return '插件工具执行失败：$error';
+      return ToolResult.failure(
+        code: ToolCodes.networkUnavailable,
+        message: '插件工具执行失败：$error'
+            '${readOnly ? '' : '；请求可能已送达，请先确认对方状态再决定是否重试'}',
+        effect: readOnly ? ToolEffect.none : ToolEffect.unknown,
+      );
     }
   }
 }

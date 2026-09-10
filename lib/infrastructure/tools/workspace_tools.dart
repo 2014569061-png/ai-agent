@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../../domain/models.dart';
+import '../../domain/tool_codes.dart';
+import '../../domain/tool_result.dart';
 import '../observability/unified_diff.dart';
 import 'tool_registry.dart';
 
@@ -122,15 +124,32 @@ class ReadFileTool with _FileMetadata implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final path = arguments['path'];
+    if (path is! String || path.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'path 必须是非空字符串',
+      );
+    }
+    final String fullPath;
     try {
-      final path = arguments['path'] as String;
-      final fullPath = sandbox.resolvePath(path);
+      fullPath = sandbox.resolvePath(path);
+    } on ArgumentError catch (e) {
+      return ToolResult.failure(
+        code: ToolCodes.sandboxViolation,
+        message: '路径越出工作区：${e.message}',
+      );
+    }
+    try {
       final file = File(fullPath);
 
       if (!await file.exists()) {
-        return '文件不存在：$path';
+        return ToolResult.failure(
+          code: ToolCodes.notFound,
+          message: '文件不存在：$path',
+        );
       }
 
       final content = await file.readAsString();
@@ -148,18 +167,29 @@ class ReadFileTool with _FileMetadata implements AgentTool {
         for (var i = 0; i < slice.length; i++) {
           numbered.add('${start + i + 1}: ${slice[i]}');
         }
-        return numbered.join('\n');
+        return ToolResult.text(numbered.join('\n'), extra: {
+          'path': path,
+          'totalLines': lines.length,
+          'sliced': true,
+        });
       }
 
       // 如果全量文件很大（超过 2000 行），提示行数并返回前 500 行
       if (lines.length > 2000) {
         final preview = lines.take(500).join('\n');
-        return '$preview\n\n... [文件内容过长，共 ${lines.length} 行，已截断。请使用 startLine 和 endLine 分段查看]';
+        return ToolResult.text(
+          '$preview\n\n... [文件内容过长，共 ${lines.length} 行，已截断。请使用 startLine 和 endLine 分段查看]',
+          extra: {'path': path, 'totalLines': lines.length, 'truncated': true},
+        );
       }
 
-      return content;
+      return ToolResult.text(content,
+          extra: {'path': path, 'totalLines': lines.length});
     } catch (e) {
-      return '读取文件失败：$e';
+      return ToolResult.failure(
+        code: ToolCodes.toolError,
+        message: '读取文件失败：$e',
+      );
     }
   }
 }
@@ -185,13 +215,37 @@ class WriteFileTool with _FileMetadata implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final path = arguments['path'];
+    final content = arguments['content'];
+    if (path is! String || path.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'path 必须是非空字符串',
+      );
+    }
+    if (content is! String) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'content 必须是字符串',
+      );
+    }
+    final String fullPath;
     try {
-      final path = arguments['path'] as String;
-      final content = arguments['content'] as String;
-      final fullPath = sandbox.resolvePath(path);
-      final file = File(fullPath);
+      fullPath = sandbox.resolvePath(path);
+    } on ArgumentError catch (e) {
+      return ToolResult.failure(
+        code: ToolCodes.sandboxViolation,
+        message: '路径越出工作区：${e.message}',
+      );
+    }
+
+    final file = File(fullPath);
+    // committed 之前抛错说明还没碰过磁盘（effect=none）；
+    // 之后抛错必须按“可能已经写进去了”上报，让模型先读再决定是否重试。
+    var committed = false;
+    try {
       final before = await file.exists() ? await file.readAsString() : '';
 
       // 自动创建父目录
@@ -201,14 +255,30 @@ class WriteFileTool with _FileMetadata implements AgentTool {
       }
 
       await file.writeAsString(content);
+      committed = true;
       recordFile(
           operation: before.isEmpty ? 'create' : 'write',
           path: path,
           before: before,
           after: content);
-      return '成功写入文件：$path (${content.length} 字符)';
+      return ToolResult.success(
+        message: '成功写入文件：$path (${content.length} 字符)',
+        data: {
+          'path': path,
+          'chars': content.length,
+          'created': before.isEmpty,
+        },
+        effect: ToolEffect.applied,
+      );
     } catch (e) {
-      return '写入文件失败：$e';
+      return ToolResult.failure(
+        code: ToolCodes.toolError,
+        message: committed
+            ? '文件已写入但记录变更元数据失败：$e'
+            : '写入过程中断：$e；文件可能已被部分修改，'
+                '请先 read_file 确认当前内容再决定是否重试',
+        effect: committed ? ToolEffect.applied : ToolEffect.unknown,
+      );
     }
   }
 }
@@ -235,32 +305,72 @@ class EditFileTool with _FileMetadata implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final path = arguments['path'];
+    final target = arguments['targetContent'];
+    final replacement = arguments['replacementContent'];
+    if (path is! String || path.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'path 必须是非空字符串',
+      );
+    }
+    if (target is! String || replacement is! String) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'targetContent 与 replacementContent 必须是字符串',
+      );
+    }
+    final String fullPath;
     try {
-      final path = arguments['path'] as String;
-      final target = arguments['targetContent'] as String;
-      final replacement = arguments['replacementContent'] as String;
-      final fullPath = sandbox.resolvePath(path);
-      final file = File(fullPath);
+      fullPath = sandbox.resolvePath(path);
+    } on ArgumentError catch (e) {
+      return ToolResult.failure(
+        code: ToolCodes.sandboxViolation,
+        message: '路径越出工作区：${e.message}',
+      );
+    }
 
+    final file = File(fullPath);
+    var committed = false;
+    try {
       if (!await file.exists()) {
-        return '编辑失败：文件不存在 $path';
+        return ToolResult.failure(
+          code: ToolCodes.notFound,
+          message: '编辑失败：文件不存在 $path',
+        );
       }
 
       final content = await file.readAsString();
       if (!content.contains(target)) {
-        return '编辑失败：未在文件中找到指定的 targetContent 匹配块，请重新读取文件核对内容。';
+        return ToolResult.failure(
+          code: ToolCodes.notFound,
+          message: '编辑失败：未在文件中找到指定的 targetContent 匹配块，'
+              '请重新读取文件核对内容。',
+        );
       }
 
       // 仅替换一次
       final newContent = content.replaceFirst(target, replacement);
       await file.writeAsString(newContent);
+      committed = true;
       recordFile(
           operation: 'edit', path: path, before: content, after: newContent);
-      return '成功修改文件：$path';
+      return ToolResult.success(
+        message: '成功修改文件：$path',
+        data: {'path': path, 'chars': newContent.length},
+        effect: ToolEffect.applied,
+      );
     } catch (e) {
-      return '编辑文件失败：$e';
+      return ToolResult.failure(
+        code: ToolCodes.toolError,
+        message: committed
+            ? '文件已修改但记录变更元数据失败：$e'
+            : '编辑过程中断：$e；文件可能已被部分修改，'
+                '请先 read_file 确认当前内容再决定是否重试',
+        effect: committed ? ToolEffect.applied : ToolEffect.unknown,
+      );
     }
   }
 }
@@ -285,22 +395,34 @@ class ListDirectoryTool with _FileMetadata implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final relativePath = arguments['path'] as String? ?? '';
+    final recursive = arguments['recursive'] == true;
+    final String fullPath;
     try {
-      final relativePath = arguments['path'] as String? ?? '';
-      final recursive = arguments['recursive'] as bool? ?? false;
-      final fullPath = sandbox.resolvePath(relativePath);
+      fullPath = sandbox.resolvePath(relativePath);
+    } on ArgumentError catch (e) {
+      return ToolResult.failure(
+        code: ToolCodes.sandboxViolation,
+        message: '路径越出工作区：${e.message}',
+      );
+    }
+    try {
       final dir = Directory(fullPath);
+      final displayPath = relativePath.isEmpty ? '.' : relativePath;
 
       if (!await dir.exists()) {
         recordMetadata({
           'operation': 'list',
-          'path': relativePath.isEmpty ? '.' : relativePath,
+          'path': displayPath,
           'recursive': recursive,
           'exists': false,
         });
-        return '目录不存在：$relativePath';
+        return ToolResult.failure(
+          code: ToolCodes.notFound,
+          message: '目录不存在：$relativePath',
+        );
       }
 
       final entries = <String>[];
@@ -315,24 +437,33 @@ class ListDirectoryTool with _FileMetadata implements AgentTool {
       if (entries.isEmpty) {
         recordMetadata({
           'operation': 'list',
-          'path': relativePath.isEmpty ? '.' : relativePath,
+          'path': displayPath,
           'recursive': recursive,
           'entryCount': 0,
         });
-        return '目录为空：$relativePath';
+        return ToolResult.success(
+          message: '目录为空：$relativePath',
+          data: {'path': displayPath, 'entryCount': 0},
+        );
       }
 
       entries.sort();
-      final result = entries.join('\n');
       recordMetadata({
         'operation': 'list',
-        'path': relativePath.isEmpty ? '.' : relativePath,
+        'path': displayPath,
         'recursive': recursive,
         'entryCount': entries.length,
       });
-      return result;
+      return ToolResult.text(entries.join('\n'), extra: {
+        'path': displayPath,
+        'entryCount': entries.length,
+        'recursive': recursive,
+      });
     } catch (e) {
-      return '列出目录失败：$e';
+      return ToolResult.failure(
+        code: ToolCodes.toolError,
+        message: '列出目录失败：$e',
+      );
     }
   }
 }
@@ -361,11 +492,17 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final query = arguments['query'];
+    if (query is! String || query.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'query 必须是非空字符串',
+      );
+    }
+    final ext = arguments['fileExtension'] as String?;
     try {
-      final query = arguments['query'] as String;
-      final ext = arguments['fileExtension'] as String?;
       final dir = Directory(sandbox.rootPath);
 
       if (!await dir.exists()) {
@@ -375,7 +512,10 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
           'query': query,
           'exists': false,
         });
-        return '工作区目录不存在';
+        return ToolResult.failure(
+          code: ToolCodes.notFound,
+          message: '工作区目录不存在',
+        );
       }
 
       final results = <String>[];
@@ -420,10 +560,13 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
           'fileExtension': ext,
           'matchCount': 0,
         });
-        return '未搜索到匹配项："$query"';
+        // 搜索无命中是正常结果而非失败：模型据此换关键词，不该触发重试。
+        return ToolResult.success(
+          message: '未搜索到匹配项："$query"',
+          data: {'query': query, 'matchCount': 0},
+        );
       }
 
-      final result = results.join('\n');
       recordMetadata({
         'operation': 'search',
         'path': '.',
@@ -432,9 +575,16 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
         'matchCount': results.length,
         'truncated': results.length >= 50,
       });
-      return result;
+      return ToolResult.text(results.join('\n'), extra: {
+        'query': query,
+        'matchCount': results.length,
+        'truncated': results.length >= 50,
+      });
     } catch (e) {
-      return '搜索失败：$e';
+      return ToolResult.failure(
+        code: ToolCodes.toolError,
+        message: '搜索失败：$e',
+      );
     }
   }
 }
@@ -459,28 +609,69 @@ class DeleteFileTool with _FileMetadata implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final path = arguments['path'];
+    if (path is! String || path.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'path 必须是非空字符串',
+      );
+    }
+    final String fullPath;
     try {
-      final path = arguments['path'] as String;
-      final fullPath = sandbox.resolvePath(path);
-      final file = File(fullPath);
-      final dir = Directory(fullPath);
+      fullPath = sandbox.resolvePath(path);
+    } on ArgumentError catch (e) {
+      return ToolResult.failure(
+        code: ToolCodes.sandboxViolation,
+        message: '路径越出工作区：${e.message}',
+      );
+    }
 
+    final file = File(fullPath);
+    final dir = Directory(fullPath);
+    var committed = false;
+    try {
       if (await file.exists()) {
-        final before = await file.readAsString();
+        // 二进制文件读不成字符串也必须能删，否则删除会被前置读取卡死。
+        String? before;
+        try {
+          before = await file.readAsString();
+        } catch (_) {
+          before = null;
+        }
         await file.delete();
-        recordFile(operation: 'delete', path: path, before: before);
-        return '成功删除文件：$path';
+        committed = true;
+        recordFile(operation: 'delete', path: path, before: before ?? '');
+        return ToolResult.success(
+          message: '成功删除文件：$path',
+          data: {'path': path, 'kind': 'file', 'recoverable': false},
+          effect: ToolEffect.applied,
+        );
       } else if (await dir.exists()) {
         await dir.delete();
+        committed = true;
         recordFile(operation: 'delete', path: path);
-        return '成功删除目录：$path';
+        return ToolResult.success(
+          message: '成功删除目录：$path',
+          data: {'path': path, 'kind': 'directory', 'recoverable': false},
+          effect: ToolEffect.applied,
+        );
       } else {
-        return '文件或目录不存在：$path';
+        return ToolResult.failure(
+          code: ToolCodes.notFound,
+          message: '文件或目录不存在：$path',
+        );
       }
     } catch (e) {
-      return '删除失败：$e';
+      return ToolResult.failure(
+        code: ToolCodes.toolError,
+        message: committed
+            ? '目标已删除但记录元数据失败：$e'
+            : '删除过程中断：$e；目标可能已被删除，'
+                '请先 list_directory 或 read_file 确认再决定是否重试',
+        effect: committed ? ToolEffect.applied : ToolEffect.unknown,
+      );
     }
   }
 }
@@ -507,13 +698,37 @@ class MoveFileTool with _FileMetadata implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final oldPath = arguments['path'];
+    final newPath = arguments['newPath'];
+    if (oldPath is! String || oldPath.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'path 必须是非空字符串',
+      );
+    }
+    if (newPath is! String || newPath.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'newPath 必须是非空字符串',
+      );
+    }
+    final String sourcePath;
+    final String targetPath;
     try {
-      final oldPath = arguments['path'] as String;
-      final newPath = arguments['newPath'] as String;
-      final sourcePath = sandbox.resolvePath(oldPath);
-      final targetPath = sandbox.resolvePath(newPath);
+      sourcePath = sandbox.resolvePath(oldPath);
+      targetPath = sandbox.resolvePath(newPath);
+    } on ArgumentError catch (e) {
+      return ToolResult.failure(
+        code: ToolCodes.sandboxViolation,
+        message: '路径越出工作区：${e.message}',
+      );
+    }
+
+    // 一旦开始创建目标父目录，世界就可能已经变了；此后失败一律 unknown。
+    var touched = false;
+    try {
       if (sourcePath == targetPath) {
         recordMetadata({
           'operation': 'move',
@@ -522,7 +737,10 @@ class MoveFileTool with _FileMetadata implements AgentTool {
           'moved': false,
           'reason': 'same_path',
         });
-        return '移动路径与源路径相同';
+        return ToolResult.failure(
+          code: ToolCodes.invalidArguments,
+          message: '移动路径与源路径相同',
+        );
       }
 
       final sourceFile = File(sourcePath);
@@ -535,7 +753,10 @@ class MoveFileTool with _FileMetadata implements AgentTool {
           'moved': false,
           'reason': 'source_missing',
         });
-        return '源文件或目录不存在：$oldPath';
+        return ToolResult.failure(
+          code: ToolCodes.notFound,
+          message: '源文件或目录不存在：$oldPath',
+        );
       }
       if (await File(targetPath).exists() ||
           await Directory(targetPath).exists()) {
@@ -546,12 +767,16 @@ class MoveFileTool with _FileMetadata implements AgentTool {
           'moved': false,
           'reason': 'destination_exists',
         });
-        return '移动失败：目标路径已存在 $newPath';
+        return ToolResult.failure(
+          code: ToolCodes.alreadyExists,
+          message: '移动失败：目标路径已存在 $newPath',
+        );
       }
 
       final targetParent = Directory(targetPath).parent;
       if (!await targetParent.exists()) {
         await targetParent.create(recursive: true);
+        touched = true;
       }
 
       String? content;
@@ -566,9 +791,20 @@ class MoveFileTool with _FileMetadata implements AgentTool {
         await sourceDir.rename(targetPath);
       }
       recordMove(oldPath: oldPath, newPath: newPath, content: content);
-      return '成功移动：$oldPath -> $newPath';
+      return ToolResult.success(
+        message: '成功移动：$oldPath -> $newPath',
+        data: {'oldPath': oldPath, 'newPath': newPath},
+        effect: ToolEffect.applied,
+      );
     } catch (e) {
-      return '移动失败：$e';
+      return ToolResult.failure(
+        code: ToolCodes.toolError,
+        message: touched
+            ? '移动过程中断：$e；目标父目录可能已创建、源可能已被改名，'
+                '请先 list_directory 确认两端状态再决定是否重试'
+            : '移动失败：$e',
+        effect: touched ? ToolEffect.unknown : ToolEffect.none,
+      );
     }
   }
 }

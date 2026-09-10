@@ -1,48 +1,69 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
-/// 胶囊右侧的操作项。
+/// 降级为平面 Chip（白底/暗底 + 1px hairline + radiusPill）
 class GlassChip extends StatelessWidget {
-  const GlassChip({super.key, required this.label, this.icon, this.onPressed});
+  const GlassChip({
+    super.key,
+    required this.label,
+    this.icon,
+    this.onPressed,
+    this.selected = false,
+    this.minHeight = 36.0,
+  });
 
   final String label;
   final IconData? icon;
   final VoidCallback? onPressed;
+  final bool selected;
+  final double minHeight;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final border = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final normalBg = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
+    final selectedBg =
+        isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
+    final normalTextColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    const selectedTextColor = AppPalette.brandOnSoft;
+
+    final bg = selected ? selectedBg : normalBg;
+    final border = selected ? selectedBg : hairline;
+    final textColor = selected ? selectedTextColor : normalTextColor;
+
     return Material(
-      color: isDark
-          ? Colors.white.withValues(alpha: .07)
-          : Colors.black.withValues(alpha: .05),
+      color: bg,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTokens.smallControlRadius), // 14
-        side: BorderSide(color: border.withValues(alpha: .5)),
+        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+        side: BorderSide(color: border, width: 1.0),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
         onTap: onPressed,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(
-              minHeight: 36), // 视觉 36；语义目标 >=44 由外层 padding 补足
+          constraints: BoxConstraints(minHeight: minHeight),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              if (icon != null) ...[
-                Icon(icon, size: 14),
-                const SizedBox(width: 4),
-              ],
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 14, color: textColor),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    height: 1.4,
+                    color: textColor,
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
           ),
         ),
       ),

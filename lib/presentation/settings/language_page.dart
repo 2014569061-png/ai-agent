@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 import '../l10n/app_locale_controller.dart';
 import '../widgets/floating_toast.dart';
@@ -59,7 +60,7 @@ class _LanguagePageState extends State<LanguagePage> {
                   children: [
                     SettingsTile(
                       icon: Icons.devices_rounded,
-                      iconColor: const Color(0xFF007AFF),
+                      iconColor: settingsMutedColor(context),
                       title: '跟随系统 (System Default)',
                       subtitle: '优先采用移动操作系统的默认语言设置',
                       selected: _current == 'system',
@@ -68,7 +69,7 @@ class _LanguagePageState extends State<LanguagePage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.translate_rounded,
-                      iconColor: const Color(0xFFFF9500),
+                      iconColor: AppPalette.warning,
                       title: '简体中文',
                       subtitle: '完整支持 · 默认语言',
                       selected: _current == 'zh',
@@ -77,7 +78,7 @@ class _LanguagePageState extends State<LanguagePage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.language_rounded,
-                      iconColor: const Color(0xFF34C759),
+                      iconColor: AppPalette.success,
                       title: 'English',
                       subtitle: 'Partial translation in progress',
                       trailingBadge: Container(
@@ -86,8 +87,8 @@ class _LanguagePageState extends State<LanguagePage> {
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Theme.of(context).brightness == Brightness.dark
-                              ? const Color(0xFF2C2C2E)
-                              : const Color(0xFFE5E5EA),
+                              ? AppPalette.darkHairline
+                              : AppPalette.lightHairline,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -108,4 +109,3 @@ class _LanguagePageState extends State<LanguagePage> {
     );
   }
 }
-

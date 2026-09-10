@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/immersive_effects_controller.dart';
@@ -96,28 +97,21 @@ class _NavItem extends StatelessWidget {
           Stack(
             alignment: Alignment.center,
             children: [
-              if (selected && glowEnabled)
-                AnimatedOpacity(
-                  opacity: 1,
-                  duration: AppTokens.durationFast,
-                  child: Container(
-                    width: 52,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: RadialGradient(
-                        colors: [
-                          color.focusGlow.withValues(alpha: .9),
-                          color.focusGlow.withValues(alpha: 0),
-                        ],
-                      ),
-                    ),
+              if (selected)
+                Container(
+                  width: 48,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppPalette.darkBrandSoft
+                        : AppPalette.lightBrandSoft,
+                    borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                   ),
                 ),
               Icon(
                 icon,
-                size: 23,
-                color: selected ? primary : color.textMuted,
+                size: 22,
+                color: selected ? AppPalette.brand : color.textMuted,
               ),
             ],
           ),
@@ -126,8 +120,8 @@ class _NavItem extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: 11,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? primary : color.textMuted,
+              fontWeight: FontWeight.w500,
+              color: selected ? AppPalette.brand : color.textMuted,
             ),
           ),
         ],

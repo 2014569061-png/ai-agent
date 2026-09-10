@@ -51,34 +51,7 @@ class AnthropicProvider implements LlmProvider {
   @override
   Stream<UnifiedEvent> stream(UnifiedRequest request,
       {CancelToken? cancelToken}) async* {
-    String? system;
-    final messages = <Map<String, dynamic>>[];
-    for (final message in request.messages) {
-      if (message.role == MessageRole.system) {
-        system = message.text;
-      } else {
-        messages.add(toAnthropicMessage(message));
-      }
-    }
-
-    // 思考档位 → Anthropic thinking.budget_tokens。低=2048, 中=8192, 高=16384。
-    final thinking = _buildThinking(request.reasoningEffort);
-
-    final payload = {
-      'model': request.model,
-      'max_tokens': request.maxTokens,
-      // Anthropic rejects temperature/top_p when extended thinking is enabled.
-      if (thinking == null) ...{
-        'temperature': request.temperature,
-        'top_p': request.topP,
-      },
-      'stream': true,
-      if (thinking != null) 'thinking': thinking,
-      if (system != null && system.trim().isNotEmpty) 'system': system.trim(),
-      'messages': messages,
-      if (request.tools.isNotEmpty)
-        'tools': request.tools.map(toAnthropicTool).toList(),
-    };
+    final payload = buildRequestPayload(request, stream: true);
 
     try {
       final response = await _dio.post<ResponseBody>(
@@ -89,7 +62,10 @@ class AnthropicProvider implements LlmProvider {
       );
       final stream = response.data?.stream;
       if (stream == null) {
-        yield const ProviderErrorEvent('Provider 返回了空响应');
+        yield const ProviderErrorEvent(
+          'Provider 返回了空响应',
+          failureKind: 'protocol',
+        );
         return;
       }
 
@@ -99,6 +75,7 @@ class AnthropicProvider implements LlmProvider {
       var cacheCreationTokens = 0;
       var cacheReadTokens = 0;
       var outputTokens = 0;
+      var stopReason = StopReason.unknown;
 
       void updateUsage(Map<String, dynamic> usage) {
         final input = _asInt(usage['input_tokens']);
@@ -149,6 +126,12 @@ class AnthropicProvider implements LlmProvider {
           } else if (type == 'message_delta') {
             final usage = json['usage'] as Map<String, dynamic>? ?? const {};
             updateUsage(usage);
+            // stop_reason 在 message_delta.delta 里，是能否执行工具调用的判据。
+            final delta = json['delta'] as Map<String, dynamic>? ?? const {};
+            final raw = delta['stop_reason'] as String?;
+            if (raw != null && raw.isNotEmpty) {
+              stopReason = StopReason.parse(raw);
+            }
           }
         }
       }
@@ -157,6 +140,11 @@ class AnthropicProvider implements LlmProvider {
         if (trailing != null && trailing['type'] == 'message_delta') {
           final usage = trailing['usage'] as Map<String, dynamic>? ?? const {};
           updateUsage(usage);
+          final delta = trailing['delta'] as Map<String, dynamic>? ?? const {};
+          final raw = delta['stop_reason'] as String?;
+          if (raw != null && raw.isNotEmpty) {
+            stopReason = StopReason.parse(raw);
+          }
         }
       }
 
@@ -164,12 +152,15 @@ class AnthropicProvider implements LlmProvider {
       for (final index in sortedIndexes) {
         final acc = toolAccumulators[index]!;
         final rawArgs = acc.arguments.toString();
-        Map<String, dynamic> args = const {};
+        Map<String, dynamic> args;
         try {
           final decoded = jsonDecode(rawArgs.isEmpty ? '{}' : rawArgs);
-          if (decoded is Map<String, dynamic>) args = decoded;
+          args = decoded is Map<String, dynamic>
+              ? decoded
+              : {'_unparsed': rawArgs};
         } catch (_) {
-          // 参数不完整时保持空对象
+          // 参数不完整时必须交给 AgentExecutor 拦截，不能降级为空对象后误执行。
+          args = {'_unparsed': rawArgs};
         }
         yield ToolCallEvent(ToolCall(
           id: acc.id ?? 'anthropic-tool-$index',
@@ -181,16 +172,68 @@ class AnthropicProvider implements LlmProvider {
           promptTokens: inputTokens + cacheCreationTokens + cacheReadTokens,
           completionTokens: outputTokens,
           cachedTokens: cacheReadTokens);
-      yield const CompletedEvent();
+      yield CompletedEvent(stopReason: stopReason);
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;
       final message =
           error.response?.data?.toString() ?? error.message ?? '网络请求失败';
-      yield ProviderErrorEvent(message);
+      yield ProviderErrorEvent(
+        message,
+        statusCode: error.response?.statusCode,
+        failureKind: error.type.name,
+      );
     } catch (error) {
-      yield ProviderErrorEvent(error.toString());
+      yield ProviderErrorEvent(
+        error.toString(),
+        failureKind: error.runtimeType.toString(),
+      );
     }
+  }
+
+  /// 构建 Anthropic 请求体并给稳定的 system 提示词打上缓存边界。
+  ///
+  /// system 使用 content block 而不是裸字符串，既兼容普通请求，也让
+  /// Anthropic 能复用长会话前缀；模型消息本身仍按原顺序逐条发送。
+  Map<String, dynamic> buildRequestPayload(UnifiedRequest request,
+      {bool stream = true}) {
+    String? system;
+    final messages = <Map<String, dynamic>>[];
+    for (final message in request.messages) {
+      if (message.role == MessageRole.system) {
+        final text = message.text.trim();
+        if (text.isNotEmpty) {
+          system = system == null ? text : '$system\n$text';
+        }
+      } else {
+        messages.add(toAnthropicMessage(message));
+      }
+    }
+
+    // 思考档位 → Anthropic thinking.budget_tokens。低=2048, 中=8192, 高=16384。
+    final thinking = _buildThinking(request.reasoningEffort);
+    return {
+      'model': request.model,
+      'max_tokens': request.maxTokens,
+      // Anthropic rejects temperature/top_p when extended thinking is enabled.
+      if (thinking == null) ...{
+        'temperature': request.temperature,
+        'top_p': request.topP,
+      },
+      'stream': stream,
+      if (thinking != null) 'thinking': thinking,
+      if (system != null)
+        'system': [
+          {
+            'type': 'text',
+            'text': system,
+            'cache_control': {'type': 'ephemeral'},
+          },
+        ],
+      'messages': messages,
+      if (request.tools.isNotEmpty)
+        'tools': request.tools.map(toAnthropicTool).toList(),
+    };
   }
 
   /// 将统一消息转换为 Anthropic Messages API 的 message 结构。

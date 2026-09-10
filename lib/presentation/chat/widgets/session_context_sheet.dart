@@ -45,7 +45,7 @@ class SessionContextSheet extends StatelessWidget {
       return ListTile(
         leading: Icon(icon, color: theme.colorScheme.primary),
         title: Text(label,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         subtitle: Text(value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -71,7 +71,7 @@ class SessionContextSheet extends StatelessWidget {
               const SizedBox(width: 8),
               Text('会话上下文',
                   style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w700)),
+                      ?.copyWith(fontWeight: FontWeight.w500)),
             ]),
             const SizedBox(height: 8),
             tile(
@@ -124,7 +124,7 @@ class SessionContextSheet extends StatelessWidget {
                       ? AppTheme.warning
                       : theme.colorScheme.outline),
               title: const Text('计划审批模式',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
               subtitle: const Text('开启后首轮先生成分步计划，确认后才执行',
                   style: TextStyle(fontSize: 12)),
               value: state.planMode,

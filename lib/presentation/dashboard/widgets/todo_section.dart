@@ -9,7 +9,7 @@ import '../../../domain/models.dart';
 import '../../../infrastructure/database/app_database.dart';
 import '../../l10n/app_strings.dart';
 import '../../tasks/task_details_page.dart';
-import '../../theme/app_theme.dart';
+import '../../theme/app_palette.dart';
 import '../../widgets/floating_toast.dart';
 import '../../widgets/nexus_section.dart';
 import '../../widgets/section_card.dart';
@@ -42,8 +42,6 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
       return const SizedBox.shrink();
     }
 
-    final theme = Theme.of(context);
-
     return NexusSection(
       title: '${AppStrings.pendingActions} (${todos.length})',
       icon: Icons.notifications_active_outlined,
@@ -58,8 +56,8 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
           final isBusy = _busyTodoIds.contains(item.id);
 
           final badgeColor = isApproval
-              ? AppTheme.warning
-              : (isPlan ? theme.colorScheme.primary : AppTheme.success);
+              ? AppPalette.warning
+              : (isPlan ? AppPalette.brand : AppPalette.success);
 
           final badgeText = isApproval
               ? AppStrings.pendingApproval
@@ -105,7 +103,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                           badgeText,
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             color: badgeColor,
                           ),
                         ),
@@ -116,7 +114,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -129,7 +127,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       textStyle: const TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     onPressed:

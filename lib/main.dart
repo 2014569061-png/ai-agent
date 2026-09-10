@@ -9,17 +9,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'application/onboarding_service.dart';
-import 'application/account_services.dart';
-import 'application/billing_api.dart';
-import 'application/run_event_queue.dart';
 import 'infrastructure/background/foreground_service.dart';
 import 'infrastructure/background/scheduled_task_runner.dart';
-import 'infrastructure/database/database_provider.dart';
 import 'infrastructure/notifications/notification_service.dart';
 import 'infrastructure/observability/sentry_service.dart';
 import 'infrastructure/share/deep_link_service.dart';
 import 'infrastructure/share/sharing_service.dart';
-import 'infrastructure/widgets/nexus_widget.dart';
 import 'presentation/chat/chat_layout_controller.dart';
 import 'presentation/navigation/app_shell.dart';
 import 'presentation/l10n/app_locale_controller.dart';
@@ -86,49 +81,14 @@ Future<void> _initializeServices() async {
       debugPrint('深链监听失败: $error');
     }
 
-    // E2 home-screen widget actions.
-    NexusWidget.onWidgetClicked(
-      (uri) => DeepLinkService.instance.handleUri(uri),
-    );
-
     // Initialize crash reporting after the first frame.
     try {
       await SentryService.init(() {});
     } catch (error) {
       debugPrint('崩溃上报初始化失败: $error');
     }
-
-    // Refresh widget data without holding up the foreground UI.
-    unawaited(_refreshWidget());
-    // Recover events captured while offline after the first frame. Backoff in
-    // RunEventQueue prevents repeated startup failures from causing a storm.
-    unawaited(_recoverRunEvents());
   } catch (error, stack) {
     debugPrint('后台启动服务初始化失败: $error\n$stack');
-  }
-}
-
-Future<void> _recoverRunEvents() async {
-  try {
-    final queue = RunEventQueue();
-    if (await queue.pendingCount() == 0) return;
-    final api = BillingApi(baseUrl: defaultBackendBaseUrl());
-    final session = await AccountService(api: api).restoreSession();
-    if (session == null) return;
-    await queue.recover(api: api, access: session.access);
-  } catch (error) {
-    debugPrint('离线运行事件恢复失败: $error');
-  }
-}
-
-Future<void> _refreshWidget() async {
-  try {
-    final db = await DatabaseProvider.instance.database;
-    final conversations = await db.recentConversations();
-    final items = conversations.take(3).map((c) => c.title).toList();
-    await NexusWidget.updateWidget(items: items);
-  } catch (error) {
-    debugPrint('刷新桌面 Widget 失败: $error');
   }
 }
 

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/immersive_dropdown.dart';
 import 'phone_preview_view.dart';
 
@@ -219,7 +221,7 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
             height: 42,
             decoration: BoxDecoration(
               color: colors.primary.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppTokens.radiusCard),
             ),
             child: Icon(Icons.phone_iphone_rounded, color: colors.primary),
           ),
@@ -230,7 +232,7 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
               children: [
                 const Text(
                   '手机视口预览',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 3),
                 Text(
@@ -328,9 +330,9 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
       margin: const EdgeInsets.fromLTRB(18, 18, 12, 18),
       decoration: BoxDecoration(
         color: theme.brightness == Brightness.dark
-            ? const Color(0xFF111827)
-            : const Color(0xFFF2F5FA),
-        borderRadius: BorderRadius.circular(22),
+            ? AppPalette.darkSurface
+            : AppPalette.lightSurface,
+        borderRadius: BorderRadius.circular(AppTokens.radiusModal),
         border: Border.all(color: colors.outlineVariant),
       ),
       child: Column(
@@ -343,7 +345,7 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
                 const SizedBox(width: 7),
                 const Text(
                   '预览画布',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                 ),
                 const Spacer(),
                 if (_previewUrl.isNotEmpty)
@@ -351,13 +353,13 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2BA471).withValues(alpha: .12),
-                      borderRadius: BorderRadius.circular(20),
+                      color: AppPalette.success.withValues(alpha: .12),
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.circle, size: 7, color: Color(0xFF2BA471)),
+                        Icon(Icons.circle, size: 7, color: AppPalette.success),
                         SizedBox(width: 5),
                         Text('已嵌入', style: TextStyle(fontSize: 11)),
                       ],
@@ -463,9 +465,9 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
             const Text(
               '输入地址开始预览',
               style: TextStyle(
-                color: Color(0xFF334155),
+                color: AppPalette.lightTextMuted,
                 fontSize: 16,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: 7),
@@ -596,7 +598,7 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colors.primary.withValues(alpha: .08),
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,7 +608,7 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
             style: TextStyle(
               color: colors.primary,
               fontSize: 16,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w500,
               fontFamily: 'monospace',
             ),
           ),
@@ -626,7 +628,7 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
           style: TextStyle(
             color: colors.onSurfaceVariant,
             fontSize: 12,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w500,
           ),
         ),
         const SizedBox(height: 6),
@@ -646,7 +648,7 @@ class _WebPreviewDialogState extends State<WebPreviewDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('预览设置',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
           const SizedBox(height: 12),
           deviceField,
           const SizedBox(height: 12),

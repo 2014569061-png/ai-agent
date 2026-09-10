@@ -105,7 +105,10 @@ class GeminiProvider implements LlmProvider {
       );
       final stream = response.data?.stream;
       if (stream == null) {
-        yield const ProviderErrorEvent('Provider 返回了空响应');
+        yield const ProviderErrorEvent(
+          'Provider 返回了空响应',
+          failureKind: 'protocol',
+        );
         return;
       }
 
@@ -114,6 +117,7 @@ class GeminiProvider implements LlmProvider {
       var promptTokens = 0;
       var completionTokens = 0;
       var cachedTokens = 0;
+      var stopReason = StopReason.unknown;
 
       void updateUsage(Map<String, dynamic> usage) {
         final prompt = _asInt(usage['promptTokenCount']);
@@ -136,6 +140,12 @@ class GeminiProvider implements LlmProvider {
           final candidates = json['candidates'] as List<dynamic>? ?? const [];
           for (final candidate
               in candidates.whereType<Map<String, dynamic>>()) {
+            // Gemini 用大写枚举（STOP / MAX_TOKENS / SAFETY / …），
+            // MALFORMED_FUNCTION_CALL 等未识别值会落到 unknown，不执行工具。
+            final finish = candidate['finishReason'] as String?;
+            if (finish != null && finish.isNotEmpty) {
+              stopReason = StopReason.parse(finish);
+            }
             final content =
                 candidate['content'] as Map<String, dynamic>? ?? const {};
             final parts = content['parts'] as List<dynamic>? ?? const [];
@@ -152,10 +162,17 @@ class GeminiProvider implements LlmProvider {
               final functionCall = part['functionCall'];
               if (functionCall is Map<String, dynamic>) {
                 final args = functionCall['args'];
+                final parsedArguments = args == null
+                    ? const <String, dynamic>{}
+                    : args is Map<String, dynamic>
+                        ? args
+                        : <String, dynamic>{
+                            '_unparsed': jsonEncode(args),
+                          };
                 pendingCalls.add(ToolCall(
                   id: 'gemini-call-${pendingCalls.length}',
                   name: functionCall['name'] as String? ?? '',
-                  arguments: args is Map<String, dynamic> ? args : const {},
+                  arguments: parsedArguments,
                 ));
               }
             }
@@ -169,6 +186,16 @@ class GeminiProvider implements LlmProvider {
           if (usage is Map<String, dynamic>) {
             updateUsage(usage);
           }
+          // 收尾帧常只带 usageMetadata + finishReason，同样要取到结束原因。
+          final trailingCandidates =
+              trailing['candidates'] as List<dynamic>? ?? const [];
+          for (final candidate
+              in trailingCandidates.whereType<Map<String, dynamic>>()) {
+            final finish = candidate['finishReason'] as String?;
+            if (finish != null && finish.isNotEmpty) {
+              stopReason = StopReason.parse(finish);
+            }
+          }
         }
       }
 
@@ -179,15 +206,22 @@ class GeminiProvider implements LlmProvider {
           promptTokens: promptTokens,
           completionTokens: completionTokens,
           cachedTokens: cachedTokens);
-      yield const CompletedEvent();
+      yield CompletedEvent(stopReason: stopReason);
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;
       final message =
           error.response?.data?.toString() ?? error.message ?? '网络请求失败';
-      yield ProviderErrorEvent(message);
+      yield ProviderErrorEvent(
+        message,
+        statusCode: error.response?.statusCode,
+        failureKind: error.type.name,
+      );
     } catch (error) {
-      yield ProviderErrorEvent(error.toString());
+      yield ProviderErrorEvent(
+        error.toString(),
+        failureKind: error.runtimeType.toString(),
+      );
     }
   }
 

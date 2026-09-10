@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/orchestration_module.dart';
 import '../../domain/collaboration_models.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/section_card.dart';
 import 'collaboration_timeline.dart';
 
@@ -122,18 +123,18 @@ class _CollaborationPlanSheetState
                       children: [
                         Text('协作分析方案确认',
                             style: theme.textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w700)),
+                                ?.copyWith(fontWeight: FontWeight.w500)),
                         const SizedBox(height: 6),
 
                         // 1. 目标任务与安全说明卡
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppTheme.brandBright.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12),
+                            color: AppPalette.brand.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(AppTokens.radiusCard),
                             border: Border.all(
                               color:
-                                  AppTheme.brandBright.withValues(alpha: 0.2),
+                                  AppPalette.brand.withValues(alpha: 0.2),
                             ),
                           ),
                           child: Column(
@@ -142,14 +143,14 @@ class _CollaborationPlanSheetState
                               const Row(
                                 children: [
                                   Icon(Icons.shield_outlined,
-                                      size: 16, color: AppTheme.brandBright),
+                                      size: 16, color: AppPalette.brand),
                                   SizedBox(width: 6),
                                   Text(
                                     '只读安全协同',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.brandBright,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppPalette.brand,
                                     ),
                                   ),
                                 ],
@@ -207,7 +208,7 @@ class _CollaborationPlanSheetState
                                             agent.role.label,
                                             style: const TextStyle(
                                                 fontSize: 13,
-                                                fontWeight: FontWeight.w700),
+                                                fontWeight: FontWeight.w500),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
@@ -294,10 +295,10 @@ class _CollaborationPlanSheetState
                                   '$_budgetTokens Token',
                                   canDecrease: _budgetTokens > 2000,
                                   canIncrease: _budgetTokens < 12000,
-                                  onDecrease: () => setState(
-                                      () => _budgetTokens -= 1000),
-                                  onIncrease: () => setState(
-                                      () => _budgetTokens += 1000),
+                                  onDecrease: () =>
+                                      setState(() => _budgetTokens -= 1000),
+                                  onIncrease: () =>
+                                      setState(() => _budgetTokens += 1000),
                                 ),
                               ],
                             ),
@@ -318,7 +319,7 @@ class _CollaborationPlanSheetState
                                   style: FilledButton.styleFrom(
                                     minimumSize: const Size(0, 46),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                                     ),
                                   ),
                                   onPressed: _starting ? null : _start,
@@ -330,8 +331,8 @@ class _CollaborationPlanSheetState
                                               strokeWidth: 2),
                                         )
                                       : const Icon(Icons.play_arrow_rounded),
-                                  label: Text(
-                                      _starting ? '正在启动协同…' : '确认方案并开始分析'),
+                                  label:
+                                      Text(_starting ? '正在启动协同…' : '确认方案并开始分析'),
                                 ),
                               ),
                             ],
@@ -355,7 +356,8 @@ class _CollaborationPlanSheetState
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+        Text(title,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -373,7 +375,7 @@ class _CollaborationPlanSheetState
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
@@ -401,6 +403,6 @@ class _CollaborationPlanSheetState
   Widget _sectionTitle(String title) => Padding(
         padding: const EdgeInsets.only(top: 8, bottom: 6),
         child: Text(title,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
       );
 }

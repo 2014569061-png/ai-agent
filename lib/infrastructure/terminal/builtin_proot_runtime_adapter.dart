@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
@@ -14,7 +15,8 @@ import 'linux_runtime.dart';
 /// The native bridge owns the Android process lifecycle. This adapter owns the
 /// Flutter asset lifecycle, including integrity verification and atomic rootfs
 /// installation into application-private storage.
-class BuiltinProotRuntimeAdapter implements LinuxRuntimeAdapter {
+class BuiltinProotRuntimeAdapter
+    implements LinuxRuntimeAdapter, DetachedLinuxRuntimeAdapter {
   BuiltinProotRuntimeAdapter({
     this.maxOutputBytes = 128 * 1024,
     this.rootfsAssetPath = _defaultRootfsAssetPath,
@@ -153,8 +155,131 @@ class BuiltinProotRuntimeAdapter implements LinuxRuntimeAdapter {
   }
 
   @override
+  Future<DetachedCommandHandle?> startDetached(
+    LinuxCommandRequest request, {
+    required String workingDirectory,
+    required Duration timeout,
+    required String ownerToken,
+    required String logPath,
+  }) async {
+    if (!Platform.isAndroid) return null;
+    try {
+      final rootfsPath = await _ensureRootfs();
+      final runtimeLibraryPath =
+          p.join(Directory(rootfsPath).parent.path, 'native-libs');
+      final completionPath = '$logPath.exit.json';
+      final raw =
+          await _bridge.invokeMethod<Map<dynamic, dynamic>>('startDetached', {
+        'command': request.commandLine,
+        'workingDirectory': workingDirectory,
+        'rootfsPath': rootfsPath,
+        'runtimeLibraryPath': runtimeLibraryPath,
+        'timeoutMs': timeout.inMilliseconds,
+        'maxOutputBytes': maxOutputBytes,
+        'ownerToken': ownerToken,
+        'logPath': logPath,
+        'completionPath': completionPath,
+      });
+      final pid = (raw?['pid'] as num?)?.toInt() ?? 0;
+      if (pid <= 0) return null;
+      return DetachedCommandHandle(
+        pid: pid,
+        completion: _waitDetached(
+          pid: pid,
+          ownerToken: ownerToken,
+          logPath: logPath,
+          completionPath: completionPath,
+          timeout: timeout,
+        ),
+      );
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<bool> verifyDetached(int pid, String ownerToken) async {
+    if (!Platform.isAndroid || pid <= 0 || ownerToken.isEmpty) return false;
+    try {
+      return await _bridge.invokeMethod<bool>('verifyDetached', {
+            'pid': pid,
+            'ownerToken': ownerToken,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> stopDetached(int pid, String ownerToken) async {
+    if (!Platform.isAndroid || pid <= 0 || ownerToken.isEmpty) return false;
+    try {
+      return await _bridge.invokeMethod<bool>('stopDetached', {
+            'pid': pid,
+            'ownerToken': ownerToken,
+          }) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   void stop() {
     unawaited(_bridge.invokeMethod<void>('stop'));
+  }
+
+  Future<CommandResult> _waitDetached({
+    required int pid,
+    required String ownerToken,
+    required String logPath,
+    required String completionPath,
+    required Duration timeout,
+  }) async {
+    final completion = File(completionPath);
+    final deadline = DateTime.now().add(timeout + const Duration(seconds: 5));
+    while (DateTime.now().isBefore(deadline)) {
+      if (await completion.exists()) {
+        try {
+          final raw = jsonDecode(await completion.readAsString());
+          final output = await _readBoundedLog(logPath);
+          return CommandResult(
+            output: output,
+            exitCode:
+                (raw is Map ? (raw['exitCode'] as num?)?.toInt() : null) ?? 127,
+            timedOut: raw is Map && raw['timedOut'] == true,
+          );
+        } catch (_) {
+          // 文件可能正在原子替换，下一轮重读。
+        }
+      }
+      if (!await verifyDetached(pid, ownerToken)) {
+        return CommandResult(
+          output: await _readBoundedLog(logPath),
+          exitCode: 124,
+          timedOut: true,
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    return CommandResult(
+      output: await _readBoundedLog(logPath),
+      exitCode: 124,
+      timedOut: true,
+    );
+  }
+
+  Future<String> _readBoundedLog(String path) async {
+    try {
+      final value = await File(path).readAsString();
+      if (value.length <= maxOutputBytes) return value;
+      return '[输出已截断]\n${value.substring(value.length - maxOutputBytes)}';
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<String> _ensureRootfs() {

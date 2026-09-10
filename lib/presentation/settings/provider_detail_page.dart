@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/models.dart';
@@ -27,6 +28,9 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   late final TextEditingController _model;
   late final TextEditingController _apiKey;
   late final TextEditingController _contextTokens;
+  late final TextEditingController _inputPrice;
+  late final TextEditingController _outputPrice;
+  late final TextEditingController _cachedPrice;
   final _store = ProviderConfigStore();
   late ProviderType _type;
   ReasoningEffort _reasoning = ReasoningEffort.medium;
@@ -50,6 +54,12 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _apiKey = TextEditingController(text: config?.apiKey ?? '');
     _contextTokens =
         TextEditingController(text: config?.contextTokens.toString() ?? '');
+    _inputPrice = TextEditingController(
+        text: config?.inputPricePerMillionCents?.toString() ?? '');
+    _outputPrice = TextEditingController(
+        text: config?.outputPricePerMillionCents?.toString() ?? '');
+    _cachedPrice = TextEditingController(
+        text: config?.cachedPricePerMillionCents?.toString() ?? '');
     _type = config?.type ?? preset?.type ?? ProviderType.openaiCompatible;
     _reasoning = config?.reasoningEffort ?? ReasoningEffort.medium;
   }
@@ -61,7 +71,16 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _model.dispose();
     _apiKey.dispose();
     _contextTokens.dispose();
+    _inputPrice.dispose();
+    _outputPrice.dispose();
+    _cachedPrice.dispose();
     super.dispose();
+  }
+
+  int? _price(TextEditingController controller) {
+    final raw = controller.text.trim();
+    if (raw.isEmpty) return null;
+    return int.tryParse(raw)?.clamp(0, 100000000).toInt();
   }
 
   ProviderConfig get _config => ProviderConfig(
@@ -77,6 +96,9 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 ProviderConfig.defaultContextTokens)
             .clamp(4000, 2000000)
             .toInt(),
+        inputPricePerMillionCents: _price(_inputPrice),
+        outputPricePerMillionCents: _price(_outputPrice),
+        cachedPricePerMillionCents: _price(_cachedPrice),
       );
 
   Future<void> _save() async {
@@ -134,14 +156,25 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     final origBaseUrl = widget.config?.baseUrl ?? widget.preset?.baseUrl ?? '';
     final origModel = widget.config?.model ?? widget.preset?.defaultModel ?? '';
     final origApiKey = widget.config?.apiKey ?? '';
-    final origType = widget.config?.type ?? widget.preset?.type ?? ProviderType.openaiCompatible;
-    final origReasoning = widget.config?.reasoningEffort ?? ReasoningEffort.medium;
+    final origType = widget.config?.type ??
+        widget.preset?.type ??
+        ProviderType.openaiCompatible;
+    final origReasoning =
+        widget.config?.reasoningEffort ?? ReasoningEffort.medium;
     return _name.text != origName ||
         _baseUrl.text != origBaseUrl ||
         _model.text != origModel ||
         _apiKey.text != origApiKey ||
         _type != origType ||
-        _reasoning != origReasoning;
+        _reasoning != origReasoning ||
+        _contextTokens.text !=
+            (widget.config?.contextTokens.toString() ?? '') ||
+        _inputPrice.text !=
+            (widget.config?.inputPricePerMillionCents?.toString() ?? '') ||
+        _outputPrice.text !=
+            (widget.config?.outputPricePerMillionCents?.toString() ?? '') ||
+        _cachedPrice.text !=
+            (widget.config?.cachedPricePerMillionCents?.toString() ?? '');
   }
 
   Future<bool> _showDiscardConfirm() async {
@@ -228,8 +261,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                       child: Text('Gemini'),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _type = value ?? _type),
+                  onChanged: (value) => setState(() => _type = value ?? _type),
                 ),
                 const SizedBox(height: 14),
                 TextField(
@@ -246,8 +278,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                       icon: Icon(_obscure
                           ? Icons.visibility_outlined
                           : Icons.visibility_off_outlined),
-                      onPressed: () =>
-                          setState(() => _obscure = !_obscure),
+                      onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
                 ),
@@ -258,7 +289,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
               children: [
                 SettingsTile(
                   icon: Icons.view_list_rounded,
-                  iconColor: const Color(0xFF007AFF),
+                  iconColor: settingsMutedColor(context),
                   title: _model.text.isEmpty ? '选择模型' : _model.text,
                   subtitle: '查看预设模型、远端模型或添加自定义模型',
                   onTap: _chooseModel,
@@ -274,8 +305,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                         ? Icons.check_circle_rounded
                         : Icons.info_rounded,
                     iconColor: _status!.startsWith('连接测试成功')
-                        ? const Color(0xFF34C759)
-                        : const Color(0xFFFF3B30),
+                        ? AppPalette.success
+                        : AppPalette.danger,
                     title: _status!,
                     showChevron: false,
                   ),
@@ -287,7 +318,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
               children: [
                 SettingsTile(
                   icon: Icons.tune_rounded,
-                  iconColor: const Color(0xFF5856D6),
+                  iconColor: settingsMutedColor(context),
                   title: '高级参数',
                   subtitle: _advanced ? '点击收起' : '调整思考程度与上下文窗口',
                   showChevron: false,
@@ -339,6 +370,49 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                             labelText: '上下文窗口上限（Token）',
                           ),
                         ),
+                        const SizedBox(height: 18),
+                        Text(
+                          '费用价目（分 / 百万 Token）',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: settingsMutedColor(context),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '留空使用内置价目；缓存价格用于估算 prompt cache 节省。',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: settingsMutedColor(context),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _inputPrice,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: '输入 Token 价格',
+                            suffixText: '分 / 1M',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _outputPrice,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: '输出 Token 价格',
+                            suffixText: '分 / 1M',
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _cachedPrice,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: '缓存 Token 价格',
+                            suffixText: '分 / 1M',
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -364,7 +438,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2))
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
                             : const Icon(Icons.wifi_tethering),
                         label: const Text('测试连接'),
                       ),
@@ -376,7 +451,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                       height: 44,
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF007AFF),
+                          backgroundColor: AppPalette.brand,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),

@@ -67,7 +67,7 @@ Future<T?> showImmersiveActionSheet<T>({
                         Text(
                           title,
                           style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w500,
                             fontSize: 17,
                           ),
                         ),
@@ -142,7 +142,7 @@ Future<T?> showImmersiveActionSheet<T>({
                       item.title,
                       style: TextStyle(
                         fontWeight:
-                            item.selected ? FontWeight.w600 : FontWeight.w500,
+                            item.selected ? FontWeight.w500 : FontWeight.w400,
                         fontSize: 14,
                         color: item.enabled
                             ? itemColor

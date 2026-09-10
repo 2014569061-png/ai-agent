@@ -24,6 +24,18 @@ abstract interface class CollaborationAgentRunner {
 class HeadlessCollaborationAgentRunner implements CollaborationAgentRunner {
   const HeadlessCollaborationAgentRunner();
 
+  static const _readOnlyTools = <String>{
+    'calculator',
+    'get_time',
+    'json_query',
+    'read_file',
+    'list_directory',
+    'search_files',
+    'memory_get',
+    'skills_read',
+    'skills_read_resource',
+  };
+
   @override
   Future<CollaborationAgentOutput> run({
     required CollaborationAgentRole role,
@@ -58,8 +70,13 @@ $context
       prompt: prompt,
       systemPrompt: systemPrompt,
       workspacePath: workspacePath,
-      allowedToolNames: role.allowedTools,
-      maxSteps: 1,
+      // 角色清单只是候选声明，最终再与只读投影求交，防止未来新增角色
+      // 时误把 write/edit/terminal 等有副作用工具带入交叉验证。
+      allowedToolNames:
+          role.allowedTools.where(_readOnlyTools.contains).toSet().toList(),
+      // 只读协作至少需要一轮“调用工具 -> 回灌结果 -> 输出结论”；
+      // maxSteps=1 会把工具调用结果永远截断在模型之外。
+      maxSteps: 3,
       maxTokens: maxTokens,
       cancellationToken: cancellationToken,
     );

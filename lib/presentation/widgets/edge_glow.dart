@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_theme.dart';
-
+/// 降级为无效果渲染，保留类名与参数以保持向后兼容
 class EdgeGlow extends StatelessWidget {
   const EdgeGlow({super.key, required this.child, this.active = true});
 
@@ -10,15 +9,6 @@ class EdgeGlow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppTheme.radiusCapsule),
-        boxShadow: active ? AppTheme.floatingShadow(isDark) : const [],
-      ),
-      child: child,
-    );
+    return child;
   }
 }

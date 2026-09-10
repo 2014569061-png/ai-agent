@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../domain/models.dart';
+import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_surface.dart';
@@ -13,8 +14,6 @@ class InputToolGridSheet extends StatelessWidget {
   final VoidCallback onMcpMenu;
   final VoidCallback onTerminalPreview;
   final VoidCallback onEnvSetup;
-  final VoidCallback? onVoiceToggle;
-  final bool isListening;
   final VoidCallback? onOpenDashboard;
   final bool planModeEnabled;
   final VoidCallback onPlanModeToggle;
@@ -27,8 +26,6 @@ class InputToolGridSheet extends StatelessWidget {
     required this.onMcpMenu,
     required this.onTerminalPreview,
     required this.onEnvSetup,
-    this.onVoiceToggle,
-    this.isListening = false,
     this.onOpenDashboard,
     required this.planModeEnabled,
     required this.onPlanModeToggle,
@@ -42,8 +39,6 @@ class InputToolGridSheet extends StatelessWidget {
     required VoidCallback onMcpMenu,
     required VoidCallback onTerminalPreview,
     required VoidCallback onEnvSetup,
-    VoidCallback? onVoiceToggle,
-    bool isListening = false,
     VoidCallback? onOpenDashboard,
     required bool planModeEnabled,
     required VoidCallback onPlanModeToggle,
@@ -60,8 +55,6 @@ class InputToolGridSheet extends StatelessWidget {
         onMcpMenu: onMcpMenu,
         onTerminalPreview: onTerminalPreview,
         onEnvSetup: onEnvSetup,
-        onVoiceToggle: onVoiceToggle,
-        isListening: isListening,
         onOpenDashboard: onOpenDashboard,
         planModeEnabled: planModeEnabled,
         onPlanModeToggle: onPlanModeToggle,
@@ -88,28 +81,28 @@ class InputToolGridSheet extends StatelessWidget {
         icon: Icons.keyboard_command_key_rounded,
         title: '提示词库',
         subtitle: '预设任务指令',
-        color: AppTheme.brandBright,
+        color: AppPalette.brand,
         onTap: onCommandMenu,
       ),
       _ToolDefinition(
         icon: Icons.widgets_outlined,
         title: 'MCP 服务',
         subtitle: '扩展工具生态',
-        color: const Color(0xFF6366F1),
+        color: semantic.text,
         onTap: onMcpMenu,
       ),
       _ToolDefinition(
         icon: Icons.terminal_rounded,
         title: '终端预览',
         subtitle: '命令行与脚本',
-        color: const Color(0xFF0EA5E9),
+        color: semantic.text,
         onTap: onTerminalPreview,
       ),
       _ToolDefinition(
         icon: Icons.build_circle_outlined,
         title: '开发环境',
         subtitle: '运行时与依赖',
-        color: const Color(0xFF10B981),
+        color: semantic.text,
         onTap: onEnvSetup,
       ),
       if (onOpenDashboard != null)
@@ -117,7 +110,7 @@ class InputToolGridSheet extends StatelessWidget {
           icon: Icons.dashboard_outlined,
           title: '仪表盘',
           subtitle: '工作负载总览',
-          color: const Color(0xFF8B5CF6),
+          color: semantic.text,
           onTap: onOpenDashboard!,
         ),
       _ToolDefinition(
@@ -126,7 +119,7 @@ class InputToolGridSheet extends StatelessWidget {
             : Icons.pan_tool_alt_rounded,
         title: '计划模式',
         subtitle: planModeEnabled ? '已开启 · 需确认' : '已关闭 · 自动执行',
-        color: planModeEnabled ? AppTheme.warning : semantic.textMuted,
+        color: planModeEnabled ? AppPalette.brand : semantic.textMuted,
         isActive: planModeEnabled,
         onTap: onPlanModeToggle,
       ),
@@ -136,25 +129,14 @@ class InputToolGridSheet extends StatelessWidget {
             : Icons.verified_user_outlined,
         title: '审批策略',
         subtitle: _approvalLabel(approvalMode),
-        color: approvalMode == ApprovalMode.fullAccess
-            ? AppTheme.warning
-            : const Color(0xFF3B82F6),
+        color: semantic.text,
         onTap: onApprovalModeTap,
       ),
-      if (onVoiceToggle != null)
-        _ToolDefinition(
-          icon: isListening ? Icons.mic_rounded : Icons.mic_none_rounded,
-          title: isListening ? '停止录音' : '语音输入',
-          subtitle: isListening ? '正在收音…' : '语音转文字',
-          color: isListening ? AppTheme.danger : const Color(0xFFEC4899),
-          isActive: isListening,
-          onTap: onVoiceToggle!,
-        ),
     ];
 
     return ImmersiveSurface(
       level: ImmersiveMaterialLevel.ultraThick,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -180,13 +162,14 @@ class InputToolGridSheet extends StatelessWidget {
               // 标题栏
               Row(
                 children: [
-                  const Icon(Icons.apps_rounded, size: 18, color: AppTheme.brandBright),
+                  const Icon(Icons.apps_rounded,
+                      size: 18, color: AppPalette.brand),
                   const SizedBox(width: 8),
                   Text(
                     '工作台工具箱',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontSize: 15,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const Spacer(),
@@ -276,23 +259,31 @@ class _ToolGridCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: tool.color.withValues(alpha: isDark ? 0.16 : 0.12),
-                  borderRadius: BorderRadius.circular(14),
+                  color: tool.isActive
+                      ? (isDark
+                          ? AppPalette.brandSoftDark
+                          : AppPalette.brandSoftLight)
+                      : (isDark
+                          ? AppPalette.darkSurface
+                          : AppPalette.lightSurface),
+                  borderRadius:
+                      BorderRadius.circular(AppTokens.radiusControl),
                   border: Border.all(
-                    color: tool.color.withValues(alpha: tool.isActive ? 0.5 : 0.25),
-                    width: tool.isActive ? 1.5 : 1.0,
+                    color: tool.isActive
+                        ? AppPalette.brand
+                        : (isDark
+                            ? AppPalette.darkHairline
+                            : AppPalette.lightHairline),
+                    width: 1.0,
                   ),
-                  boxShadow: tool.isActive
-                      ? [
-                          BoxShadow(
-                            color: tool.color.withValues(alpha: 0.3),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : null,
                 ),
-                child: Icon(tool.icon, size: 24, color: tool.color),
+                child: Icon(tool.icon,
+                    size: 22,
+                    color: tool.isActive
+                        ? AppPalette.brand
+                        : (isDark
+                            ? AppPalette.darkText
+                            : AppPalette.lightText)),
               ),
               const SizedBox(height: 6),
               Text(
@@ -300,8 +291,8 @@ class _ToolGridCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 2),
@@ -310,9 +301,10 @@ class _ToolGridCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 9.5,
-                  color:
-                      theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75),
+                  fontSize: 11,
+                  color: isDark
+                      ? AppPalette.darkTextMuted
+                      : AppPalette.lightTextMuted,
                 ),
               ),
             ],

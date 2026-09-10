@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../application/task_service.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
@@ -79,8 +81,8 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
       // 状态筛选
       final matchesStatus = switch (_filter) {
         'running' => task.status == 'running',
-        'waiting_approval' =>
-          task.status == 'waiting_approval' || task.status == 'awaiting_approval',
+        'waiting_approval' => task.status == 'waiting_approval' ||
+            task.status == 'awaiting_approval',
         'completed' => task.status == 'completed',
         'failed' => task.status == 'failed' || task.status == 'cancelled',
         _ => true,
@@ -91,8 +93,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
       if (query.isNotEmpty) {
         final inTitle = task.title.toLowerCase().contains(query);
         final inPrompt = task.prompt.toLowerCase().contains(query);
-        final inWs =
-            task.workspacePath?.toLowerCase().contains(query) ?? false;
+        final inWs = task.workspacePath?.toLowerCase().contains(query) ?? false;
         return inTitle || inPrompt || inWs;
       }
       return true;
@@ -123,17 +124,18 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final tasks = _filtered;
 
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: '开发任务中心',
         actions: [
           IconButton(
             tooltip: _showSearch ? '收起搜索' : '搜索任务',
-            icon: Icon(_showSearch
-                ? Icons.search_off_rounded
-                : Icons.search_rounded),
+            icon: Icon(
+                _showSearch ? Icons.search_off_rounded : Icons.search_rounded),
             onPressed: () {
               setState(() {
                 _showSearch = !_showSearch;
@@ -242,7 +244,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                       width: 8,
                       height: 8,
                       decoration: const BoxDecoration(
-                        color: Colors.orange,
+                        color: AppPalette.warning,
                         shape: BoxShape.circle,
                       ),
                     )
@@ -259,12 +261,12 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
 
   Widget _taskCard(DevelopmentTaskInfo task) {
     final theme = Theme.of(context);
-    final isWaitingApproval = task.status == 'waiting_approval' ||
-        task.status == 'awaiting_approval';
+    final isWaitingApproval =
+        task.status == 'waiting_approval' || task.status == 'awaiting_approval';
 
     return SectionCard(
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
         onTap: () => _openTaskDetails(task),
         child: Padding(
           padding: const EdgeInsets.all(14),
@@ -281,7 +283,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         fontSize: 14.5,
                       ),
                     ),
@@ -301,13 +303,13 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer
                           .withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                     ),
                     child: Text(
                       task.type,
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: theme.colorScheme.onPrimaryContainer,
                       ),
                     ),
@@ -336,24 +338,24 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(8),
+                    color: AppPalette.warning.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                     border: Border.all(
-                      color: Colors.orange.withValues(alpha: 0.3),
+                      color: AppPalette.warning.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
                     children: [
                       const Icon(Icons.warning_amber_rounded,
-                          size: 16, color: Colors.orange),
+                          size: 16, color: AppPalette.warning),
                       const SizedBox(width: 6),
                       const Expanded(
                         child: Text(
                           '此任务正在等待您的审批授权',
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange,
+                            fontWeight: FontWeight.w500,
+                            color: AppPalette.warning,
                           ),
                         ),
                       ),
@@ -364,8 +366,8 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                           visualDensity: VisualDensity.compact,
                         ),
                         onPressed: () => _openTaskDetails(task),
-                        child: const Text('立即处理',
-                            style: TextStyle(fontSize: 11)),
+                        child:
+                            const Text('立即处理', style: TextStyle(fontSize: 11)),
                       ),
                     ],
                   ),

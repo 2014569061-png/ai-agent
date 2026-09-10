@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
+import '../../domain/tool_codes.dart';
 import 'skill_parser.dart';
 
 /// 解析后的 GitHub Skill 来源引用。
@@ -57,6 +58,21 @@ class SkillPackPreview {
   final String sha256Hex;
 
   List<String> get fileList => fileContents.keys.toList()..sort();
+}
+
+/// 安装阶段发生写盘/替换不确定时的显式错误。
+///
+/// 调用方必须把它作为 NEXT_TURN_REQUIRED 回灌，当前回合不得继续读取这棵
+/// Skill 目录；目录会留下冻结标记，直到下一次明确的安装/更新动作处理它。
+class SkillInstallException implements Exception {
+  const SkillInstallException(this.message,
+      {this.code = ToolCodes.nextTurnRequired});
+
+  final String message;
+  final String code;
+
+  @override
+  String toString() => message;
 }
 
 /// 下载 / 校验 / 安装 Skill。
@@ -181,44 +197,109 @@ class SkillInstaller {
     final dir = await getApplicationDocumentsDirectory();
     final installRoot = p.join(dir.path, 'skills', preview.metadata.name);
     final rootDir = Directory(installRoot);
-    if (rootDir.existsSync()) {
-      rootDir.deleteSync(recursive: true);
-    }
-    await rootDir.create(recursive: true);
+    final parent = Directory(p.dirname(installRoot));
+    await parent.create(recursive: true);
+    final stagingRoot = p.join(parent.path,
+        '.${preview.metadata.name}.staging-${DateTime.now().microsecondsSinceEpoch}');
+    final stagingDir = Directory(stagingRoot);
+    Directory? backupDir;
+    var committed = false;
     final now = DateTime.now();
     final fileList = <String>[];
-    for (final entry in preview.fileContents.entries) {
-      final target = p.join(installRoot, entry.key);
-      final normalized = p.normalize(target);
-      if (!normalized.startsWith(p.normalize(installRoot) + p.separator) &&
-          normalized != p.normalize(installRoot)) {
-        throw SkillValidationException('非法路径：${entry.key}');
+    try {
+      await stagingDir.create(recursive: true);
+      for (final entry in preview.fileContents.entries) {
+        final target = p.join(stagingRoot, entry.key);
+        final normalized = p.normalize(target);
+        if (!normalized.startsWith(p.normalize(stagingRoot) + p.separator) &&
+            normalized != p.normalize(stagingRoot)) {
+          throw SkillValidationException('非法路径：${entry.key}');
+        }
+        final file = File(normalized);
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(entry.value, flush: true);
+        fileList.add(entry.key);
       }
-      final file = File(normalized);
-      await file.parent.create(recursive: true);
-      await file.writeAsBytes(entry.value, flush: true);
-      fileList.add(entry.key);
+
+      // 同一父目录内 rename 是原子替换边界：模型不会看到“半棵新 Skill”。
+      if (rootDir.existsSync()) {
+        backupDir =
+            Directory('$installRoot.previous-${now.microsecondsSinceEpoch}');
+        await rootDir.rename(backupDir.path);
+      }
+      await stagingDir.rename(installRoot);
+      committed = true;
+
+      final existing = await db.findSkillPackByName(preview.metadata.name);
+      final pack = SkillPack(
+        id: existing?.id ?? 'skill-${now.microsecondsSinceEpoch}',
+        name: preview.metadata.name,
+        description: preview.metadata.description,
+        author: preview.metadata.author,
+        version: preview.metadata.version,
+        source: 'https://${preview.source.label}',
+        repo: preview.source.fullRepo,
+        ref: preview.source.ref,
+        subPath: preview.source.subPath,
+        installRoot: installRoot,
+        fileListJson: jsonEncode(fileList),
+        enabled: true,
+        installedAt: existing?.installedAt ?? now,
+        updatedAt: now,
+        sha256: preview.sha256Hex,
+      );
+      try {
+        await db.saveSkillPack(pack);
+      } catch (error) {
+        throw SkillInstallException('Skill 文件已替换但安装记录写入失败：$error');
+      }
+      if (backupDir?.existsSync() == true) {
+        await backupDir!.delete(recursive: true);
+      }
+      return pack;
+    } catch (error) {
+      // 解析/校验错误不会触及旧目录，不需要冻结；写盘、rename 或 DB 提交
+      // 进入不确定状态后必须冻结整棵目录，避免本回合继续读取混合版本。
+      if (error is SkillValidationException) {
+        rethrow;
+      }
+      if (backupDir?.existsSync() == true) {
+        try {
+          final current = Directory(installRoot);
+          if (current.existsSync()) await current.delete(recursive: true);
+          await backupDir!.rename(installRoot);
+        } catch (_) {
+          // 回滚失败时仍保留冻结标记，宁可停用也不让模型猜测状态。
+        }
+      }
+      await _freezeDirectory(rootDir, '$error');
+      if (error is SkillInstallException) rethrow;
+      throw SkillInstallException('Skill 安装状态无法确认：$error');
+    } finally {
+      if (stagingDir.existsSync()) {
+        try {
+          await stagingDir.delete(recursive: true);
+        } catch (_) {}
+      }
+      // 成功提交后旧目录已不再需要；失败路径若回滚成功则 backup 已被 rename。
+      if (backupDir?.existsSync() == true && committed) {
+        try {
+          await backupDir!.delete(recursive: true);
+        } catch (_) {}
+      }
     }
-    final existing = await db.findSkillPackByName(preview.metadata.name);
-    final pack = SkillPack(
-      id: existing?.id ?? 'skill-${now.microsecondsSinceEpoch}',
-      name: preview.metadata.name,
-      description: preview.metadata.description,
-      author: preview.metadata.author,
-      version: preview.metadata.version,
-      source: 'https://${preview.source.label}',
-      repo: preview.source.fullRepo,
-      ref: preview.source.ref,
-      subPath: preview.source.subPath,
-      installRoot: installRoot,
-      fileListJson: jsonEncode(fileList),
-      enabled: true,
-      installedAt: existing?.installedAt ?? now,
-      updatedAt: now,
-      sha256: preview.sha256Hex,
-    );
-    await db.saveSkillPack(pack);
-    return pack;
+  }
+
+  Future<void> _freezeDirectory(Directory root, String reason) async {
+    try {
+      await root.create(recursive: true);
+      await File(p.join(root.path, '.nexus-frozen')).writeAsString(
+        'code=${ToolCodes.nextTurnRequired}\n$reason\n',
+        flush: true,
+      );
+    } catch (_) {
+      // 冻结标记本身失败时无法进一步保证状态，错误仍由调用方回灌。
+    }
   }
 
   Future<GithubSkillRef> _resolveRef(GithubSkillRef source) async {

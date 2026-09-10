@@ -77,20 +77,11 @@ abstract final class AppStrings {
   static const toolListEntry = '工具列表';
   static const enableWebBrowsingTool = '启用网页浏览工具';
   static const enableWebBrowsingToolHint = '允许 Agent 搜索和读取网页内容';
-  static const enableDeviceDirectTool = '启用设备直达工具';
-  static const enableDeviceDirectToolHint = '允许访问受控的设备能力';
-  static const allowSensitiveDeviceRead = '允许读取敏感设备信息';
-  static const allowSensitiveDeviceAction = '允许敏感设备操作';
   static const enableTerminalFileTool = '启用终端/文件工具';
-  static const sensitiveToolWarning = '该权限可能暴露设备信息或改变系统状态。\n具体操作仍需按照当前审批策略确认。';
   static const linuxEnvironmentEntry = 'Linux 工具环境';
   static const linuxEnvironmentSubtitle = 'Termux · proot · 主机终端';
   static const workspaceFilesEntry = '工作区与文件';
   static const workspaceFilesSubtitle = '导入、导出与目录访问';
-  static const systemAssistantSection = '系统助手接管';
-  static const systemAssistantEntry = 'Eta 系统助手';
-  static const systemAssistantSubtitle = '选择 Eta 作为默认数字助理';
-  static const systemAssistantNotReady = '尚未完成系统级接管 (Beta)';
   static const generalSection = '通用';
   static const appearanceAndTheme = '外观与主题';
   static const language = '语言';
@@ -98,7 +89,6 @@ abstract final class AppStrings {
   static const dataBackup = '数据备份';
   static const permissionsSection = '权限';
   static const floatingWindowPermission = '悬浮窗权限';
-  static const accessibilityTool = '无障碍增强工具';
   static const batteryExemption = '电池优化豁免';
   static const permGranted = '已授权';
   static const permDenied = '未授权';
@@ -198,10 +188,7 @@ abstract final class AppStrings {
   static const memoryEnabled = '启用记忆注入';
   static const memoryEnabledHint = '关闭后不再把记忆注入到对话';
 
-  // --- ASR / 拍照 / 分享 / 锁屏 / 更新 / 引导 ---
-  static const voiceInput = '语音输入';
-  static const voiceListening = '正在聆听…松开结束';
-  static const voiceError = '语音识别不可用';
+  // --- 拍照 / 分享 / 锁屏 / 更新 / 引导 ---
   static const takePhoto = '拍照';
   static const fromGallery = '相册';
   static const appLock = '应用锁（生物识别）';
@@ -245,6 +232,8 @@ abstract final class AppStrings {
   static const dashboardSubtitle = 'Agent 工作负载与运行总览';
   static const todayConversations = '今日会话';
   static const todayTokens = '今日 Token';
+  static const cacheHitRate = '缓存命中率';
+  static const cacheHitRateHint = '今日命中缓存的 Token 占比';
   static const runningTasks = '进行中任务';
   static const taskSuccessRate = '任务成功率';
   static const tokenTrend7Days = 'Token 用量（近 7 天）';
@@ -262,6 +251,15 @@ abstract final class AppStrings {
   static const viewTaskDetails = '查看任务详情';
   static const cacheHit = '缓存命中';
   static const cached = '缓存';
+  static const promptTokens = '输入';
+  static const outputTokens = '输出';
+  static const cachedTokens = '缓存';
+  static const callsLabel = '调用';
+  static const costLabel = '预计';
+  static const trendTotal = '7日合计';
+  static const todayLabel = '今日';
+  static const pastLabel = '历史';
+  static const trendHint = '柱顶为当天输入与输出 Token 总量';
   static const refreshDashboard = '刷新仪表盘';
   static String dashboardLoadFailed(String error) => '加载仪表盘失败：$error';
   static const retry = '重试';

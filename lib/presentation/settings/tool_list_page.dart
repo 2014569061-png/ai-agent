@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/models.dart';
@@ -19,7 +20,7 @@ class _ToolEntry {
   final String displayName;
   final String description;
   final ToolRisk risk;
-  final bool isSensitive;
+  final bool isSensitive = false;
   final String approvalPolicy;
   final String category;
 
@@ -28,7 +29,6 @@ class _ToolEntry {
     required this.displayName,
     required this.description,
     required this.risk,
-    this.isSensitive = false,
     required this.approvalPolicy,
     required this.category,
   });
@@ -167,42 +167,6 @@ class _ToolListPageState extends State<ToolListPage> {
       approvalPolicy: '需要配置对应模型或服务端点。',
       category: '多模态',
     ),
-    _ToolEntry(
-      name: 'device_camera',
-      displayName: '设备拍照与相册选择 (Camera & Photos)',
-      description: '调用系统相机拍照或打开相册选择图片作为上下文附件。',
-      risk: ToolRisk.dangerous,
-      isSensitive: true,
-      approvalPolicy: '敏感设备权限，需系统权限授权并在调用时二次确认。',
-      category: '设备能力',
-    ),
-    _ToolEntry(
-      name: 'device_record',
-      displayName: '音频录制与实时识别 (Audio Record & ASR)',
-      description: '调用麦克风录制音频并调用语音引擎进行实时语音听写识别。',
-      risk: ToolRisk.dangerous,
-      isSensitive: true,
-      approvalPolicy: '敏感麦克风权限，需系统权限授权并提示录音状态。',
-      category: '设备能力',
-    ),
-    _ToolEntry(
-      name: 'device_info',
-      displayName: '读取敏感设备信息 (Device Info)',
-      description: '获取设备硬件标识、系统版本、网络状态与电池详情。',
-      risk: ToolRisk.dangerous,
-      isSensitive: true,
-      approvalPolicy: '敏感权限控制，需总开关开启并在调用时二次确认。',
-      category: '设备能力',
-    ),
-    _ToolEntry(
-      name: 'device_action',
-      displayName: '敏感设备操作 (Device Action)',
-      description: '调整设备设置、触发震动、屏幕常亮或前后台状态控制。',
-      risk: ToolRisk.dangerous,
-      isSensitive: true,
-      approvalPolicy: '敏感高危设备控制，不绕过任何单次审批。',
-      category: '设备能力',
-    ),
   ];
 
   @override
@@ -233,15 +197,7 @@ class _ToolListPageState extends State<ToolListPage> {
   }
 
   IconData _toolIcon(_ToolEntry tool) {
-    if (tool.isSensitive) {
-      return switch (tool.name) {
-        'device_camera' => Icons.camera_alt_rounded,
-        'device_record' => Icons.mic_rounded,
-        'device_info' => Icons.perm_device_information_rounded,
-        'device_action' => Icons.phonelink_setup_rounded,
-        _ => Icons.security_rounded,
-      };
-    }
+    if (tool.isSensitive) return Icons.security_rounded;
     return switch (tool.name) {
       'web_search' => Icons.search_rounded,
       'http_request' => Icons.http_rounded,
@@ -264,17 +220,19 @@ class _ToolListPageState extends State<ToolListPage> {
   }
 
   Color _toolColor(_ToolEntry tool) {
-    if (tool.isSensitive) return const Color(0xFFFF9500);
-    if (tool.risk == ToolRisk.dangerous) return const Color(0xFFFF3B30);
-    if (tool.risk == ToolRisk.requiresConfirmation) return const Color(0xFF007AFF);
+    if (tool.isSensitive) return AppPalette.warning;
+    if (tool.risk == ToolRisk.dangerous) return AppPalette.danger;
+    if (tool.risk == ToolRisk.requiresConfirmation) {
+      return AppPalette.brand;
+    }
     return switch (tool.category) {
-      '网络与知识' => const Color(0xFF007AFF),
-      '通用计算' => const Color(0xFF34C759),
-      '工作区与文件' => const Color(0xFF5856D6),
-      '终端与执行' => const Color(0xFFFF3B30),
-      'Agent 与上下文' => const Color(0xFFAF52DE),
-      '多模态' => const Color(0xFFFF2D55),
-      _ => const Color(0xFF8E8E93),
+      '网络与知识' => AppPalette.brand,
+      '通用计算' => AppPalette.success,
+      '工作区与文件' => AppPalette.lightTextMuted,
+      '终端与执行' => AppPalette.danger,
+      'Agent 与上下文' => AppPalette.lightTextMuted,
+      '多模态' => AppPalette.danger,
+      _ => AppPalette.lightTextFaint,
     };
   }
 
@@ -287,7 +245,7 @@ class _ToolListPageState extends State<ToolListPage> {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+            color: isDark ? AppPalette.lightText : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
@@ -301,7 +259,9 @@ class _ToolListPageState extends State<ToolListPage> {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF38383A) : const Color(0xFFD1D1D6),
+                    color: isDark
+                        ? AppPalette.darkHairline
+                        : AppPalette.lightHairline,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -324,7 +284,7 @@ class _ToolListPageState extends State<ToolListPage> {
                       tool.displayName,
                       style: const TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -336,7 +296,9 @@ class _ToolListPageState extends State<ToolListPage> {
                 tool.description,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark ? const Color(0xFFEBEBF5) : const Color(0xFF3C3C43),
+                  color: isDark
+                      ? AppPalette.lightHairline
+                      : AppPalette.darkHairline,
                   height: 1.4,
                 ),
               ),
@@ -344,7 +306,9 @@ class _ToolListPageState extends State<ToolListPage> {
               Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF2C2C2E) : const Color(0xFFF2F2F7),
+                  color: isDark
+                      ? AppPalette.darkHairline
+                      : AppPalette.lightSurface,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Column(
@@ -354,7 +318,7 @@ class _ToolListPageState extends State<ToolListPage> {
                       '权限与审批策略',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: isDark ? Colors.white : Colors.black,
                       ),
                     ),
@@ -363,7 +327,9 @@ class _ToolListPageState extends State<ToolListPage> {
                       tool.approvalPolicy,
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70),
+                        color: isDark
+                            ? AppPalette.lightTextFaint
+                            : AppPalette.lightTextMuted,
                         height: 1.4,
                       ),
                     ),
@@ -376,8 +342,8 @@ class _ToolListPageState extends State<ToolListPage> {
                               : Icons.verified_user_outlined,
                           size: 15,
                           color: tool.isSensitive
-                              ? const Color(0xFFFF9500)
-                              : const Color(0xFF007AFF),
+                              ? AppPalette.warning
+                              : AppPalette.brand,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -388,8 +354,10 @@ class _ToolListPageState extends State<ToolListPage> {
                             style: TextStyle(
                               fontSize: 11,
                               color: tool.isSensitive
-                                  ? const Color(0xFFFF9500)
-                                  : (isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70)),
+                                  ? AppPalette.warning
+                                  : (isDark
+                                      ? AppPalette.lightTextFaint
+                                      : AppPalette.lightTextMuted),
                             ),
                           ),
                         ),
@@ -404,7 +372,7 @@ class _ToolListPageState extends State<ToolListPage> {
                 height: 44,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF007AFF),
+                    backgroundColor: AppPalette.brand,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -412,7 +380,7 @@ class _ToolListPageState extends State<ToolListPage> {
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text(
                     '我知道了',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
@@ -435,22 +403,22 @@ class _ToolListPageState extends State<ToolListPage> {
             style: TextStyle(
               color: color,
               fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
         );
 
     final riskBadge = switch (tool.risk) {
-      ToolRisk.safe => badge('安全', const Color(0xFF34C759)),
-      ToolRisk.requiresConfirmation => badge('需确认', const Color(0xFF007AFF)),
-      ToolRisk.dangerous => badge('高危', const Color(0xFFFF3B30)),
+      ToolRisk.safe => badge('安全', AppPalette.success),
+      ToolRisk.requiresConfirmation => badge('需确认', AppPalette.brand),
+      ToolRisk.dangerous => badge('高危', AppPalette.danger),
     };
 
     if (tool.isSensitive) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          badge('🔒 敏感', const Color(0xFFFF9500)),
+          badge('🔒 敏感', AppPalette.warning),
           const SizedBox(width: 4),
           riskBadge,
         ],
@@ -479,7 +447,8 @@ class _ToolListPageState extends State<ToolListPage> {
             child: Container(
               height: 36,
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFE5E5EA),
+                color:
+                    isDark ? AppPalette.lightText : AppPalette.lightHairline,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: TextField(
@@ -534,7 +503,7 @@ class _ToolListPageState extends State<ToolListPage> {
                 const SizedBox(width: 8),
                 _buildFilterChip('高危', _RiskFilter.dangerous),
                 const SizedBox(width: 8),
-                _buildFilterChip('敏感设备能力', _RiskFilter.sensitive),
+                _buildFilterChip('敏感工具', _RiskFilter.sensitive),
               ],
             ),
           ),
@@ -562,8 +531,7 @@ class _ToolListPageState extends State<ToolListPage> {
                     showChevron: true,
                     onTap: () => _showToolDetail(tools[i]),
                   ),
-                  if (i < tools.length - 1)
-                    const SettingsDivider(),
+                  if (i < tools.length - 1) const SettingsDivider(),
                 ],
               ],
             ),
@@ -581,15 +549,16 @@ class _ToolListPageState extends State<ToolListPage> {
         label,
         style: TextStyle(
           fontSize: 12.5,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
           color: selected
               ? Colors.white
-              : (isDark ? const Color(0xFF8E8E93) : const Color(0xFF6C6C70)),
+              : (isDark ? AppPalette.lightTextFaint : AppPalette.lightTextMuted),
         ),
       ),
       selected: selected,
-      selectedColor: const Color(0xFF007AFF),
-      backgroundColor: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFE5E5EA),
+      selectedColor: AppPalette.brand,
+      backgroundColor:
+          isDark ? AppPalette.lightText : AppPalette.lightHairline,
       side: BorderSide.none,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../../application/error_humanizer.dart';
 
@@ -21,11 +22,11 @@ extension _ToneStyle on ToastTone {
       };
   Color accent(bool isDark) => switch (this) {
         ToastTone.neutral => isDark
-            ? AppTheme.darkSemantic.onGlass
-            : AppTheme.lightSemantic.onGlass,
-        ToastTone.success => AppTheme.success,
-        ToastTone.warning => AppTheme.warning,
-        ToastTone.danger => AppTheme.danger,
+            ? AppPalette.darkText
+            : AppPalette.lightText,
+        ToastTone.success => AppPalette.success,
+        ToastTone.warning => AppPalette.warning,
+        ToastTone.danger => AppPalette.danger,
       };
 }
 
@@ -294,8 +295,8 @@ class _ToastViewState extends State<_ToastView>
                       child: ImmersiveSurface(
                         level: ImmersiveMaterialLevel.thick,
                         borderRadius:
-                            BorderRadius.circular(AppTokens.capsuleRadius),
-                        showGlow: true,
+                            BorderRadius.circular(AppTokens.radiusPill),
+                        showGlow: false,
                         padding: EdgeInsets.fromLTRB(
                             16, 10, widget.persistent ? 8 : 16, 10),
                         child: Row(
@@ -311,9 +312,9 @@ class _ToastViewState extends State<_ToastView>
                                 widget.message,
                                 style: TextStyle(
                                     color: textColor,
-                                    fontSize: 14,
+                                    fontSize: 13,
                                     height: 1.4,
-                                    fontWeight: FontWeight.w600),
+                                    fontWeight: FontWeight.w500),
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
                               ),

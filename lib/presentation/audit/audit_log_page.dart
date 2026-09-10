@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/audit_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
@@ -73,7 +75,10 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(
         title: const Text('审计日志'),
         actions: [
@@ -93,9 +98,32 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: SectionCard(
             child: SwitchListTile(
-              secondary: const Icon(Icons.security_outlined),
-              title: const Text('启用审计'),
-              subtitle: const Text('开启后记录工具调用与审批（本设备可被查看）'),
+              secondary: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? AppPalette.brandSoftDark
+                      : AppPalette.brandSoftLight,
+                  borderRadius:
+                      BorderRadius.circular(AppTokens.radiusControl),
+                ),
+                child: const Icon(Icons.security_outlined,
+                    size: 20, color: AppPalette.brand),
+              ),
+              title: const Text(
+                '启用审计',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+              ),
+              subtitle: Text(
+                '开启后记录工具调用与审批（本设备可被查看）',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark
+                      ? AppPalette.darkTextMuted
+                      : AppPalette.lightTextMuted,
+                ),
+              ),
               value: _enabled,
               onChanged: _toggle,
             ),
@@ -121,16 +149,50 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                       return SectionCard(
                         child: ListTile(
                           dense: true,
-                          leading: Icon(
+                          leading: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppPalette.darkSurface
+                                  : AppPalette.lightSurface,
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusControl),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline,
+                              ),
+                            ),
+                            child: Icon(
                               log.type == 'approval'
                                   ? Icons.fact_check_outlined
                                   : Icons.build_outlined,
-                              size: 20),
-                          title: Text('${log.type} · ${log.detail}',
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                              size: 16,
+                              color: isDark
+                                  ? AppPalette.darkText
+                                  : AppPalette.lightText,
+                            ),
+                          ),
+                          title: Text(
+                            '${log.type} · ${log.detail}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                           subtitle: Text(
-                              '${log.createdAt.toLocal().toString().substring(0, 19)}'
-                              '${log.decision != null ? ' · ${log.decision}' : ''}'),
+                            '${log.createdAt.toLocal().toString().substring(0, 19)}'
+                            '${log.decision != null ? ' · ${log.decision}' : ''}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
+                          ),
                         ),
                       );
                     },

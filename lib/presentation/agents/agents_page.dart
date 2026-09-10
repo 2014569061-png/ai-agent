@@ -8,6 +8,8 @@ import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
 import '../../infrastructure/tools/core_tools.dart';
 import '../../infrastructure/tools/tool_registry.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
@@ -128,7 +130,7 @@ class _AgentsPageState extends State<AgentsPage> {
                 const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(AppStrings.modelParams,
-                        style: TextStyle(fontWeight: FontWeight.w600))),
+                        style: TextStyle(fontWeight: FontWeight.w500))),
                 Row(children: [
                   Expanded(
                       child: TextField(
@@ -154,7 +156,7 @@ class _AgentsPageState extends State<AgentsPage> {
                 const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(AppStrings.availableTools,
-                        style: TextStyle(fontWeight: FontWeight.w600))),
+                        style: TextStyle(fontWeight: FontWeight.w500))),
                 ..._toolOptions.map((tool) => CheckboxListTile(
                       value: enabled.contains(tool.manifest.name),
                       onChanged: (value) => setDialogState(() => value == true
@@ -218,12 +220,25 @@ class _AgentsPageState extends State<AgentsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(title: const Text('Agent 管理')),
       floatingActionButton: FloatingActionButton.extended(
-          onPressed: _createAgent,
-          icon: const Icon(Icons.add),
-          label: const Text('新建 Agent')),
+        onPressed: _createAgent,
+        backgroundColor: AppPalette.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        ),
+        icon: const Icon(Icons.add),
+        label: const Text('新建 Agent'),
+      ),
       body: FutureBuilder<List<Agent>>(
           future: _agents,
           builder: (context, snapshot) {
@@ -246,11 +261,37 @@ class _AgentsPageState extends State<AgentsPage> {
                   final agent = agents[index];
                   return SectionCard(
                       child: ListTile(
-                          leading: const CircleAvatar(
-                              child: Icon(Icons.smart_toy_outlined)),
-                          title: Text(agent.name),
-                          subtitle: Text(agent.systemPrompt,
-                              maxLines: 2, overflow: TextOverflow.ellipsis),
+                          leading: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppPalette.brandSoftDark
+                                  : AppPalette.brandSoftLight,
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusControl),
+                            ),
+                            child: const Icon(Icons.smart_toy_outlined,
+                                size: 20, color: AppPalette.brand),
+                          ),
+                          title: Text(
+                            agent.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 15,
+                            ),
+                          ),
+                          subtitle: Text(
+                            agent.systemPrompt,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
+                          ),
                           trailing: IconButton(
                               icon: const Icon(Icons.edit_outlined),
                               onPressed: () => _editAgent(agent)),

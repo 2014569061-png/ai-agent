@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -74,8 +75,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
       }
       final result = await FilePicker.platform.pickFiles(allowMultiple: true);
       if (result == null || result.files.isEmpty) return;
-      final importDir =
-          Directory('$workspace${Platform.pathSeparator}imports');
+      final importDir = Directory('$workspace${Platform.pathSeparator}imports');
       await importDir.create(recursive: true);
       var imported = 0;
       for (final picked in result.files) {
@@ -194,7 +194,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.folder_rounded,
-                      iconColor: const Color(0xFF007AFF),
+                      iconColor: settingsMutedColor(context),
                       title: '工作区路径',
                       subtitle: currentWs,
                       onTap: _pickWorkspace,
@@ -202,7 +202,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.shield_rounded,
-                      iconColor: const Color(0xFF34C759),
+                      iconColor: AppPalette.success,
                       title: '工作区权限',
                       subtitle: '受控沙箱：文件读写严格限制在工作区内部',
                       showChevron: false,
@@ -210,15 +210,16 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF34C759).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(6),
+                          color:
+                              AppPalette.success.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
                           '受控安全',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF34C759),
-                            fontWeight: FontWeight.w600,
+                            color: AppPalette.success,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
@@ -230,7 +231,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.file_upload_rounded,
-                      iconColor: const Color(0xFF5856D6),
+                      iconColor: settingsMutedColor(context),
                       title: '导入文件',
                       subtitle: '选取外部文件或文档导入到 Agent 工作区',
                       onTap: _importFile,
@@ -238,7 +239,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.file_download_rounded,
-                      iconColor: const Color(0xFFFF9500),
+                      iconColor: AppPalette.warning,
                       title: '导出会话与文件',
                       subtitle: '以 Markdown 或加密形式备份项目与对话',
                       onTap: _exportConversation,
@@ -246,7 +247,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.lock_clock_rounded,
-                      iconColor: const Color(0xFFAF52DE),
+                      iconColor: settingsMutedColor(context),
                       title: '文件访问授权策略',
                       subtitle: '删除文件与关键代码编辑始终经过弹窗确认',
                       onTap: () {
@@ -279,12 +280,12 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                       for (var i = 0; i < _recentDirs.length; i++) ...[
                         SettingsTile(
                           icon: Icons.history_rounded,
-                          iconColor: const Color(0xFF8E8E93),
+                          iconColor: settingsMutedColor(context),
                           title: _recentDirs[i],
                           trailingWidget: const Icon(
                             Icons.arrow_forward_rounded,
                             size: 16,
-                            color: Color(0xFF8E8E93),
+                            color: AppPalette.lightTextFaint,
                           ),
                           onTap: () {
                             ref
@@ -296,8 +297,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                             );
                           },
                         ),
-                        if (i < _recentDirs.length - 1)
-                          const SettingsDivider(),
+                        if (i < _recentDirs.length - 1) const SettingsDivider(),
                       ],
                     ],
                   ),
@@ -307,9 +307,9 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.cleaning_services_rounded,
-                      iconColor: const Color(0xFFFF3B30),
+                      iconColor: AppPalette.danger,
                       title: '清理临时缓存文件',
-                      titleColor: const Color(0xFFFF3B30),
+                      titleColor: AppPalette.danger,
                       subtitle: '清理临时预览、生成草稿与图片缓存（二次确认）',
                       onTap: _cleanTempFiles,
                     ),

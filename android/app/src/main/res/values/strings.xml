@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="nexus_widget_desc">NEXUS Agent 快捷入口</string>
+    <string name="nexus_notification_listener_desc">NEXUS Agent 通知读取服务</string>
 </resources>

@@ -1,22 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../theme/app_theme.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../markdown/math_block.dart';
+import '../../theme/app_palette.dart';
+import '../../theme/app_tokens.dart';
 
-/// G1 思考过程紧凑块:指标 Pill 与"思考"chip 同行(右对齐),点击在下方
-/// 展开/收起思考内容——不再以常驻大卡抢占消息头部空间。
+/// 思考过程折叠块（对标 DeepSeek）。
+///
+/// 收起态是一行极简文案 + 右侧小箭头：
+///     已思考（用时 6 秒）  ›
+/// 点击该行（含箭头）展开思考正文；箭头旋转 90° 指向下方。
+///
+/// 时长来自 `ChatMessage.reasoningDuration`（首个思考 token → 首个正文 token），
+/// 不能用 TTFT 代替——思考流本身会产出 token，TTFT 落在思考的**开始**处。
 class ReasoningCompactBlock extends StatefulWidget {
   const ReasoningCompactBlock({
     super.key,
     required this.reasoning,
-    this.leading,
+    this.duration,
     this.streaming = false,
   });
 
   final String reasoning;
-  final Widget? leading;
+
+  /// 思考耗时；为空时只显示「已思考」。
+  final Duration? duration;
+
+  /// 正在思考（尚未产出正文）。此时显示呼吸点 + 「正在思考…」。
   final bool streaming;
 
   @override
@@ -26,105 +37,109 @@ class ReasoningCompactBlock extends StatefulWidget {
 class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
   bool _expanded = false;
 
+  String get _label {
+    final d = widget.duration;
+    // 时长一旦结算说明思考已结束。思考中途 duration 仍为 null，
+    // 此时必须显示「正在思考…」，不能显示「已思考」。
+    if (d == null) return widget.streaming ? '正在思考…' : '已思考';
+    // 不足 1 秒时按 1 秒展示，避免出现「用时 0 秒」这种看起来像坏掉的状态。
+    final seconds = d.inSeconds < 1 ? 1 : d.inSeconds;
+    if (seconds < 60) return '已思考（用时 $seconds 秒）';
+    return '已思考（用时 ${seconds ~/ 60} 分 ${seconds % 60} 秒）';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+
     final hasReasoning = widget.reasoning.trim().isNotEmpty;
-    final visible = hasReasoning || widget.streaming;
+    final thinking = widget.streaming && widget.duration == null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (widget.leading != null)
-              Expanded(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: widget.leading!,
-                ),
-              ),
-            if (visible) ...[
-              const SizedBox(width: 8),
-              Material(
-                color: AppTheme.brandGradientEnd.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(10),
-                child: InkWell(
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    setState(() => _expanded = !_expanded);
-                  },
-                  borderRadius: BorderRadius.circular(10),
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (widget.streaming && !hasReasoning)
-                        SizedBox(
-                          width: 13,
-                          height: 13,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.8,
-                            color: AppTheme.brandGradientEnd,
-                          ),
-                        )
-                      else
-                        Icon(Icons.psychology_outlined,
-                            size: 13, color: AppTheme.brandGradientEnd),
-                      const SizedBox(width: 4),
-                      Text(
-                          widget.streaming && !hasReasoning
-                              ? '正在思考…'
-                              : '思考 ${widget.reasoning.length} 字',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: theme.colorScheme.onSurfaceVariant)),
-                      AnimatedRotation(
-                        turns: _expanded ? .5 : 0,
-                        duration: const Duration(milliseconds: 180),
-                        child: Icon(Icons.expand_more_rounded,
-                            size: 14, color: theme.colorScheme.outline),
-                      ),
-                    ]),
+        GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() => _expanded = !_expanded);
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (thinking) ...[
+                  Container(
+                    width: 6,
+                    height: 6,
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: const BoxDecoration(
+                      color: AppPalette.brand,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+                Text(
+                  _label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    height: 1.55,
+                    color: textMuted,
                   ),
                 ),
-              ),
-            ],
-          ],
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: _expanded ? 0.25 : 0.0,
+                  duration: AppTokens.durationBase,
+                  curve: AppTokens.curveStandard,
+                  child: Icon(
+                    Icons.keyboard_arrow_right_rounded,
+                    size: 14,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
         if (hasReasoning)
           AnimatedCrossFade(
             firstChild: const SizedBox(width: double.infinity),
             secondChild: Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.only(top: 6, bottom: 4),
               child: Container(
                 width: double.infinity,
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border(
-                    left: BorderSide(
-                      color: AppTheme.brandGradientEnd.withValues(alpha: 0.8),
-                      width: 3,
-                    ),
-                  ),
+                  color: surface,
+                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                  border: Border.all(color: hairline, width: 1.0),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: MathMarkdown(
-                      data: widget.reasoning,
-                      selectable: true,
-                      textColor: theme.colorScheme.onSurfaceVariant,
-                      styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                        p: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurfaceVariant,
-                          height: 1.4,
-                        ),
-                        blockSpacing: 6,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: MathMarkdown(
+                    data: widget.reasoning,
+                    selectable: true,
+                    textColor: textMuted,
+                    styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                      p: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: textMuted,
+                        height: 1.55,
+                      ),
+                      blockSpacing: 8,
+                      code: TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'JetBrains Mono',
+                        color: textMuted,
                       ),
                     ),
                   ),
@@ -134,7 +149,10 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
             crossFadeState: _expanded
                 ? CrossFadeState.showSecond
                 : CrossFadeState.showFirst,
-            duration: const Duration(milliseconds: 180),
+            duration: AppTokens.durationBase,
+            firstCurve: AppTokens.curveStandard,
+            secondCurve: AppTokens.curveStandard,
+            sizeCurve: AppTokens.curveStandard,
           ),
       ],
     );

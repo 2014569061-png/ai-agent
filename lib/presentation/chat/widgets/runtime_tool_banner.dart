@@ -63,7 +63,7 @@ class RuntimeToolBanner extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w700)),
+                      fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 1),
               Text(
                 '${activity.status} · 步骤 ${index + 1}/$totalLabel',

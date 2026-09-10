@@ -56,7 +56,7 @@ class NexusSection extends StatelessWidget {
                           Text(
                             title!,
                             style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w500,
                               fontSize: 14,
                               letterSpacing: 0.2,
                             ),

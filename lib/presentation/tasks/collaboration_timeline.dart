@@ -8,6 +8,8 @@ import '../../application/orchestration_module.dart';
 import '../../application/providers.dart';
 import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
 import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
@@ -125,6 +127,7 @@ class _CollaborationTimelinePageState
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final run = _run;
     final isAwaitingApproval =
         run?.status == CollaborationStatus.awaitingExecutionApproval;
@@ -134,6 +137,7 @@ class _CollaborationTimelinePageState
         run.status != CollaborationStatus.failed;
 
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: '协作分析看板',
         statusPill: run != null
@@ -143,7 +147,8 @@ class _CollaborationTimelinePageState
           if (isRunning)
             IconButton(
               tooltip: '终止协作',
-              icon: const Icon(Icons.stop_circle_outlined, color: AppTheme.danger),
+              icon: const Icon(Icons.stop_circle_outlined,
+                  color: AppPalette.danger),
               onPressed: _cancel,
             ),
         ],
@@ -159,23 +164,23 @@ class _CollaborationTimelinePageState
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.14),
+                      color: AppPalette.warning.withValues(alpha: 0.14),
                       border: const Border(
-                        bottom: BorderSide(color: Colors.orange, width: 0.8),
+                        bottom: BorderSide(color: AppPalette.warning, width: 0.8),
                       ),
                     ),
                     child: Row(
                       children: [
                         const Icon(Icons.verified_user_rounded,
-                            size: 18, color: Colors.orange),
+                            size: 18, color: AppPalette.warning),
                         const SizedBox(width: 8),
                         const Expanded(
                           child: Text(
                             '协作分析完成，已形成汇总决策，等待执行授权',
                             style: TextStyle(
                               fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.orange,
+                              fontWeight: FontWeight.w500,
+                              color: AppPalette.warning,
                             ),
                           ),
                         ),
@@ -183,6 +188,9 @@ class _CollaborationTimelinePageState
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 32),
                             padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                            ),
                             visualDensity: VisualDensity.compact,
                           ),
                           onPressed: _approving ? null : _approveExecution,
@@ -307,17 +315,17 @@ class _CollaborationTimelinePageState
                 '${run.mode.label} · 第 ${run.currentRound}/${run.maxRounds} 轮',
                 style: const TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               Text(
                 '$percent% 预算占用',
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                   color: ratio > 0.8
-                      ? AppTheme.danger
-                      : (ratio > 0.6 ? AppTheme.warning : AppTheme.success),
+                      ? AppPalette.danger
+                      : (ratio > 0.6 ? AppPalette.warning : AppPalette.success),
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
@@ -325,12 +333,12 @@ class _CollaborationTimelinePageState
           ),
           const SizedBox(height: 8),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
             child: LinearProgressIndicator(
               value: ratio == 0 ? 0.01 : ratio,
               minHeight: 6,
               valueColor: AlwaysStoppedAnimation<Color>(
-                ratio > 0.8 ? AppTheme.danger : AppTheme.brandBright,
+                ratio > 0.8 ? AppPalette.danger : AppPalette.brand,
               ),
             ),
           ),
@@ -377,10 +385,10 @@ class _CollaborationTimelinePageState
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: isDone
-                      ? AppTheme.success.withValues(alpha: 0.12)
+                      ? AppPalette.success.withValues(alpha: 0.12)
                       : (isFailed
-                          ? AppTheme.danger.withValues(alpha: 0.12)
-                          : AppTheme.brandBright.withValues(alpha: 0.12)),
+                          ? AppPalette.danger.withValues(alpha: 0.12)
+                          : AppPalette.brand.withValues(alpha: 0.12)),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -391,8 +399,8 @@ class _CollaborationTimelinePageState
                           : Icons.smart_toy_outlined),
                   size: 16,
                   color: isDone
-                      ? AppTheme.success
-                      : (isFailed ? AppTheme.danger : AppTheme.brandBright),
+                      ? AppPalette.success
+                      : (isFailed ? AppPalette.danger : AppPalette.brand),
                 ),
               ),
               const SizedBox(width: 8),
@@ -400,7 +408,7 @@ class _CollaborationTimelinePageState
                 child: Text(
                   role.label,
                   style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w700),
+                      fontSize: 13.5, fontWeight: FontWeight.w500),
                 ),
               ),
               NexusStatusPill.fromString(agent.status, isCompact: true),
@@ -433,9 +441,11 @@ class _CollaborationTimelinePageState
         tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: const Icon(Icons.inventory_2_outlined, size: 20),
         title: Text(artifact.type,
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600)),
+            style:
+                const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500)),
         subtitle: Text('置信度：$confidence%',
-            style: const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
+            style:
+                const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
@@ -465,15 +475,17 @@ class _CollaborationTimelinePageState
                     : Icons.forum_outlined,
                 size: 15,
                 color: isSynthesizer
-                    ? AppTheme.brandBright
+                    ? AppPalette.brand
                     : Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 6),
               Text(
-                isSynthesizer ? '主 Agent 汇总发言' : (message.senderAgentRunId ?? '智能体消息'),
+                isSynthesizer
+                    ? '主 Agent 汇总发言'
+                    : (message.senderAgentRunId ?? '智能体消息'),
                 style: const TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -501,7 +513,7 @@ class _CollaborationTimelinePageState
           if (result.findings.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text('关键发现',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
             ...result.findings.map((f) => Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 3),
@@ -509,10 +521,12 @@ class _CollaborationTimelinePageState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('• ',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: TextStyle(fontWeight: FontWeight.w500)),
                       Expanded(
                           child: SelectableText(
-                              f.detail.isEmpty ? f.title : '${f.title}：${f.detail}',
+                              f.detail.isEmpty
+                                  ? f.title
+                                  : '${f.title}：${f.detail}',
                               style: const TextStyle(fontSize: 12.5))),
                     ],
                   ),
@@ -523,8 +537,8 @@ class _CollaborationTimelinePageState
             const Text('分歧与权衡取舍',
                 style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.warning)),
+                    fontWeight: FontWeight.w500,
+                    color: AppPalette.warning)),
             const SizedBox(height: 4),
             ...result.disagreements.map((d) => Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 3),
@@ -532,9 +546,31 @@ class _CollaborationTimelinePageState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text('• ',
-                          style: TextStyle(fontWeight: FontWeight.w700)),
+                          style: TextStyle(fontWeight: FontWeight.w500)),
                       Expanded(
                           child: SelectableText(d,
+                              style: const TextStyle(fontSize: 12.5))),
+                    ],
+                  ),
+                )),
+          ],
+          if (result.risks.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('风险与证据缺口',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppPalette.warning)),
+            const SizedBox(height: 4),
+            ...result.risks.map((risk) => Padding(
+                  padding: const EdgeInsets.only(left: 8, bottom: 3),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ',
+                          style: TextStyle(fontWeight: FontWeight.w500)),
+                      Expanded(
+                          child: SelectableText(risk,
                               style: const TextStyle(fontSize: 12.5))),
                     ],
                   ),

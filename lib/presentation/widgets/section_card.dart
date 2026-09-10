@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'immersive_surface.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
 /// 统一的内容分段卡片 (SectionCard)
-/// 遵循三档表面策略之「A. 内容层」：默认采用近实色 elevated 面与轻边框，
-/// 避免在长列表、任务列表、设置页中每个卡片都重复执行高斯模糊 BackdropFilter。
+/// 遵循极简表面策略：实色 surface 与 1px hairline 边框，0 模糊。
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -25,23 +24,25 @@ class SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? BorderRadius.circular(AppTokens.cardRadius);
+    final radius = borderRadius ?? BorderRadius.circular(AppTokens.radiusCard);
 
     if (solid) {
       final theme = Theme.of(context);
       final isDark = theme.brightness == Brightness.dark;
-      final base = isDark ? AppTheme.darkElevated : AppTheme.lightElevated;
-      final border = isDark ? AppTheme.darkBorder : AppTheme.lightBorder;
+      // 卡片用纯白底 + hairline 描边；浅灰 surface 只用于悬停 / 分组底，
+      // 避免「灰底 + 灰边框」在纯白画布上读成凹陷或禁用态。
+      final base = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
+      final border = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
       return Container(
         margin: margin,
         padding: padding,
         decoration: BoxDecoration(
-          color: base.withValues(alpha: isDark ? 0.88 : 0.94),
+          color: base,
           borderRadius: radius,
           border: Border.all(
-            color: border.withValues(alpha: isDark ? 0.75 : 0.8),
-            width: 0.9,
+            color: border,
+            width: 1.0,
           ),
         ),
         child: Material(
@@ -62,4 +63,3 @@ class SectionCard extends StatelessWidget {
     );
   }
 }
-

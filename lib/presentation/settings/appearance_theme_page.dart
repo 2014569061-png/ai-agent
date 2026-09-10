@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../infrastructure/background_service.dart';
 import '../chat/chat_layout_controller.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_theme_controller.dart';
 import '../theme/app_appearance_controller.dart';
 import '../widgets/floating_toast.dart';
@@ -93,7 +94,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                           children: [
                             SettingsTile(
                               icon: Icons.brightness_auto_rounded,
-                              iconColor: const Color(0xFF007AFF),
+                              iconColor: settingsMutedColor(context),
                               title: '跟随系统',
                               subtitle: '根据系统深浅色外观自动切换',
                               selected: currentMode == ThemeMode.system,
@@ -103,7 +104,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                             const SettingsDivider(),
                             SettingsTile(
                               icon: Icons.light_mode_rounded,
-                              iconColor: const Color(0xFFFF9500),
+                              iconColor: AppPalette.warning,
                               title: '浅色模式',
                               subtitle: '清新明亮的白蓝质感',
                               selected: currentMode == ThemeMode.light,
@@ -113,7 +114,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                             const SettingsDivider(),
                             SettingsTile(
                               icon: Icons.dark_mode_rounded,
-                              iconColor: const Color(0xFF1C1C1E),
+                              iconColor: settingsMutedColor(context),
                               title: '深色模式',
                               subtitle: '深邃专注的纯黑沉浸感',
                               selected: currentMode == ThemeMode.dark,
@@ -134,12 +135,12 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('毛玻璃模糊强度',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                            style: TextStyle(fontWeight: FontWeight.w500)),
                         Text(
                           '${(_glassIntensity * 100).round()}%',
                           style: TextStyle(
-                            color: theme.colorScheme.primary,
-                            fontWeight: FontWeight.bold,
+                            color: AppPalette.brand,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -153,13 +154,12 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                     ),
                     const Divider(height: 16),
                     const Text('动效等级',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
+                        style: TextStyle(fontWeight: FontWeight.w500)),
                     const SizedBox(height: 8),
                     SegmentedButton<String>(
                       segments: const [
                         ButtonSegment(value: 'full', label: Text('完整动效')),
-                        ButtonSegment(
-                            value: 'reduced', label: Text('节能平滑')),
+                        ButtonSegment(value: 'reduced', label: Text('节能平滑')),
                         ButtonSegment(value: 'off', label: Text('关闭动效')),
                       ],
                       selected: {_effectMode},
@@ -183,7 +183,8 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                               initialValue: _widthOption(widthFactor),
                               items: const [
                                 DropdownMenuItem(
-                                    value: _adaptiveWidth, child: Text('自适应屏幕')),
+                                    value: _adaptiveWidth,
+                                    child: Text('自适应屏幕')),
                                 DropdownMenuItem(
                                     value: _compactWidth,
                                     child: Text('紧凑 (62%)')),
@@ -198,7 +199,8 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                               onChanged: (selection) {
                                 if (selection == null) return;
                                 final value = switch (selection) {
-                                  _adaptiveWidth => ChatLayoutController.adaptive,
+                                  _adaptiveWidth =>
+                                    ChatLayoutController.adaptive,
                                   _compactWidth => .62,
                                   _standardWidth => .72,
                                   _wideWidth => .86,
@@ -210,14 +212,15 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                             if (_widthOption(widthFactor) == _customWidth) ...[
                               const SizedBox(height: 12),
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   const Text('自定义气泡最大宽度比例'),
                                   Text(
                                     '${(widthFactor * 100).round()}%',
                                     style: TextStyle(
-                                      color: theme.colorScheme.primary,
-                                      fontWeight: FontWeight.bold,
+                                      color: AppPalette.brand,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ],
@@ -231,8 +234,10 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                                 max: ChatLayoutController.customMax,
                                 divisions: 10,
                                 label: '${(widthFactor * 100).round()}%',
-                                onChanged: ChatLayoutController.updateWidthFactor,
-                                onChangeEnd: ChatLayoutController.setWidthFactor,
+                                onChanged:
+                                    ChatLayoutController.updateWidthFactor,
+                                onChangeEnd:
+                                    ChatLayoutController.setWidthFactor,
                               ),
                             ],
                           ],
@@ -254,7 +259,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                           children: [
                             SettingsTile(
                               icon: Icons.wallpaper_rounded,
-                              iconColor: const Color(0xFF636366),
+                              iconColor: settingsMutedColor(context),
                               title: '默认（跟随主题）',
                               subtitle: '极简纯色纯净底色，与顶栏完全融为一体',
                               selected: current.mode == 'default',
@@ -291,7 +296,8 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                                 child: Container(
                                   width: 28,
                                   height: 28,
-                                  color: theme.colorScheme.surfaceContainerHighest,
+                                  color:
+                                      theme.colorScheme.surfaceContainerHighest,
                                   child: (current.mode == 'custom' &&
                                           current.customPath != null)
                                       ? Image.file(
@@ -302,7 +308,8 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                                                   Icons.broken_image_outlined,
                                                   size: 16),
                                         )
-                                      : const Icon(Icons.image_outlined, size: 16),
+                                      : const Icon(Icons.image_outlined,
+                                          size: 16),
                                 ),
                               ),
                               title: '自定义相册图片',

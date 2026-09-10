@@ -1,6 +1,6 @@
 # NEXUS Agent
 
-面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.8.0**（Android versionCode `80`）。
+面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.8.7**（Android versionCode `87`）。
 
 ## 核心能力
 
@@ -11,6 +11,12 @@
 - 提供运行时间线、Token/费用统计、缓存命中信息、诊断日志和报告导出。
 - 支持协作分析：启动前确认角色、预算、轮次和只读权限，多个子 Agent 并行分析后生成结构化汇总。
 - API Key 使用系统安全存储，隐私保险箱支持加密备份与恢复。
+
+## Android 隐私边界
+
+- 剪贴板和图片附件只在模型明确请求的当前回合按需读取，不会作为后台监听持续采集。
+- 敏感工具的原始参数、结果、运行日志、会话导出和保险箱导出均在持久化出口脱敏；当前回合只向模型提供完成任务所需的原文。
+- 删除会话会联动删除关联的运行事件、日志和审批轨迹。
 
 ## 环境要求
 
@@ -39,17 +45,12 @@ flutter build apk --release
 build/app/outputs/flutter-apk/app-release.apk
 ```
 
-## 项目结构
+## 项目结构（Android-only）
 
 ```text
 lib/       应用源码
 assets/    图片与品牌资源
 android/   Android 工程
-ios/       iOS 工程
-web/       Web 工程
-macos/     macOS 工程
-windows/   Windows 工程
-linux/     Linux 工程
 ```
 
 ## 发布版本

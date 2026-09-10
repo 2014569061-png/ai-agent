@@ -60,7 +60,7 @@ class ImmersiveListTile extends StatelessWidget {
                 Text(
                   title,
                   style: theme.textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                     color: titleColor,
                   ),
                 ),

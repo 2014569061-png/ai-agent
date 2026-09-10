@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../../application/mcp_service.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/mcp/mcp_tool_provider.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
@@ -55,6 +57,15 @@ class _McpServersPageState extends State<McpServersPage> {
               onPressed: () => Navigator.pop(context, false),
               child: const Text('取消')),
           FilledButton(
+              style: FilledButton.styleFrom(
+                elevation: 0,
+                backgroundColor: AppPalette.brand,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(AppTokens.radiusControl),
+                ),
+              ),
               onPressed: () => Navigator.pop(context, true),
               child: const Text('保存')),
         ],
@@ -112,6 +123,15 @@ class _McpServersPageState extends State<McpServersPage> {
               onPressed: () => Navigator.pop(context, false),
               child: const Text('取消')),
           FilledButton(
+              style: FilledButton.styleFrom(
+                elevation: 0,
+                backgroundColor: AppPalette.brand,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(AppTokens.radiusControl),
+                ),
+              ),
               onPressed: () => Navigator.pop(context, true),
               child: const Text('保存')),
         ],
@@ -149,9 +169,7 @@ class _McpServersPageState extends State<McpServersPage> {
     setState(() => _testing[server.id] = false);
     FloatingToast.show(
       context,
-      result.ok
-          ? '连接成功：发现 ${result.toolCount} 个工具'
-          : '连接失败：${result.error}',
+      result.ok ? '连接成功：发现 ${result.toolCount} 个工具' : '连接失败：${result.error}',
       tone: result.ok ? ToastTone.success : ToastTone.danger,
     );
   }
@@ -190,8 +208,10 @@ class _McpServersPageState extends State<McpServersPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: 'MCP 服务器',
         subtitle: 'Model Context Protocol 协议扩展与工具注入',
@@ -217,24 +237,41 @@ class _McpServersPageState extends State<McpServersPage> {
                 final server = _servers[index];
                 return SectionCard(
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: (server.enabled
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.outline)
-                              .withValues(alpha: 0.12),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: server.enabled
+                                ? (isDark
+                                    ? AppPalette.brandSoftDark
+                                    : AppPalette.brandSoftLight)
+                                : (isDark
+                                    ? AppPalette.darkSurface
+                                    : AppPalette.lightSurface),
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusControl),
+                            border: Border.all(
+                              color: server.enabled
+                                  ? AppPalette.brand
+                                  : (isDark
+                                      ? AppPalette.darkHairline
+                                      : AppPalette.lightHairline),
+                            ),
+                          ),
                           child: Icon(
                             server.kind == McpServerKind.http
                                 ? Icons.dns_outlined
                                 : Icons.terminal_rounded,
                             size: 18,
                             color: server.enabled
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.outline,
+                                ? AppPalette.brand
+                                : (isDark
+                                    ? AppPalette.darkTextMuted
+                                    : AppPalette.lightTextMuted),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -250,8 +287,8 @@ class _McpServersPageState extends State<McpServersPage> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                        fontSize: 14.5,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w500,
                                       ),
                                     ),
                                   ),
@@ -260,19 +297,27 @@ class _McpServersPageState extends State<McpServersPage> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 5, vertical: 1.5),
                                     decoration: BoxDecoration(
-                                      color: theme
-                                          .colorScheme.surfaceContainerHighest,
-                                      borderRadius: BorderRadius.circular(4),
+                                      color: isDark
+                                          ? AppPalette.darkSurface
+                                          : AppPalette.lightSurface,
+                                      borderRadius: BorderRadius.circular(
+                                          AppTokens.radiusControl),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? AppPalette.darkHairline
+                                            : AppPalette.lightHairline,
+                                      ),
                                     ),
                                     child: Text(
                                       server.kind == McpServerKind.http
                                           ? 'HTTP'
                                           : 'STDIO',
                                       style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? AppPalette.darkTextMuted
+                                            : AppPalette.lightTextMuted,
                                       ),
                                     ),
                                   ),
@@ -284,8 +329,10 @@ class _McpServersPageState extends State<McpServersPage> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? AppPalette.darkTextMuted
+                                      : AppPalette.lightTextMuted,
                                 ),
                               ),
                             ],
@@ -304,8 +351,8 @@ class _McpServersPageState extends State<McpServersPage> {
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2),
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.wifi_tethering_rounded,
                                   size: 20),
@@ -334,6 +381,15 @@ class _McpServersPageState extends State<McpServersPage> {
             ),
       floatingActionButton: FloatingActionButton(
         onPressed: _add,
+        backgroundColor: AppPalette.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        ),
         tooltip: '新增 MCP 服务器',
         child: const Icon(Icons.add),
       ),

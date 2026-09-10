@@ -105,6 +105,12 @@ class ProviderConfigStore {
         reasoningEffort: _parseEffort(item['reasoningEffort'] as String?),
         contextTokens: (item['contextTokens'] as num?)?.toInt() ??
             ProviderConfig.defaultContextTokens,
+        inputPricePerMillionCents:
+            (item['inputPricePerMillionCents'] as num?)?.toInt(),
+        outputPricePerMillionCents:
+            (item['outputPricePerMillionCents'] as num?)?.toInt(),
+        cachedPricePerMillionCents:
+            (item['cachedPricePerMillionCents'] as num?)?.toInt(),
       ));
     }
     return result;
@@ -118,6 +124,12 @@ class ProviderConfigStore {
         'type': item.type.name,
         'reasoningEffort': item.reasoningEffort.name,
         'contextTokens': item.contextTokens,
+        if (item.inputPricePerMillionCents != null)
+          'inputPricePerMillionCents': item.inputPricePerMillionCents,
+        if (item.outputPricePerMillionCents != null)
+          'outputPricePerMillionCents': item.outputPricePerMillionCents,
+        if (item.cachedPricePerMillionCents != null)
+          'cachedPricePerMillionCents': item.cachedPricePerMillionCents,
       };
 
   ProviderType _parseType(String? name) =>
@@ -143,7 +155,8 @@ class ProviderConfigStore {
   Future<void> setActive(String id) async {
     final preferences = await SharedPreferences.getInstance();
     final profiles = await loadAll();
-    final target = profiles.firstWhere((p) => p.id == id, orElse: () => profiles.first);
+    final target =
+        profiles.firstWhere((p) => p.id == id, orElse: () => profiles.first);
     await preferences.setString(_activeKey, target.id);
     await preferences.setString(_baseUrlKey, target.baseUrl.trim());
     await preferences.setString(_modelKey, target.model.trim());

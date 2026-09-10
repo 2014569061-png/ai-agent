@@ -6,7 +6,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/observability/unified_diff.dart';
+import 'sensitive_tool_policy.dart';
 import 'providers.dart';
+
+/// 将外部名称压缩为可安全落日志的 token。日志不应携带 prompt、路径、命令
+/// 或远端返回的任意长字符串；无法证明安全时统一使用 unknown。
+String toSafeLogToken(Object? value) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty || text.length > 64) return 'unknown';
+  return RegExp(r'^[A-Za-z0-9._-]+$').hasMatch(text) ? text : 'unknown';
+}
 
 /// User-facing diagnostic log service. Writes are best effort and never fail
 /// the active model/tool/file operation.
@@ -134,13 +143,14 @@ class LogService {
             : _truncate(jsonEncode(_sanitize(detail)), _maxDetailLength);
         await db.insertLogRecord(LogRecordsCompanion.insert(
           logId: 'log-${now.microsecondsSinceEpoch}',
-          runId: Value(runId),
-          eventId: Value(eventId),
+          runId: Value(runId == null ? null : toSafeLogToken(runId)),
+          eventId: Value(eventId == null ? null : toSafeLogToken(eventId)),
           level: level,
-          category: category,
+          category: toSafeLogToken(category),
           message: _truncate(redactSensitiveText(message), _maxMessageLength),
           detailJson: Value(detailJson),
-          errorCode: Value(errorCode),
+          errorCode:
+              Value(errorCode == null ? null : toSafeLogToken(errorCode)),
           stackTrace: Value(stackTrace == null
               ? null
               : _truncate(redactSensitiveText(stackTrace), _maxDetailLength)),
@@ -161,6 +171,9 @@ class LogService {
   dynamic _sanitize(dynamic value) {
     if (value is String) return redactSensitiveText(value);
     if (value is Map) {
+      final toolName = value['tool']?.toString();
+      final sensitiveTool =
+          toolName != null && SensitiveToolPolicy.isSensitive(toolName);
       return value.map((key, item) {
         final compact = '$key'.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
         final sensitive = [
@@ -171,8 +184,34 @@ class LogService {
           'secret',
           'token'
         ].contains(compact);
-        return MapEntry('$key',
-            sensitive && item is String ? '[REDACTED]' : _sanitize(item));
+        final forbidden = [
+          'path',
+          'filepath',
+          'newpath',
+          'command',
+          'stdout',
+          'stderr',
+          'arguments',
+          'prompt',
+        ].contains(compact);
+        final sensitivePayload = [
+          'result',
+          'output',
+          'data',
+          'content',
+          'text',
+          'path',
+          'newpath',
+        ].contains(compact);
+        return MapEntry(
+            '$key',
+            sensitiveTool && (forbidden || sensitivePayload)
+                ? '[REDACTED]'
+                : sensitive && item is String
+                    ? '[REDACTED]'
+                    : forbidden
+                        ? '[OMITTED]'
+                        : _sanitize(item));
       });
     }
     if (value is Iterable) return value.map(_sanitize).toList(growable: false);

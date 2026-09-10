@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-
+import '../../theme/app_palette.dart';
 import '../../widgets/brand_mark.dart';
 
 class MascotAvatar extends StatelessWidget {
@@ -11,18 +10,21 @@ class MascotAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 36,
-        height: 36,
+        width: 28,
+        height: 28,
         decoration: BoxDecoration(
-          color: AppTheme.brandBright.withValues(alpha: 0.1),
+          color: surface,
           shape: BoxShape.circle,
-          border:
-              Border.all(color: AppTheme.brandBright.withValues(alpha: 0.3)),
+          border: Border.all(color: hairline, width: 1.0),
         ),
-        child: const Center(child: BrandMark(size: 22)),
+        child: const Center(child: BrandMark(size: 18)),
       ),
     );
   }

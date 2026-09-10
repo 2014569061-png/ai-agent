@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
@@ -208,10 +210,22 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final categories = _categories.toList()..sort();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(title: const Text('Prompt 模板')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(),
+        backgroundColor: AppPalette.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        ),
         icon: const Icon(Icons.add),
         label: const Text('新建 Prompt'),
       ),
@@ -285,7 +299,8 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
   }
 
   Widget _promptCard(PromptTemplate template) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return SectionCard(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
@@ -299,17 +314,23 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(template.name,
-                            style: theme.textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        child: Text(
+                          template.name,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                       IconButton(
                         visualDensity: VisualDensity.compact,
                         icon: Icon(
                           template.isFavorite ? Icons.star : Icons.star_border,
                           color: template.isFavorite
-                              ? Colors.amber.shade600
-                              : theme.colorScheme.outline,
+                              ? AppPalette.warning
+                              : (isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted),
                         ),
                         tooltip: template.isFavorite ? '取消收藏' : '收藏',
                         onPressed: () => _toggleFavorite(template),
@@ -317,8 +338,23 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
                     ],
                   ),
                   Chip(
-                    label: Text(template.category,
-                        style: const TextStyle(fontSize: 11)),
+                    backgroundColor: isDark
+                        ? AppPalette.darkSurface
+                        : AppPalette.lightSurface,
+                    side: BorderSide(
+                      color: isDark
+                          ? AppPalette.darkHairline
+                          : AppPalette.lightHairline,
+                    ),
+                    label: Text(
+                      template.category,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark
+                            ? AppPalette.darkTextMuted
+                            : AppPalette.lightTextMuted,
+                      ),
+                    ),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                   ),
@@ -327,13 +363,26 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
                     template.content,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      FilledButton.tonal(
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          elevation: 0,
+                          backgroundColor: AppPalette.brand,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusControl),
+                          ),
+                        ),
                         onPressed: () => _use(template),
                         child: const Text('使用'),
                       ),
@@ -344,7 +393,7 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
                       TextButton(
                         onPressed: () => _delete(template),
                         child: const Text('删除',
-                            style: TextStyle(color: AppTheme.danger)),
+                            style: TextStyle(color: AppPalette.danger)),
                       ),
                     ],
                   ),

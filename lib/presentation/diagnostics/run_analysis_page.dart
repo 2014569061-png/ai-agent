@@ -6,10 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/chat_controller.dart';
+import '../../application/run_audit_report.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../markdown/markdown_render_metrics.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
@@ -89,9 +91,11 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final chatState = ref.watch(chatControllerProvider);
 
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: '运行分析与观测',
         bottom: TabBar(
@@ -187,7 +191,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 12.5, fontWeight: FontWeight.w600),
+                      fontSize: 12.5, fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -221,7 +225,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
                 value: NexusMetricTile.formatTokens(outputTokens),
                 unit: 'tok',
                 icon: Icons.output_rounded,
-                color: AppTheme.brandGradientEnd,
+                color: AppPalette.brand,
                 explanation: '模型思考过程与最终输出文本所生成的 Token 总量。',
               ),
               NexusMetricTile(
@@ -229,14 +233,14 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
                 value: NexusMetricTile.formatTokens(cachedTokens),
                 unit: 'tok',
                 icon: Icons.cached_rounded,
-                color: AppTheme.success,
+                color: AppPalette.success,
                 explanation: '服务商 Prompt Cache 命中的 Token，享受折扣且大幅降低延迟。',
               ),
               NexusMetricTile(
                 label: '缓存命中率',
                 value: '$cacheHitPercent%',
                 icon: Icons.pie_chart_outline_rounded,
-                color: cacheHitRate > 0.3 ? AppTheme.success : null,
+                color: cacheHitRate > 0.3 ? AppPalette.success : null,
                 explanation: '缓存 Token 占总输入 Token 的比例，越高代表上下文复用越好。',
               ),
             ],
@@ -264,7 +268,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
                       '${NexusMetricTile.formatTokens(chatState.liveContextTokens > 0 ? chatState.liveContextTokens : totalTokens)} / ${NexusMetricTile.formatTokens(chatState.contextTokens)}',
                       style: const TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w500,
                         fontFeatures: [FontFeature.tabularFigures()],
                       ),
                     ),
@@ -272,7 +276,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
                 ),
                 const SizedBox(height: 6),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                   child: LinearProgressIndicator(
                     value: chatState.contextTokens <= 0
                         ? 0.01
@@ -400,11 +404,11 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
           isFailed
               ? Icons.error_outline_rounded
               : Icons.check_circle_outline_rounded,
-          color: isFailed ? AppTheme.danger : AppTheme.success,
+          color: isFailed ? AppPalette.danger : AppPalette.success,
         ),
         title: Text(
           run.model,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
         ),
         subtitle: Text(
           '${run.startedAt.toLocal().toString().substring(0, 16)} · '
@@ -567,6 +571,8 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
     return saved;
   }
 
+  RunAuditReport get _auditReport => RunAuditReport.fromEvents(_events);
+
   Map<String, dynamic> _reportMap() => {
         'run': {
           'runId': _run.runId,
@@ -590,6 +596,7 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
           'estimatedSavedCostCents': _savedCostCents(),
           'retryCount': _run.retryCount,
         },
+        'audit': _auditReport.toJson(),
         'rendering': _renderingReport(),
         'events': _events
             .map((event) => {
@@ -666,12 +673,14 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final total = _run.inputTokens + _run.outputTokens;
     final cacheRate = _run.inputTokens == 0
         ? '暂无数据'
         : '${(_run.cachedTokens / _run.inputTokens * 100).toStringAsFixed(1)}%';
     final savedCost = _savedCostCents();
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(
         title: const Text('任务详情'),
         actions: [
@@ -762,6 +771,8 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
                 ),
               ),
               const SizedBox(height: 18),
+              _buildAuditSection(),
+              const SizedBox(height: 18),
               Text('执行时间线', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               if (_events.isEmpty)
@@ -818,10 +829,77 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
           children: [
             Text(label, style: const TextStyle(fontSize: 12)),
             const SizedBox(height: 4),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
           ],
         ),
       );
+
+  Widget _buildAuditSection() {
+    final report = _auditReport;
+    if (report.entries.isEmpty) {
+      return SectionCard(
+        child: ListTile(
+          leading: const Icon(Icons.verified_user_outlined),
+          title: const Text('副作用审计'),
+          subtitle: const Text('本次运行没有记录到文件、终端或设备副作用。'),
+        ),
+      );
+    }
+    return SectionCard(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.fact_check_outlined, size: 18),
+              const SizedBox(width: 8),
+              Text('副作用审计（${report.entries.length} 次）',
+                  style: const TextStyle(fontWeight: FontWeight.w500)),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: () => _export(true),
+                icon: const Icon(Icons.data_object, size: 16),
+                label: const Text('JSON'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ...report.entries.map((entry) {
+            final color = switch (entry.effect) {
+              'applied' => AppPalette.success,
+              'unknown' => AppPalette.warning,
+              _ => Theme.of(context).colorScheme.onSurfaceVariant,
+            };
+            return ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                entry.effect == 'applied'
+                    ? Icons.check_circle_outline
+                    : entry.effect == 'unknown'
+                        ? Icons.help_outline
+                        : Icons.remove_circle_outline,
+                color: color,
+                size: 19,
+              ),
+              title: Text('${entry.tool} · effect=${entry.effect}'),
+              subtitle: Text(
+                [
+                  if (entry.path != null) entry.path!,
+                  if (entry.code.isNotEmpty) entry.code,
+                  if (entry.evidence != null && entry.evidence!.isNotEmpty)
+                    entry.evidence!,
+                ].join(' · '),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
 }
 
 class _EventMetadataView extends StatelessWidget {
@@ -845,7 +923,7 @@ class _EventMetadataView extends StatelessWidget {
           if (entries.isNotEmpty) SelectableText(entries),
           if (diff != null && diff.isNotEmpty) ...[
             const SizedBox(height: 8),
-            const Text('Diff', style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text('Diff', style: TextStyle(fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,

@@ -74,7 +74,7 @@ class ToolApprovalSheet extends StatelessWidget {
                               style: Theme.of(context)
                                   .textTheme
                                   .titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.w700)),
+                                  ?.copyWith(fontWeight: FontWeight.w500)),
                           Text(AppStrings.requiresAuthorization,
                               style: TextStyle(
                                   color: Theme.of(context).colorScheme.outline,
@@ -98,11 +98,11 @@ class ToolApprovalSheet extends StatelessWidget {
                           child: Text(call.name,
                               style: const TextStyle(
                                   fontFamily: 'monospace',
-                                  fontWeight: FontWeight.w700))),
+                                  fontWeight: FontWeight.w500))),
                       Text(riskLabel,
                           style: TextStyle(
                               color: riskColor,
-                              fontWeight: FontWeight.w700,
+                              fontWeight: FontWeight.w500,
                               fontSize: 12)),
                     ]),
                   ),
@@ -111,7 +111,7 @@ class ToolApprovalSheet extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text(summary,
                         style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w600)),
+                            fontSize: 15, fontWeight: FontWeight.w500)),
                     if (paramLines.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       for (final (k, v) in paramLines)
@@ -262,7 +262,7 @@ class ToolApprovalSheet extends StatelessWidget {
                   style: TextStyle(
                       fontSize: 11,
                       color: Color(0xFFBAC2DE),
-                      fontWeight: FontWeight.w600)),
+                      fontWeight: FontWeight.w500)),
             ],
           ),
           const SizedBox(height: 6),

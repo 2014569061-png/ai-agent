@@ -1,55 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'app_palette.dart';
 import 'app_tokens.dart';
 
 abstract final class AppTheme {
-  static const brand = Color(0xFF0A59F7);
-  static const brandBright = Color(0xFF1677FF);
+  // 品牌色与主要视觉色
+  static const brand = AppPalette.brand;
+  static const brandBright = AppPalette.brand;
+  static const background = AppPalette.lightCanvas;
+  static const darkBackground = AppPalette.darkCanvas;
+  static const textPrimary = AppPalette.lightText;
+  static const textSecondary = AppPalette.lightTextMuted;
+  static const danger = AppPalette.danger;
+  static const warning = AppPalette.warning;
+  static const success = AppPalette.success;
 
-  /// 品牌渐变对（蓝→紫）：录音胶囊、空态艺术、品牌光晕共用；用户气泡的带透明版在 AppSemanticColors。
-  static const brandGradientStart = Color(0xFF4C8DFF);
-  static const brandGradientEnd = Color(0xFF9333EA);
-
-  /// 玻璃表面弱化文字（mutedOnGlass）的顶层 const 版本，供 const 表达式直接引用。
-  static const mutedOnGlassLight = Color(0xFF627D98);
-  static const mutedOnGlassDark = Color(0xFF8A94A6);
-  static const background = Color(0xFFF6F8FB);
-  static const darkBackground = Color(0xFF080D17);
-  static const textPrimary = Color(0xFF1E293B);
-  static const textSecondary = Color(0xFF64748B);
-  static const danger = Color(0xFFE5484D);
-  static const warning = Color(0xFFF5A623);
-  static const success = Color(0xFF2BA471);
-
+  // 基础圆角常量
   static const radiusSmall = AppTokens.radiusControl;
-  static const radiusCapsule = AppTokens.radiusCapsule;
+  static const radiusCapsule = AppTokens.radiusPill;
   static const radiusCard = AppTokens.radiusCard;
   static const radiusModal = AppTokens.radiusModal;
 
-  static const lightFloating = Color(0xEFFFFFFF);
-  static const darkFloating = Color(0xE61E2635);
-  static const lightElevated = Color(0xFFFDFEFF);
-  static const darkElevated = Color(0xFF202838);
-  static const lightBorder = Color(0xFFDCE5F2);
-  static const darkBorder = Color(0xFF354155);
-  static const lightGlow = Color(0x241A6BFF);
-  static const darkGlow = Color(0x423E86FF);
+  // 表面色与边框色
+  static const lightFloating = AppPalette.lightSurface;
+  static const darkFloating = AppPalette.darkSurface;
+  static const lightElevated = AppPalette.lightSurface;
+  static const darkElevated = AppPalette.darkSurface;
+  static const lightBorder = AppPalette.lightHairline;
+  static const darkBorder = AppPalette.darkHairline;
 
-  static List<BoxShadow> floatingShadow(bool isDark) => [
+  // 废弃字段兼容别名
+  @Deprecated('视觉规范已改为单强调色')
+  static const brandGradientStart = AppPalette.brand;
+  @Deprecated('视觉规范已改为单强调色')
+  static const brandGradientEnd = AppPalette.brand;
+  @Deprecated('请改用 AppPalette.lightTextMuted')
+  static const mutedOnGlassLight = AppPalette.lightTextMuted;
+  @Deprecated('请改用 AppPalette.darkTextMuted')
+  static const mutedOnGlassDark = AppPalette.darkTextMuted;
+  @Deprecated('视觉规范已移除彩色光晕')
+  static const lightGlow = Colors.transparent;
+  @Deprecated('视觉规范已移除彩色光晕')
+  static const darkGlow = Colors.transparent;
+
+  // 阴影收敛为 2 级（卡片 1px，浮层 8px）
+  static const cardShadow = [
+    BoxShadow(
+      color: Color.fromRGBO(16, 24, 40, 0.04),
+      blurRadius: 2,
+      offset: Offset(0, 1),
+    ),
+  ];
+
+  static List<BoxShadow> floatingShadow([bool isDark = false]) => const [
         BoxShadow(
-          color: Colors.black.withValues(alpha: isDark ? .28 : .08),
+          color: Color.fromRGBO(16, 24, 40, 0.08),
           blurRadius: 24,
-          offset: const Offset(0, 8),
-        ),
-        BoxShadow(
-          color: isDark ? darkGlow : lightGlow,
-          blurRadius: 18,
-          spreadRadius: -4,
-          offset: const Offset(0, 3),
+          offset: Offset(0, 8),
         ),
       ];
 
-  /// 明暗两套语义色 token。初现时在底部只建一档；后续真正落地时按需补齐。
+  // 语义色集合
   static const lightSemantic = AppSemanticColors.light;
   static const darkSemantic = AppSemanticColors.dark;
 
@@ -58,42 +69,126 @@ abstract final class AppTheme {
           ? darkSemantic
           : lightSemantic;
 
-  static List<String> get _cjkFallback => const [
-        'Noto Sans SC',
+  // 字体族串联：正文用 Inter, PingFang SC, Microsoft YaHei, Noto Sans SC
+  static List<String> get _fontFallback => const [
+        'Inter',
         'PingFang SC',
-        'Hiragino Sans GB',
         'Microsoft YaHei',
-        'Source Han Sans SC',
-        'WenQuanYi Micro Hei',
+        'Noto Sans SC',
         'sans-serif',
       ];
 
-  static TextTheme _baseTextTheme(TextTheme base) => base.copyWith(
-        bodyLarge: base.bodyLarge?.copyWith(fontFamilyFallback: _cjkFallback),
-        bodyMedium: base.bodyMedium?.copyWith(fontFamilyFallback: _cjkFallback),
-        bodySmall: base.bodySmall?.copyWith(fontFamilyFallback: _cjkFallback),
-        titleLarge: base.titleLarge?.copyWith(fontFamilyFallback: _cjkFallback),
-        titleMedium:
-            base.titleMedium?.copyWith(fontFamilyFallback: _cjkFallback),
-        titleSmall: base.titleSmall?.copyWith(fontFamilyFallback: _cjkFallback),
-        labelLarge: base.labelLarge
-            ?.copyWith(fontFamilyFallback: _cjkFallback, height: 1.3),
-        labelMedium: base.labelMedium
-            ?.copyWith(fontFamilyFallback: _cjkFallback, height: 1.3),
-        labelSmall: base.labelSmall
-            ?.copyWith(fontFamilyFallback: _cjkFallback, height: 1.3),
-        headlineLarge:
-            base.headlineLarge?.copyWith(fontFamilyFallback: _cjkFallback),
-        headlineMedium:
-            base.headlineMedium?.copyWith(fontFamilyFallback: _cjkFallback),
-        headlineSmall:
-            base.headlineSmall?.copyWith(fontFamilyFallback: _cjkFallback),
-        displayLarge:
-            base.displayLarge?.copyWith(fontFamilyFallback: _cjkFallback),
-        displayMedium:
-            base.displayMedium?.copyWith(fontFamilyFallback: _cjkFallback),
-        displaySmall:
-            base.displaySmall?.copyWith(fontFamilyFallback: _cjkFallback),
+  // 字体收敛为 5 档，字重严格限定为 400 与 500
+  static TextTheme _baseTextTheme(
+    TextTheme base, {
+    required Color primary,
+    required Color muted,
+    required Color faint,
+  }) =>
+      base.copyWith(
+        // 空态主文案：22 / 500 / 1.35
+        headlineLarge: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 22,
+          fontWeight: FontWeight.w500,
+          height: 1.35,
+          color: primary,
+        ),
+        headlineMedium: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 22,
+          fontWeight: FontWeight.w500,
+          height: 1.35,
+          color: primary,
+        ),
+        // 页面标题、内容小标题：17 / 500 / 1.4
+        headlineSmall: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 17,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+          color: primary,
+        ),
+        titleLarge: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 17,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+          color: primary,
+        ),
+        titleMedium: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 17,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+          color: primary,
+        ),
+        titleSmall: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+          color: primary,
+        ),
+        // 正文：15 / 400 / 1.6
+        bodyLarge: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+          height: 1.6,
+          color: primary,
+        ),
+        bodyMedium: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+          height: 1.6,
+          color: primary,
+        ),
+        // 次要信息：13 / 400 / 1.55
+        bodySmall: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          height: 1.55,
+          color: muted,
+        ),
+        // 标签 / 徽标：11 / 500 / 1.4 (可加 letterSpacing: 0.04)
+        labelLarge: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+          color: primary,
+        ),
+        labelMedium: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+          letterSpacing: 0.04,
+          color: faint,
+        ),
+        labelSmall: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          height: 1.4,
+          letterSpacing: 0.04,
+          color: faint,
+        ),
       );
 
   static ThemeData light() => _build(Brightness.light);
@@ -101,257 +196,358 @@ abstract final class AppTheme {
 
   static ThemeData _build(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
-    final scheme = ColorScheme.fromSeed(
-      seedColor: isDark ? brandBright : brand,
+    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final text = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final textFaint =
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+
+    final scheme = ColorScheme(
       brightness: brightness,
-    ).copyWith(
-      primary: isDark ? const Color(0xFF72A5FF) : brand,
-      secondary: isDark ? const Color(0xFF8EB8FF) : brandBright,
-      surface: isDark ? darkBackground : Colors.white,
+      primary: AppPalette.brand,
+      onPrimary: Colors.white,
+      secondary:
+          isDark ? AppPalette.darkBrandHover : AppPalette.lightBrandHover,
+      onSecondary: Colors.white,
+      error: AppPalette.danger,
+      onError: Colors.white,
+      surface: surface,
+      onSurface: text,
+      surfaceContainerHighest:
+          isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
+      onSurfaceVariant: textMuted,
+      outline: hairline,
+      outlineVariant: hairline,
     );
-    final surface = isDark ? darkElevated : lightElevated;
-    final floating = isDark ? darkFloating : lightFloating;
-    final border = isDark ? darkBorder : lightBorder;
-    final foreground = isDark ? const Color(0xFFEDF1F8) : textPrimary;
+
     final base = isDark ? ThemeData.dark() : ThemeData.light();
-    final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radiusCard),
-      side: BorderSide(color: border),
+    final cardShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+      side: BorderSide(color: hairline, width: 1.0),
     );
-    final capsule = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(radiusCapsule),
-      side: BorderSide(color: border),
+    final controlShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+      side: BorderSide(color: hairline, width: 1.0),
+    );
+    final pillShape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+      side: BorderSide(color: hairline, width: 1.0),
     );
 
     return ThemeData(
       colorScheme: scheme,
-      scaffoldBackgroundColor: isDark ? darkBackground : background,
+      scaffoldBackgroundColor: canvas,
       useMaterial3: true,
-      fontFamily: 'Noto Sans SC',
-      fontFamilyFallback: _cjkFallback,
-      textTheme: _baseTextTheme(base.textTheme),
+      fontFamily: 'Inter',
+      fontFamilyFallback: _fontFallback,
+      textTheme: _baseTextTheme(
+        base.textTheme,
+        primary: text,
+        muted: textMuted,
+        faint: textFaint,
+      ),
+      dividerColor: hairline,
+      dividerTheme: DividerThemeData(
+        color: hairline,
+        thickness: 1.0,
+        space: 1.0,
+      ),
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor: foreground,
+        backgroundColor: canvas,
+        foregroundColor: text,
         elevation: 0,
         scrolledUnderElevation: 0,
+        toolbarHeight: AppTokens.kTopBarHeight,
         systemOverlayStyle: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
           systemNavigationBarColor: Colors.transparent,
           statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
           statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-          systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          systemNavigationBarIconBrightness:
+              isDark ? Brightness.light : Brightness.dark,
         ),
       ),
       cardTheme: CardThemeData(
-        color: surface,
+        color: canvas,
         elevation: 0,
         shadowColor: Colors.transparent,
-        shape: shape,
+        shape: cardShape,
         margin: EdgeInsets.zero,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: floating,
+        fillColor: canvas,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusCapsule),
-            borderSide: BorderSide(color: border)),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderSide: BorderSide(color: hairline, width: 1.0),
+        ),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusCapsule),
-            borderSide: BorderSide(color: border)),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderSide: BorderSide(color: hairline, width: 1.0),
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusCapsule),
-            borderSide: BorderSide(color: scheme.primary, width: 1.5)),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderSide: const BorderSide(color: AppPalette.brand, width: 1.0),
+        ),
+        hintStyle: TextStyle(
+          color: textFaint,
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
+        ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor:
-            isDark ? const Color(0xFF26334A) : const Color(0xFFEAF2FF),
-        side: BorderSide.none,
-        shape: const StadiumBorder(),
+        backgroundColor: canvas,
+        side: BorderSide(color: hairline, width: 1.0),
+        shape: pillShape,
         labelStyle: TextStyle(
-            color: isDark ? foreground : const Color(0xFF174A7E), height: 1.35),
+          color: text,
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          height: 1.4,
+        ),
       ),
-      // 弹层表面统一由 showImmersiveDialog / showImmersiveSheet 的 ImmersiveSurface 提供，
-      // dialogTheme 只保留文字样式，背景保持透明避免出现不透明兜底面。
       dialogTheme: DialogThemeData(
-        backgroundColor: Colors.transparent,
+        backgroundColor: canvas,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shadowColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusModal),
+          side: BorderSide(color: hairline, width: 1.0),
+        ),
         titleTextStyle: TextStyle(
-            color: foreground, fontSize: 20, fontWeight: FontWeight.w700),
+          color: text,
+          fontSize: 17,
+          fontWeight: FontWeight.w500,
+        ),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: surface,
-        contentTextStyle: TextStyle(color: foreground),
-        shape: capsule,
+        backgroundColor: isDark ? surface : const Color(0xEB1A1A1A),
+        contentTextStyle: TextStyle(
+          color: isDark ? text : Colors.white,
+          fontSize: 13,
+          height: 1.55,
+        ),
+        shape: controlShape,
         behavior: SnackBarBehavior.floating,
-        elevation: 8,
+        elevation: 4,
       ),
       filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-              shape: capsule,
-              minimumSize: const Size(0, 46),
-              padding: const EdgeInsets.symmetric(horizontal: 22))),
+        style: FilledButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          ),
+          minimumSize: const Size(0, AppTokens.kControlHeight),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        ),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-              shape: capsule,
-              minimumSize: const Size(0, 46),
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 22))),
+        style: ElevatedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          ),
+          minimumSize: const Size(0, AppTokens.kControlHeight),
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        ),
+      ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-              shape: capsule,
-              minimumSize: const Size(0, 46),
-              padding: const EdgeInsets.symmetric(horizontal: 22))),
+        style: OutlinedButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            side: BorderSide(color: hairline, width: 1.0),
+          ),
+          minimumSize: const Size(0, AppTokens.kControlHeight),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        ),
+      ),
       textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-              shape: capsule,
-              minimumSize: const Size(0, 44),
-              padding: const EdgeInsets.symmetric(horizontal: 18))),
+        style: TextButton.styleFrom(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          ),
+          minimumSize: const Size(0, AppTokens.kControlHeight),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        ),
+      ),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusSmall),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        iconColor: scheme.primary,
-        textColor: foreground,
+        iconColor: textMuted,
+        textColor: text,
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radiusCapsule),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
         ),
-        elevation: 6,
-        backgroundColor: scheme.primary,
-        foregroundColor: scheme.onPrimary,
+        elevation: 0,
+        backgroundColor: AppPalette.brand,
+        foregroundColor: Colors.white,
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: floating,
+        backgroundColor: canvas,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         height: 68,
         indicatorColor:
-            isDark ? const Color(0x334C8DFF) : const Color(0x1F0A59F7),
+            isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
         labelTextStyle: WidgetStatePropertyAll(
-            TextStyle(fontWeight: FontWeight.w600, color: foreground)),
+          TextStyle(fontWeight: FontWeight.w500, color: text, fontSize: 11),
+        ),
       ),
     );
   }
 }
 
-/// 沉浸光感的明暗语义色 token 集合。
-/// 各字段与 [AppTheme] 的明暗静态常量对齐，页面/组件一律通过语义名引用，
-/// 避免散落的硬编码颜色（背景、浮层、抬升面、模态、边框、文字、聊天双方气泡与状态色）。
+/// 明暗两套语义色彩定义集合
 class AppSemanticColors {
   const AppSemanticColors({
     required this.canvas,
     required this.surface,
+    required this.surfaceHover,
+    required this.hairline,
+    required this.textPrimary,
+    required this.textMuted,
+    required this.textFaint,
+    required this.brand,
+    required this.brandHover,
+    required this.brandActive,
+    required this.brandSoft,
+    required this.brandFaint,
+    required this.danger,
+    required this.warning,
+    required this.success,
+    // 兼容字段
     required this.floatingSurface,
     required this.elevatedSurface,
     required this.modalSurface,
     required this.border,
-    required this.textPrimary,
-    required this.textMuted,
     required this.chatUser,
     required this.chatAssistant,
-    required this.danger,
-    required this.warning,
-    required this.success,
-    required this.focusGlow,
-    required this.glowBright,
-    required this.brandAccent,
-    required this.userBubbleStart,
-    required this.userBubbleEnd,
-    required this.userBubbleGlow,
     required this.onGlass,
     required this.mutedOnGlass,
     required this.surfaceTint,
+    required this.brandAccent,
+    required this.focusGlow,
+    required this.glowBright,
+    required this.userBubbleStart,
+    required this.userBubbleEnd,
+    required this.userBubbleGlow,
   });
 
   final Color canvas;
   final Color surface;
+  final Color surfaceHover;
+  final Color hairline;
+  final Color textPrimary;
+  final Color textMuted;
+  final Color textFaint;
+  final Color brand;
+  final Color brandHover;
+  final Color brandActive;
+  final Color brandSoft;
+  final Color brandFaint;
+  final Color danger;
+  final Color warning;
+  final Color success;
+
+  // 兼容老调用字段
   final Color floatingSurface;
   final Color elevatedSurface;
   final Color modalSurface;
   final Color border;
-  final Color textPrimary;
-  final Color textMuted;
   final Color chatUser;
   final Color chatAssistant;
-  final Color danger;
-  final Color warning;
-  final Color success;
-  final Color focusGlow;
-  final Color glowBright;
-
-  /// 品牌强调蓝（计划卡片、抽屉图标、选中态描边）。
+  final Color onGlass;
+  final Color mutedOnGlass;
+  final Color surfaceTint;
   final Color brandAccent;
-
-  /// 用户气泡彩色玻璃：渐变起止（自带透明度，叠在 BackdropFilter 上）。
+  @Deprecated('视觉规范已移除光晕')
+  final Color focusGlow;
+  @Deprecated('视觉规范已移除光晕')
+  final Color glowBright;
+  @Deprecated('视觉规范已改为 brandSoft')
   final Color userBubbleStart;
+  @Deprecated('视觉规范已改为 brandSoft')
   final Color userBubbleEnd;
-
-  /// 用户气泡光晕（浅色主题下透明，即无光晕）。
+  @Deprecated('视觉规范已移除气泡光晕')
   final Color userBubbleGlow;
 
-  /// 彩色玻璃表面上的正文颜色。
-  final Color onGlass;
-
-  /// 玻璃表面上的弱化文字/署名（比 textMuted 更贴玻璃材质的一档）。
-  final Color mutedOnGlass;
-
-  /// 玻璃面/悬浮面浅色遮罩叠加色（消除越过语义层的手写透明度）。
-  final Color surfaceTint;
+  Color get text => textPrimary;
 
   static const light = AppSemanticColors(
-    canvas: AppTheme.background,
-    surface: AppTheme.lightElevated,
-    floatingSurface: AppTheme.lightFloating,
-    elevatedSurface: AppTheme.lightElevated,
-    modalSurface: Color(0xFFFDFEFF),
-    border: AppTheme.lightBorder,
-    textPrimary: AppTheme.textPrimary,
-    textMuted: Color(0xFF51617A), // P2-5: 提升对比度至 5.2:1 (符合 WCAG AA 4.5:1)
-    chatUser: Color(0xFF0A59F7),
-    chatAssistant: Color(0xFFEFF4FB),
-    danger: AppTheme.danger,
-    warning: AppTheme.warning,
-    success: AppTheme.success,
-    focusGlow: AppTheme.lightGlow,
-    glowBright: Color(0x331A6BFF),
-    brandAccent: AppTheme.brandBright,
-    userBubbleStart: Color(0x9EFFFFFF),
-    userBubbleEnd: Color(0x80C7D7FE),
-    userBubbleGlow: Color(0x00000000),
-    onGlass: AppTheme.textPrimary,
-    mutedOnGlass: AppTheme.mutedOnGlassLight,
-    surfaceTint: Color(0x8CFFFFFF), // Colors.white @ 0.55
+    canvas: AppPalette.lightCanvas,
+    surface: AppPalette.lightSurface,
+    surfaceHover: AppPalette.lightSurfaceHover,
+    hairline: AppPalette.lightHairline,
+    textPrimary: AppPalette.lightText,
+    textMuted: AppPalette.lightTextMuted,
+    textFaint: AppPalette.lightTextFaint,
+    brand: AppPalette.brand,
+    brandHover: AppPalette.lightBrandHover,
+    brandActive: AppPalette.lightBrandActive,
+    brandSoft: AppPalette.lightBrandSoft,
+    brandFaint: AppPalette.lightBrandFaint,
+    danger: AppPalette.danger,
+    warning: AppPalette.warning,
+    success: AppPalette.success,
+    floatingSurface: AppPalette.lightSurface,
+    elevatedSurface: AppPalette.lightSurface,
+    modalSurface: AppPalette.lightSurface,
+    border: AppPalette.lightHairline,
+    chatUser: AppPalette.lightBrandSoft,
+    chatAssistant: AppPalette.lightSurface,
+    onGlass: AppPalette.lightText,
+    mutedOnGlass: AppPalette.lightTextMuted,
+    surfaceTint: Colors.transparent,
+    brandAccent: AppPalette.brand,
+    focusGlow: Colors.transparent,
+    glowBright: Colors.transparent,
+    userBubbleStart: AppPalette.lightBrandSoft,
+    userBubbleEnd: AppPalette.lightBrandSoft,
+    userBubbleGlow: Colors.transparent,
   );
 
   static const dark = AppSemanticColors(
-    canvas: AppTheme.darkBackground,
-    surface: AppTheme.darkElevated,
-    floatingSurface: AppTheme.darkFloating,
-    elevatedSurface: AppTheme.darkElevated,
-    modalSurface: Color(0xFF202838),
-    border: AppTheme.darkBorder,
-    textPrimary: Color(0xFFEDF1F8),
-    textMuted: Color(0xFF94A3B8),
-    chatUser: Color(0xFF72A5FF),
-    chatAssistant: Color(0xFF263448),
-    danger: AppTheme.danger,
-    warning: AppTheme.warning,
-    success: AppTheme.success,
-    focusGlow: AppTheme.darkGlow,
-    glowBright: Color(0x663E86FF),
-    brandAccent: Color(0xFF4C8DFF),
-    userBubbleStart: Color(0x8C4C8DFF),
-    userBubbleEnd: Color(0x8C9333EA),
-    userBubbleGlow: Color(0x4D9333EA),
-    onGlass: Colors.white,
-    mutedOnGlass: AppTheme.mutedOnGlassDark,
-    surfaceTint: Color(0x14FFFFFF), // Colors.white @ 0.08
+    canvas: AppPalette.darkCanvas,
+    surface: AppPalette.darkSurface,
+    surfaceHover: AppPalette.darkSurfaceHover,
+    hairline: AppPalette.darkHairline,
+    textPrimary: AppPalette.darkText,
+    textMuted: AppPalette.darkTextMuted,
+    textFaint: AppPalette.darkTextFaint,
+    brand: AppPalette.brand,
+    brandHover: AppPalette.darkBrandHover,
+    brandActive: AppPalette.darkBrandActive,
+    brandSoft: AppPalette.darkBrandSoft,
+    brandFaint: AppPalette.darkBrandFaint,
+    danger: AppPalette.danger,
+    warning: AppPalette.warning,
+    success: AppPalette.success,
+    floatingSurface: AppPalette.darkSurface,
+    elevatedSurface: AppPalette.darkSurface,
+    modalSurface: AppPalette.darkSurface,
+    border: AppPalette.darkHairline,
+    chatUser: AppPalette.darkBrandSoft,
+    chatAssistant: AppPalette.darkSurface,
+    onGlass: AppPalette.darkText,
+    mutedOnGlass: AppPalette.darkTextMuted,
+    surfaceTint: Colors.transparent,
+    brandAccent: AppPalette.brand,
+    focusGlow: Colors.transparent,
+    glowBright: Colors.transparent,
+    userBubbleStart: AppPalette.darkBrandSoft,
+    userBubbleEnd: AppPalette.darkBrandSoft,
+    userBubbleGlow: Colors.transparent,
   );
 }

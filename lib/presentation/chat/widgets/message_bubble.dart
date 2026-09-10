@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
@@ -11,17 +12,16 @@ import '../../markdown/code_block.dart';
 import '../../markdown/math_block.dart';
 import '../../markdown/markdown_render_policy.dart';
 import '../../markdown/markdown_render_metrics.dart';
-import '../../theme/app_theme.dart';
+import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/floating_toast.dart';
-import '../../widgets/immersive_surface.dart';
 import 'mascot_avatar.dart';
-import 'message_metrics_sheet.dart';
 import 'attachment_strip.dart';
 import 'reasoning_block.dart';
 
 /// 单个消息气泡：负责气泡布局、正文/思考/附件渲染与轻量操作（复制、重生成）。
-/// 长按动作菜单与「重新生成」由页面通过回调注入，保持流式/状态逻辑留在 ChatPage。
+/// 用户消息：底 brandSoft、文字 text 15/400、内边距 10×14、圆角 16 16 8 16、最大宽 78%
+/// AI 消息：不使用气泡，直接排版，左右各 16px 边距；正文 15/1.6、段间距 12px、回答内小标题 17/500（上 20 下 8）
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
@@ -41,10 +41,16 @@ class MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isUser = message.role == MessageRole.user;
     final isTool = message.role == MessageRole.tool;
-    final glass = AppTheme.semanticOf(context);
-    final assistantTextColor = glass.textPrimary;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final brandSoft =
+        isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
+
     final imageParts =
         message.parts.where((part) => part.type == 'image').toList();
     final audioParts =
@@ -59,42 +65,42 @@ class MessageBubble extends StatelessWidget {
 
     // 流式生成中的最后一条助手消息使用纯文本，避免每个增量都重新解析 Markdown。
     final lightweight = !isUser && !isTool && isLast && running;
-    final isDark = theme.brightness == Brightness.dark;
+
+    // 无障碍：把原本只能长按触发的「复制 / 重新生成」暴露成读屏可操作的自定义
+    // 语义动作（不新增可见按钮，避免改变视觉）。
+    final customActions = <CustomSemanticsAction, VoidCallback>{
+      const CustomSemanticsAction(label: '复制'): () {
+        Clipboard.setData(ClipboardData(text: message.text));
+        HapticFeedback.lightImpact();
+        FloatingToast.show(
+          context,
+          '已复制全文',
+          tone: ToastTone.success,
+        );
+      },
+      if (isLast && message.role == MessageRole.assistant && !running)
+        const CustomSemanticsAction(label: '重新生成'): onRegenerate,
+    };
+
     final body = isUser
-        ? ImmersiveSurface(
-            level: ImmersiveMaterialLevel.thick,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(16),
-              bottomLeft: Radius.circular(16),
-              bottomRight: Radius.circular(16),
-              topRight: Radius.circular(4),
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: brandSoft,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+                bottomRight: Radius.circular(8),
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            // 彩色玻璃：渐变自带透明度叠在高斯模糊上，保留蓝紫品牌色身份。
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                glass.userBubbleStart.withValues(alpha: 0.40),
-                glass.userBubbleEnd.withValues(alpha: 0.40)
-              ],
-            ),
-            boxShadow: isDark
-                ? [
-                    BoxShadow(
-                      color: glass.userBubbleGlow,
-                      blurRadius: 16,
-                      spreadRadius: 1,
-                    )
-                  ]
-                : null,
             child: SelectableText(
               message.text,
               style: TextStyle(
-                color: glass.onGlass,
-                height: 1.4,
-                fontSize: 13.5,
-                fontWeight: isDark ? FontWeight.w500 : FontWeight.normal,
+                color: textColor,
+                height: 1.6,
+                fontSize: 15,
+                fontWeight: FontWeight.w400,
               ),
             ),
           )
@@ -102,102 +108,132 @@ class MessageBubble extends StatelessWidget {
             ? SelectableText(
                 errorSplit.main,
                 style: TextStyle(
-                    color: assistantTextColor, height: 1.45, fontSize: 13.5),
+                  color: textColor,
+                  height: 1.6,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                ),
               )
             : _DeferredMarkdown(
                 data: errorSplit.main,
                 selectable: true,
                 builders: {'pre': CodeBlockBuilder()},
-                textColor: assistantTextColor,
+                textColor: textColor,
                 styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                   p: TextStyle(
-                      color: assistantTextColor, height: 1.45, fontSize: 13),
-                  blockSpacing: 6,
-                  listIndent: 18,
-                  // 标题统一压到与系统正文协调的档位(flutter_markdown 默认 22-24,过大)
+                    color: textColor,
+                    height: 1.6,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  blockSpacing: 12,
+                  listIndent: 20,
                   h1: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 16,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700),
-                  h1Padding: const EdgeInsets.only(top: 10, bottom: 4),
+                    color: textColor,
+                    fontSize: 17,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  h1Padding: const EdgeInsets.only(top: 20, bottom: 8),
                   h2: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 15,
-                      height: 1.35,
-                      fontWeight: FontWeight.w700),
-                  h2Padding: const EdgeInsets.only(top: 8, bottom: 4),
+                    color: textColor,
+                    fontSize: 17,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
                   h3: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 14,
-                      height: 1.4,
-                      fontWeight: FontWeight.w600),
-                  h3Padding: const EdgeInsets.only(top: 6, bottom: 2),
+                    color: textColor,
+                    fontSize: 15,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  h3Padding: const EdgeInsets.only(top: 16, bottom: 6),
                   h4: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600),
+                    color: textColor,
+                    fontSize: 15,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
                   h5: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600),
+                    color: textColor,
+                    fontSize: 15,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
                   h6: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600),
+                    color: textColor,
+                    fontSize: 15,
+                    height: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
                   listBullet: TextStyle(
-                      color: assistantTextColor, height: 1.45, fontSize: 13),
+                    color: textColor,
+                    height: 1.6,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                  ),
                   code: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 12,
-                      fontFamily: 'monospace'),
+                    color: textColor,
+                    fontSize: 13,
+                    fontFamily: 'JetBrains Mono',
+                  ),
                   blockquote: TextStyle(
-                      color: assistantTextColor, height: 1.4, fontSize: 13),
+                    color: textColor,
+                    height: 1.6,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                  ),
                   tableHead: TextStyle(
-                      color: assistantTextColor,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600),
+                    color: textColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                   tableBody: TextStyle(
-                      color: assistantTextColor, fontSize: 12.5, height: 1.35),
+                    color: textColor,
+                    fontSize: 13,
+                    height: 1.55,
+                    fontWeight: FontWeight.w400,
+                  ),
                   blockquoteDecoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border(
-                        left: BorderSide(
-                            color: theme.colorScheme.primary
-                                .withValues(alpha: 0.5),
-                            width: 3)),
+                    color: surface,
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                    border: const Border(
+                      left: BorderSide(
+                        color: AppPalette.brand,
+                        width: 3,
+                      ),
+                    ),
                   ),
                 ),
               );
 
     final reasoningText = message.reasoning;
     final content = Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          AttachmentStrip(parts: [...imageParts, ...audioParts, ...videoParts]),
-          if (hasText) body,
-          if (errorDetail != null) ...[
-            const SizedBox(height: 6),
-            _ErrorDetailBlock(detail: errorDetail),
-          ],
-        ]);
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AttachmentStrip(parts: [...imageParts, ...audioParts, ...videoParts]),
+        if (hasText) body,
+        if (errorDetail != null) ...[
+          const SizedBox(height: 6),
+          _ErrorDetailBlock(detail: errorDetail),
+        ],
+      ],
+    );
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final factor = ChatLayoutController.widthFactor.value;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 12),
       child: LayoutBuilder(builder: (context, constraints) {
-        final avatarSpace = isUser ? 0.0 : 44.0;
+        final avatarSpace = isUser ? 0.0 : 36.0;
         final availableWidth = (constraints.maxWidth - avatarSpace)
             .clamp(0.0, double.infinity)
             .toDouble();
         final desiredWidth = factor == ChatLayoutController.adaptive
-            ? (screenWidth < 640
-                ? (isUser ? screenWidth * .78 : availableWidth)
-                : math.min(screenWidth * .65, 720.0))
+            ? (isUser ? screenWidth * 0.78 : availableWidth)
             : screenWidth * factor;
         final maxWidth = math.min(desiredWidth, availableWidth).toDouble();
         return Row(
@@ -210,21 +246,21 @@ class MessageBubble extends StatelessWidget {
                 Semantics(
                   label: '工具调用',
                   child: CircleAvatar(
-                      radius: 14,
-                      backgroundColor:
-                          theme.colorScheme.surfaceContainerHighest,
-                      child: Icon(Icons.handyman_outlined,
-                          size: 14, color: theme.colorScheme.onSurfaceVariant)),
+                    radius: 14,
+                    backgroundColor: surface,
+                    child: Icon(Icons.handyman_outlined,
+                        size: 14, color: textMuted),
+                  ),
                 )
               else
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: 4),
                   child: Semantics(
                     label: '${message.modelName ?? "AI 助手"}模型',
                     child: MascotAvatar(modelName: message.modelName ?? ''),
                   ),
                 ),
-              const SizedBox(width: 8)
+              const SizedBox(width: 8),
             ],
             GestureDetector(
               onLongPress: isTool ? null : onLongPress,
@@ -234,6 +270,7 @@ class MessageBubble extends StatelessWidget {
                 showDuration: const Duration(milliseconds: 1800),
                 child: Semantics(
                   onLongPressHint: isUser ? '编辑或复制' : '朗读或复制',
+                  customSemanticsActions: customActions,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: maxWidth),
                     child: isUser
@@ -242,77 +279,75 @@ class MessageBubble extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Align(
-                                    alignment: Alignment.centerRight,
-                                    child: content),
+                                  alignment: Alignment.centerRight,
+                                  child: content,
+                                ),
                               ],
                             ),
                           )
-                        : ImmersiveSurface(
-                            level: ImmersiveMaterialLevel.thin,
-                            borderRadius: BorderRadius.circular(16),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  if (!isTool &&
-                                      (_hasMeta(message) ||
-                                          (running && !isUser)))
-                                    ReasoningCompactBlock(
-                                      reasoning: reasoningText ?? '',
-                                      streaming: running && !hasText,
-                                      leading:
-                                          MessageStatusPill(message: message),
-                                    ),
-                                  Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: content),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            iconSize: 16,
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(
-                                                minWidth: 28, minHeight: 28),
-                                            onPressed: () {
-                                              Clipboard.setData(ClipboardData(
-                                                  text: message.text));
-                                              HapticFeedback.lightImpact();
-                                              FloatingToast.show(
-                                                context,
-                                                '已复制全文',
-                                                tone: ToastTone.success,
-                                              );
-                                            },
-                                            icon: Icon(Icons.copy_outlined,
-                                                color: glass.textMuted),
-                                            tooltip: '复制'),
-                                        if (isLast &&
-                                            message.role ==
-                                                MessageRole.assistant &&
-                                            !running)
-                                          IconButton(
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              iconSize: 16,
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(
-                                                  minWidth: 28, minHeight: 28),
-                                              onPressed: onRegenerate,
-                                              icon: Icon(Icons.refresh_rounded,
-                                                  color: glass.textMuted),
-                                              tooltip: '重新生成'),
-                                      ],
-                                    ),
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // 只在确实有思考内容（或正在思考）时才出现这一行。
+                                // 原先只要消息带 elapsed/usage 就渲染一行指标，与底部会话指标条重复，已移除。
+                                if (!isTool &&
+                                    ((reasoningText?.trim().isNotEmpty ?? false) ||
+                                        (running && !isUser)))
+                                  ReasoningCompactBlock(
+                                    reasoning: reasoningText ?? '',
+                                    streaming: running && !hasText,
+                                    duration: message.reasoningDuration,
                                   ),
-                                ],
-                              ),
+                                Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: content,
+                                ),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        iconSize: 16,
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(
+                                            minWidth: 28, minHeight: 28),
+                                        onPressed: () {
+                                          Clipboard.setData(ClipboardData(
+                                              text: message.text));
+                                          HapticFeedback.lightImpact();
+                                          FloatingToast.show(
+                                            context,
+                                            '已复制全文',
+                                            tone: ToastTone.success,
+                                          );
+                                        },
+                                        icon: Icon(Icons.copy_outlined,
+                                            color: textMuted),
+                                        tooltip: '复制',
+                                      ),
+                                      if (isLast &&
+                                          message.role ==
+                                              MessageRole.assistant &&
+                                          !running)
+                                        IconButton(
+                                          visualDensity: VisualDensity.compact,
+                                          iconSize: 16,
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(
+                                              minWidth: 28, minHeight: 28),
+                                          onPressed: onRegenerate,
+                                          icon: Icon(Icons.refresh_rounded,
+                                              color: textMuted),
+                                          tooltip: '重新生成',
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                   ),
@@ -325,10 +360,6 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  static bool _hasMeta(ChatMessage message) =>
-      message.modelName != null ||
-      message.elapsed != null ||
-      (message.usage?.totalTokens ?? 0) > 0;
 }
 
 /// Delays expensive Markdown and math parsing for long completed replies.
@@ -392,8 +423,9 @@ class _DeferredMarkdownState extends State<_DeferredMarkdown> {
         widget.data,
         style: TextStyle(
           color: widget.textColor,
-          height: 1.45,
-          fontSize: 13,
+          height: 1.6,
+          fontSize: 15,
+          fontWeight: FontWeight.w400,
         ),
       );
     }
@@ -417,35 +449,96 @@ class _DeferredMarkdownState extends State<_DeferredMarkdown> {
   }
 }
 
-/// 错误原文折叠块：默认收起，点开展开底层异常全文（样式对齐 ReasoningBlock 的弱化文本）。
-class _ErrorDetailBlock extends StatelessWidget {
+/// 错误原文折叠块：遵循统一折叠行规范（13/400 textMuted + 12px 箭头，展开 220ms easeOutCubic）。
+class _ErrorDetailBlock extends StatefulWidget {
   const _ErrorDetailBlock({required this.detail});
 
   final String detail;
 
   @override
+  State<_ErrorDetailBlock> createState() => _ErrorDetailBlockState();
+}
+
+class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final colors = AppTheme.semanticOf(context);
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(bottom: 4),
-        iconColor: colors.textMuted,
-        collapsedIconColor: colors.textMuted,
-        title: Text('技术细节',
-            style: TextStyle(fontSize: 12, color: colors.textMuted)),
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SelectableText(
-              detail,
-              style:
-                  TextStyle(fontSize: 12, height: 1.4, color: colors.textMuted),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: () {
+            HapticFeedback.selectionClick();
+            setState(() => _expanded = !_expanded);
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '技术细节',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w400,
+                    height: 1.55,
+                    color: textMuted,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: _expanded ? 0.25 : 0.0,
+                  duration: AppTokens.durationSlow,
+                  curve: AppTokens.curveStandard,
+                  child: Icon(
+                    Icons.keyboard_arrow_right_rounded,
+                    size: 12,
+                    color: textMuted,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+        AnimatedCrossFade(
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+              border: Border.all(color: hairline, width: 1.0),
+            ),
+            child: SelectableText(
+              widget.detail,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+                height: 1.55,
+                color: textMuted,
+                fontFamily: 'JetBrains Mono',
+              ),
+            ),
+          ),
+          crossFadeState: _expanded
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+          duration: AppTokens.durationSlow,
+          firstCurve: AppTokens.curveStandard,
+          secondCurve: AppTokens.curveStandard,
+          sizeCurve: AppTokens.curveStandard,
+        ),
+      ],
     );
   }
 }

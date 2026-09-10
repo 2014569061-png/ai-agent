@@ -5,6 +5,8 @@ import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/skills/skill_installer.dart';
 import '../../infrastructure/skills/skill_store.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
@@ -125,7 +127,8 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
       await _load();
       if (mounted) FloatingToast.show(context, 'Skill 已更新');
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '更新失败：$error');
+      if (!mounted) return;
+      FloatingToast.show(context, '更新失败：$error');
     }
   }
 
@@ -135,7 +138,8 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
       await _store.setEnabled(db, pack, enabled);
       await _load();
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '操作失败：$error');
+      if (!mounted) return;
+      FloatingToast.show(context, '操作失败：$error');
     }
   }
 
@@ -153,12 +157,15 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
       await _load();
       if (mounted) FloatingToast.show(context, 'Skill 已删除');
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '删除失败：$error');
+      if (!mounted) return;
+      FloatingToast.show(context, '删除失败：$error');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Column(
       children: [
         Padding(
@@ -168,10 +175,23 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
               Expanded(
                 child: TextField(
                   controller: _urlController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'GitHub 仓库地址或 owner/repo',
                     isDense: true,
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? AppPalette.darkHairline
+                            : AppPalette.lightHairline,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
+                      borderSide: const BorderSide(color: AppPalette.brand),
+                    ),
                   ),
                   onSubmitted: (_) => _preview(),
                 ),
@@ -186,7 +206,25 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
-                  : ElevatedButton(
+                  : FilledButton(
+                      style: FilledButton.styleFrom(
+                        elevation: 0,
+                        backgroundColor: isDark
+                            ? AppPalette.darkSurface
+                            : AppPalette.lightSurface,
+                        foregroundColor: isDark
+                            ? AppPalette.darkText
+                            : AppPalette.lightText,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusControl),
+                          side: BorderSide(
+                            color: isDark
+                                ? AppPalette.darkHairline
+                                : AppPalette.lightHairline,
+                          ),
+                        ),
+                      ),
                       onPressed: _preview,
                       child: const Text('解析预览'),
                     ),
@@ -194,7 +232,10 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
           ),
         ),
         if (_previewPack != null) _buildPreviewCard(),
-        const Divider(height: 1),
+        Divider(
+          height: 1,
+          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+        ),
         Expanded(
           child: AsyncStateView(
             loading: _loading,
@@ -215,12 +256,36 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                       final pack = _installed[index];
                       return SectionCard(
                         child: ListTile(
-                          leading: const Icon(Icons.menu_book_outlined),
-                          title: Text(pack.name),
+                          leading: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppPalette.brandSoftDark
+                                  : AppPalette.brandSoftLight,
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusControl),
+                            ),
+                            child: const Icon(Icons.menu_book_outlined,
+                                size: 20, color: AppPalette.brand),
+                          ),
+                          title: Text(
+                            pack.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                           subtitle: Text(
                             '${pack.description}\n${pack.source} · v${pack.version}',
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -251,6 +316,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
   }
 
   Widget _buildPreviewCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final preview = _previewPack!;
     return SectionCard(
       margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -264,7 +330,10 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                 Expanded(
                   child: Text(
                     '${preview.metadata.name}  v${preview.metadata.version}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
                 _installing
@@ -274,24 +343,60 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : FilledButton(
+                        style: FilledButton.styleFrom(
+                          elevation: 0,
+                          backgroundColor: AppPalette.brand,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusControl),
+                          ),
+                        ),
                         onPressed: () => _install(),
                         child: const Text('安装'),
                       ),
               ],
             ),
             const SizedBox(height: 4),
-            Text(preview.metadata.description),
+            Text(
+              preview.metadata.description,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppPalette.darkText : AppPalette.lightText,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               '来源：${preview.source.label} · ${preview.fileList.length} 个文件 · ${(preview.totalBytes / 1024).toStringAsFixed(1)} KB',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted,
+              ),
             ),
             const SizedBox(height: 4),
             Wrap(
               spacing: 6,
               children: preview.metadata.tags
                   .map((tag) => Chip(
-                      label: Text(tag), visualDensity: VisualDensity.compact))
+                        backgroundColor: isDark
+                            ? AppPalette.darkSurface
+                            : AppPalette.lightSurface,
+                        side: BorderSide(
+                          color: isDark
+                              ? AppPalette.darkHairline
+                              : AppPalette.lightHairline,
+                        ),
+                        labelStyle: TextStyle(
+                          fontSize: 11,
+                          color: isDark
+                              ? AppPalette.darkTextMuted
+                              : AppPalette.lightTextMuted,
+                        ),
+                        label: Text(tag),
+                        visualDensity: VisualDensity.compact,
+                      ))
                   .toList(),
             ),
           ],

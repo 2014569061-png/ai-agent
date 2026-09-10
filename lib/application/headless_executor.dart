@@ -1,6 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models.dart';
+import '../domain/tool_codes.dart';
+import '../domain/tool_result.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/anthropic_provider.dart';
 import '../infrastructure/providers/gemini_provider.dart';
@@ -12,6 +14,7 @@ import '../infrastructure/tools/core_tools.dart';
 import '../infrastructure/tools/image_gen_tool.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/tools/workspace_tools.dart';
+import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
@@ -27,6 +30,7 @@ class HeadlessRunResult {
     required this.inputTokens,
     required this.outputTokens,
     required this.cachedTokens,
+    this.context,
     this.error,
   });
 
@@ -35,6 +39,10 @@ class HeadlessRunResult {
   final int inputTokens;
   final int outputTokens;
   final int cachedTokens;
+
+  /// 预算暂停时的完整 Agent 上下文。恢复只使用这份 checkpoint，绝不从
+  /// 原始 prompt 重放已经完成的工具调用。
+  final List<ChatMessage>? context;
   final String? error;
 
   bool get succeeded => status == RunStatus.completed && error == null;
@@ -50,6 +58,7 @@ class HeadlessExecutor {
     Iterable<String>? allowedToolNames,
     int maxSteps = 4,
     int maxTokens = 1024,
+    List<ChatMessage>? initialHistory,
     AgentCancellationToken? cancellationToken,
     Future<ToolApproval> Function(ToolCall call, ToolRisk risk)? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
@@ -63,6 +72,7 @@ class HeadlessExecutor {
       allowedToolNames: allowedToolNames,
       maxSteps: maxSteps,
       maxTokens: maxTokens,
+      initialHistory: initialHistory,
       cancellationToken: cancellationToken,
       approveTool: approveTool,
       approvalMode: approvalMode,
@@ -79,6 +89,7 @@ class HeadlessExecutor {
     Iterable<String>? allowedToolNames,
     int maxSteps = 4,
     int maxTokens = 1024,
+    List<ChatMessage>? initialHistory,
     AgentCancellationToken? cancellationToken,
     Future<ToolApproval> Function(ToolCall call, ToolRisk risk)? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
@@ -97,6 +108,89 @@ class HeadlessExecutor {
     registerIfAllowed(GetTimeTool());
     registerIfAllowed(JsonQueryTool());
     registerIfAllowed(ImageGenTool(config: config));
+
+    // 后台/协作路径也必须提供与主 Agent 一致的只读记忆和 Skill 读取能力。
+    // 这里只注册读取工具；memory_write 属于持久化副作用，除非调用方明确
+    // 把它放进 allow-list，否则不能因为“safe”标签而被后台自动执行。
+    final memoryService = MemoryService();
+    registerIfAllowed(MemoryGetTool(onGet: (query, offset, limit) async {
+      final rows = await memoryService.search(db, query,
+          offset: offset, limit: limit + 1);
+      final hasMore = rows.length > limit;
+      final visible = hasMore ? rows.take(limit).toList() : rows;
+      return ToolResult.success(
+        message: visible.isEmpty ? '没有找到匹配的记忆' : '已读取 ${visible.length} 条记忆',
+        data: {
+          'revision': await memoryService.currentRevision(db),
+          'items': visible
+              .map((item) => {
+                    'id': item.id,
+                    'content': item.content,
+                    'category': item.category,
+                    'importance': item.importance,
+                    'updatedAt': item.updatedAt.toIso8601String(),
+                  })
+              .toList(growable: false),
+          'hasMore': hasMore,
+          if (hasMore) 'nextOffset': offset + visible.length,
+        },
+      );
+    }));
+    if (allowList?.contains('memory_write') == true) {
+      registerIfAllowed(MemoryWriteTool(onWrite: ({
+        required String? id,
+        required String content,
+        required String mode,
+        required int? startLine,
+        required int? endLine,
+        required String? expectedRevision,
+      }) async {
+        try {
+          final memory = await memoryService.write(
+            database: db,
+            id: id,
+            content: content,
+            mode: mode,
+            startLine: startLine,
+            endLine: endLine,
+            expectedRevision: expectedRevision,
+          );
+          return ToolResult.success(
+            message: '记忆已写入',
+            data: {
+              'id': memory.id,
+              'revision': await memoryService.currentRevision(db),
+              'mode': mode,
+            },
+            effect: ToolEffect.applied,
+          );
+        } on MemoryConflictException catch (error) {
+          return ToolResult.failure(
+            code: ToolCodes.revisionConflict,
+            message: '记忆已被其他操作更新，请先重新调用 memory_get 获取最新 revision',
+            data: {'revision': error.currentRevision},
+          );
+        } on FormatException catch (error) {
+          return ToolResult.failure(
+            code: ToolCodes.invalidArguments,
+            message: error.message,
+          );
+        } catch (error) {
+          return ToolResult.failure(
+            code: ToolCodes.toolError,
+            message: '记忆写入失败：$error',
+          );
+        }
+      }));
+    }
+
+    // Skill 正文与资源都按需读取，索引由系统提示词渐进披露。
+    try {
+      registerIfAllowed(SkillsReadTool(database: db));
+      registerIfAllowed(SkillsReadResourceTool(database: db));
+    } catch (_) {
+      // 单测或旧数据库不可用时不阻断其余只读工具。
+    }
     final terminalFileEnabled = (await SharedPreferences.getInstance())
             .getBool('settings.tool.terminal_file') ??
         true;
@@ -112,7 +206,8 @@ class HeadlessExecutor {
 
     var system = systemPrompt ?? '你是一个有帮助的 AI Agent。';
     try {
-      final memoryBlock = await MemoryService().buildInjectionBlock(db);
+      final memoryBlock = await MemoryService()
+          .buildInjectionBlock(db, contextTokens: config.contextTokens);
       if (memoryBlock.isNotEmpty) system = '$memoryBlock\n$system';
       final knowledgeBlock =
           await KnowledgeService().buildInjectionBlock(db, prompt);
@@ -124,15 +219,19 @@ class HeadlessExecutor {
       // 注入失败不阻断执行。
     }
 
-    final history = [
-      ChatMessage(role: MessageRole.user, parts: [MessagePart.text(prompt)])
-    ];
+    final history = initialHistory == null || initialHistory.isEmpty
+        ? <ChatMessage>[
+            ChatMessage(
+                role: MessageRole.user, parts: [MessagePart.text(prompt)])
+          ]
+        : List<ChatMessage>.of(initialHistory);
     final answer = StringBuffer();
     var status = RunStatus.created;
     var inputTokens = 0;
     var outputTokens = 0;
     var cachedTokens = 0;
     String? errorMessage;
+    List<ChatMessage>? checkpoint;
     try {
       await for (final event in executor.run(
         history: history,
@@ -164,6 +263,7 @@ class HeadlessExecutor {
           // 预算耗尽可恢复，不归类为真实失败。
           status = RunStatus.paused;
           errorMessage = event.message;
+          checkpoint = List<ChatMessage>.of(event.context);
         }
       }
     } catch (error) {
@@ -177,6 +277,7 @@ class HeadlessExecutor {
       inputTokens: inputTokens,
       outputTokens: outputTokens,
       cachedTokens: cachedTokens,
+      context: checkpoint,
       error: errorMessage,
     );
   }

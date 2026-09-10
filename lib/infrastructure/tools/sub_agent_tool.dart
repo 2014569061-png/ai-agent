@@ -1,4 +1,6 @@
 import '../../domain/models.dart';
+import '../../domain/tool_codes.dart';
+import '../../domain/tool_result.dart';
 import 'tool_registry.dart';
 
 /// 子 Agent 工具（C7）：主 Agent 可派生子 Agent（不同系统提示词）执行子任务并返回摘要。
@@ -37,7 +39,10 @@ class SubAgentTool implements AgentTool {
         parametersSchema: {
           'type': 'object',
           'properties': {
-            'agentId': {'type': 'string', 'description': '子 Agent 的 id（可省略，取第一个）'},
+            'agentId': {
+              'type': 'string',
+              'description': '子 Agent 的 id（可省略，取第一个）'
+            },
             'prompt': {'type': 'string', 'description': '子任务描述'},
             'maxTokens': {
               'type': 'integer',
@@ -52,11 +57,23 @@ class SubAgentTool implements AgentTool {
       );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     final agentId = arguments['agentId'] as String?;
     final prompt = (arguments['prompt'] as String? ?? '').trim();
-    if (prompt.isEmpty) return '请提供子任务描述';
+    if (prompt.isEmpty) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: '请提供子任务描述（prompt 不能为空）',
+      );
+    }
     final budget = (arguments['maxTokens'] as num?)?.toInt();
-    return onRun(agentId, prompt, budget);
+    final summary = await onRun(agentId, prompt, budget);
+    return ToolResult.text(
+      summary,
+      extra: {
+        if (agentId != null) 'agentId': agentId,
+        'budget': clampBudget(budget),
+      },
+    );
   }
 }

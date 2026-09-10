@@ -3,7 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../infrastructure/sync/sync_service.dart';
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/section_card.dart';
@@ -50,6 +51,15 @@ class _SyncPageState extends ConsumerState<SyncPage> {
           TextButton(
               onPressed: () => Navigator.pop(context), child: const Text('取消')),
           FilledButton(
+              style: FilledButton.styleFrom(
+                elevation: 0,
+                backgroundColor: AppPalette.brand,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(AppTokens.radiusControl),
+                ),
+              ),
               onPressed: () => Navigator.pop(context, controller.text),
               child: const Text('确定')),
         ],
@@ -61,15 +71,41 @@ class _SyncPageState extends ConsumerState<SyncPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final sync = ref.watch(syncServiceProvider);
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(title: const Text('云同步')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         SectionCard(
           child: ListTile(
-            leading: const Icon(Icons.key_outlined),
-            title: const Text('生成恢复码'),
-            subtitle: const Text('口令派生密钥（scrypt/PBKDF2），服务端只存密文'),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppPalette.brandSoftDark
+                    : AppPalette.brandSoftLight,
+                borderRadius:
+                    BorderRadius.circular(AppTokens.radiusControl),
+              ),
+              child: const Icon(Icons.key_outlined,
+                  size: 20, color: AppPalette.brand),
+            ),
+            title: const Text(
+              '生成恢复码',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              '口令派生密钥（scrypt/PBKDF2），服务端只存密文',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted,
+              ),
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _generateRecoveryCode,
           ),
@@ -77,26 +113,80 @@ class _SyncPageState extends ConsumerState<SyncPage> {
         const SizedBox(height: 12),
         SectionCard(
           child: ListTile(
-            leading: const Icon(Icons.sync_alt),
-            title: const Text('导入恢复码'),
-            subtitle: const Text('在另一台设备输入恢复码以同步'),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppPalette.brandSoftDark
+                    : AppPalette.brandSoftLight,
+                borderRadius:
+                    BorderRadius.circular(AppTokens.radiusControl),
+              ),
+              child: const Icon(Icons.sync_alt,
+                  size: 20, color: AppPalette.brand),
+            ),
+            title: const Text(
+              '导入恢复码',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              '在另一台设备输入恢复码以同步',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted,
+              ),
+            ),
             trailing: const Icon(Icons.chevron_right),
             onTap: _importRecoveryCode,
           ),
         ),
         const SizedBox(height: 16),
-        const SectionCard(
+        SectionCard(
           child: ListTile(
-            leading: Icon(Icons.info_outline),
-            title: Text('云同步暂不可用'),
-            subtitle: Text('需 NEXUS 账号服务（v0.3 托管后端）。当前仅提供本地加密密钥派生与恢复码能力。'),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                borderRadius:
+                    BorderRadius.circular(AppTokens.radiusControl),
+                border: Border.all(
+                  color: isDark
+                      ? AppPalette.darkHairline
+                      : AppPalette.lightHairline,
+                ),
+              ),
+              child: Icon(
+                Icons.info_outline,
+                size: 20,
+                color: isDark ? AppPalette.darkText : AppPalette.lightText,
+              ),
+            ),
+            title: const Text(
+              '云同步暂不可用',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              '需 NEXUS 账号服务（v0.3 托管后端）。当前仅提供本地加密密钥派生与恢复码能力。',
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted,
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 8),
         Text('同步后端地址：${sync.isConfigured ? '已配置' : '未配置'}',
             style: TextStyle(
                 fontSize: 12,
-                color: AppTheme.semanticOf(context).mutedOnGlass)),
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted)),
       ]),
     );
   }

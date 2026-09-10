@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 
 /// 非 Web 目标的降级视图。网页仍可通过系统浏览器打开。
@@ -9,7 +10,7 @@ class PhonePreviewView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: const Color(0xFFF8FAFC),
+      color: AppPalette.lightSurface,
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -23,8 +24,8 @@ class PhonePreviewView extends StatelessWidget {
                 '当前运行目标不支持内嵌网页',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: Color(0xFF334155),
-                  fontWeight: FontWeight.w700,
+                  color: AppPalette.lightTextMuted,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 6),

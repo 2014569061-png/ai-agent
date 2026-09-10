@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../theme/app_theme.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_dropdown.dart';
 
@@ -51,7 +52,10 @@ class _FeedbackPageState extends State<FeedbackPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: AppBar(title: const Text('意见反馈')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         ImmersiveDropdown<String>(
@@ -77,6 +81,16 @@ class _FeedbackPageState extends State<FeedbackPage> {
             decoration: const InputDecoration(labelText: '联系方式（选填，便于跟进）')),
         const SizedBox(height: 20),
         FilledButton.icon(
+            style: FilledButton.styleFrom(
+              elevation: 0,
+              backgroundColor: AppPalette.brand,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(44),
+              shape: RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.circular(AppTokens.radiusControl),
+              ),
+            ),
             onPressed: _submit,
             icon: const Icon(Icons.send_outlined),
             label: const Text('提交反馈')),
@@ -84,7 +98,9 @@ class _FeedbackPageState extends State<FeedbackPage> {
         Text('当前通过邮件客户端提交，无需注册账号。',
             style: TextStyle(
                 fontSize: 12,
-                color: AppTheme.semanticOf(context).mutedOnGlass)),
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted)),
       ]),
     );
   }

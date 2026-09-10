@@ -15,6 +15,9 @@ class ProviderConfig {
     this.type = ProviderType.openaiCompatible,
     this.reasoningEffort = ReasoningEffort.medium,
     this.contextTokens = defaultContextTokens,
+    this.inputPricePerMillionCents,
+    this.outputPricePerMillionCents,
+    this.cachedPricePerMillionCents,
   });
 
   final String id;
@@ -26,6 +29,12 @@ class ProviderConfig {
   final ReasoningEffort reasoningEffort;
   final int contextTokens;
 
+  /// 可选的每百万 Token 价格（单位：分）。为空时使用本地模型价目表，
+  /// 这样新增模型不会静默显示 0 成本，同时允许服务商自定义价格。
+  final int? inputPricePerMillionCents;
+  final int? outputPricePerMillionCents;
+  final int? cachedPricePerMillionCents;
+
   ProviderConfig copyWith({
     String? id,
     String? name,
@@ -35,6 +44,9 @@ class ProviderConfig {
     ProviderType? type,
     ReasoningEffort? reasoningEffort,
     int? contextTokens,
+    int? inputPricePerMillionCents,
+    int? outputPricePerMillionCents,
+    int? cachedPricePerMillionCents,
   }) =>
       ProviderConfig(
         id: id ?? this.id,
@@ -45,6 +57,12 @@ class ProviderConfig {
         type: type ?? this.type,
         reasoningEffort: reasoningEffort ?? this.reasoningEffort,
         contextTokens: contextTokens ?? this.contextTokens,
+        inputPricePerMillionCents:
+            inputPricePerMillionCents ?? this.inputPricePerMillionCents,
+        outputPricePerMillionCents:
+            outputPricePerMillionCents ?? this.outputPricePerMillionCents,
+        cachedPricePerMillionCents:
+            cachedPricePerMillionCents ?? this.cachedPricePerMillionCents,
       );
 
   bool get isConfigured {

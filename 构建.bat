@@ -4,6 +4,9 @@ setlocal EnableExtensions
 title NEXUS Agent - Build Latest APK
 cd /d "%~dp0"
 
+rem 使用用户级 Gradle 缓存，避免在项目根目录重新生成 gradle-cache。
+set "GRADLE_USER_HOME=%USERPROFILE%\.gradle"
+
 echo ========================================================
 echo             NEXUS Agent Build Latest APK
 echo ========================================================

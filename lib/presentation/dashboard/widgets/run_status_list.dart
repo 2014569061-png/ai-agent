@@ -8,7 +8,7 @@ import '../../../infrastructure/database/app_database.dart';
 import '../../l10n/app_strings.dart';
 import '../../tasks/development_tasks_page.dart';
 import '../../tasks/task_details_page.dart';
-import '../../theme/app_theme.dart';
+import '../../theme/app_palette.dart';
 import '../../widgets/nexus_metric_tile.dart';
 import '../../widgets/nexus_section.dart';
 import '../../widgets/nexus_status_pill.dart';
@@ -28,7 +28,13 @@ class RunStatusList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final semantic = AppTheme.semanticOf(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final textFaint =
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
 
     return NexusSection(
       title: AppStrings.runStatus,
@@ -43,12 +49,13 @@ class RunStatusList extends ConsumerWidget {
             MaterialPageRoute(builder: (_) => const DevelopmentTasksPage()),
           );
         },
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(AppStrings.viewAll, style: TextStyle(fontSize: 12)),
-            SizedBox(width: 2),
-            Icon(Icons.chevron_right_rounded, size: 16),
+            Text(AppStrings.viewAll,
+                style: TextStyle(fontSize: 12, color: textMuted)),
+            const SizedBox(width: 2),
+            Icon(Icons.chevron_right_rounded, size: 16, color: textMuted),
           ],
         ),
       ),
@@ -63,7 +70,7 @@ class RunStatusList extends ConsumerWidget {
                     AppStrings.noRunningRecords,
                     style: TextStyle(
                       fontSize: 13,
-                      color: semantic.mutedOnGlass,
+                      color: textMuted,
                     ),
                   ),
                 ),
@@ -74,8 +81,8 @@ class RunStatusList extends ConsumerWidget {
                 itemCount: runs.length,
                 separatorBuilder: (_, __) => Divider(
                   height: 1,
-                  thickness: 0.6,
-                  color: semantic.border.withValues(alpha: 0.35),
+                  thickness: 1.0,
+                  color: hairline,
                   indent: 16,
                   endIndent: 16,
                 ),
@@ -92,9 +99,10 @@ class RunStatusList extends ConsumerWidget {
                       item.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                        color: textColor,
                       ),
                     ),
                     subtitle: Padding(
@@ -111,17 +119,17 @@ class RunStatusList extends ConsumerWidget {
                               AppStrings.durationLabel(durationStr),
                               style: TextStyle(
                                 fontSize: 11,
-                                color: semantic.mutedOnGlass,
+                                color: textFaint,
                               ),
                             ),
                           ],
                         ],
                       ),
                     ),
-                    trailing: const Icon(
+                    trailing: Icon(
                       Icons.chevron_right_rounded,
-                      size: 18,
-                      color: Colors.grey,
+                      size: 16,
+                      color: textFaint,
                     ),
                     onTap: () async {
                       final db = await ref.read(databaseProvider.future);

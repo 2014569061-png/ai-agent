@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/immersive_sheet.dart';
 
 /// G1 工作区文件树:目录导航模式(进入子目录 / 后退 / 前进),
@@ -137,7 +139,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
         builder: (ctx) => AlertDialog(
           title: Text(p.basename(file.path),
               style:
-                  const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
           content: SizedBox(
             width: double.maxFinite,
             height: 400,
@@ -188,7 +190,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
             height: 4,
             decoration: BoxDecoration(
               color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(AppTokens.radiusPill),
             ),
           ),
           const SizedBox(height: 12),
@@ -206,7 +208,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                       Text(
                         projectName.isEmpty ? '项目工作区' : projectName,
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
+                            fontSize: 16, fontWeight: FontWeight.w500),
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
@@ -304,7 +306,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                                       : _getFileIcon(entity.path),
                                   size: 20,
                                   color: isDir
-                                      ? Colors.amber[700]
+                                      ? AppPalette.warning
                                       : theme.colorScheme.primary,
                                 ),
                                 title: Text(
@@ -312,8 +314,8 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: isDir
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
+                                        ? FontWeight.w500
+                                        : FontWeight.w400,
                                   ),
                                 ),
                                 trailing: isDir

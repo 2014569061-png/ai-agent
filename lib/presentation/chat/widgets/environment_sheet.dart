@@ -195,7 +195,7 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
-                    ?.copyWith(fontWeight: FontWeight.bold)),
+                    ?.copyWith(fontWeight: FontWeight.w500)),
           ),
           IconButton(
             visualDensity: VisualDensity.compact,

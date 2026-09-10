@@ -94,10 +94,16 @@ extension CollaborationAgentRoleX on CollaborationAgentRole {
 
   List<String> get allowedTools => switch (this) {
         CollaborationAgentRole.planner => const ['json_query'],
-        CollaborationAgentRole.analyzer =>
-          const ['read_file', 'list_directory', 'search_files'],
-        CollaborationAgentRole.tester =>
-          const ['read_file', 'list_directory', 'search_files'],
+        CollaborationAgentRole.analyzer => const [
+            'read_file',
+            'list_directory',
+            'search_files'
+          ],
+        CollaborationAgentRole.tester => const [
+            'read_file',
+            'list_directory',
+            'search_files'
+          ],
         CollaborationAgentRole.reviewer => const ['json_query'],
       };
 
@@ -368,6 +374,7 @@ class CollaborationResult {
     required this.evidence,
     required this.nextSteps,
     required this.disagreements,
+    this.risks = const [],
     required this.confidence,
     this.rawSynthesis,
   });
@@ -378,6 +385,9 @@ class CollaborationResult {
   final List<String> evidence;
   final List<String> nextSteps;
   final List<String> disagreements;
+
+  /// 子 Agent 明确标记的风险与证据缺口，和 findings 分开显示。
+  final List<String> risks;
   final double confidence;
   final String? rawSynthesis;
 
@@ -388,6 +398,7 @@ class CollaborationResult {
         'evidence': evidence,
         'nextSteps': nextSteps,
         'disagreements': disagreements,
+        'risks': risks,
         'confidence': confidence,
         if (rawSynthesis != null) 'rawSynthesis': rawSynthesis,
       };
@@ -400,13 +411,14 @@ class CollaborationResult {
       summary: json['summary']?.toString() ?? '',
       findings: rawFindings
           .whereType<Map>()
-          .map((item) => CollaborationFinding.fromJson(
-              Map<String, dynamic>.from(item)))
+          .map((item) =>
+              CollaborationFinding.fromJson(Map<String, dynamic>.from(item)))
           .toList(growable: false),
       actions: _stringList(json['actions']),
       evidence: _stringList(json['evidence']),
       nextSteps: _stringList(json['nextSteps']),
       disagreements: _stringList(json['disagreements']),
+      risks: _stringList(json['risks']),
       confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
       rawSynthesis: json['rawSynthesis']?.toString(),
     );
@@ -421,6 +433,7 @@ class CollaborationResult {
         evidence: [],
         nextSteps: [],
         disagreements: [],
+        risks: [],
         confidence: 0,
       );
     }
@@ -436,6 +449,7 @@ class CollaborationResult {
         evidence: const [],
         nextSteps: const [],
         disagreements: const [],
+        risks: const [],
         confidence: 0,
         rawSynthesis: value,
       );
@@ -454,8 +468,8 @@ class CollaborationRunEvent extends CollaborationEvent {
 }
 
 class CollaborationAgentEvent extends CollaborationEvent {
-  const CollaborationAgentEvent(super.runId, this.agentRunId, this.role,
-      this.status, this.summary);
+  const CollaborationAgentEvent(
+      super.runId, this.agentRunId, this.role, this.status, this.summary);
   final String agentRunId;
   final CollaborationAgentRole role;
   final String status;

@@ -52,7 +52,7 @@ class _ImmersiveDropdownState<T> extends State<ImmersiveDropdown<T>> {
               child: Text(
                 widget.labelText,
                 style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                    ?.copyWith(fontWeight: FontWeight.w500),
               ),
             ),
             Flexible(

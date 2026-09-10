@@ -19,9 +19,10 @@ class BackgroundService {
     final prefs = await SharedPreferences.getInstance();
     final mode = prefs.getString(_modeKey) ?? 'default';
     final path = prefs.getString(_pathKey);
-    final validPath = (path != null && path.isNotEmpty && File(path).existsSync())
-        ? path
-        : null;
+    final validPath =
+        (path != null && path.isNotEmpty && File(path).existsSync())
+            ? path
+            : null;
     return BackgroundConfig(
       mode: mode == 'clouds' || mode == 'custom' ? mode : 'default',
       customPath: validPath,
@@ -32,7 +33,8 @@ class BackgroundService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_modeKey, mode);
     final current = bgNotifier.value;
-    bgNotifier.value = BackgroundConfig(mode: mode, customPath: current.customPath);
+    bgNotifier.value =
+        BackgroundConfig(mode: mode, customPath: current.customPath);
   }
 
   /// 从用户选择的源路径拷贝到应用私有目录并记录,同时切到 custom 模式。

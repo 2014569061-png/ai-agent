@@ -43,6 +43,19 @@ class ToolHumanizer {
       'remember' => _s(a, 'content').isNotEmpty
           ? '记住：${_clip(_s(a, 'content'), 40)}'
           : '写入一条记忆',
+      'memory_get' => _s(a, 'query').isNotEmpty
+          ? '检索记忆 “${_clip(_s(a, 'query'), 40)}”'
+          : '读取已保存记忆',
+      'memory_write' => '写入一条记忆',
+      'skills_read' => _s(a, 'skill').isNotEmpty
+          ? '读取 Skill ${_clip(_s(a, 'skill'), 40)}'
+          : '读取 Skill 内容',
+      'skills_read_resource' => _s(a, 'path').isNotEmpty
+          ? '读取 Skill 资源 ${_clip(_s(a, 'path'), 40)}'
+          : '读取 Skill 资源',
+      'sub_agent' => _s(a, 'prompt').isNotEmpty
+          ? '委派子 Agent：${_clip(_s(a, 'prompt'), 40)}'
+          : '委派子 Agent 交叉验证',
       _ => null,
     };
   }

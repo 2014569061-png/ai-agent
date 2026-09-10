@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -9,7 +10,8 @@ import 'linux_runtime.dart';
 ///
 /// 这是 Android 的外部备用 Linux 用户空间实现。Termux 提供完整 bash 和开发
 /// 工具链；默认优先使用内置 PRoot，只有内置运行时不可用时才选择本 Adapter。
-class TermuxRuntimeAdapter implements LinuxRuntimeAdapter {
+class TermuxRuntimeAdapter
+    implements LinuxRuntimeAdapter, DetachedLinuxRuntimeAdapter {
   TermuxRuntimeAdapter({this.maxOutputBytes = 128 * 1024});
 
   static const bridgeDir = '/sdcard/pocketforge-bridge';
@@ -17,6 +19,7 @@ class TermuxRuntimeAdapter implements LinuxRuntimeAdapter {
 
   final int maxOutputBytes;
   bool _running = false;
+  final Map<String, DateTime> _procVerificationCache = {};
 
   @override
   LinuxRuntimeKind get kind => LinuxRuntimeKind.termux;
@@ -98,6 +101,304 @@ class TermuxRuntimeAdapter implements LinuxRuntimeAdapter {
   void stop() {
     // 当前 Termux RUN_COMMAND 桥以后台 Intent 启动任务，没有可靠的进程句柄。
     // 保留该方法，待任务 ID/停止协议接入后由此处实现真正取消。
+  }
+
+  /// Termux 的 RUN_COMMAND 不把外部进程句柄回传给 Flutter，因此 daemon
+  /// 使用共享目录里的 owner/pid/exit 三个小文件建立可恢复协议。PID 的
+  /// 停止请求仍由 Termux 自己执行，避免 Android App 直接跨 UID 杀进程。
+  @override
+  Future<DetachedCommandHandle?> startDetached(
+    LinuxCommandRequest request, {
+    required String workingDirectory,
+    required Duration timeout,
+    required String ownerToken,
+    required String logPath,
+  }) async {
+    if (!Platform.isAndroid || ownerToken.trim().isEmpty) return null;
+    final paths = _detachedPaths(ownerToken);
+    await _deleteFiles(paths.values);
+    final inner = _detachedScript(
+      request.commandLine,
+      workingDirectory,
+      ownerToken,
+      paths,
+    );
+    // 鍦ㄥ惎鍔ㄦ椂灏嗘墍鏈夋潈 token 娉ㄥ叆杩涚▼鍒濆鐜锛屽惁鍒欐敼鍙樼幆澧冨悗
+    // /proc/<pid>/environ 可能不可读，状态校验失败时宁可拒绝认领，避免误杀正常进程。
+    final launch = 'env NEXUS_DAEMON_OWNER=${_shellQuote(ownerToken)} '
+        'nohup setsid bash -lc ${_shellQuote(inner)} '
+        '> /dev/null 2>&1 < /dev/null &';
+    try {
+      await _bridge.invokeMethod('runInTermux', {
+        'command': launch,
+        'timeoutMs': const Duration(seconds: 30).inMilliseconds,
+      });
+    } on PlatformException {
+      return null;
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return null;
+    }
+
+    final pid = await _waitForPid(paths['pid']!, const Duration(seconds: 5));
+    if (pid == null || pid <= 0) return null;
+    return DetachedCommandHandle(
+      pid: pid,
+      logPath: paths['log'],
+      completion: _waitDetached(
+        pid: pid,
+        ownerToken: ownerToken,
+        paths: paths,
+        timeout: timeout,
+      ),
+    );
+  }
+
+  @override
+  Future<bool> verifyDetached(int pid, String ownerToken) async {
+    if (!Platform.isAndroid || pid <= 0 || ownerToken.trim().isEmpty) {
+      return false;
+    }
+    final paths = _detachedPaths(ownerToken);
+    if (await File(paths['exit']!).exists()) return false;
+    try {
+      final owner = (await File(paths['owner']!).readAsString()).trim();
+      final storedPid = (await File(paths['pid']!).readAsString()).trim();
+      if (owner != ownerToken || storedPid != '$pid') return false;
+      final cacheKey = '$pid:$ownerToken';
+      final now = DateTime.now();
+      final cachedUntil = _procVerificationCache[cacheKey];
+      if (cachedUntil != null && now.isBefore(cachedUntil)) return true;
+      final verified = await _verifyProcOwner(
+        pid: pid,
+        ownerToken: ownerToken,
+        markerPath: paths['procCheck']!,
+      );
+      if (verified) {
+        _procVerificationCache[cacheKey] = now.add(const Duration(seconds: 2));
+      } else {
+        _procVerificationCache.remove(cacheKey);
+      }
+      return verified;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> stopDetached(int pid, String ownerToken) async {
+    if (!await verifyDetached(pid, ownerToken)) return false;
+    final paths = _detachedPaths(ownerToken);
+    final ack = paths['stop']!;
+    final ownerPath = _shellQuote(paths['owner']!);
+    final pidPath = _shellQuote(paths['pid']!);
+    final procPath = _shellQuote('/proc/$pid/environ');
+    final token = _shellQuote(ownerToken);
+    final pidLiteral = _shellQuote('$pid');
+    final ownerLine = _shellQuote('NEXUS_DAEMON_OWNER=$ownerToken');
+    final ackPart = _shellQuote('$ack.part');
+    final ackPath = _shellQuote(ack);
+    final commandBuilder = StringBuffer()
+      ..write(r'owner=$(cat ')
+      ..write(ownerPath)
+      ..write(r'); currentPid=$(cat ')
+      ..write(pidPath)
+      ..write(r'); if [ "$owner" = ')
+      ..write(token)
+      ..write(r' ] && [ "$currentPid" = ')
+      ..write(pidLiteral)
+      ..write(r' ] && [ -r ')
+      ..write(procPath)
+      ..write(" ] && tr '\\0' '\\n' < ")
+      ..write(procPath)
+      ..write(r' | grep -Fqx ')
+      ..write(ownerLine)
+      ..write(r'; then kill "$currentPid" 2>/dev/null || true; ')
+      ..write('printf true > ')
+      ..write(ackPart)
+      ..write('; mv ')
+      ..write(ackPart)
+      ..write(' ')
+      ..write(ackPath)
+      ..write('; fi');
+    final command = commandBuilder.toString();
+    try {
+      await _bridge.invokeMethod('runInTermux', {
+        'command': command,
+        'timeoutMs': const Duration(seconds: 30).inMilliseconds,
+      });
+    } catch (_) {
+      return false;
+    }
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        if ((await File(ack).readAsString()).trim() == 'true') {
+          await File(ack).delete();
+          return true;
+        }
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    return false;
+  }
+
+  Map<String, String> _detachedPaths(String ownerToken) {
+    final safe = ownerToken.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+    final base = '$bridgeDir/nexus-daemon-$safe';
+    return {
+      'log': '$base.log',
+      'pid': '$base.pid',
+      'owner': '$base.owner',
+      'exit': '$base.exit.json',
+      'stop': '$base.stop',
+      'procCheck': '$base.proc-check',
+    };
+  }
+
+  Future<bool> _verifyProcOwner({
+    required int pid,
+    required String ownerToken,
+    required String markerPath,
+  }) async {
+    final partPath = '$markerPath.part';
+    await _deleteFiles([markerPath, partPath]);
+    final procPath = _shellQuote('/proc/$pid/environ');
+    final ownerLine = _shellQuote('NEXUS_DAEMON_OWNER=$ownerToken');
+    final marker = _shellQuote(markerPath);
+    final part = _shellQuote(partPath);
+    final command =
+        'if [ -r $procPath ] && tr \'\\0\' \'\\n\' < $procPath | grep -Fqx $ownerLine; '
+        'then printf true > $part; mv $part $marker; else rm -f $part $marker; fi';
+    try {
+      await _bridge.invokeMethod('runInTermux', {
+        'command': command,
+        'timeoutMs': const Duration(seconds: 10).inMilliseconds,
+      });
+    } catch (_) {
+      return false;
+    }
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        if ((await File(markerPath).readAsString()).trim() == 'true') {
+          await _deleteFiles([markerPath, partPath]);
+          return true;
+        }
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    await _deleteFiles([markerPath, partPath]);
+    return false;
+  }
+
+  Future<void> _deleteFiles(Iterable<String> paths) async {
+    for (final path in paths) {
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
+  }
+
+  String _detachedScript(
+    String commandLine,
+    String cwd,
+    String ownerToken,
+    Map<String, String> paths,
+  ) {
+    final log = _shellQuote(paths['log']!);
+    final pid = _shellQuote(paths['pid']!);
+    final owner = _shellQuote(paths['owner']!);
+    final exit = _shellQuote(paths['exit']!);
+    final cwdArg = _shellQuote(cwd);
+    final token = _shellQuote(ownerToken);
+    final completionPart = _shellQuote('${paths['exit']!}.part');
+    return '''
+umask 077
+mkdir -p ${_shellQuote(bridgeDir)}
+printf '%s' $token > $owner
+echo \$\$ > $pid
+finish() {
+  code=\$?
+  printf '{"exitCode":%s,"timedOut":false}' "\$code" > $completionPart
+  mv $completionPart $exit
+  rm -f $pid
+}
+trap finish EXIT TERM INT
+cd $cwdArg 2>/dev/null || exit 125
+export NEXUS_DAEMON_OWNER=$token
+{
+$commandLine
+} > $log 2>&1
+''';
+  }
+
+  Future<int?> _waitForPid(String path, Duration timeout) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final pid = int.tryParse((await File(path).readAsString()).trim());
+        if (pid != null && pid > 0) return pid;
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    return null;
+  }
+
+  Future<CommandResult> _waitDetached({
+    required int pid,
+    required String ownerToken,
+    required Map<String, String> paths,
+    required Duration timeout,
+  }) async {
+    final deadline = DateTime.now().add(timeout + const Duration(seconds: 5));
+    while (DateTime.now().isBefore(deadline)) {
+      final completion = File(paths['exit']!);
+      if (await completion.exists()) {
+        try {
+          final value = jsonDecode(await completion.readAsString());
+          return CommandResult(
+            output: await _readFileBounded(paths['log']!),
+            exitCode: value is Map
+                ? (value['exitCode'] as num?)?.toInt() ?? 127
+                : 127,
+            timedOut: value is Map && value['timedOut'] == true,
+          );
+        } catch (_) {}
+      }
+      if (!await verifyDetached(pid, ownerToken)) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        if (await completion.exists()) continue;
+        return CommandResult(
+          output: await _readFileBounded(paths['log']!),
+          exitCode: 124,
+          timedOut: true,
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+    return CommandResult(
+      output: await _readFileBounded(paths['log']!),
+      exitCode: 124,
+      timedOut: true,
+    );
+  }
+
+  String _shellQuote(String value) =>
+      "'${value.replaceAll("'", "'\\\"'\\\"'")}'";
+
+  Future<String> _readFileBounded(String path) async {
+    try {
+      var value = await File(path).readAsString();
+      if (value.length > maxOutputBytes) {
+        value = '[输出已截断]\n${value.substring(value.length - maxOutputBytes)}';
+      }
+      return value;
+    } catch (_) {
+      return '';
+    }
   }
 
   Future<CommandResult> _runViaTermux(

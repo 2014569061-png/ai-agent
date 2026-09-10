@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
 import '../../domain/models.dart';
+import '../../application/sensitive_tool_policy.dart';
 import '../providers/provider_config.dart';
 import '../providers/provider_config_store.dart';
 import '../sync/sync_service.dart';
@@ -33,7 +34,8 @@ Future<String?> exportVaultFile(AppDatabase db, String password,
 }
 
 /// 从加密文件字节解密并全量恢复。返回解密后的数据条数摘要。
-Future<String> importVaultBytes(AppDatabase db, Uint8List bytes, String password,
+Future<String> importVaultBytes(
+    AppDatabase db, Uint8List bytes, String password,
     {ProviderConfigStore? providerStore}) async {
   final cipher = utf8.decode(bytes);
   final plaintext = await SyncService().decryptWithPassword(cipher, password);
@@ -60,7 +62,23 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
   final conversations = await db.recentConversations();
   final messages = <Map<String, dynamic>>[];
   for (final c in conversations) {
-    messages.addAll((await db.messagesFor(c.id)).map((m) => m.toJson()));
+    final rows = await db.messagesFor(c.id);
+    final toolNamesById = <String, String>{};
+    for (final row in rows) {
+      if (row.role != 'assistant' || row.toolCallsJson == null) continue;
+      try {
+        final calls = jsonDecode(row.toolCallsJson!);
+        if (calls is List) {
+          for (final call in calls.whereType<Map>()) {
+            final id = call['id']?.toString();
+            final name = call['name']?.toString();
+            if (id != null && name != null) toolNamesById[id] = name;
+          }
+        }
+      } catch (_) {}
+    }
+    messages.addAll(rows
+        .map((row) => _redactPersistedMessage(row.toJson(), toolNamesById)));
   }
   final profiles = await store.loadAll();
   return {
@@ -92,6 +110,12 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
                 'apiKey': p.apiKey,
                 'reasoningEffort': p.reasoningEffort.name,
                 'contextTokens': p.contextTokens,
+                if (p.inputPricePerMillionCents != null)
+                  'inputPricePerMillionCents': p.inputPricePerMillionCents,
+                if (p.outputPricePerMillionCents != null)
+                  'outputPricePerMillionCents': p.outputPricePerMillionCents,
+                if (p.cachedPricePerMillionCents != null)
+                  'cachedPricePerMillionCents': p.cachedPricePerMillionCents,
               })
           .toList(),
     if (includeSecrets)
@@ -100,6 +124,42 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
       },
     'mcpServers': (await db.allMcpServers()).map((s) => s.toJson()).toList(),
   };
+}
+
+Map<String, dynamic> _redactPersistedMessage(
+    Map<String, dynamic> raw, Map<String, String> toolNamesById) {
+  final result = Map<String, dynamic>.from(raw);
+  final role = result['role']?.toString() ?? '';
+  final toolName = toolNamesById[result['toolCallId']?.toString()];
+  if (role == 'tool' &&
+      toolName != null &&
+      SensitiveToolPolicy.isSensitive(toolName)) {
+    result['content'] = '[敏感工具结果已脱敏]';
+  }
+  final callsJson = result['toolCallsJson']?.toString();
+  if (role == 'assistant' && callsJson != null && callsJson.isNotEmpty) {
+    try {
+      final calls = jsonDecode(callsJson);
+      if (calls is List) {
+        result['toolCallsJson'] =
+            jsonEncode(calls.whereType<Map>().map((rawCall) {
+          final call = Map<String, dynamic>.from(rawCall);
+          final name = call['name']?.toString() ?? '';
+          if (SensitiveToolPolicy.isArgumentSensitive(name)) {
+            call['arguments'] = SensitiveToolPolicy.redactArguments(
+                name,
+                call['arguments'] is Map
+                    ? Map<String, dynamic>.from(call['arguments'] as Map)
+                    : const {});
+          }
+          return call;
+        }).toList(growable: false));
+      }
+    } catch (_) {
+      // 旧版本的损坏 toolCallsJson 不阻断整个保险箱导出。
+    }
+  }
+  return result;
 }
 
 Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
@@ -153,20 +213,20 @@ Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
     // MCP 配置的正式来源是数据库；仅当备份含该段（v2+）时覆盖。
     if (json['mcpServers'] is List) {
       await db.clearMcpServers();
-      for (final m in (json['mcpServers'] as List)
-          .cast<Map<String, dynamic>>()) {
+      for (final m
+          in (json['mcpServers'] as List).cast<Map<String, dynamic>>()) {
         await db.saveMcpServer(McpServer.fromJson(m));
       }
     }
   });
   await _restoreSkillFiles(db, json);
-  await _restoreProviderSecrets(db, json,
-      providerStore ?? ProviderConfigStore());
+  await _restoreProviderSecrets(
+      db, json, providerStore ?? ProviderConfigStore());
 }
 
 /// 恢复 Provider 配置（含 API Key）与工具密钥到安全存储；旧版备份无该段时跳过。
-Future<void> _restoreProviderSecrets(AppDatabase db,
-    Map<String, dynamic> json, ProviderConfigStore store) async {
+Future<void> _restoreProviderSecrets(AppDatabase db, Map<String, dynamic> json,
+    ProviderConfigStore store) async {
   try {
     final profilesJson = json['providerProfiles'];
     if (profilesJson is List) {
@@ -181,11 +241,17 @@ Future<void> _restoreProviderSecrets(AppDatabase db,
                 type: ProviderType.values.firstWhere(
                     (t) => t.name == item['type'],
                     orElse: () => ProviderType.openaiCompatible),
-                reasoningEffort: ReasoningEffort.values
-                    .firstWhere((e) => e.name == item['reasoningEffort'],
-                        orElse: () => ReasoningEffort.medium),
+                reasoningEffort: ReasoningEffort.values.firstWhere(
+                    (e) => e.name == item['reasoningEffort'],
+                    orElse: () => ReasoningEffort.medium),
                 contextTokens: (item['contextTokens'] as num?)?.toInt() ??
                     ProviderConfig.defaultContextTokens,
+                inputPricePerMillionCents:
+                    (item['inputPricePerMillionCents'] as num?)?.toInt(),
+                outputPricePerMillionCents:
+                    (item['outputPricePerMillionCents'] as num?)?.toInt(),
+                cachedPricePerMillionCents:
+                    (item['cachedPricePerMillionCents'] as num?)?.toInt(),
               ))
           .where((config) => config.model.trim().isNotEmpty)
           .toList();

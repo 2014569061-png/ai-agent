@@ -121,6 +121,10 @@ class _ChatMessageListState extends State<ChatMessageList> {
               )
             : storedMessage;
         return MessageBubble(
+          // 用全局索引（= _start + localIndex）作 key：窗口只会改变 localIndex
+          // （加载更早消息时 _start 前移），同一条消息的全局索引恒定，因此该 key
+          // 跨重建稳定，可让 Element 复用、避免整屏气泡重建。
+          key: ValueKey<int>(index),
           message: message,
           isLast: index == widget.messages.length - 1,
           running: widget.running,

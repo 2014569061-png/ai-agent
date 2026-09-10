@@ -126,12 +126,25 @@ class OpenAiCompatibleProvider implements LlmProvider {
 
       final stream = response.data?.stream;
       if (stream == null) {
-        yield const ProviderErrorEvent('Provider 返回了空响应');
+        yield const ProviderErrorEvent(
+          'Provider 返回了空响应',
+          failureKind: 'protocol',
+        );
         return;
       }
       final sse = SseDecoder();
       final toolAccumulators = <int, _ToolAccumulator>{};
       var nextToolIndex = 0;
+      var stopReason = StopReason.unknown;
+      // finish_reason 可能出现在任意一帧（含 delta 为空的收尾帧），逐帧记录，
+      // 后到的覆盖先到的。
+      void noteStop(_SseChunk parsed) {
+        final raw = parsed.finishReason;
+        if (raw != null && raw.isNotEmpty) {
+          stopReason = StopReason.parse(raw);
+        }
+      }
+
       void collect(_SseChunk parsed) {
         for (final fragment in parsed.tools) {
           final index = fragment.index ?? nextToolIndex++;
@@ -158,6 +171,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
             yield ReasoningDeltaEvent(parsed.reasoning!);
           }
           collect(parsed);
+          noteStop(parsed);
           if (parsed.usage != null) yield parsed.usage!;
         }
       }
@@ -171,6 +185,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
           yield ReasoningDeltaEvent(parsed.reasoning!);
         }
         collect(parsed);
+        noteStop(parsed);
         if (parsed.usage != null) yield parsed.usage!;
       }
       for (final accumulator in toolAccumulators.values) {
@@ -191,7 +206,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
           arguments: arguments,
         ));
       }
-      yield const CompletedEvent();
+      yield CompletedEvent(stopReason: stopReason);
     } on DioException catch (error) {
       // 主动取消时静默结束，避免把"已取消"渲染成错误提示。
       if (error.type == DioExceptionType.cancel) return;
@@ -201,9 +216,16 @@ class OpenAiCompatibleProvider implements LlmProvider {
         if (status != null) 'HTTP $status',
         if (detail.isNotEmpty) detail else error.message ?? '网络请求失败',
       ].join(': ');
-      yield ProviderErrorEvent(message);
+      yield ProviderErrorEvent(
+        message,
+        statusCode: status,
+        failureKind: error.type.name,
+      );
     } catch (error) {
-      yield ProviderErrorEvent(error.toString());
+      yield ProviderErrorEvent(
+        error.toString(),
+        failureKind: error.runtimeType.toString(),
+      );
     }
   }
 
@@ -327,9 +349,15 @@ class OpenAiCompatibleProvider implements LlmProvider {
     if (data == '[DONE]' || data.isEmpty) return null;
     try {
       final json = jsonDecode(data) as Map<String, dynamic>;
+      final choices = json['choices'] as List<dynamic>? ?? const [];
+      final first = choices.isEmpty
+          ? const <String, dynamic>{}
+          : choices.first as Map<String, dynamic>;
+      final finishReason = first['finish_reason'] as String?;
       final usage = json['usage'];
       if (usage is Map<String, dynamic>) {
         return _SseChunk(
+          finishReason: finishReason,
           usage: UsageEvent(
             promptTokens: (usage['prompt_tokens'] as num?)?.toInt() ?? 0,
             completionTokens:
@@ -342,9 +370,12 @@ class OpenAiCompatibleProvider implements LlmProvider {
           ),
         );
       }
-      final choices = json['choices'] as List<dynamic>? ?? const [];
-      if (choices.isEmpty) return null;
-      final delta = choices.first['delta'] as Map<String, dynamic>? ?? const {};
+      if (choices.isEmpty) {
+        return finishReason == null
+            ? null
+            : _SseChunk(finishReason: finishReason);
+      }
+      final delta = first['delta'] as Map<String, dynamic>? ?? const {};
       final content = delta['content'] as String?;
       // 推理模型的思考增量：DeepSeek-R1 用 reasoning_content，OpenAI o 系列部分用 reasoning。
       final reasoning = (delta['reasoning_content'] as String?) ??
@@ -354,6 +385,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
         return _SseChunk(
           text: content,
           reasoning: reasoning,
+          finishReason: finishReason,
           tools: toolCalls.map((item) {
             final tool = item as Map<String, dynamic>;
             final function =
@@ -368,8 +400,11 @@ class OpenAiCompatibleProvider implements LlmProvider {
       }
       if ((content != null && content.isNotEmpty) ||
           (reasoning != null && reasoning.isNotEmpty)) {
-        return _SseChunk(text: content, reasoning: reasoning);
+        return _SseChunk(
+            text: content, reasoning: reasoning, finishReason: finishReason);
       }
+      // 只剩结束原因的收尾帧。
+      if (finishReason != null) return _SseChunk(finishReason: finishReason);
     } catch (_) {
       return null;
     }
@@ -379,12 +414,20 @@ class OpenAiCompatibleProvider implements LlmProvider {
 
 class _SseChunk {
   const _SseChunk(
-      {this.text, this.reasoning, this.tools = const [], this.usage});
+      {this.text,
+      this.reasoning,
+      this.tools = const [],
+      this.usage,
+      this.finishReason});
 
   final String? text;
   final String? reasoning;
   final List<_ToolFragment> tools;
   final UsageEvent? usage;
+
+  /// 本帧携带的 finish_reason。它通常出现在 delta 为空的最后一帧，
+  /// 必须单独取出，否则会被“无内容即忽略”的分支丢掉。
+  final String? finishReason;
 }
 
 class _ToolFragment {

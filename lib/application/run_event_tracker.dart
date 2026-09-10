@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/observability/unified_diff.dart';
+import 'sensitive_tool_policy.dart';
 
 /// Persists a run event as a started row and later completes it with the
 /// measured duration. Database failures are intentionally swallowed so
@@ -43,6 +44,7 @@ class RunEventTracker {
       eventId: 'event-${startedAt.microsecondsSinceEpoch}-${nextSequence + 1}',
       sequenceNo: ++nextSequence,
       startedAt: startedAt,
+      sensitive: SensitiveToolPolicy.isSensitive(name),
     );
     _enqueue(() => database.insertRunEvent(RunEventsCompanion.insert(
           eventId: handle.eventId,
@@ -52,8 +54,9 @@ class RunEventTracker {
           status: 'started',
           name: name,
           startedAt: startedAt,
-          inputSummary: Value(_limit(inputSummary)),
-          metadataJson: Value(_encodeMetadata(metadata)),
+          inputSummary: Value(_summary(inputSummary, handle.sensitive)),
+          metadataJson:
+              Value(_encodeMetadata(metadata, sensitive: handle.sensitive)),
         )));
     return handle;
   }
@@ -73,10 +76,10 @@ class RunEventTracker {
             status: Value(status),
             endedAt: Value(endedAt),
             durationMs: Value(duration < 0 ? 0 : duration),
-            outputSummary: Value(_limit(outputSummary)),
+            outputSummary: Value(_summary(outputSummary, handle.sensitive)),
             metadataJson: metadata == null
                 ? const Value.absent()
-                : Value(_encodeMetadata(metadata)),
+                : Value(_encodeMetadata(metadata, sensitive: handle.sensitive)),
           ),
         ));
   }
@@ -106,9 +109,16 @@ class RunEventTracker {
     return '${value.substring(0, 2000)}…';
   }
 
-  static String _encodeMetadata(Map<String, dynamic>? metadata) {
+  static String? _summary(String? value, bool sensitive) {
+    if (value == null) return null;
+    if (sensitive) return '[敏感工具内容已脱敏]';
+    return _limit(redactSensitiveText(value));
+  }
+
+  static String _encodeMetadata(Map<String, dynamic>? metadata,
+      {bool sensitive = false}) {
     if (metadata == null || metadata.isEmpty) return '{}';
-    final sanitized = _sanitize(metadata);
+    final sanitized = _sanitize(metadata, sensitive: sensitive);
     final encoded = jsonEncode(sanitized);
     if (encoded.length <= 8000) return encoded;
     return jsonEncode({
@@ -117,23 +127,51 @@ class RunEventTracker {
     });
   }
 
-  static dynamic _sanitize(dynamic value) {
-    if (value is String) return redactSensitiveText(_limit(value) ?? '');
+  static dynamic _sanitize(dynamic value, {bool sensitive = false}) {
+    if (value is String) {
+      return sensitive
+          ? '[REDACTED]'
+          : redactSensitiveText(_limit(value) ?? '');
+    }
     if (value is Map) {
       return value.map((key, item) {
         final normalizedKey = '$key'.toLowerCase();
         final compactKey = normalizedKey.replaceAll(RegExp(r'[^a-z]'), '');
-        final sensitive = compactKey.contains('apikey') ||
+        final keySensitive = compactKey.contains('apikey') ||
             compactKey.contains('authorization') ||
             compactKey == 'cookie' ||
             compactKey == 'password' ||
             compactKey == 'secret' ||
             compactKey == 'token';
-        return MapEntry('$key',
-            sensitive && item is String ? '[REDACTED]' : _sanitize(item));
+        final sensitiveValue = sensitive &&
+            const {
+              'argument',
+              'arguments',
+              'input',
+              'output',
+              'result',
+              'data',
+              'content',
+              'path',
+              'text',
+              'command',
+              'stdout',
+              'stderr',
+            }.contains(compactKey);
+        return MapEntry(
+            '$key',
+            (keySensitive && item is String)
+                ? '[REDACTED]'
+                : sensitiveValue
+                    ? '[REDACTED]'
+                    : _sanitize(item));
       });
     }
-    if (value is Iterable) return value.map(_sanitize).toList(growable: false);
+    if (value is Iterable) {
+      return value
+          .map((item) => _sanitize(item, sensitive: sensitive))
+          .toList(growable: false);
+    }
     return value;
   }
 }
@@ -143,9 +181,11 @@ class RunEventHandle {
     required this.eventId,
     required this.sequenceNo,
     required this.startedAt,
+    this.sensitive = false,
   });
 
   final String eventId;
   final int sequenceNo;
   final DateTime startedAt;
+  final bool sensitive;
 }

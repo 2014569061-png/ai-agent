@@ -49,13 +49,20 @@ class CommandResult {
     required this.output,
     required this.exitCode,
     this.timedOut = false,
+    this.notExecuted = false,
   });
 
   final String output;
   final int exitCode;
   final bool timedOut;
 
-  bool get succeeded => exitCode == 0 && !timedOut;
+  /// 守卫拦截：命令被安全策略拒绝，**进程从未启动**，因此确定没有副作用。
+  ///
+  /// 与 [timedOut] 的区别至关重要——超时意味着进程被中途杀掉，副作用无法确认；
+  /// 而守卫拦截可以确定地告诉模型“这次什么都没发生，可以改参数重试”。
+  final bool notExecuted;
+
+  bool get succeeded => exitCode == 0 && !timedOut && !notExecuted;
 }
 
 /// 终端执行的 seam。
@@ -83,4 +90,38 @@ abstract interface class LinuxRuntimeAdapter {
   });
 
   void stop();
+}
+
+/// 可把命令交给独立进程运行的 Runtime 扩展。
+///
+/// 普通 [run] 会等待当前 Flutter 调用返回，无法支持 App 重启后的 daemon 认领。
+/// 只有实现了这个扩展的 Runtime 才能声明 PID 与 owner token，调用方不能把普通
+/// Future 强行当成“已脱离进程”。
+abstract interface class DetachedLinuxRuntimeAdapter {
+  Future<DetachedCommandHandle?> startDetached(
+    LinuxCommandRequest request, {
+    required String workingDirectory,
+    required Duration timeout,
+    required String ownerToken,
+    required String logPath,
+  });
+
+  Future<bool> verifyDetached(int pid, String ownerToken);
+
+  Future<bool> stopDetached(int pid, String ownerToken);
+}
+
+class DetachedCommandHandle {
+  const DetachedCommandHandle({
+    required this.pid,
+    required this.completion,
+    this.logPath,
+  });
+
+  final int pid;
+  final Future<CommandResult> completion;
+
+  /// Runtime 可能需要把日志落在外部沙箱可写的目录（例如 Termux 的
+  /// shared bridge）。上层保存这个最终路径，重启后仍能读取同一份日志。
+  final String? logPath;
 }

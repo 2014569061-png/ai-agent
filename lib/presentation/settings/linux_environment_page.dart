@@ -1,3 +1,4 @@
+import '../theme/app_palette.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../chat/widgets/environment_sheet.dart';
 import '../diagnostics/log_viewer_page.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/nexus_page_header.dart';
@@ -194,13 +196,11 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
   @override
   Widget build(BuildContext context) {
     final bridgeColor = kIsWeb
-        ? const Color(0xFF8E8E93)
+        ? AppPalette.lightTextFaint
         : (_bridgeAvailable
-            ? const Color(0xFF34C759)
-            : const Color(0xFFFF9500));
-    final bridgeText = kIsWeb
-        ? '仅预览'
-        : (_bridgeAvailable ? '已连接' : '待配置');
+            ? AppPalette.success
+            : AppPalette.warning);
+    final bridgeText = kIsWeb ? '仅预览' : (_bridgeAvailable ? '已连接' : '待配置');
 
     return Scaffold(
       backgroundColor: settingsBgColor(context),
@@ -218,7 +218,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.terminal_rounded,
-                      iconColor: const Color(0xFF48484A),
+                      iconColor: settingsMutedColor(context),
                       title: '当前运行环境',
                       subtitle: kIsWeb
                           ? 'Web Sandbox'
@@ -231,13 +231,13 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                             horizontal: 7, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: bridgeColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                         ),
                         child: Text(
                           bridgeText,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                             color: bridgeColor,
                           ),
                         ),
@@ -247,7 +247,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.health_and_safety_rounded,
-                      iconColor: const Color(0xFF007AFF),
+                      iconColor: settingsMutedColor(context),
                       title: '环境状态诊断',
                       subtitle: _diagnosticSummary,
                       trailingWidget: IconButton(
@@ -264,8 +264,8 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                           width: double.infinity,
                           child: FilledButton.icon(
                             onPressed: _openSetupGuide,
-                            icon: const Icon(
-                                Icons.settings_suggest_rounded, size: 18),
+                            icon: const Icon(Icons.settings_suggest_rounded,
+                                size: 18),
                             label: Text(_termuxInstalled
                                 ? '去配置：授权 Termux 外部调用'
                                 : '去配置：安装 Termux'),
@@ -280,7 +280,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.folder_rounded,
-                      iconColor: const Color(0xFFFF9F0A),
+                      iconColor: AppPalette.warning,
                       title: '默认工作目录',
                       subtitle: _defaultWorkDir,
                       onTap: _editWorkDir,
@@ -288,7 +288,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.code_rounded,
-                      iconColor: const Color(0xFF5856D6),
+                      iconColor: settingsMutedColor(context),
                       title: 'Shell 类型',
                       trailingText: _shellType,
                       onTap: _chooseShell,
@@ -300,7 +300,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                   children: [
                     SettingsTile(
                       icon: Icons.play_circle_filled_rounded,
-                      iconColor: const Color(0xFF34C759),
+                      iconColor: AppPalette.success,
                       title: '环境检测与安装引导',
                       subtitle: '分步检测 Termux、桥授权与 Go 工具链',
                       onTap: _openSetupGuide,
@@ -308,7 +308,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.restart_alt_rounded,
-                      iconColor: const Color(0xFFFF9500),
+                      iconColor: AppPalette.warning,
                       title: '重新初始化环境',
                       subtitle: '重设桥接状态并执行环境重新连接',
                       onTap: _reinitialize,
@@ -316,7 +316,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.receipt_long_rounded,
-                      iconColor: const Color(0xFF636366),
+                      iconColor: settingsMutedColor(context),
                       title: '查看诊断日志',
                       subtitle: '查看终端与工具执行的详细运行记录',
                       onTap: () {

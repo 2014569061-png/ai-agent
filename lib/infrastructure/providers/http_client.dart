@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
+import '../../application/model_failure.dart';
+
 /// 共享 HTTP 客户端工厂。
 ///
 /// 统一为三个 LLM Provider 提供带重试能力的 [Dio] 实例，并设置默认连接与
@@ -9,10 +11,12 @@ import 'package:dio/dio.dart';
 Dio buildHttpClient({
   int maxRetries = 3,
   Duration connectTimeout = const Duration(seconds: 15),
-  Duration receiveTimeout = const Duration(seconds: 120),
+  Duration sendTimeout = const Duration(seconds: 30),
+  Duration receiveTimeout = const Duration(minutes: 5),
 }) {
   final dio = Dio(BaseOptions(
     connectTimeout: connectTimeout,
+    sendTimeout: sendTimeout,
     receiveTimeout: receiveTimeout,
   ));
   dio.interceptors.add(RetryInterceptor(dio: dio, maxRetries: maxRetries));
@@ -56,18 +60,31 @@ class RetryInterceptor extends Interceptor {
     }
 
     final status = err.response?.statusCode;
+    final detail = err.response?.data?.toString() ?? err.message ?? '';
+    final failure = ModelFailure.classify(
+      detail,
+      statusCode: status,
+      failureKind: err.type.name,
+    );
+    // 计费、鉴权、协议和证书失败即使返回 429，也不能自动重放请求。
+    if (!failure.retryable) {
+      handler.next(err);
+      return;
+    }
     // 4xx（除 429 限流）不重试 —— 客户端错误重试无意义。
     if (status != null && status >= 400 && status < 500 && status != 429) {
       handler.next(err);
       return;
     }
 
-    final retryable = (status != null && status >= 500) ||
-        status == 429 ||
-        err.type == DioExceptionType.connectionError ||
-        err.type == DioExceptionType.connectionTimeout ||
-        err.type == DioExceptionType.sendTimeout ||
-        err.type == DioExceptionType.receiveTimeout;
+    final retryable = failure.retryable &&
+        (status == null ||
+            (status >= 500) ||
+            status == 429 ||
+            err.type == DioExceptionType.connectionError ||
+            err.type == DioExceptionType.connectionTimeout ||
+            err.type == DioExceptionType.sendTimeout ||
+            err.type == DioExceptionType.receiveTimeout);
     if (!retryable) {
       handler.next(err);
       return;

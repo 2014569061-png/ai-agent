@@ -1,18 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../application/dashboard_service.dart';
-import '../../account/usage_report_page.dart';
 import '../../history/history_page.dart';
 import '../../l10n/app_strings.dart';
 import '../../tasks/development_tasks_page.dart';
-import '../../theme/app_theme.dart';
+import '../../theme/app_palette.dart';
 import '../../widgets/nexus_metric_tile.dart';
 
 /// M1: 2×2 核心 KPI 卡片网格
-/// 复用 NexusMetricTile 统一排版与可读性解释。
-///
-/// 空值约定：无数据展示 `--`（绝不显示 0 误导）；仅"今日会话/进行中任务"
-/// 的 0 是合法业务值，保留显示。
 class KpiCardGrid extends StatelessWidget {
   const KpiCardGrid({super.key, required this.kpis});
 
@@ -20,7 +15,6 @@ class KpiCardGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final hasTokenData = kpis.todayTokens > 0;
     final cachePct =
         hasTokenData ? (kpis.cacheHitRate * 100).toStringAsFixed(0) : null;
@@ -28,15 +22,15 @@ class KpiCardGrid extends StatelessWidget {
     final successColor = successRate == null
         ? null
         : (successRate >= 90
-            ? AppTheme.success
-            : (successRate >= 75 ? AppTheme.warning : AppTheme.danger));
+            ? AppPalette.success
+            : (successRate >= 75 ? AppPalette.warning : AppPalette.danger));
 
     return LayoutBuilder(builder: (context, constraints) {
-      final itemWidth = (constraints.maxWidth - 10) / 2;
+      final itemWidth = (constraints.maxWidth - 12) / 2;
 
       return Wrap(
-        spacing: 10,
-        runSpacing: 10,
+        spacing: 12,
+        runSpacing: 12,
         children: [
           // 1. 今日会话
           SizedBox(
@@ -54,24 +48,20 @@ class KpiCardGrid extends StatelessWidget {
             ),
           ),
 
-          // 2. 今日 Token
+          // 2. 缓存命中率（今日 Token 详情已由 TokenUsageHero 承接）
           SizedBox(
             width: itemWidth,
             child: NexusMetricTile(
-              label: AppStrings.todayTokens,
-              value: hasTokenData
-                  ? NexusMetricTile.formatTokens(kpis.todayTokens)
-                  : '--',
-              unit: hasTokenData ? 'T' : null,
-              explanation:
-                  hasTokenData ? '${AppStrings.cacheHit} $cachePct%' : null,
-              icon: Icons.data_usage_rounded,
-              color: theme.colorScheme.primary,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const UsageReportPage()),
-                );
-              },
+              label: AppStrings.cacheHitRate,
+              value: cachePct == null ? '--' : '$cachePct%',
+              explanation: AppStrings.cacheHitRateHint,
+              icon: Icons.bolt_rounded,
+              color: cachePct == null
+                  ? null
+                  : (int.parse(cachePct) >= 30
+                      ? AppPalette.success
+                      : null),
+              onTap: () {},
             ),
           ),
 
@@ -83,7 +73,7 @@ class KpiCardGrid extends StatelessWidget {
               value: '${kpis.runningTasks}',
               unit: '项',
               icon: Icons.pending_actions_rounded,
-              color: kpis.runningTasks > 0 ? AppTheme.warning : null,
+              color: kpis.runningTasks > 0 ? AppPalette.warning : null,
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(

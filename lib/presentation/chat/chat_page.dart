@@ -2,28 +2,27 @@ import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
-import 'package:speech_to_text/speech_to_text.dart';
 import 'package:super_clipboard/super_clipboard.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/chat_controller.dart';
 import '../../application/app_lock_service.dart';
 import '../../application/providers.dart';
-import '../../application/tts_service.dart';
+import '../../application/sensitive_tool_policy.dart';
 import '../../domain/models.dart';
+import '../../domain/session_metrics.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
 import '../../infrastructure/share/deep_link_service.dart';
@@ -43,6 +42,9 @@ import '../workspace/file_tree_sheet.dart';
 import '../workspace/terminal_sheet.dart';
 
 import 'widgets/floating_capsule_input.dart';
+import 'widgets/session_metrics_bar.dart';
+import 'widgets/session_metrics_sheet.dart';
+import 'widgets/input_tool_grid_sheet.dart';
 import 'widgets/environment_sheet.dart';
 import '../../../infrastructure/background_service.dart';
 import 'widgets/session_context_sheet.dart';
@@ -187,20 +189,32 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   final _controller = TextEditingController();
   final _attachments = <PlatformFile>[];
-  final _speech = SpeechToText();
   final _picker = ImagePicker();
-  final _recorder = AudioRecorder();
   final _scrollController = ScrollController();
   bool _showScrollToBottom = false;
   bool _followTailScheduled = false;
   bool _followTailAnimate = false;
-  bool _listening = false;
-  bool _recording = false;
+
+  /// 用户是否正在用手指拖拽消息列表。
+  ///
+  /// 用 [ScrollNotification] 的 `dragDetails` 判定，而不是
+  /// `position.isScrollingNotifier`——后者在程序化 `jumpTo`/`animateTo` 期间
+  /// 也为 true，会把「自己的自动跟随」误判成用户拖拽而永久停止跟随。
+  bool _userDragging = false;
   bool _longPressHintShown = false;
   final Map<String, String> _draftsByConversation = <String, String>{};
   StreamSubscription<String>? _shareSub;
   String _pendingTaskType = 'general';
   String _pendingSourceType = 'manual';
+
+  // 首页能力开关（对标 DeepSeek 的「深度思考」/「智能搜索」）。
+  // 持久化键与 ChatController._prepareRun 读取的键保持完全一致，
+  // 这样这里切换后，下一次发送即可生效，无需改动控制器。
+  static const _kDeepReasoningPref = 'settings.llm.deep_reasoning';
+  static const _kWebBrowsingPref = 'settings.tool.web_browsing';
+
+  bool _deepThinking = true;
+  bool _webSearch = true;
 
   ChatController get _chat => ref.read(chatControllerProvider.notifier);
 
@@ -288,6 +302,98 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _backgroundService.load().then((c) {
       BackgroundService.bgNotifier.value = c;
     });
+    // 首页能力开关：读取「深度思考 / 智能搜索」的持久化状态。
+    Future.microtask(_loadHomeToggles);
+  }
+
+  /// 读取首页两个能力开关的持久化状态（默认均开启）。
+  Future<void> _loadHomeToggles() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final deep = prefs.getBool(_kDeepReasoningPref) ?? true;
+      final web = prefs.getBool(_kWebBrowsingPref) ?? true;
+      if (!mounted) return;
+      setState(() {
+        _deepThinking = deep;
+        _webSearch = web;
+      });
+    } catch (_) {
+      // 读取失败时保持默认值（两项默认开启）。
+    }
+  }
+
+  Future<void> _setHomeToggle(String key, bool value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(key, value);
+    } catch (_) {
+      // 持久化失败不阻塞交互，本次会话内仍然生效。
+    }
+  }
+
+  void _toggleDeepThinking() {
+    final next = !_deepThinking;
+    setState(() => _deepThinking = next);
+    HapticFeedback.selectionClick();
+    _setHomeToggle(_kDeepReasoningPref, next);
+    FloatingToast.show(context, next ? '深度思考已开启' : '深度思考已关闭');
+  }
+
+  void _toggleWebSearch() {
+    final next = !_webSearch;
+    setState(() => _webSearch = next);
+    HapticFeedback.selectionClick();
+    _setHomeToggle(_kWebBrowsingPref, next);
+    FloatingToast.show(context, next ? '智能搜索已开启' : '智能搜索已关闭');
+  }
+
+  /// 语音输入入口。当前工程未接入语音识别能力（无 speech 依赖、
+  /// AndroidManifest 也未声明 RECORD_AUDIO），因此先给出明确提示，
+  /// 待接入后把这里替换为「按住说话」的录音 / 转写流程即可。
+  void _handleVoiceInput() {
+    HapticFeedback.mediumImpact();
+    FloatingToast.show(context, '语音输入尚未接入，可先用键盘输入');
+  }
+
+  /// 会话指标条（对标 DeepSeek 输入区上方的指标胶囊）。
+  ///
+  /// 空会话与纯聊天不渲染，避免在首页制造噪音；自定义聊天背景下
+  /// 自动切深色半透明底，保证可读性。
+  Widget _buildSessionMetricsBar({
+    required List<ChatMessage> messages,
+    required int totalSteps,
+    required List<ToolActivity> toolActivities,
+    required int liveContextTokens,
+    required int contextTokens,
+  }) {
+    final metrics = SessionMetrics.from(
+      messages: messages,
+      steps: totalSteps,
+      toolExecutionMs: toolActivities.fold<int>(
+        0,
+        (sum, activity) => sum + activity.executionMs,
+      ),
+    );
+    if (metrics.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      child: ValueListenableBuilder<BackgroundConfig>(
+        valueListenable: BackgroundService.bgNotifier,
+        builder: (context, background, _) => SessionMetricsBar(
+          metrics: metrics,
+          onImageBackground: background.mode != 'default',
+          maxGroups:
+              MediaQuery.viewInsetsOf(context).bottom > 0 ? 2 : null,
+          onTap: () => showSessionMetricsSheet(
+            context,
+            metrics: metrics,
+            liveContextTokens: liveContextTokens,
+            contextLimit: contextTokens,
+          ),
+        ),
+      ),
+    );
   }
 
   void _onScroll() {
@@ -317,9 +423,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return _scrollController.position.extentAfter <= 120;
   }
 
+  /// 跟踪用户拖拽状态：`dragDetails` 仅在手指/触控拖拽时非空，程序化滚动为 null。
+  /// 只关心纵向列表，忽略附件条等横向滚动通知。
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    if (notification is ScrollStartNotification) {
+      _userDragging = notification.dragDetails != null;
+    } else if (notification is ScrollUpdateNotification) {
+      if (notification.dragDetails != null) _userDragging = true;
+    } else if (notification is ScrollEndNotification) {
+      _userDragging = false;
+    }
+    return false;
+  }
+
   /// 合并同一帧内的流式滚动请求，避免每次文本刷新都重启动画。
   void _scheduleFollowTail({required bool animate}) {
     if (!_scrollController.hasClients) return;
+    // 用户正在拖拽时不抢滚动位置：松手后由下一次流式回调自然接管跟随。
+    if (_userDragging) return;
     if (!_isNearBottom()) {
       if (!_showScrollToBottom && mounted) {
         setState(() => _showScrollToBottom = true);
@@ -332,6 +454,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _followTailScheduled = false;
       if (!mounted || !_scrollController.hasClients) return;
+      if (_userDragging) {
+        _followTailAnimate = false;
+        return;
+      }
       if (!_isNearBottom()) {
         if (!_showScrollToBottom) {
           setState(() => _showScrollToBottom = true);
@@ -404,7 +530,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     WidgetsBinding.instance.removeObserver(this);
     _shareSub?.cancel();
     _controller.dispose();
-    _recorder.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -547,8 +672,45 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _stop() => _chat.stop();
 
+  Future<void> _steerCurrentRun() async {
+    final input = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('补充运行指令'),
+        content: TextField(
+          controller: input,
+          autofocus: true,
+          minLines: 1,
+          maxLines: 4,
+          decoration: const InputDecoration(hintText: '下一轮执行时生效'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, input.text),
+            child: const Text('加入'),
+          ),
+        ],
+      ),
+    );
+    input.dispose();
+    if (!mounted || text == null || text.trim().isEmpty) return;
+    _chat.steer(text);
+  }
+
   String _buildMarkdown(ChatState state) {
     final content = StringBuffer('# ${state.conversationTitle}\n\n');
+    final toolNamesById = <String, String>{};
+    for (final message in state.messages) {
+      if (message.role != MessageRole.assistant) continue;
+      for (final call in message.toolCalls) {
+        toolNamesById[call.id] = call.name;
+      }
+    }
     for (final message in state.messages) {
       final role = switch (message.role) {
         MessageRole.user => '用户',
@@ -556,7 +718,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
         MessageRole.system => '系统',
         MessageRole.tool => '工具',
       };
-      content.write('## $role\n\n${message.text}\n\n');
+      final text = message.role == MessageRole.tool
+          ? SensitiveToolPolicy.redactText(
+              toolNamesById[message.toolCallId] ?? '', message.text)
+          : message.text;
+      content.write('## $role\n\n$text\n\n');
     }
     return content.toString();
   }
@@ -803,7 +969,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
-  /// 附件入口：底部菜单在「拍照 / 相册 / 多图 / 文件 / 录音 / 粘贴图片」间选择。
+  /// 附件入口：底部菜单在「拍照 / 相册 / 多图 / 文件 / 粘贴图片」间选择。
   Future<void> _showAttachmentMenu() async {
     final choice = await showImmersiveActionSheet<String>(
       context: context,
@@ -829,16 +995,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
           title: AppStrings.addFile,
           value: 'file',
         ),
-        ActionSheetItem(
-          icon: _recording ? Icons.stop_circle_outlined : Icons.mic_none,
-          title: _recording ? '停止录音' : '录音',
-          value: 'record',
-        ),
         const ActionSheetItem(
           icon: Icons.content_paste_outlined,
           title: '粘贴图片',
           value: 'paste',
         ),
+        const ActionSheetItem(
+          icon: Icons.grid_view_rounded,
+          title: '更多工具',
+          subtitle: '命令、MCP、终端、环境与仪表盘',
+          value: 'tools',
+        ),
+        ActionSheetItem(
+          icon: Icons.checklist_rounded,
+          title: ref.read(chatControllerProvider).planMode
+              ? '关闭计划模式'
+              : '开启计划模式',
+          value: 'plan',
+        ),
+        if (ref.read(chatControllerProvider).running)
+          const ActionSheetItem(
+            icon: Icons.playlist_add_rounded,
+            title: '补充运行指令',
+            subtitle: '不打断当前运行，下一轮执行时生效',
+            value: 'steer',
+          ),
       ],
     );
     if (!mounted || choice == null) return;
@@ -851,11 +1032,43 @@ class _ChatPageState extends ConsumerState<ChatPage>
         await _pickMultiImage();
       case 'file':
         await _pickFiles();
-      case 'record':
-        await _recordAudio();
       case 'paste':
         await _pasteClipboardImage();
+      case 'tools':
+        if (mounted) _openToolsSheet();
+      case 'plan':
+        _chat.setPlanMode(!ref.read(chatControllerProvider).planMode);
+      case 'steer':
+        await _steerCurrentRun();
     }
+  }
+
+  /// 「更多工具」网格：承接原先输入区「工具」chip 的全部能力
+  /// （命令库 / MCP / 终端 / 环境 / 仪表盘 / 计划模式 / 审批模式）。
+  ///
+  /// 对标 DeepSeek 后输入区只保留「深度思考 / 智能搜索」两个 chip，
+  /// 这些进阶入口统一收进「＋」菜单，避免首页出现第三个 chip。
+  void _openToolsSheet() {
+    final state = ref.read(chatControllerProvider);
+    InputToolGridSheet.show(
+      context,
+      onCommandMenu: _openPromptLibrary,
+      onMcpMenu: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const McpServersPage())),
+      onTerminalPreview: _openTerminal,
+      onEnvSetup: _openEnvSetup,
+      onOpenDashboard: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => DashboardPage(
+            onConversationSelected: (c) => _switchConversation(c),
+          ),
+        ),
+      ),
+      planModeEnabled: state.planMode,
+      onPlanModeToggle: () => _chat.setPlanMode(!state.planMode),
+      approvalMode: state.approvalMode,
+      onApprovalModeTap: _selectApprovalMode,
+    );
   }
 
   /// 拍照/相册：压缩到 1280px / 80% 质量，控制 base64 体积，复用现有附件管线。
@@ -875,48 +1088,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
-  /// 按住说话 / 点击切换语音识别。识别结果回填输入框，可继续编辑后发送。
-  Future<void> _toggleVoice() async {
-    if (_listening) {
-      await _speech.stop();
-      if (mounted) setState(() => _listening = false);
-      return;
-    }
-    try {
-      final available = await _speech.initialize();
-      if (!available) {
-        if (mounted) FloatingToast.error(context, AppStrings.voiceError);
-        return;
-      }
-      if (mounted) setState(() => _listening = true);
-      await _speech.listen(
-        onResult: (result) {
-          if (result.finalResult) {
-            final text = _controller.text.trim();
-            _controller.text =
-                (text.isEmpty ? '' : '$text ') + result.recognizedWords;
-            _controller.selection =
-                TextSelection.collapsed(offset: _controller.text.length);
-            if (mounted) setState(() => _listening = false);
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() => _listening = false);
-        FloatingToast.error(context, AppStrings.voiceError,
-            rawDetail: e.toString());
-      }
-    }
-  }
-
-  /// A2：朗读助手消息（系统 TTS）。
-  Future<void> _readAloud(ChatMessage message) async {
-    final text = message.text.trim();
-    if (text.isEmpty) return;
-    await TtsService.instance.speak(text);
-  }
-
   /// 消息长按菜单：助手消息 → 朗读 / 停止朗读 / 复制；用户消息 → 编辑 / 复制。
   Future<void> _showMessageActions(int messageIndex) async {
     final message = ref.read(chatControllerProvider).messages[messageIndex];
@@ -933,16 +1104,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
             value: 'edit',
           ),
         const ActionSheetItem(
-          icon: Icons.volume_up_outlined,
-          title: '朗读',
-          value: 'read',
-        ),
-        const ActionSheetItem(
-          icon: Icons.stop_circle_outlined,
-          title: '停止朗读',
-          value: 'stop',
-        ),
-        const ActionSheetItem(
           icon: Icons.copy_outlined,
           title: '复制全文',
           value: 'copy',
@@ -952,10 +1113,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (!mounted || action == null) return;
     if (action == 'edit') {
       await _editAndResend(messageIndex, message);
-    } else if (action == 'read') {
-      await _readAloud(message);
-    } else if (action == 'stop') {
-      await TtsService.instance.stop();
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: message.text));
       if (mounted) {
@@ -1069,43 +1226,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
     return completer.future
         .timeout(const Duration(seconds: 8), onTimeout: () => null);
-  }
-
-  /// A6：本地录音，再次点击停止并加入附件。
-  Future<void> _recordAudio() async {
-    if (_recording) {
-      final path = await _recorder.stop();
-      _recording = false;
-      if (path != null) {
-        final bytes = await XFile(path).readAsBytes();
-        if (!mounted) return;
-        setState(() => _attachments.add(PlatformFile(
-            name: '录音.m4a', size: bytes.length, path: path, bytes: bytes)));
-        FloatingToast.show(context, '录音已添加', tone: ToastTone.success);
-      }
-      if (mounted) setState(() {});
-      return;
-    }
-    try {
-      if (!await _recorder.hasPermission()) {
-        if (mounted) FloatingToast.error(context, '未获得麦克风权限');
-        return;
-      }
-      final dir = await getTemporaryDirectory();
-      final path =
-          p.join(dir.path, 'rec-${DateTime.now().millisecondsSinceEpoch}.m4a');
-      await _recorder.start(const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: path);
-      _recording = true;
-      if (mounted) {
-        setState(() {});
-        FloatingToast.show(context, '录音中，再次点击停止');
-      }
-    } catch (e, stack) {
-      debugPrint('录音启动失败: $e\n$stack');
-      _recording = false;
-      if (mounted) FloatingToast.error(context, '录音不可用');
-    }
   }
 
   Future<ToolApproval> _approveTool(ToolCall call, ToolRisk risk) =>
@@ -1228,7 +1348,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 const Expanded(
                     child: Text('思考程度',
                         style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700))),
+                            fontSize: 16, fontWeight: FontWeight.w500))),
               ]),
               const SizedBox(height: 4),
               const Text(
@@ -1325,8 +1445,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       QuickAction(label: '修复问题'),
       QuickAction(
         label: '头脑风暴',
-        prompt:
-            '帮我头脑风暴一下「」的创意方向。要求：先提出 3~5 个角度，再挑一个最有潜力的展开，最后给出下一步行动建议。',
+        prompt: '帮我头脑风暴一下「」的创意方向。要求：先提出 3~5 个角度，再挑一个最有潜力的展开，最后给出下一步行动建议。',
       ),
       QuickAction(label: '解读工作区'),
     ];
@@ -1339,15 +1458,25 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
-  String? _currentRunningStage(ChatState state) {
-    if (!state.running) {
-      if (state.planState != null && !state.planState!.isConfirmed) {
+  String? _currentRunningStage({
+    required List<ToolActivity> toolActivities,
+    required bool running,
+    required bool paused,
+    required PlanState? planState,
+  }) {
+    if (!running) {
+      if (planState != null && !planState.isConfirmed) {
         return '等待确认计划';
       }
       return null;
     }
-    if (state.toolActivities.any((a) => a.status == 'running')) {
-      return '工具执行中…';
+    if (paused) return '已暂停，可继续或追加指令';
+    final current = toolActivities.lastOrNull;
+    if (current?.status == '等待确认') {
+      return '等待确认：${current!.call.name}';
+    }
+    if (current?.status == '执行中') {
+      return '正在执行：${current!.call.name}';
     }
     return '生成中…';
   }
@@ -1367,8 +1496,45 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return ValueListenableBuilder<double>(
       valueListenable: ChatLayoutController.widthFactor,
       builder: (context, _, __) {
-        final state = ref.watch(chatControllerProvider);
-        if (state.loading) {
+        // 逐字段 select：只有被订阅字段自身变化时才重建本页。
+        // 高频变化的 liveReply（流式期间 ≤70ms 一次）**不在此订阅**，而是下沉到
+        // 仅包裹消息列表的 Consumer 中，使输入胶囊 / 会话指标条 / 顶栏不会被
+        // 每次流式增量带着整页重建。
+        final loading =
+            ref.watch(chatControllerProvider.select((s) => s.loading));
+        final conversationId =
+            ref.watch(chatControllerProvider.select((s) => s.conversationId));
+        final currentWorkspacePath = ref
+            .watch(chatControllerProvider.select((s) => s.currentWorkspacePath));
+        final contextTokens =
+            ref.watch(chatControllerProvider.select((s) => s.contextTokens));
+        final liveContextTokens = ref
+            .watch(chatControllerProvider.select((s) => s.liveContextTokens));
+        final activeModel =
+            ref.watch(chatControllerProvider.select((s) => s.activeModel));
+        final activeProviderName = ref
+            .watch(chatControllerProvider.select((s) => s.activeProviderName));
+        final messages =
+            ref.watch(chatControllerProvider.select((s) => s.messages));
+        final running = ref.watch(runningProvider);
+        final paused =
+            ref.watch(chatControllerProvider.select((s) => s.paused));
+        final planMode =
+            ref.watch(chatControllerProvider.select((s) => s.planMode));
+        final approvalMode =
+            ref.watch(chatControllerProvider.select((s) => s.approvalMode));
+        final planState =
+            ref.watch(chatControllerProvider.select((s) => s.planState));
+        final activityLog =
+            ref.watch(chatControllerProvider.select((s) => s.activityLog));
+        final toolActivities =
+            ref.watch(chatControllerProvider.select((s) => s.toolActivities));
+        final conversationTitle = ref
+            .watch(chatControllerProvider.select((s) => s.conversationTitle));
+        final totalSteps =
+            ref.watch(chatControllerProvider.select((s) => s.totalSteps));
+
+        if (loading) {
           return const Scaffold(
               body: Center(child: CircularProgressIndicator()));
         }
@@ -1376,16 +1542,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
           key: _scaffoldKey,
           backgroundColor: Colors.transparent, // Background handled by stack
           drawer: ChatCatalogDrawer(
-            currentConversationId: state.conversationId,
-            currentWorkspacePath: state.currentWorkspacePath,
-            contextTokens: state.contextTokens,
-            liveContextTokens: state.liveContextTokens,
-            activeModel: state.activeModel,
-            activeProviderName: state.activeProviderName,
-            messages: state.messages,
-            isRunning: state.running,
-            planModeEnabled: state.planMode,
-            approvalMode: state.approvalMode,
+            currentConversationId: conversationId,
+            currentWorkspacePath: currentWorkspacePath,
+            contextTokens: contextTokens,
+            liveContextTokens: liveContextTokens,
+            activeModel: activeModel,
+            activeProviderName: activeProviderName,
+            messages: messages,
+            isRunning: running,
+            planModeEnabled: planMode,
+            approvalMode: approvalMode,
             onApprovalModeTap: _selectApprovalMode,
             onNewConversation: () => _startNewConversation(),
             onSelectConversation: (conv) => _switchConversation(conv),
@@ -1395,9 +1561,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
               MaterialPageRoute(builder: (_) => const McpServersPage()),
             ),
             onPromptLibrary: _openPromptLibrary,
-            onPlanModeToggle: () => _chat.setPlanMode(!state.planMode),
+            onPlanModeToggle: () => _chat.setPlanMode(!planMode),
             onMore: _showAvatarMenu,
             onOpenHistory: _openHistory,
+            onConversationDeleted: (id) {
+              // 删掉的若是当前会话，立即另起新会话，避免停留在已删除的会话上。
+              if (ref.read(chatControllerProvider).conversationId == id) {
+                _startNewConversation();
+              }
+            },
           ),
           body: Stack(
             // 顶部悬浮层（顶栏、计划与工具面板）允许展示自身阴影，
@@ -1408,21 +1580,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
               Positioned.fill(
                 child: Container(
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: Theme.of(context).brightness == Brightness.dark
-                          ? const [
-                              Color(0xFF000000), // Deep absolute black
-                              Color(0xFF0A0F1C), // Very dark blue
-                              Color(0xFF131124), // Dark purple/blue
-                            ]
-                          : const [
-                              Color(0xFFFFFFFF), // Pure white
-                              Color(0xFFF4F7FB), // Soft icy blue
-                              Color(0xFFE6EFFF), // Light blue corner
-                            ],
-                    ),
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppPalette.darkCanvas
+                        : AppPalette.lightCanvas,
                   ),
                 ),
               ),
@@ -1468,64 +1628,77 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         height: kCapsuleTopBarHeight +
                             4), // Clear the absolute positioned top bar
                     // 计划面板改为 Stack 顶层悬浮，避免挤压消息区和被顶部蒙版覆盖。
-                    if (state.activityLog.isNotEmpty)
+                    if (activityLog.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          child: Text(state.activityLog.last,
+                          child: Text(activityLog.last,
                               style: Theme.of(context).textTheme.bodySmall),
                         ),
                       ),
                     Expanded(
                       child: Stack(
                         children: [
-                          state.messages.isEmpty
+                          messages.isEmpty
                               ? _emptyState(context)
-                              : ChatMessageList(
-                                  sessionKey: state.conversationId,
-                                  messages: state.messages,
-                                  liveReply: state.liveReply,
-                                  controller: _scrollController,
-                                  running: state.running,
-                                  onLongPress: (index) {
-                                    if (!_longPressHintShown) {
-                                      _longPressHintShown = true;
-                                    }
-                                    _showMessageActions(index);
-                                  },
-                                  onRegenerate: _regenerate,
-                                  trailingWidgets: [
-                                    if (state.planState != null &&
-                                        state.planState!.status != 'cancelled')
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 12),
-                                        child: PlanPanel(
-                                          plan: state.planState!,
-                                          goal: state.planState!.steps.isEmpty
-                                              ? null
-                                              : state.planState!.steps.first
-                                                  .description,
-                                          onApprove: () =>
-                                              _chat.respondToPlan(true),
-                                          onCancel: () =>
-                                              _chat.respondToPlan(false),
-                                          onResume: () => _chat
-                                              .resumeFromBudgetPause(
-                                                  approveTool: _approveTool),
-                                        ),
-                                      ),
-                                    if (state.toolActivities.isNotEmpty)
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 12),
-                                        child: ToolActivityCapsule(
-                                          activities: state.toolActivities,
-                                          running: state.running,
-                                        ),
-                                      ),
-                                  ],
+                              : NotificationListener<ScrollNotification>(
+                                  // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
+                                  onNotification: _handleScrollNotification,
+                                  child: Consumer(
+                                    builder: (context, ref, _) {
+                                      // 高频流式文本在此单独订阅：只有本子树随
+                                      // liveReply 更新而重建，页面其余部分不动。
+                                      final liveReply =
+                                          ref.watch(liveReplyProvider);
+                                      return ChatMessageList(
+                                        sessionKey: conversationId,
+                                        messages: messages,
+                                        liveReply: liveReply,
+                                        controller: _scrollController,
+                                        running: running,
+                                        onLongPress: (index) {
+                                          if (!_longPressHintShown) {
+                                            _longPressHintShown = true;
+                                          }
+                                          _showMessageActions(index);
+                                        },
+                                        onRegenerate: _regenerate,
+                                        trailingWidgets: [
+                                          if (planState != null &&
+                                              planState.status != 'cancelled')
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 12),
+                                              child: PlanPanel(
+                                                plan: planState,
+                                                goal: planState.steps.isEmpty
+                                                    ? null
+                                                    : planState
+                                                        .steps.first.description,
+                                                onApprove: () =>
+                                                    _chat.respondToPlan(true),
+                                                onCancel: () =>
+                                                    _chat.respondToPlan(false),
+                                                onResume: () => _chat
+                                                    .resumeFromBudgetPause(
+                                                        approveTool:
+                                                            _approveTool),
+                                              ),
+                                            ),
+                                          if (toolActivities.isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                  bottom: 12),
+                                              child: ToolActivityCapsule(
+                                                activities: toolActivities,
+                                                running: running,
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                                    },
+                                  ),
                                 ),
                           if (_showScrollToBottom)
                             Positioned(
@@ -1541,7 +1714,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                     borderRadius: BorderRadius.circular(20),
                                     child: Container(
                                       padding: EdgeInsets.symmetric(
-                                        horizontal: state.running ? 10 : 8,
+                                        horizontal: running ? 10 : 8,
                                         vertical: 7,
                                       ),
                                       decoration: BoxDecoration(
@@ -1560,7 +1733,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          if (state.running) ...[
+                                          if (running) ...[
                                             SizedBox(
                                               width: 12,
                                               height: 12,
@@ -1580,7 +1753,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                               '生成中 · 回到底部',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.w600,
+                                                fontWeight: FontWeight.w500,
                                                 color: Theme.of(context)
                                                     .colorScheme
                                                     .onPrimaryContainer,
@@ -1677,51 +1850,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
                           }).toList(),
                         ),
                       ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
+                    _buildSessionMetricsBar(
+                      messages: messages,
+                      totalSteps: totalSteps,
+                      toolActivities: toolActivities,
+                      liveContextTokens: liveContextTokens,
+                      contextTokens: contextTokens,
+                    ),
                     FloatingCapsuleInput(
                       controller: _controller,
-                      isRunning: state.running,
-                      runningStage: _currentRunningStage(state),
+                      isRunning: running,
+                      runningStage: _currentRunningStage(
+                        toolActivities: toolActivities,
+                        running: running,
+                        paused: paused,
+                        planState: planState,
+                      ),
                       onSend: _send,
                       onStop: _stop,
                       onAttachmentMenu: _showAttachmentMenu,
-                      onCommandMenu: _openPromptLibrary,
-                      onMcpMenu: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                              builder: (_) => const McpServersPage())),
-                      onPlanModeToggle: () {
-                        ref
-                            .read(chatControllerProvider.notifier)
-                            .setPlanMode(!state.planMode);
-                      },
-                      onApprovalModeTap: _selectApprovalMode,
-                      onTerminalPreview: _openTerminal,
-                      onEnvSetup: _openEnvSetup,
-                      onOpenDashboard: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => DashboardPage(
-                            onConversationSelected: (c) =>
-                                _switchConversation(c),
-                          ),
-                        ),
-                      ),
-                      planModeEnabled: state.planMode,
-                      approvalMode: state.approvalMode,
-                      onVoiceToggle: _toggleVoice,
-                      isListening: _listening,
-                      modelLabel: state.activeModel.isEmpty
-                          ? (state.activeProviderName.isEmpty
-                              ? null
-                              : state.activeProviderName)
-                          : state.activeModel,
-                      workspaceLabel: state.currentWorkspacePath == null ||
-                              state.currentWorkspacePath!.isEmpty
-                          ? '无工作区'
-                          : p.basename(state.currentWorkspacePath!),
-                      onModelTap: _switchProvider,
-                      onWorkspaceTap: _handleTopBarWorkspace,
+                      onVoiceInput: _handleVoiceInput,
+                      deepThinking: _deepThinking,
+                      onDeepThinkingToggle: _toggleDeepThinking,
+                      webSearch: _webSearch,
+                      onWebSearchToggle: _toggleWebSearch,
+                      planModeEnabled: planMode,
                       hasAttachments: _attachments.isNotEmpty,
-                      attachmentCount: _attachments.length,
                     ),
                   ]);
                   if (wide) {
@@ -1736,79 +1891,47 @@ class _ChatPageState extends ConsumerState<ChatPage>
                   return column;
                 }),
               ),
-              // G1 工具执行明细悬浮胶囊:悬浮于聊天之上,不内联挤压消息流。
-              // G1 顶部渐变模糊条:消息从其下滚动穿过时渐隐(ZCode 顶栏样式)。
               Positioned(
                 top: 0,
                 left: 0,
                 right: 0,
-                height: MediaQuery.paddingOf(context).top +
-                    kCapsuleTopBarHeight +
-                    4,
-                // 仅负责视觉蒙版；不拦截其后绘制的顶部悬浮组件事件。
-                child: IgnorePointer(
-                  child: ClipRect(
-                    child: BackdropFilter(
-                      filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Theme.of(context)
-                                  .colorScheme
-                                  .surface
-                                  .withValues(alpha: .25),
-                              Theme.of(context)
-                                  .colorScheme
-                                  .surface
-                                  .withValues(alpha: .05),
-                              Theme.of(context)
-                                  .colorScheme
-                                  .surface
-                                  .withValues(alpha: 0),
-                            ],
-                          ),
-                        ),
-                      ),
+                child: SafeArea(
+                  bottom: false,
+                  child: CapsuleTopBar(
+                    maxContextTokens: contextTokens,
+                    workspaceLabel: currentWorkspacePath == null ||
+                            currentWorkspacePath.isEmpty
+                        ? null
+                        : p.basename(currentWorkspacePath),
+                    modelLabel: activeModel.isNotEmpty
+                        ? activeModel
+                        : (activeProviderName.isEmpty
+                            ? null
+                            : activeProviderName),
+                    sessionTitle: conversationTitle,
+                    runningStage: _currentRunningStage(
+                      toolActivities: toolActivities,
+                      running: running,
+                      paused: paused,
+                      planState: planState,
                     ),
+                    statusActive: running,
+                    currentContextTokens: liveContextTokens > 0
+                        ? liveContextTokens
+                        : messages.reversed
+                                .where((m) => m.usage != null)
+                                .map((m) =>
+                                    m.usage!.promptTokens +
+                                    m.usage!.completionTokens)
+                                .firstOrNull ??
+                            0,
+                    onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                    onNewChat: () => _startNewConversation(),
+                    onContextGaugeTap: () =>
+                        _scaffoldKey.currentState?.openDrawer(),
+                    onTitleTap: _showSessionContext,
+                    onWorkspaceTap: _handleTopBarWorkspace,
                   ),
-                ),
-              ),
-              Positioned(
-                top: MediaQuery.paddingOf(context).top + 4,
-                left: 12,
-                right: 12,
-                child: CapsuleTopBar(
-                  maxContextTokens: state.contextTokens,
-                  workspaceLabel: state.currentWorkspacePath == null ||
-                          state.currentWorkspacePath!.isEmpty
-                      ? null
-                      : p.basename(state.currentWorkspacePath!),
-                  modelLabel: state.activeModel.isNotEmpty
-                      ? state.activeModel
-                      : (state.activeProviderName.isEmpty
-                          ? null
-                          : state.activeProviderName),
-                  sessionTitle: state.conversationTitle,
-                  runningStage: _currentRunningStage(state),
-                  statusActive: state.running,
-                  currentContextTokens: state.liveContextTokens > 0
-                      ? state.liveContextTokens
-                      : state.messages.reversed
-                              .where((m) => m.usage != null)
-                              .map((m) =>
-                                  m.usage!.promptTokens +
-                                  m.usage!.completionTokens)
-                              .firstOrNull ??
-                          0,
-                  onMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                  onNewChat: () => _startNewConversation(),
-                  onContextGaugeTap: () =>
-                      _scaffoldKey.currentState?.openDrawer(),
-                  onTitleTap: _showSessionContext,
-                  onWorkspaceTap: _handleTopBarWorkspace,
                 ),
               ),
             ], // Stack children

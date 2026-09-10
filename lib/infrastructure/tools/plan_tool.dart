@@ -1,4 +1,6 @@
 import '../../domain/models.dart';
+import '../../domain/tool_codes.dart';
+import '../../domain/tool_result.dart';
 import 'tool_registry.dart';
 
 class ManagePlanTool implements AgentTool {
@@ -32,21 +34,49 @@ class ManagePlanTool implements AgentTool {
   );
 
   @override
-  Future<String> execute(Map<String, dynamic> arguments) async {
-    try {
-      final stepsList = arguments['steps'] as List;
-      final steps = stepsList.map((s) {
-        final map = s as Map<String, dynamic>;
-        return PlanStep(
-          id: map['id']?.toString() ?? '',
-          description: map['description']?.toString() ?? '',
-        );
-      }).toList();
-
-      await onPlanUpdated(steps);
-      return '计划已成功提交。';
-    } catch (e) {
-      return '计划提交失败：格式错误 ';
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
+    final stepsList = arguments['steps'];
+    if (stepsList is! List) {
+      return ToolResult.failure(
+        code: ToolCodes.invalidArguments,
+        message: 'steps 必须是数组',
+      );
     }
+    final steps = <PlanStep>[];
+    for (var i = 0; i < stepsList.length; i++) {
+      final item = stepsList[i];
+      if (item is! Map) {
+        return ToolResult.failure(
+          code: ToolCodes.invalidArguments,
+          message: 'steps[$i] 必须是对象',
+        );
+      }
+      final id = item['id']?.toString() ?? '';
+      final description = item['description']?.toString() ?? '';
+      if (id.isEmpty || description.isEmpty) {
+        return ToolResult.failure(
+          code: ToolCodes.invalidArguments,
+          message: 'steps[$i] 缺少 id 或 description',
+        );
+      }
+      steps.add(PlanStep(id: id, description: description));
+    }
+
+    try {
+      await onPlanUpdated(steps);
+    } catch (e) {
+      return ToolResult.failure(
+        // 原实现把真实异常吞掉只回一句“格式错误”，模型无法判断该修参数还是重试。
+        code: ToolCodes.toolError,
+        message: '计划提交失败：$e',
+        // 回调可能已部分更新计划状态，无法确定是否生效。
+        effect: ToolEffect.unknown,
+      );
+    }
+    return ToolResult.success(
+      message: '计划已成功提交（${steps.length} 步）',
+      data: {'stepCount': steps.length},
+      effect: ToolEffect.applied,
+    );
   }
 }

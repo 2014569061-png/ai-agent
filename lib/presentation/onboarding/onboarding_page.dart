@@ -5,6 +5,8 @@ import '../../infrastructure/observability/sentry_service.dart';
 import '../chat/chat_page.dart';
 import '../l10n/app_strings.dart';
 import '../settings/settings_page.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/section_card.dart';
 
 /// 首次启动的 4 步引导：填 Key / 选模型 / 用工具 / 隐私（含崩溃上报授权）。
@@ -69,7 +71,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       body: SafeArea(
         child: Column(children: [
           Align(
@@ -95,23 +100,44 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           width: 96,
                           height: 96,
                           decoration: BoxDecoration(
-                              color: theme.colorScheme.primary,
-                              borderRadius: BorderRadius.circular(28)),
+                              color: AppPalette.brand,
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusModal)),
                           child: Icon(ic, color: Colors.white, size: 44),
                         ),
                         const SizedBox(height: 28),
                         Text(t,
                             style: theme.textTheme.headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.w700)),
+                                ?.copyWith(fontWeight: FontWeight.w500)),
                         const SizedBox(height: 12),
                         Text(d,
                             textAlign: TextAlign.center,
                             style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: isDark
+                                    ? AppPalette.darkTextMuted
+                                    : AppPalette.lightTextMuted,
                                 height: 1.5)),
                         if (i == 0) ...[
                           const SizedBox(height: 20),
-                          FilledButton.tonal(
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              elevation: 0,
+                              backgroundColor: isDark
+                                  ? AppPalette.darkSurface
+                                  : AppPalette.lightSurface,
+                              foregroundColor: isDark
+                                  ? AppPalette.darkText
+                                  : AppPalette.lightText,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                    AppTokens.radiusControl),
+                                side: BorderSide(
+                                  color: isDark
+                                      ? AppPalette.darkHairline
+                                      : AppPalette.lightHairline,
+                                ),
+                              ),
+                            ),
                             onPressed: () => Navigator.of(context).push(
                                 MaterialPageRoute(
                                     builder: (_) => const SettingsPage())),
@@ -122,9 +148,33 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           const SizedBox(height: 24),
                           SectionCard(
                             child: SwitchListTile(
-                              secondary: const Icon(Icons.bug_report_outlined),
-                              title: const Text(AppStrings.crashReport),
-                              subtitle: const Text(AppStrings.crashReportHint),
+                              secondary: Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppPalette.brandSoftDark
+                                      : AppPalette.brandSoftLight,
+                                  borderRadius: BorderRadius.circular(
+                                      AppTokens.radiusControl),
+                                ),
+                                child: const Icon(Icons.bug_report_outlined,
+                                    size: 20, color: AppPalette.brand),
+                              ),
+                              title: const Text(
+                                AppStrings.crashReport,
+                                style: TextStyle(
+                                    fontSize: 15, fontWeight: FontWeight.w500),
+                              ),
+                              subtitle: Text(
+                                AppStrings.crashReportHint,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? AppPalette.darkTextMuted
+                                      : AppPalette.lightTextMuted,
+                                ),
+                              ),
                               value: _crashReport,
                               onChanged: (v) =>
                                   setState(() => _crashReport = v),
@@ -150,14 +200,26 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: i == _index
-                                  ? theme.colorScheme.primary
-                                  : theme.colorScheme.outlineVariant),
+                                  ? AppPalette.brand
+                                  : (isDark
+                                      ? AppPalette.darkHairline
+                                      : AppPalette.lightHairline)),
                         )),
               ),
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    elevation: 0,
+                    backgroundColor: AppPalette.brand,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(44),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
+                    ),
+                  ),
                   onPressed: _next,
                   child: Text(_index == _steps.length - 1
                       ? AppStrings.startUsing

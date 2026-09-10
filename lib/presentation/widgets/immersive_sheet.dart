@@ -21,6 +21,7 @@ Future<T?> showImmersiveSheet<T>({
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       final media = MediaQuery.sizeOf(dialogContext);
+      final baseTheme = Theme.of(dialogContext);
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
@@ -36,10 +37,23 @@ Future<T?> showImmersiveSheet<T>({
                 borderRadius: BorderRadius.circular(AppTokens.modalRadius),
                 margin: EdgeInsets.zero,
                 padding: EdgeInsets.zero,
-                child: SafeArea(
-                  top: false,
-                  bottom: false,
-                  child: builder(dialogContext),
+                // 外壳已提供表面，内部的 AlertDialog 必须透明，
+                // 否则会在表面之上再叠一层不透明底，形成双重边框。
+                // 全局 dialogTheme 保留 canvas 作为裸 showDialog 的兜底。
+                child: Theme(
+                  data: baseTheme.copyWith(
+                    dialogTheme: baseTheme.dialogTheme.copyWith(
+                      backgroundColor: Colors.transparent,
+                      elevation: 0,
+                      surfaceTintColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                    ),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    bottom: false,
+                    child: builder(dialogContext),
+                  ),
                 ),
               ),
             ),

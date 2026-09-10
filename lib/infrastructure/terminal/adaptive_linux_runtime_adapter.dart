@@ -2,7 +2,8 @@ import 'linux_runtime.dart';
 
 /// Selects the first available runtime and can move to the next Adapter when
 /// a native runtime cannot start on a particular device/ROM.
-class AdaptiveLinuxRuntimeAdapter implements LinuxRuntimeAdapter {
+class AdaptiveLinuxRuntimeAdapter
+    implements LinuxRuntimeAdapter, DetachedLinuxRuntimeAdapter {
   AdaptiveLinuxRuntimeAdapter(this._candidates);
 
   final List<LinuxRuntimeAdapter> _candidates;
@@ -71,6 +72,68 @@ class AdaptiveLinuxRuntimeAdapter implements LinuxRuntimeAdapter {
   @override
   void stop() {
     _selected?.stop();
+  }
+
+  @override
+  Future<DetachedCommandHandle?> startDetached(
+    LinuxCommandRequest request, {
+    required String workingDirectory,
+    required Duration timeout,
+    required String ownerToken,
+    required String logPath,
+  }) async {
+    var runtime = await _ensureSelected();
+    while (runtime != null) {
+      if (runtime is DetachedLinuxRuntimeAdapter) {
+        final detachedRuntime = runtime as DetachedLinuxRuntimeAdapter;
+        final handle = await detachedRuntime.startDetached(
+          request,
+          workingDirectory: workingDirectory,
+          timeout: timeout,
+          ownerToken: ownerToken,
+          logPath: logPath,
+        );
+        if (handle != null) return handle;
+        // 启动失败时允许下一个候选接管；与普通 run 的降级规则保持一致。
+        _selected = null;
+        _inspection = null;
+        runtime = await _ensureSelected();
+      } else {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Future<bool> verifyDetached(int pid, String ownerToken) async {
+    for (final runtime in _detachedCandidates()) {
+      if (await runtime.verifyDetached(pid, ownerToken)) return true;
+    }
+    return false;
+  }
+
+  @override
+  Future<bool> stopDetached(int pid, String ownerToken) async {
+    for (final runtime in _detachedCandidates()) {
+      if (await runtime.stopDetached(pid, ownerToken)) return true;
+    }
+    return false;
+  }
+
+  Iterable<DetachedLinuxRuntimeAdapter> _detachedCandidates() sync* {
+    final seen = <DetachedLinuxRuntimeAdapter>{};
+    final selected = _selected;
+    if (selected is DetachedLinuxRuntimeAdapter) {
+      final detached = selected as DetachedLinuxRuntimeAdapter;
+      if (seen.add(detached)) yield detached;
+    }
+    for (final candidate in _candidates) {
+      if (candidate is DetachedLinuxRuntimeAdapter) {
+        final detached = candidate as DetachedLinuxRuntimeAdapter;
+        if (seen.add(detached)) yield detached;
+      }
+    }
   }
 
   Future<LinuxRuntimeAdapter?> _ensureSelected() async {

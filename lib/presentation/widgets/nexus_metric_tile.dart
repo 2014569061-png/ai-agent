@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 
 /// 统一的指标展示卡片 (NexusMetricTile)
 /// 用于 Token、耗时、缓存命中率、重试次数、预计费用等指标的统一排版与可读性解释。
@@ -44,23 +46,22 @@ class NexusMetricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final valueColor = color ?? theme.colorScheme.onSurface;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final valueColor = color ?? textColor;
 
     final content = InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppTokens.radiusCard),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.04)
-              : Colors.black.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.07)
-                : Colors.black.withValues(alpha: 0.06),
-          ),
+          color: surface,
+          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+          border: Border.all(color: hairline, width: 1.0),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -70,16 +71,13 @@ class NexusMetricTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (icon != null) ...[
-                  Icon(icon,
-                      size: 13,
-                      color:
-                          color ?? theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.8)),
+                  Icon(icon, size: 13, color: color ?? textMuted),
                   const SizedBox(width: 4),
                 ],
                 Text(
                   label,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                  style: TextStyle(
+                    color: textMuted,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                   ),
@@ -92,7 +90,7 @@ class NexusMetricTile extends StatelessWidget {
                     child: Icon(
                       Icons.info_outline_rounded,
                       size: 12,
-                      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                      color: textMuted,
                     ),
                   ),
                 ],
@@ -107,8 +105,8 @@ class NexusMetricTile extends StatelessWidget {
                 Text(
                   value,
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                     color: valueColor,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
@@ -119,8 +117,8 @@ class NexusMetricTile extends StatelessWidget {
                     unit!,
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w400,
+                      color: textMuted,
                     ),
                   ),
                 ],
