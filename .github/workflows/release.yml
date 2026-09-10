@@ -79,7 +79,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-          files: build/app/outputs/flutter-apk/app-release.apk
+          # 同时归档混淆符号：否则线上崩溃堆栈无法反解（B-10）。
+          files: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/symbols/**
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
