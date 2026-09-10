@@ -191,9 +191,18 @@ class HeadlessExecutor {
     } catch (_) {
       // 单测或旧数据库不可用时不阻断其余只读工具。
     }
-    final terminalFileEnabled = (await SharedPreferences.getInstance())
-            .getBool('settings.tool.terminal_file') ??
-        true;
+    // 注意：这里的 prefs 读取必须自带兜底。此前直接 await getInstance()，
+    // 在单测 / 插件缺失环境下抛 MissingPluginException，会把**整轮后台执行**
+    // 判为失败（与紧邻 188-193 行"不阻断其余只读工具"的本意相矛盾）。
+    bool terminalFileEnabled;
+    try {
+      terminalFileEnabled =
+          (await SharedPreferences.getInstance())
+                  .getBool('settings.tool.terminal_file') ??
+              true;
+    } catch (_) {
+      terminalFileEnabled = true;
+    }
     if (workspacePath != null &&
         workspacePath.trim().isNotEmpty &&
         terminalFileEnabled) {
