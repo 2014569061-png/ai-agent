@@ -1,3 +1,5 @@
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -188,6 +190,25 @@ class CodeBlockWidget extends StatefulWidget {
 
 class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   static const _maxHighlightChars = 12000;
+
+  // 语法高亮色板有意独立于 AppPalette 业务 Token：代码块配色需保持稳定统一，
+  // 不应随主题 Token 调整而漂移。这里把明/暗两套提为 const，避免每次 rebuild
+  // 都重新构造 SimpleSyntaxHighlighter（原先在 build 内 new，每帧一个实例）。
+  static const SimpleSyntaxHighlighter _lightHighlighter =
+      SimpleSyntaxHighlighter(
+    keywordColor: Color(0xFFA626A4),
+    stringColor: Color(0xFF50A14F),
+    commentColor: Color(0xFF9DA0A6),
+    numberColor: Color(0xFF986801),
+  );
+  static const SimpleSyntaxHighlighter _darkHighlighter =
+      SimpleSyntaxHighlighter(
+    keywordColor: Color(0xFFC678DD),
+    stringColor: Color(0xFF98C379),
+    commentColor: Color(0xFF5C6773),
+    numberColor: Color(0xFFD19A66),
+  );
+
   bool _highlighted = false;
   bool _codeMetricRecorded = false;
   TextSpan? _highlightedSpan;
@@ -257,21 +278,20 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final background = dark ? const Color(0xFF1B2230) : const Color(0xFFF6F8FA);
+    final background =
+        dark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final headerBackground =
-        dark ? const Color(0xFF222A3A) : const Color(0xFFEEF1F4);
-    final border = dark ? const Color(0xFF2C3547) : const Color(0xFFE2E8F0);
-    final headerText = dark ? const Color(0xFFA6B2C6) : const Color(0xFF64748B);
-    final codeColor = dark ? const Color(0xFFE6EDF3) : const Color(0xFF24292F);
+        dark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
+    final border =
+        dark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final headerText =
+        dark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
+    final codeColor = dark ? AppPalette.darkText : AppPalette.lightText;
     final trimmed = widget.code.trimRight();
     final longFallback = widget.code.length > _maxHighlightChars;
 
-    final highlighter = SimpleSyntaxHighlighter(
-      keywordColor: dark ? const Color(0xFFC678DD) : const Color(0xFFA626A4),
-      stringColor: dark ? const Color(0xFF98C379) : const Color(0xFF50A14F),
-      commentColor: dark ? const Color(0xFF5C6773) : const Color(0xFF9DA0A6),
-      numberColor: dark ? const Color(0xFFD19A66) : const Color(0xFF986801),
-    );
+    // 复用 const 高亮器，避免每次 rebuild 重新构造。
+    final highlighter = dark ? _darkHighlighter : _lightHighlighter;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -297,7 +317,7 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                   style: TextStyle(
                     fontSize: 12,
                     color: headerText,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                     fontFamily: 'monospace',
                   ),
                 ),
@@ -305,7 +325,7 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                     onTap: () {
                       HapticFeedback.lightImpact();
                       Clipboard.setData(ClipboardData(text: trimmed));
