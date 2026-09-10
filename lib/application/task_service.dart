@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models.dart';
 import '../infrastructure/database/app_database.dart';
-import 'sensitive_tool_policy.dart';
+import '../domain/sensitive_tool_policy.dart';
 
 /// v0.9 各类开发任务共用的结构化结果载体。
 class StructuredTaskResult {

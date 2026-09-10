@@ -1,7 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mobile_agent/application/sensitive_tool_policy.dart';
+import 'package:mobile_agent/domain/sensitive_tool_policy.dart';
 import 'package:mobile_agent/domain/tool_result.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config.dart';

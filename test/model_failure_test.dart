@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:mobile_agent/application/model_failure.dart';
+import 'package:mobile_agent/domain/model_failure.dart';
 
 void main() {
   test('billing markers win over a transient 429 status', () {

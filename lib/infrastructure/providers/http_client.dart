@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 
-import '../../application/model_failure.dart';
+import '../../domain/model_failure.dart';
 
 /// 共享 HTTP 客户端工厂。
 ///

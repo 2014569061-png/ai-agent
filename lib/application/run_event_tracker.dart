@@ -4,7 +4,7 @@ import 'package:drift/drift.dart' show Value;
 
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/observability/unified_diff.dart';
-import 'sensitive_tool_policy.dart';
+import '../domain/sensitive_tool_policy.dart';
 
 /// Persists a run event as a started row and later completes it with the
 /// measured duration. Database failures are intentionally swallowed so

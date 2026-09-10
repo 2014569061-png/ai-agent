@@ -1,4 +1,4 @@
-import '../domain/tool_result.dart';
+import 'tool_result.dart';
 
 /// 仅用于持久化、导出和诊断出口的敏感工具策略。
 ///

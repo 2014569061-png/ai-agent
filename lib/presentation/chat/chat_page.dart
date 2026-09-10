@@ -20,7 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../application/chat_controller.dart';
 import '../../application/app_lock_service.dart';
 import '../../application/providers.dart';
-import '../../application/sensitive_tool_policy.dart';
+import '../../domain/sensitive_tool_policy.dart';
 import '../../domain/models.dart';
 import '../../domain/session_metrics.dart';
 import '../../infrastructure/database/app_database.dart';

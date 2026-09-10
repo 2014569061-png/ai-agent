@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/observability/unified_diff.dart';
 import 'log_service.dart';
-import 'sensitive_tool_policy.dart';
+import '../domain/sensitive_tool_policy.dart';
 
 /// 审计日志服务（G2）。默认关闭（隐私优先），开启后记录工具调用/审批/导出/同步等决策链路。
 class AuditService {
