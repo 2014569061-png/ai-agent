@@ -696,6 +696,45 @@ class AppDatabase extends _$AppDatabase {
         .then((rows) => rows.reversed.toList(growable: false));
   }
 
+  /// UI 分页专用的键集翻页（B-2）：游标是 (createdAt, rowid) 复合。
+  ///
+  /// Drift 默认按「秒」存 DateTime —— 同一秒内会写入多条消息（快速工具轮很常见），
+  /// 只按 createdAt 严格小于翻页会把同秒边界上的整组消息漏掉（实测复现），
+  /// 因此必须带 rowid 决胜。返回升序的 (行, rowid)。
+  Future<List<(Message, int)>> messagesPage(
+    String conversationId, {
+    DateTime? before,
+    int? beforeRowId,
+    int? limit,
+  }) async {
+    final variables = <Variable>[Variable<String>(conversationId)];
+    var where = 'conversation_id = ?';
+    if (before != null) {
+      if (beforeRowId == null) {
+        where += ' AND created_at < ?';
+        variables.add(Variable<DateTime>(before));
+      } else {
+        where += ' AND (created_at < ? OR (created_at = ? AND rowid < ?))';
+        variables
+          ..add(Variable<DateTime>(before))
+          ..add(Variable<DateTime>(before))
+          ..add(Variable<int>(beforeRowId));
+      }
+    }
+    final limitSql = limit == null ? '' : ' LIMIT $limit';
+    final rows = await customSelect(
+      'SELECT *, rowid AS page_rowid FROM messages WHERE $where '
+      'ORDER BY created_at DESC, rowid DESC$limitSql',
+      variables: variables,
+      readsFrom: {messages},
+    ).get();
+    final page = <(Message, int)>[
+      for (final row in rows)
+        (await messages.mapFromRow(row), row.data['page_rowid'] as int),
+    ];
+    return page.reversed.toList(growable: false);
+  }
+
   /// 删除最后一次用户消息之后的所有助手/工具消息（用于"重新生成"时清理上一轮结果）。
   Future<void> deleteTrailingAssistantAndTool(String conversationId) async {
     final lastUser = await (select(messages)

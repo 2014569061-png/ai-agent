@@ -352,7 +352,10 @@ class ChatController extends Notifier<ChatState> {
       final conversation = conversations.isNotEmpty
           ? conversations.first
           : await _createConversation(database);
-      final storedMessages = await database.messagesFor(conversation.id);
+      final storedPage =
+          await _loadConversationPage(database, conversation.id);
+      _trackLoadedWindow(storedPage);
+      final storedMessages = storedPage.map((e) => e.$1).toList();
       if (agents.isEmpty) {
         final now = DateTime.now();
         await database.insertAgent(AgentsCompanion.insert(
@@ -1947,13 +1950,82 @@ class ChatController extends Notifier<ChatState> {
       clearLiveReply: true,
       clearSessionSkillInstructions: true,
     );
+    _oldestLoadedAt = null;
+    _olderExhausted = true;
+  }
+
+  /// --- 长会话键集分页（B-2 UI 接线）---
+  ///
+  /// 初始只把会话最新 [_conversationPageSize] 条载入内存；用户滚到顶部时由
+  /// UI 回调 [loadOlderMessages] 按 (conversationId, createdAt) 键集翻上一页。
+  /// DB 层已有完整键集支持，这里只维护「当前已加载窗口」的游标。
+  static const _conversationPageSize = 200;
+  static const _olderPageSize = 100;
+  DateTime? _oldestLoadedAt;
+  int? _oldestLoadedRowId;
+  bool _olderExhausted = false;
+
+  Future<List<(Message, int)>> _loadConversationPage(
+      AppDatabase database, String conversationId) {
+    return database.messagesPage(conversationId,
+        limit: _conversationPageSize);
+  }
+
+  void _trackLoadedWindow(List<(Message, int)> page) {
+    if (page.isEmpty) {
+      _oldestLoadedAt = null;
+      _oldestLoadedRowId = null;
+      _olderExhausted = true;
+      return;
+    }
+    _oldestLoadedAt = page.first.$1.createdAt;
+    _oldestLoadedRowId = page.first.$2;
+    _olderExhausted = page.length < _conversationPageSize;
+  }
+
+  /// 加载更早一页并前插到消息列表。返回 true 表示本次有新页入列
+  /// （可能仍有更早）；false 表示没有更早消息或当前不可加载。
+  ///
+  /// 运行中不加载：前插会使 LiveReply.messageIndex 指错消息（流式绑定按
+  /// 索引定位），且滚顶行为与流式跟手冲突。
+  Future<bool> loadOlderMessages() async {
+    final conversationId = state.conversationId;
+    final oldest = _oldestLoadedAt;
+    if (conversationId == null || oldest == null || _olderExhausted) {
+      return false;
+    }
+    if (state.running) return false;
+    try {
+      final database = await ref.read(databaseProvider.future);
+      final older = await database.messagesPage(conversationId,
+          before: oldest,
+          beforeRowId: _oldestLoadedRowId,
+          limit: _olderPageSize);
+      if (older.isEmpty) {
+        _olderExhausted = true;
+        return false;
+      }
+      if (older.length < _olderPageSize) _olderExhausted = true;
+      _oldestLoadedAt = older.first.$1.createdAt;
+      _oldestLoadedRowId = older.first.$2;
+      final restored = _restoreFromMessages(older.map((e) => e.$1).toList());
+      state = state.copyWith(
+        messages: [...restored.$1, ...state.messages],
+        toolActivities: [...restored.$2, ...state.toolActivities],
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> switchConversation(Conversation conversation) async {
     _invalidateActiveRun();
     final switchGeneration = _runs.generation;
     final database = await ref.read(databaseProvider.future);
-    final stored = await database.messagesFor(conversation.id);
+    final storedPage = await _loadConversationPage(database, conversation.id);
+    _trackLoadedWindow(storedPage);
+    final stored = storedPage.map((e) => e.$1).toList();
     if (switchGeneration != _runs.generation) return;
     var agentName = state.agentName;
     var systemPrompt = state.systemPrompt;

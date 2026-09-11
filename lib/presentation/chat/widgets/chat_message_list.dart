@@ -18,6 +18,7 @@ class ChatMessageList extends StatefulWidget {
     this.trailingWidgets = const [],
     this.sessionKey,
     this.liveReply,
+    this.onLoadOlder,
   });
 
   final List<ChatMessage> messages;
@@ -30,6 +31,10 @@ class ChatMessageList extends StatefulWidget {
   final List<Widget> trailingWidgets;
   final String? sessionKey;
   final LiveReply? liveReply;
+
+  /// 内存窗口耗尽（_start 到 0）后向 DB 拉更早一页的回调（B-2 键集分页）。
+  /// 返回 true 表示有新页已前插进 [messages]；null/false 表示无更早或未接线。
+  final Future<bool> Function()? onLoadOlder;
 
   @override
   State<ChatMessageList> createState() => _ChatMessageListState();
@@ -54,8 +59,18 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final sessionChanged =
         widget.sessionKey != null && widget.sessionKey != oldWidget.sessionKey;
     final countDecreased = widget.messages.length < oldWidget.messages.length;
+    // DB「加载更早」会把新页前插：窗口起点同步前移，才能保持同一条消息的
+    // 全局索引（= ValueKey）恒定、Element 继续复用。用 identical 识别前插，
+    // 与「运行中向尾部追加新消息」区分开。
+    final delta = widget.messages.length - oldWidget.messages.length;
+    final prepended = delta > 0 &&
+        oldWidget.messages.isNotEmpty &&
+        widget.messages.length > delta &&
+        identical(widget.messages[delta], oldWidget.messages[0]);
     if (sessionChanged || countDecreased) {
       _resetWindow();
+    } else if (prepended) {
+      _start += delta;
     }
   }
 
@@ -70,11 +85,18 @@ class _ChatMessageListState extends State<ChatMessageList> {
         .clamp(0, widget.messages.length);
   }
 
+  bool _dbExhausted = false;
+
   void _onScroll() {
     if (!widget.controller.hasClients ||
         widget.controller.position.pixels > 80 ||
-        _start == 0 ||
         _loadingOlder) {
+      return;
+    }
+    if (_start == 0) {
+      // 内存窗口已全部展示：转 DB 键集翻页（未接线或已到底则静默停止）。
+      if (widget.onLoadOlder == null || _dbExhausted) return;
+      _fetchOlderFromDb();
       return;
     }
     _loadingOlder = true;
@@ -92,6 +114,35 @@ class _ChatMessageListState extends State<ChatMessageList> {
           widget.controller.jumpTo((oldPixels + delta)
               .clamp(0.0, widget.controller.position.maxScrollExtent));
         }
+      }
+      if (mounted) _loadingOlder = false;
+    });
+  }
+
+  Future<void> _fetchOlderFromDb() async {
+    _loadingOlder = true;
+    final oldExtent = widget.controller.hasClients
+        ? widget.controller.position.maxScrollExtent
+        : 0.0;
+    final oldPixels = widget.controller.hasClients
+        ? widget.controller.position.pixels
+        : 0.0;
+    bool hadMore;
+    try {
+      hadMore = await widget.onLoadOlder!();
+    } catch (_) {
+      hadMore = false;
+    }
+    if (!mounted) return;
+    if (!hadMore) {
+      setState(() => _dbExhausted = true);
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !widget.controller.hasClients) return;
+      final delta = widget.controller.position.maxScrollExtent - oldExtent;
+      if (delta > 0) {
+        widget.controller.jumpTo((oldPixels + delta)
+            .clamp(0.0, widget.controller.position.maxScrollExtent));
       }
       if (mounted) _loadingOlder = false;
     });

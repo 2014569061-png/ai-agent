@@ -2022,6 +2022,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         liveReply: liveReply,
                                         controller: _scrollController,
                                         running: running,
+                                        onLoadOlder: () =>
+                                            _chat.loadOlderMessages(),
                                         onLongPress: (index) {
                                           if (!_longPressHintShown) {
                                             _longPressHintShown = true;
