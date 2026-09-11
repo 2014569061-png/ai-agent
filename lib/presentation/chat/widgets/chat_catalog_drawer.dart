@@ -91,7 +91,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
   Future<void> _loadData() async {
     try {
       final db = await DatabaseProvider.instance.database;
-      final list = (await db.recentConversations()).take(30).toList();
+      final list = (await db.recentConversations(limit: 30)).toList();
       if (mounted) {
         setState(() {
           _recentConversations = list;
