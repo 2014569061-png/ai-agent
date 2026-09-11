@@ -89,6 +89,6 @@ git rev-parse HEAD   # 复验
 
 ## 7. 架构现状备忘（2026-09-12）
 
-- `ChatController` 拆分：第 1 步 `RunCoordinator` + `chat_run_execution.dart` 已完成（2825 → 2063 行），断点恢复/预算续跑已有护栏测试（`test/chat_resume_test.dart`）。**第 2/4 步（ConversationStore/ToolRegistryFactory）明确不再做**：剩余可摘块仅 250–350 行的小方法集合，protected `state` 限制下性价比为负；第 3 步 `PlanStateMachine` 视情况独立实施。
+- `ChatController` 拆分（A-1）：第 1 步 `RunCoordinator` + `chat_run_execution.dart` 已完成（2825 → 2063 行），断点恢复/预算续跑已有护栏测试（`test/chat_resume_test.dart`）。**最终处置（2026-09-12）：第 2/4 步与第 3 步的胶水层明确不再做** —— 计划状态机的可测核心（`normalizePlanStepsForTerminal` / `resolvePlanTerminalStatus`）已是 static 纯函数并有 `test/plan_status_fix_test.dart` 守护，剩余只是必须住在 Notifier 上的 15–30 行受保护状态胶水，机械搬迁零行为收益（`Notifier.state` 是 protected 成员，见下）。
 - `Notifier.state` 是 protected 成员：搬方法出 `Notifier` 子类会撞 40+ 条 `invalid_use_of_protected_member`。可行路子是 part 文件 + 库内转发访问器（参考 `_currentState`）。
 - 跨层反向依赖（`infrastructure → application`）应清零；新增依赖前先看 `lib/domain/ports/` 有没有缝可用。
