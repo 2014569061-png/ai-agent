@@ -43,5 +43,9 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-pub
 
+      # 「仅中文」决策的门禁：内联中文文案行数不得上升（见 tool/check_inline_zh.sh）。
+      - name: Inline CJK gate
+        run: bash tool/check_inline_zh.sh
+
       - name: Test
         run: flutter test
