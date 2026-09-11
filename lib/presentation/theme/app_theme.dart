@@ -69,10 +69,11 @@ abstract final class AppTheme {
           ? darkSemantic
           : lightSemantic;
 
-  // 字体族串联：Latin 交由系统字体（Roboto/MIUI），中文走 PingFang SC, Microsoft YaHei, Noto Sans SC。
-  // 注意：不要写 fontFamily: 'Inter' —— Inter 未随包分发，声明只会让字重合成不稳定。
-  // 若将来打包 Inter，须同时在本清单头部恢复并在 pubspec 声明 assets/fonts。
+  // 字体族串联：Latin 用随包分发的 Inter（400/500 已在 pubspec 声明），中文走
+  // PingFang SC, Microsoft YaHei, Noto Sans SC。勿只声明不打包 —— 那会让字重合成
+  // 不稳定（详见 ENGINEERING.md 字体决策）。
   static List<String> get _fontFallback => const [
+        'Inter',
         'PingFang SC',
         'Microsoft YaHei',
         'Noto Sans SC',
@@ -89,6 +90,7 @@ abstract final class AppTheme {
       base.copyWith(
         // 空态主文案：22 / 500 / 1.35
         headlineLarge: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 22,
           fontWeight: FontWeight.w500,
@@ -96,6 +98,7 @@ abstract final class AppTheme {
           color: primary,
         ),
         headlineMedium: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 22,
           fontWeight: FontWeight.w500,
@@ -104,6 +107,7 @@ abstract final class AppTheme {
         ),
         // 页面标题、内容小标题：17 / 500 / 1.4
         headlineSmall: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 17,
           fontWeight: FontWeight.w500,
@@ -111,6 +115,7 @@ abstract final class AppTheme {
           color: primary,
         ),
         titleLarge: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 17,
           fontWeight: FontWeight.w500,
@@ -118,6 +123,7 @@ abstract final class AppTheme {
           color: primary,
         ),
         titleMedium: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 17,
           fontWeight: FontWeight.w500,
@@ -125,6 +131,7 @@ abstract final class AppTheme {
           color: primary,
         ),
         titleSmall: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 15,
           fontWeight: FontWeight.w500,
@@ -133,6 +140,7 @@ abstract final class AppTheme {
         ),
         // 正文：15 / 400 / 1.6
         bodyLarge: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 15,
           fontWeight: FontWeight.w400,
@@ -140,6 +148,7 @@ abstract final class AppTheme {
           color: primary,
         ),
         bodyMedium: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 15,
           fontWeight: FontWeight.w400,
@@ -148,6 +157,7 @@ abstract final class AppTheme {
         ),
         // 次要信息：13 / 400 / 1.55
         bodySmall: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 13,
           fontWeight: FontWeight.w400,
@@ -156,6 +166,7 @@ abstract final class AppTheme {
         ),
         // 标签 / 徽标：11 / 500 / 1.4 (可加 letterSpacing: 0.04)
         labelLarge: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 13,
           fontWeight: FontWeight.w500,
@@ -163,6 +174,7 @@ abstract final class AppTheme {
           color: primary,
         ),
         labelMedium: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 11,
           fontWeight: FontWeight.w500,
@@ -171,6 +183,7 @@ abstract final class AppTheme {
           color: faint,
         ),
         labelSmall: TextStyle(
+          fontFamily: 'Inter',
           fontFamilyFallback: _fontFallback,
           fontSize: 11,
           fontWeight: FontWeight.w500,
@@ -231,6 +244,7 @@ abstract final class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: canvas,
       useMaterial3: true,
+      fontFamily: 'Inter',
       fontFamilyFallback: _fontFallback,
       textTheme: _baseTextTheme(
         base.textTheme,

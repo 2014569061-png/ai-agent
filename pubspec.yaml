@@ -54,6 +54,15 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # Inter 仅 Latin 字形（中文走系统字体栈）；400/500 两档与 DESIGN.md 字重规范对应。
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
   assets:
     - assets/branding/nexus_mark.png
     - assets/images/bg_default.jpg
