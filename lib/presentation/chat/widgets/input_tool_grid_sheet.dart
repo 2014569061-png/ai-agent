@@ -15,6 +15,7 @@ class InputToolGridSheet extends StatelessWidget {
   final VoidCallback onTerminalPreview;
   final VoidCallback onEnvSetup;
   final VoidCallback? onOpenDashboard;
+  final VoidCallback? onOpenWorkbench;
   final bool planModeEnabled;
   final VoidCallback onPlanModeToggle;
   final ApprovalMode approvalMode;
@@ -27,6 +28,7 @@ class InputToolGridSheet extends StatelessWidget {
     required this.onTerminalPreview,
     required this.onEnvSetup,
     this.onOpenDashboard,
+    this.onOpenWorkbench,
     required this.planModeEnabled,
     required this.onPlanModeToggle,
     required this.approvalMode,
@@ -40,6 +42,7 @@ class InputToolGridSheet extends StatelessWidget {
     required VoidCallback onTerminalPreview,
     required VoidCallback onEnvSetup,
     VoidCallback? onOpenDashboard,
+    VoidCallback? onOpenWorkbench,
     required bool planModeEnabled,
     required VoidCallback onPlanModeToggle,
     required ApprovalMode approvalMode,
@@ -56,6 +59,7 @@ class InputToolGridSheet extends StatelessWidget {
         onTerminalPreview: onTerminalPreview,
         onEnvSetup: onEnvSetup,
         onOpenDashboard: onOpenDashboard,
+        onOpenWorkbench: onOpenWorkbench,
         planModeEnabled: planModeEnabled,
         onPlanModeToggle: onPlanModeToggle,
         approvalMode: approvalMode,
@@ -123,6 +127,14 @@ class InputToolGridSheet extends StatelessWidget {
         isActive: planModeEnabled,
         onTap: onPlanModeToggle,
       ),
+      if (onOpenWorkbench != null)
+        _ToolDefinition(
+          icon: Icons.build_circle_outlined,
+          title: '开发工作台',
+          subtitle: '构建 APK 与 Go 产物',
+          color: semantic.text,
+          onTap: onOpenWorkbench!,
+        ),
       _ToolDefinition(
         icon: approvalMode == ApprovalMode.fullAccess
             ? Icons.shield_outlined
@@ -136,7 +148,8 @@ class InputToolGridSheet extends StatelessWidget {
 
     return ImmersiveSurface(
       level: ImmersiveMaterialLevel.ultraThick,
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
+      borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppTokens.radiusModal)),
       child: SafeArea(
         top: false,
         child: Padding(
@@ -266,8 +279,7 @@ class _ToolGridCard extends StatelessWidget {
                       : (isDark
                           ? AppPalette.darkSurface
                           : AppPalette.lightSurface),
-                  borderRadius:
-                      BorderRadius.circular(AppTokens.radiusControl),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                   border: Border.all(
                     color: tool.isActive
                         ? AppPalette.brand

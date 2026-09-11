@@ -35,6 +35,7 @@ extension ChatRunExecution on ChatController {
     final runPlanMode = _currentState.planMode;
     final runApprovalMode = _currentState.approvalMode;
     final runSystemPrompt = _currentState.systemPrompt;
+    final sessionSkillInstructions = _currentState.sessionSkillInstructions;
     bool ownsRun() => _runs.ownsRun(runGeneration, runConversationId);
     final runId = 'run-${DateTime.now().microsecondsSinceEpoch}';
     final logService = ref.read(logServiceProvider);
@@ -209,6 +210,10 @@ extension ChatRunExecution on ChatController {
       if (skillBlock.isNotEmpty) {
         baseSystemPrompt = '$skillBlock\n$baseSystemPrompt';
       }
+      if (sessionSkillInstructions.isNotEmpty) {
+        baseSystemPrompt =
+            '${sessionSkillInstructions.map((item) => item.content).join('\n\n')}\n$baseSystemPrompt';
+      }
     } catch (_) {}
 
     // 委派规则：向主 Agent 注入使用 sub_agent 的边界与预算约束。
@@ -261,12 +266,12 @@ extension ChatRunExecution on ChatController {
           syncEventCount();
           if (ownsRun()) {
             // agent 循环每迭代一步都会先进入 waitingModel，这里累计步数。
-            _currentState = _currentState.copyWith(totalSteps: _currentState.totalSteps + 1);
+            _currentState = _currentState.copyWith(
+                totalSteps: _currentState.totalSteps + 1);
           }
         } else if (event is TextEvent) {
           if (reasoningStartedAt != null && reasoningDuration == null) {
-            reasoningDuration =
-                DateTime.now().difference(reasoningStartedAt);
+            reasoningDuration = DateTime.now().difference(reasoningStartedAt);
           }
           final firstTokenElapsed = stopwatch.elapsed;
           ttft ??= firstTokenElapsed;
@@ -443,8 +448,9 @@ extension ChatRunExecution on ChatController {
           }
           _currentState = _currentState.copyWith(
             activityLog: [..._currentState.activityLog, '等待确认'],
-            toolActivities:
-                _updateLastToolActivity(_currentState.toolActivities, status: '执行中'),
+            toolActivities: _updateLastToolActivity(
+                _currentState.toolActivities,
+                status: '执行中'),
           );
         } else if (event is ApprovalRequiredEvent) {
           if (!ownsRun()) continue;
@@ -673,8 +679,8 @@ extension ChatRunExecution on ChatController {
       elapsed: stopwatch.elapsed,
       ttft: ttft,
     );
-    final runCancelled = _runs.wasCancelled(runGeneration) ||
-        runStatus == 'cancelled';
+    final runCancelled =
+        _runs.wasCancelled(runGeneration) || runStatus == 'cancelled';
     // 计划收敛不依赖 ownsRun()：即使运行代次已失效（会话切换 / 中断 / 取消），
     // 也要对当前会话 planState 执行一次终态收敛与步骤归一化，
     // 避免 plan.status 残留 executing 导致“计划一直显示正在运行”。
@@ -684,7 +690,8 @@ extension ChatRunExecution on ChatController {
     if (ownsRun()) {
       if (assistantIndex < _currentState.messages.length) {
         _currentState =
-            _withMessageAt(_currentState, assistantIndex, assistantMessage).copyWith(
+            _withMessageAt(_currentState, assistantIndex, assistantMessage)
+                .copyWith(
           running: false,
           clearLiveReply: true,
           liveContextTokens: usage.totalTokens > 0
@@ -692,8 +699,8 @@ extension ChatRunExecution on ChatController {
               : _estimateLiveContextTokens(assistantIndex, assistantMessage),
         );
       } else {
-        _currentState =
-            _currentState.copyWith(running: false, paused: false, clearLiveReply: true);
+        _currentState = _currentState.copyWith(
+            running: false, paused: false, clearLiveReply: true);
       }
       try {
         await _persistMessage(assistantMessage);

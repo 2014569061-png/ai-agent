@@ -41,7 +41,7 @@ void main() {
     expect(find.text('有 1 项结果待核验'), findsOneWidget);
     await tester.tap(find.text('有 1 项结果待核验'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('terminal'));
+    await tester.tap(find.text('需要核验：执行命令 flutter test'));
     await tester.pumpAndSettle();
     expect(find.text('待核验'), findsOneWidget);
     expect(find.text('结果无法确认，请先检查目标状态再重试。'), findsOneWidget);
@@ -68,6 +68,40 @@ void main() {
     ));
 
     expect(find.text('1 项操作已执行'), findsOneWidget);
+  });
+
+  testWidgets('uses a human-readable result card before technical details',
+      (tester) async {
+    await tester.pumpWidget(const _Harness(
+      activities: [
+        ToolActivity(
+          call: ToolCall(
+            id: 'write-1',
+            name: 'write_file',
+            arguments: {'path': 'lib/main.dart', 'content': 'void main() {}'},
+          ),
+          risk: ToolRisk.requiresConfirmation,
+          status: '已完成',
+          ok: true,
+          code: 'OK',
+          effect: ToolEffect.applied,
+          result: '已写入文件',
+        ),
+      ],
+    ));
+
+    await tester.tap(find.text('1 项操作已执行'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('已完成：写入文件 lib/main.dart'), findsOneWidget);
+    expect(find.text('操作结果已记录。'), findsOneWidget);
+    expect(find.text('write_file'), findsNothing);
+
+    await tester.tap(find.text('已完成：写入文件 lib/main.dart'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('技术详情'), findsOneWidget);
+    expect(find.textContaining('工具: write_file'), findsOneWidget);
   });
 }
 

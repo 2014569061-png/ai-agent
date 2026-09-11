@@ -5,6 +5,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_dropdown.dart';
+import '../widgets/nexus_page_header.dart';
 
 /// 应用内反馈渠道（F6）：内置表单 + mailto 兜底（无后端时）。
 class FeedbackPage extends StatefulWidget {
@@ -56,7 +57,10 @@ class _FeedbackPageState extends State<FeedbackPage> {
 
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
-      appBar: AppBar(title: const Text('意见反馈')),
+      appBar: const NexusPageHeader(
+        title: '意见反馈',
+        subtitle: '问题反馈与改进建议',
+      ),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         ImmersiveDropdown<String>(
           labelText: '问题类型',
@@ -87,8 +91,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
               foregroundColor: Colors.white,
               minimumSize: const Size.fromHeight(44),
               shape: RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(AppTokens.radiusControl),
+                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
               ),
             ),
             onPressed: _submit,

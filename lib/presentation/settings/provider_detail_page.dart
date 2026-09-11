@@ -1,4 +1,5 @@
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/models.dart';
@@ -7,6 +8,7 @@ import '../../infrastructure/providers/gemini_provider.dart';
 import '../../infrastructure/providers/openai_compatible_provider.dart';
 import '../../infrastructure/providers/provider_config.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
 import 'model_list_page.dart';
@@ -38,6 +40,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   bool _saving = false;
   bool _testing = false;
   bool _advanced = false;
+  bool _submitted = false;
   String? _status;
 
   @override
@@ -102,6 +105,12 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
       );
 
   Future<void> _save() async {
+    setState(() => _submitted = true);
+    if (_name.text.trim().isEmpty || _baseUrl.text.trim().isEmpty) {
+      FloatingToast.show(context, '请完善服务商名称和 Base URL',
+          tone: ToastTone.warning);
+      return;
+    }
     setState(() => _saving = true);
     try {
       final config = _config;
@@ -178,28 +187,14 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   }
 
   Future<bool> _showDiscardConfirm() async {
-    final res = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('放弃未保存的修改？'),
-        content: const Text('当前服务商配置尚未保存，离开后修改将丢失。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('继续编辑'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('放弃修改'),
-          ),
-        ],
-      ),
+    return showConfirmAction(
+      context,
+      title: '放弃未保存的修改？',
+      message: '当前服务商配置尚未保存，离开后修改将丢失。',
+      confirmLabel: '放弃修改',
+      cancelLabel: '继续编辑',
+      isDanger: true,
     );
-    return res ?? false;
   }
 
   Future<void> _handlePop() async {
@@ -241,7 +236,14 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
               children: [
                 TextField(
                   controller: _name,
-                  decoration: const InputDecoration(labelText: '服务商名称'),
+                  decoration: InputDecoration(
+                    labelText: '服务商名称 *',
+                    helperText: '自定义名称，用于列表中标识该服务商',
+                    errorText: (_submitted && _name.text.trim().isEmpty)
+                        ? '服务商名称不能为空'
+                        : null,
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<ProviderType>(
@@ -266,21 +268,37 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 const SizedBox(height: 14),
                 TextField(
                   controller: _baseUrl,
-                  decoration: const InputDecoration(labelText: 'Base URL'),
+                  decoration: InputDecoration(
+                    labelText: 'Base URL *',
+                    helperText: 'API 端点地址，如 https://api.openai.com/v1',
+                    errorText: (_submitted && _baseUrl.text.trim().isEmpty)
+                        ? 'Base URL 不能为空'
+                        : null,
+                  ),
+                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 14),
                 TextField(
                   controller: _apiKey,
                   obscureText: _obscure,
                   decoration: InputDecoration(
-                    labelText: 'API Key',
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
-                      onPressed: () => setState(() => _obscure = !_obscure),
+                    labelText: 'API Key *',
+                    helperText: _apiKey.text.trim().isNotEmpty
+                        ? '已安全保存（本地存储）'
+                        : '未填写，需要填写才能调用服务',
+                    suffixIcon: SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: IconButton(
+                        icon: Icon(_obscure
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined),
+                        tooltip: _obscure ? '显示密钥' : '隐藏密钥',
+                        onPressed: () => setState(() => _obscure = !_obscure),
+                      ),
                     ),
                   ),
+                  onChanged: (_) => setState(() {}),
                 ),
               ],
             ),
@@ -419,53 +437,65 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 ],
               ],
             ),
-            const SizedBox(height: 24),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 44,
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        onPressed: _testing ? null : _test,
-                        icon: _testing
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.wifi_tethering),
-                        label: const Text('测试连接'),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: SizedBox(
-                      height: 44,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: AppPalette.brand,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        onPressed: _saving ? null : _save,
-                        icon: const Icon(Icons.save_outlined),
-                        label: Text(_saving ? '保存中…' : '保存并启用'),
-                      ),
-                    ),
-                  ),
-                ],
+          ],
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            decoration: BoxDecoration(
+              color: settingsBgColor(context),
+              border: Border(
+                top: BorderSide(
+                  color: settingsDividerColor(context),
+                  width: 0.8,
+                ),
               ),
             ),
-          ],
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: AppTokens.kControlHeight,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusControl),
+                        ),
+                      ),
+                      onPressed: _testing ? null : _test,
+                      icon: _testing
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.wifi_tethering),
+                      label: const Text('测试连接'),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: AppTokens.kControlHeight,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppPalette.brandAction,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusControl),
+                        ),
+                      ),
+                      onPressed: _saving ? null : _save,
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(_saving ? '保存中…' : '保存并启用'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

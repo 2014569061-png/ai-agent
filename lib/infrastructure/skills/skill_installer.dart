@@ -32,11 +32,23 @@ class GithubSkillRef {
   final String ref;
   final String? subPath;
 
+  bool get isLocalArchive => owner == 'local';
+
   String get fullRepo => '$owner/$repo';
 
-  String get label => subPath == null || subPath!.isEmpty
-      ? 'github.com/$fullRepo'
-      : 'github.com/$fullRepo/tree/$ref/$subPath';
+  String get label => isLocalArchive
+      ? original
+      : subPath == null || subPath!.isEmpty
+          ? 'github.com/$fullRepo'
+          : 'github.com/$fullRepo/tree/$ref/$subPath';
+
+  factory GithubSkillRef.localArchive(String filename) => GithubSkillRef(
+        original: '本地压缩包：$filename',
+        owner: 'local',
+        repo: p.basenameWithoutExtension(filename),
+        ref: 'local',
+        subPath: null,
+      );
 }
 
 /// 安装前预览结果（尚未写盘 / 未入库）。
@@ -149,7 +161,10 @@ class SkillInstaller {
   /// 从归档字节构建预览（解压 -> 校验，不含下载步骤），便于测试恶意包场景。
   Future<SkillPackPreview> previewFromArchiveBytes(
       Uint8List bytes, GithubSkillRef source) async {
-    final archive = _decodeTarGz(bytes);
+    if (bytes.length > _maxRawArchiveBytes) {
+      throw SkillValidationException('压缩包超过 10MB 上限');
+    }
+    final archive = _decodeArchive(bytes);
     final files = _extractAllowedFiles(archive, source.subPath);
     if (files.isEmpty) {
       throw SkillValidationException('未找到可安装的 SKILL.md 或白名单资源');
@@ -237,7 +252,9 @@ class SkillInstaller {
         description: preview.metadata.description,
         author: preview.metadata.author,
         version: preview.metadata.version,
-        source: 'https://${preview.source.label}',
+        source: preview.source.isLocalArchive
+            ? preview.source.original
+            : 'https://${preview.source.label}',
         repo: preview.source.fullRepo,
         ref: preview.source.ref,
         subPath: preview.source.subPath,
@@ -358,12 +375,18 @@ class SkillInstaller {
     return Uint8List.fromList(data);
   }
 
-  Archive _decodeTarGz(Uint8List bytes) {
+  Archive _decodeArchive(Uint8List bytes) {
     try {
+      if (bytes.length >= 4 &&
+          bytes[0] == 0x50 &&
+          bytes[1] == 0x4b &&
+          (bytes[2] == 0x03 || bytes[2] == 0x05 || bytes[2] == 0x07)) {
+        return ZipDecoder().decodeBytes(bytes);
+      }
       final gz = const GZipDecoder().decodeBytes(bytes);
       return TarDecoder().decodeBytes(gz);
     } catch (_) {
-      throw SkillValidationException('无法解压 GitHub 归档包');
+      throw SkillValidationException('仅支持 ZIP 或 tar.gz 格式的 Skill 压缩包');
     }
   }
 
@@ -418,13 +441,13 @@ class SkillInstaller {
   }
 
   String _findRootPrefix(Archive archive) {
-    final names = archive.where((f) => f.name.contains('/')).map((f) => f.name);
-    if (names.isEmpty) return '';
-    final first = names.first;
-    if (first.contains('/')) {
-      return '${first.split('/').first}/';
-    }
-    return '';
+    final names = archive
+        .where((file) => file.name.isNotEmpty)
+        .map((file) => file.name.replaceAll('\\', '/'))
+        .toList(growable: false);
+    if (names.isEmpty || names.any((name) => !name.contains('/'))) return '';
+    final prefix = names.first.split('/').first;
+    return names.every((name) => name.startsWith('$prefix/')) ? '$prefix/' : '';
   }
 
   bool _isAllowedPath(String rel) {

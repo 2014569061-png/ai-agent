@@ -22,7 +22,8 @@ class GlassChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final normalBg = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
     final selectedBg =
         isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;

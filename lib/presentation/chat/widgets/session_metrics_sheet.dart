@@ -44,7 +44,8 @@ class SessionMetricsSheet extends StatelessWidget {
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     final tiles = <Widget>[
       NexusMetricTile(
@@ -142,7 +143,6 @@ class SessionMetricsSheet extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 16),
-
             if (contextLimit > 0) ...[
               _ContextGauge(
                 live: liveContextTokens,
@@ -153,7 +153,6 @@ class SessionMetricsSheet extends StatelessWidget {
               ),
               const SizedBox(height: 16),
             ],
-
             LayoutBuilder(
               builder: (context, constraints) {
                 final columns = constraints.maxWidth >= 420 ? 3 : 2;
@@ -170,7 +169,6 @@ class SessionMetricsSheet extends StatelessWidget {
                 );
               },
             ),
-
             const SizedBox(height: 16),
             Text(
               '「工具耗时」只统计工具真实执行区间，审批等待时间不计入；'

@@ -278,12 +278,10 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final background =
-        dark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final background = dark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final headerBackground =
         dark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
-    final border =
-        dark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final border = dark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final headerText =
         dark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
     final codeColor = dark ? AppPalette.darkText : AppPalette.lightText;
@@ -325,7 +323,8 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
                     onTap: () {
                       HapticFeedback.lightImpact();
                       Clipboard.setData(ClipboardData(text: trimmed));

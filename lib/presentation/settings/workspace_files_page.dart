@@ -53,7 +53,8 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
     try {
       final selected = await FilePicker.platform.getDirectoryPath();
       if (selected != null && mounted) {
-        unawaited(ref.read(chatControllerProvider.notifier).setWorkspace(selected));
+        unawaited(
+            ref.read(chatControllerProvider.notifier).setWorkspace(selected));
         final prefs = await SharedPreferences.getInstance();
         final updated = [selected, ..._recentDirs.where((d) => d != selected)]
             .take(5)
@@ -211,8 +212,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color:
-                              AppPalette.success.withValues(alpha: 0.15),
+                          color: AppPalette.success.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(

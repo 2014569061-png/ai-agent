@@ -20,6 +20,9 @@ import 'knowledge_service.dart';
 import 'memory_service.dart';
 
 import '../infrastructure/skills/skill_store.dart';
+import '../infrastructure/mcp/mcp_tool_provider.dart';
+import '../infrastructure/plugins/plugin_store.dart';
+import 'mcp_service.dart';
 
 /// 无 UI 运行 Agent（C5 定时任务 + C2 后台任务复用）。
 /// 危险工具在后台自动拒绝（无用户可审批），只放行 safe 工具。
@@ -109,6 +112,30 @@ class HeadlessExecutor {
     registerIfAllowed(JsonQueryTool());
     registerIfAllowed(ImageGenTool(config: config));
 
+    // Headless runs must expose the same user-installed tools as the
+    // foreground chat path. Failures are isolated per source so a broken
+    // plugin or unavailable MCP server cannot remove built-in tools.
+    try {
+      final pluginTools = await PluginStore().loadDeclarativeTools(db);
+      for (final tool in pluginTools) {
+        registerIfAllowed(tool);
+      }
+    } catch (_) {}
+
+    final mcpProvider = McpToolProvider();
+    try {
+      final servers =
+          await McpService(database: Future.value(db)).loadEnabled();
+      for (final server in servers) {
+        try {
+          final tools = await mcpProvider.connectAndListTools(server);
+          for (final tool in tools) {
+            registerIfAllowed(tool);
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+
     // 后台/协作路径也必须提供与主 Agent 一致的只读记忆和 Skill 读取能力。
     // 这里只注册读取工具；memory_write 属于持久化副作用，除非调用方明确
     // 把它放进 allow-list，否则不能因为“safe”标签而被后台自动执行。
@@ -196,10 +223,9 @@ class HeadlessExecutor {
     // 判为失败（与紧邻 188-193 行"不阻断其余只读工具"的本意相矛盾）。
     bool terminalFileEnabled;
     try {
-      terminalFileEnabled =
-          (await SharedPreferences.getInstance())
-                  .getBool('settings.tool.terminal_file') ??
-              true;
+      terminalFileEnabled = (await SharedPreferences.getInstance())
+              .getBool('settings.tool.terminal_file') ??
+          true;
     } catch (_) {
       terminalFileEnabled = true;
     }
@@ -280,6 +306,7 @@ class HeadlessExecutor {
       errorMessage = error.toString();
     }
     final text = answer.toString().trim();
+    await mcpProvider.dispose();
     return HeadlessRunResult(
       text: text.isEmpty && errorMessage != null ? errorMessage : text,
       status: status == RunStatus.created ? RunStatus.completed : status,

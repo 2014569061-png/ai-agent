@@ -5,8 +5,10 @@ import '../../infrastructure/database/database_provider.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
 /// Prompt application mode.
@@ -77,45 +79,147 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
     final name = TextEditingController(text: existing?.name ?? '');
     final category = TextEditingController(text: existing?.category ?? '通用');
     final content = TextEditingController(text: existing?.content ?? '');
-    final result = await showImmersiveDialog<(String, String, String)>(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final result = await showModalBottomSheet<(String, String, String)>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(existing == null ? '新建 Prompt' : '编辑 Prompt'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                    controller: name,
-                    decoration: const InputDecoration(labelText: '名称')),
-                const SizedBox(height: 8),
-                TextField(
-                    controller: category,
-                    decoration: const InputDecoration(labelText: '分类')),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: content,
-                  maxLines: 6,
-                  minLines: 3,
-                  decoration: const InputDecoration(
-                      labelText: '提示词内容', alignLabelWithHint: true),
-                ),
-              ],
+      isScrollControlled: true,
+      backgroundColor:
+          isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
+      ),
+      builder: (sheetContext) {
+        return FractionallySizedBox(
+          heightFactor: 0.85,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(sheetContext).bottom,
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          existing == null ? '新建 Prompt' : '编辑 Prompt',
+                          style: Theme.of(sheetContext)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          tooltip: '关闭',
+                          onPressed: () => Navigator.pop(sheetContext),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(
+                    height: 1,
+                    color: isDark
+                        ? AppPalette.darkHairline
+                        : AppPalette.lightHairline,
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextField(
+                            controller: name,
+                            decoration: const InputDecoration(
+                              labelText: '模板名称 *',
+                              hintText: '如：代码评审、周报撰写',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: category,
+                            decoration: const InputDecoration(
+                              labelText: '分类',
+                              hintText: '如：通用、开发、写作',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: content,
+                            maxLines: 8,
+                            minLines: 4,
+                            decoration: const InputDecoration(
+                              labelText: '提示词内容 *',
+                              hintText: '输入具体提示词内容...',
+                              alignLabelWithHint: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppPalette.darkSurface
+                          : AppPalette.lightSurface,
+                      border: Border(
+                        top: BorderSide(
+                          color: isDark
+                              ? AppPalette.darkHairline
+                              : AppPalette.lightHairline,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(
+                                  AppTokens.kMinTouchTarget),
+                            ),
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: const Text('取消'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(
+                                  AppTokens.kMinTouchTarget),
+                              backgroundColor: AppPalette.brandAction,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () {
+                              final n = name.text.trim();
+                              final c = content.text.trim();
+                              if (n.isEmpty || c.isEmpty) return;
+                              Navigator.pop(
+                                  sheetContext, (n, category.text.trim(), c));
+                            },
+                            child: const Text('保存'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context,
-                (name.text.trim(), category.text.trim(), content.text.trim())),
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+        );
+      },
     );
     name.dispose();
     category.dispose();
@@ -144,21 +248,14 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
   }
 
   Future<void> _delete(PromptTemplate template) async {
-    final confirmed = await showImmersiveDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        content: Text('确定删除“${template.name}”吗？'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('删除')),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '删除 Prompt',
+      message: '确定删除“${template.name}”吗？',
+      confirmLabel: '删除',
+      isDanger: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     final db = await DatabaseProvider.instance.database;
     await db.deletePromptTemplate(template.id);
     await _reload();
@@ -214,7 +311,10 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
 
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
-      appBar: AppBar(title: const Text('Prompt 模板')),
+      appBar: const NexusPageHeader(
+        title: 'Prompt 模板',
+        subtitle: '分类管理与快速调用常用提示词',
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(),
         backgroundColor: AppPalette.brand,

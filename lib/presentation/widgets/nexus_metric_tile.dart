@@ -47,7 +47,8 @@ class NexusMetricTile extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;

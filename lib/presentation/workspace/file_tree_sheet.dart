@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 
 /// G1 工作区文件树:目录导航模式(进入子目录 / 后退 / 前进),
@@ -157,8 +158,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
               label: const Text('复制全部'),
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: content));
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+                FloatingToast.show(context, '已复制到剪贴板');
               },
             ),
             FilledButton(
@@ -169,8 +169,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
         ),
       ));
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('无法以文本读取此文件: $e')));
+      FloatingToast.show(context, '无法以文本读取此文件: $e');
     }
   }
 
@@ -212,12 +211,30 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                             fontSize: 16, fontWeight: FontWeight.w500),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        _currentLabel,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurfaceVariant),
-                        overflow: TextOverflow.ellipsis,
+                      InkWell(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: _currentDir));
+                          FloatingToast.show(context, '已复制路径: $_currentDir');
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _currentLabel,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: theme.colorScheme.onSurfaceVariant),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.copy_rounded,
+                                size: 10,
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ],
+                        ),
                       ),
                     ],
                   ),

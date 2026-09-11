@@ -125,7 +125,8 @@ void main() {
             role: MessageRole.assistant,
             parts: const [],
             toolCalls: [
-              const ToolCall(id: 'call-1', name: 'calculator', arguments: {'a': 1})
+              const ToolCall(
+                  id: 'call-1', name: 'calculator', arguments: {'a': 1})
             ],
           ),
           const {});

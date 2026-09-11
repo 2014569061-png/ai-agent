@@ -172,6 +172,38 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
     return '${widget.activities.length} 项工具已完成';
   }
 
+  String _actionOf(ToolActivity activity) =>
+      const ToolHumanizer().summaryOf(activity.call) ?? '执行一项工具操作';
+
+  String _resultTitle(ToolActivity activity) {
+    final action = _actionOf(activity);
+    if (activity.status == '执行中') return '正在处理：$action';
+    if (activity.status == '等待确认') return '需要你的确认：$action';
+    if (activity.effect == ToolEffect.unknown) return '需要核验：$action';
+    if (activity.status == '执行失败' || activity.ok == false) {
+      return '未完成：$action';
+    }
+    if (activity.status == '已完成' || activity.ok == true) {
+      return '已完成：$action';
+    }
+    return '准备处理：$action';
+  }
+
+  String _resultSubtitle(ToolActivity activity) {
+    if (activity.effect == ToolEffect.unknown) {
+      return '执行状态无法确认，请先检查目标状态再继续。';
+    }
+    if (activity.status == '等待确认') return '确认后才会执行此操作。';
+    if (activity.status == '执行中') return '正在执行，完成后会在这里显示结果。';
+    if (activity.status == '执行失败' || activity.ok == false) {
+      return '操作没有完成。展开可查看技术详情。';
+    }
+    if (activity.status == '已完成' || activity.ok == true) {
+      return '操作结果已记录。';
+    }
+    return '等待开始执行。';
+  }
+
   Widget _row(BuildContext context, ToolActivity a) {
     final theme = Theme.of(context);
     final semantic = AppTheme.semanticOf(context);
@@ -180,9 +212,6 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
     final pending = a.status == '等待确认';
     final failed = a.status == '执行失败';
     final args = a.call.arguments.toString();
-    final description = const ToolHumanizer().summaryOf(a.call);
-    final argsBrief =
-        description ?? (args.length > 48 ? '${args.substring(0, 48)}…' : args);
     final effect = a.effect;
     final effectLabel = switch (effect) {
       ToolEffect.applied => '已执行',
@@ -198,85 +227,95 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
     };
     return Theme(
       data: theme.copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-        minTileHeight: 40,
-        leading: running
-            ? const SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2))
-            : Icon(
-                done
-                    ? Icons.check_circle_outline
-                    : failed
-                        ? Icons.cancel_outlined
-                        : pending
-                            ? Icons.error_outline
-                            : Icons.radio_button_unchecked,
-                size: 18,
-                color: done
-                    ? semantic.success
-                    : failed
-                        ? theme.colorScheme.error
-                        : pending
-                            ? semantic.warning
-                            : semantic.textMuted,
-              ),
-        title: Text(a.call.name,
-            style:
-                theme.textTheme.bodyMedium?.copyWith(fontFamily: 'monospace')),
-        subtitle: Text(argsBrief,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style:
-                theme.textTheme.bodySmall?.copyWith(color: semantic.textMuted)),
-        trailing: effectLabel != null
-            ? Text(effectLabel,
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: effectColor, fontWeight: FontWeight.w500))
-            : pending
-                ? Text('待确认',
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: semantic.warning))
-                : null,
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('参数: $args',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontFamily: 'monospace')),
-          ),
-          const SizedBox(height: 4),
-          if (a.code != null && a.code!.isNotEmpty)
+      child: Material(
+        type: MaterialType.transparency,
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+          minTileHeight: 40,
+          leading: running
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(
+                  done
+                      ? Icons.check_circle_outline
+                      : failed
+                          ? Icons.cancel_outlined
+                          : pending
+                              ? Icons.error_outline
+                              : Icons.radio_button_unchecked,
+                  size: 18,
+                  color: done
+                      ? semantic.success
+                      : failed
+                          ? theme.colorScheme.error
+                          : pending
+                              ? semantic.warning
+                              : semantic.textMuted,
+                ),
+          title: Text(_resultTitle(a),
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w500)),
+          subtitle: Text(_resultSubtitle(a),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: semantic.textMuted)),
+          trailing: effectLabel != null
+              ? Text(effectLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: effectColor, fontWeight: FontWeight.w500))
+              : pending
+                  ? Text('待确认',
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: semantic.warning))
+                  : null,
+          children: [
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('结果码: ${a.code}',
+              child: Text('技术详情',
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text('工具: ${a.call.name}\n参数: $args',
                   style: theme.textTheme.bodySmall
-                      ?.copyWith(fontFamily: 'monospace', color: effectColor)),
+                      ?.copyWith(fontFamily: 'monospace')),
             ),
-          if (effect == ToolEffect.unknown)
-            const Padding(
-              padding: EdgeInsets.only(top: 4),
-              child: Align(
+            const SizedBox(height: 4),
+            if (a.code != null && a.code!.isNotEmpty)
+              Align(
                 alignment: Alignment.centerLeft,
-                child: Text('结果无法确认，请先检查目标状态再重试。'),
+                child: Text('结果码: ${a.code}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace', color: effectColor)),
               ),
-            ),
-          if (a.code != null && a.code!.isNotEmpty) const SizedBox(height: 4),
-          if (a.result != null && a.result!.isNotEmpty)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '输出: ${a.result}',
-                maxLines: 6,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(fontFamily: 'monospace'),
+            if (effect == ToolEffect.unknown)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('结果无法确认，请先检查目标状态再重试。'),
+                ),
               ),
-            ),
-        ],
+            if (a.code != null && a.code!.isNotEmpty) const SizedBox(height: 4),
+            if (a.result != null && a.result!.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '输出: ${a.result}',
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(fontFamily: 'monospace'),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

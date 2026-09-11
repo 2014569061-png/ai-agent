@@ -39,6 +39,19 @@ class SkillStore {
   bool isFrozen(SkillPack pack) =>
       File(p.join(pack.installRoot, '.nexus-frozen')).existsSync();
 
+  /// Reads install-time metadata again so callers can safely use fields that
+  /// are intentionally not duplicated in the database, such as triggers.
+  SkillMetadata? readMetadata(SkillPack pack) {
+    try {
+      if (isFrozen(pack)) return null;
+      final file = File(p.join(pack.installRoot, 'SKILL.md'));
+      if (!file.existsSync()) return null;
+      return parseSkillMarkdown(file.readAsStringSync()).metadata;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// 构建待注入到系统提示词的 Skill 索引：正文通过 skills_read 按需读取。
   Future<String> buildInjectionBlock(AppDatabase db,
       {int budget = _defaultInjectionBudget}) async {

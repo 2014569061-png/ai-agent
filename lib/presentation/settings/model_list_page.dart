@@ -1,4 +1,5 @@
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/providers/openai_compatible_provider.dart';
@@ -127,15 +128,24 @@ class _ModelListPageState extends State<ModelListPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
-              height: 36,
+              height: 38,
               decoration: BoxDecoration(
                 color:
-                    isDark ? AppPalette.lightText : AppPalette.lightHairline,
-                borderRadius: BorderRadius.circular(10),
+                    isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                border: Border.all(
+                  color: isDark
+                      ? AppPalette.darkHairline
+                      : AppPalette.lightHairline,
+                  width: 0.8,
+                ),
               ),
               child: TextField(
                 controller: _searchController,
-                style: const TextStyle(fontSize: 14),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: isDark ? AppPalette.darkText : AppPalette.lightText,
+                ),
                 decoration: InputDecoration(
                   hintText: '搜索模型名称或 ID…',
                   hintStyle: TextStyle(
@@ -251,16 +261,19 @@ class _ModelListPageState extends State<ModelListPage> {
 }
 
 class _DisplayModel {
-  const _DisplayModel(
-      {required this.id,
-      required this.displayName,
-      required this.capabilities,
-      this.contextTokens});
+  const _DisplayModel({
+    required this.id,
+    required this.displayName,
+    required this.capabilities,
+    this.contextTokens,
+    this.isAvailable = true,
+  });
 
   factory _DisplayModel.fromPreset(ProviderPresetModel model) => _DisplayModel(
         id: model.id,
         displayName: model.displayName,
         contextTokens: model.contextTokens,
+        isAvailable: true,
         capabilities: ModelCapabilities(
             streaming: true,
             tools: model.tools,
@@ -269,12 +282,17 @@ class _DisplayModel {
       );
 
   factory _DisplayModel.fromRemote(ModelInfo model) => _DisplayModel(
-      id: model.id, displayName: model.id, capabilities: model.capabilities);
+        id: model.id,
+        displayName: model.id,
+        capabilities: model.capabilities,
+        isAvailable: true,
+      );
 
   final String id;
   final String displayName;
   final ModelCapabilities capabilities;
   final int? contextTokens;
+  final bool isAvailable;
 }
 
 class _ModelTile extends StatelessWidget {
@@ -307,29 +325,83 @@ class _ModelTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      model.displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight:
-                            selected ? FontWeight.w500 : FontWeight.w400,
-                        color: isDark ? Colors.white : Colors.black,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            model.displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight:
+                                  selected ? FontWeight.w500 : FontWeight.w400,
+                              color: isDark
+                                  ? AppPalette.darkText
+                                  : AppPalette.lightText,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        if (selected)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppPalette.darkBrandSoft
+                                  : AppPalette.lightBrandSoft,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '默认',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w500,
+                                color: AppPalette.brandAction,
+                              ),
+                            ),
+                          )
+                        else
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppPalette.darkSurface
+                                  : AppPalette.lightHairline,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              model.isAvailable ? '可用' : '不可用',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w400,
+                                color: model.isAvailable
+                                    ? AppPalette.success
+                                    : AppPalette.danger,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
                       model.id,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
+                        fontFamily: 'monospace',
                         color: settingsMutedColor(context),
                       ),
                     ),
                     if (chips.isNotEmpty) ...[
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 6),
                       Wrap(
                         spacing: 5,
                         runSpacing: 4,
@@ -366,7 +438,7 @@ class _ModelTile extends StatelessWidget {
                 const Icon(
                   Icons.check_rounded,
                   size: 20,
-                  color: AppPalette.brand,
+                  color: AppPalette.brandAction,
                 ),
               ],
             ],

@@ -58,9 +58,7 @@ class KpiCardGrid extends StatelessWidget {
               icon: Icons.bolt_rounded,
               color: cachePct == null
                   ? null
-                  : (int.parse(cachePct) >= 30
-                      ? AppPalette.success
-                      : null),
+                  : (int.parse(cachePct) >= 30 ? AppPalette.success : null),
               onTap: () {},
             ),
           ),

@@ -1,9 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/skills/skill_installer.dart';
+import '../../infrastructure/skills/skill_parser.dart';
 import '../../infrastructure/skills/skill_store.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -90,15 +94,55 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     }
   }
 
+  Future<void> _pickArchive() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['zip', 'gz', 'tgz'],
+      withData: true,
+    );
+    final file = result?.files.singleOrNull;
+    if (file == null) return;
+    try {
+      final bytes = file.bytes ??
+          (file.path == null ? null : await File(file.path!).readAsBytes());
+      if (bytes == null || bytes.isEmpty) {
+        throw SkillValidationException('无法读取所选压缩包');
+      }
+      setState(() {
+        _previewing = true;
+        _previewPack = null;
+      });
+      final preview = await _installer.previewFromArchiveBytes(
+        bytes,
+        GithubSkillRef.localArchive(file.name),
+      );
+      if (!mounted) return;
+      setState(() {
+        _previewPack = preview;
+        _previewing = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _previewing = false);
+      FloatingToast.show(context, '压缩包解析失败：$error');
+    }
+  }
+
   Future<void> _install() async {
     final preview = _previewPack;
     if (preview == null) return;
     final confirmed = await showConfirmAction(
       context,
       title: '安装第三方 Skill？',
-      message:
-          '来自 ${preview.source.label}\n\n${preview.metadata.name}：${preview.metadata.description}\n\nSkill 只包含指令与静态资源，不含可执行代码。',
-      confirmLabel: '安装',
+      message: '即将从 ${preview.source.label} 安装并注册该 Skill。请核对权限与安全范围：',
+      confirmLabel: '安装并启用',
+      bulletItems: [
+        'Skill 名称：${preview.metadata.name} v${preview.metadata.version}',
+        '功能描述：${preview.metadata.description}',
+        '安全性质：静态纯指令与提示词，无系统底层二进制可执行权限',
+        '包含文件：${preview.fileList.length} 个文件 (${(preview.totalBytes / 1024).toStringAsFixed(1)} KB)',
+        '调用范围：仅在会话命中触发意图时注入提示词上下文',
+      ],
     );
     if (!confirmed || !mounted) return;
     setState(() => _installing = true);
@@ -147,8 +191,14 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     final confirmed = await showConfirmAction(
       context,
       title: '删除 Skill？',
-      message: '将移除“${pack.name}”及其本地文件。',
+      message: '确定要删除“${pack.name}”及其本地文件吗？',
       confirmLabel: '删除',
+      isDanger: true,
+      bulletItems: [
+        '名称：${pack.name} v${pack.version}',
+        '来源：${pack.source}',
+        '描述：${pack.description}',
+      ],
     );
     if (!confirmed || !mounted) return;
     try {
@@ -197,6 +247,11 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                 ),
               ),
               const SizedBox(width: 8),
+              IconButton(
+                tooltip: '导入 Skill 压缩包',
+                onPressed: _previewing ? null : _pickArchive,
+                icon: const Icon(Icons.folder_zip_outlined),
+              ),
               _previewing
                   ? const Padding(
                       padding: EdgeInsets.all(12),
@@ -212,9 +267,8 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                         backgroundColor: isDark
                             ? AppPalette.darkSurface
                             : AppPalette.lightSurface,
-                        foregroundColor: isDark
-                            ? AppPalette.darkText
-                            : AppPalette.lightText,
+                        foregroundColor:
+                            isDark ? AppPalette.darkText : AppPalette.lightText,
                         shape: RoundedRectangleBorder(
                           borderRadius:
                               BorderRadius.circular(AppTokens.radiusControl),
@@ -242,10 +296,12 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
             error: _error,
             onRetry: _load,
             child: _installed.isEmpty
-                ? const EmptyStateView(
+                ? EmptyStateView(
                     icon: Icons.extension_outlined,
                     title: '暂无 Skill',
-                    message: '粘贴 GitHub 地址安装你的第一个 Skill',
+                    message: '粘贴 GitHub 地址或导入 ZIP / tar.gz 安装 Skill',
+                    actionLabel: '导入 Skill 压缩包',
+                    onAction: _pickArchive,
                   )
                 : ListView.separated(
                     padding:
@@ -254,54 +310,217 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                     separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (context, index) {
                       final pack = _installed[index];
+                      final isLocal = pack.source.startsWith('本地压缩包');
+
                       return SectionCard(
-                        child: ListTile(
-                          leading: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppPalette.brandSoftDark
-                                  : AppPalette.brandSoftLight,
-                              borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusControl),
-                            ),
-                            child: const Icon(Icons.menu_book_outlined,
-                                size: 20, color: AppPalette.brand),
-                          ),
-                          title: Text(
-                            pack.name,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: Text(
-                            '${pack.description}\n${pack.source} · v${pack.version}',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: isDark
-                                  ? AppPalette.darkTextMuted
-                                  : AppPalette.lightTextMuted,
-                            ),
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              IconButton(
-                                tooltip: '检查更新',
-                                icon: const Icon(Icons.refresh),
-                                onPressed: () => _update(pack),
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: pack.enabled
+                                          ? (isDark
+                                              ? AppPalette.brandSoftDark
+                                              : AppPalette.brandSoftLight)
+                                          : (isDark
+                                              ? AppPalette.darkSurface
+                                              : AppPalette.lightSurface),
+                                      borderRadius: BorderRadius.circular(
+                                          AppTokens.radiusControl),
+                                      border: Border.all(
+                                        color: pack.enabled
+                                            ? AppPalette.brand
+                                            : (isDark
+                                                ? AppPalette.darkHairline
+                                                : AppPalette.lightHairline),
+                                      ),
+                                    ),
+                                    child: const Icon(Icons.menu_book_outlined,
+                                        size: 20,
+                                        color: AppPalette.brandAction),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          pack.name,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: [
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: pack.enabled
+                                                    ? AppPalette.success
+                                                        .withValues(alpha: 0.12)
+                                                    : (isDark
+                                                        ? AppPalette.darkSurface
+                                                        : AppPalette
+                                                            .lightSurface),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        AppTokens.radiusPill),
+                                              ),
+                                              child: Text(
+                                                pack.enabled ? '已启用' : '已停用',
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: pack.enabled
+                                                      ? AppPalette.success
+                                                      : (isDark
+                                                          ? AppPalette
+                                                              .darkTextMuted
+                                                          : AppPalette
+                                                              .lightTextMuted),
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? AppPalette.darkSurface
+                                                    : AppPalette.lightSurface,
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        AppTokens.radiusPill),
+                                                border: Border.all(
+                                                  color: isDark
+                                                      ? AppPalette.darkHairline
+                                                      : AppPalette
+                                                          .lightHairline,
+                                                ),
+                                              ),
+                                              child: Text(
+                                                isLocal ? '本地压缩包' : 'GitHub',
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: isDark
+                                                      ? AppPalette.darkTextMuted
+                                                      : AppPalette
+                                                          .lightTextMuted,
+                                                ),
+                                              ),
+                                            ),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: AppPalette.brand
+                                                    .withValues(alpha: 0.1),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        AppTokens.radiusPill),
+                                              ),
+                                              child: const Text(
+                                                '纯指令静态资源',
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: AppPalette.brand,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: pack.enabled,
+                                    onChanged: (v) => _toggle(pack, v),
+                                  ),
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert_rounded,
+                                        size: 20),
+                                    tooltip: '更多操作',
+                                    onSelected: (action) {
+                                      if (action == 'update') {
+                                        _update(pack);
+                                      } else if (action == 'delete') {
+                                        _delete(pack);
+                                      }
+                                    },
+                                    itemBuilder: (ctx) => [
+                                      if (!isLocal)
+                                        const PopupMenuItem(
+                                          value: 'update',
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.refresh_rounded,
+                                                  size: 18),
+                                              SizedBox(width: 8),
+                                              Text('检查更新'),
+                                            ],
+                                          ),
+                                        ),
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete_outline_rounded,
+                                                size: 18,
+                                                color: AppPalette.danger),
+                                            SizedBox(width: 8),
+                                            Text('删除 Skill',
+                                                style: TextStyle(
+                                                    color: AppPalette.danger)),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                              Switch(
-                                value: pack.enabled,
-                                onChanged: (v) => _toggle(pack, v),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline),
-                                onPressed: () => _delete(pack),
+                              if (pack.description.isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  pack.description,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12.5,
+                                    color: isDark
+                                        ? AppPalette.darkTextMuted
+                                        : AppPalette.lightTextMuted,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 4),
+                              Text(
+                                '${pack.source} · v${pack.version}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? AppPalette.darkTextFaint
+                                      : AppPalette.lightTextFaint,
+                                ),
                               ),
                             ],
                           ),
@@ -345,7 +564,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                     : FilledButton(
                         style: FilledButton.styleFrom(
                           elevation: 0,
-                          backgroundColor: AppPalette.brand,
+                          backgroundColor: AppPalette.brandAction,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius:

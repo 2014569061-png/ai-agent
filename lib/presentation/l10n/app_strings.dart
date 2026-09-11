@@ -131,9 +131,22 @@ abstract final class AppStrings {
   static const dayModeSubtitle = '当前使用蓝白浅色主题';
   static const darkModeSubtitle = '当前使用深色主题';
   static const mcpServers = 'MCP 服务器';
+  static const mcpNotConnected = '未连接';
+  static String mcpConnectedCount(int count) => '$count 个已连接';
+  static const mcpServersSearchHint = '管理 Model Context Protocol 扩展端点';
   static const mcpServersHint = 'MCP 工具会在 Agent 执行时自动合并进工具集，风险默认需要确认。';
   static const noMcpServers = '尚未配置 MCP 服务器。';
   static const addMcpServer = '添加 MCP 服务器';
+  static const editMcpServer = '编辑 MCP 服务器';
+  static const deleteMcpServer = '删除 MCP 服务器';
+  static const mcpServerAdded = '已添加 MCP 服务器';
+  static const mcpServerSaved = '已保存修改';
+  static const mcpServerDeleted = '已删除服务器';
+  static const addFirstMcpServerHint = '点击右下角按钮添加你的第一个 MCP 服务。';
+  static String mcpConnectionFoundTools(int count) => '连接成功：发现 $count 个工具';
+  static String mcpConnectionFailed(String? error) => '连接失败：${error ?? '未知错误'}';
+  static String confirmDeleteMcpServer(String name) =>
+      '确定删除服务器“$name”吗？此操作不可撤销。';
   static const clearAll = '清空全部';
   static const clearMcpServers = '清空 MCP 服务器？';
   static const clearMcpServersConfirm = '将移除全部已配置的 MCP 服务器。';
@@ -159,6 +172,12 @@ abstract final class AppStrings {
   static const topP = 'Top P';
   static const maxOutputTokens = '最大输出 Token';
   static const maxExecutionSteps = '最大执行步数';
+  static const createAgent = '创建 Agent';
+  static const editAgent = '编辑 Agent';
+  static const agentName = '名称';
+  static const systemPrompt = '系统提示词';
+  static const save = '保存';
+  static const newAgent = '新建 Agent';
 
   // --- 历史页 ---
   static const rename = '重命名';
@@ -202,7 +221,7 @@ abstract final class AppStrings {
   static const updateLater = '稍后';
   static const downloading = '下载中…';
   static const isLatestVersion = '已是最新版本';
-  static const onboardingStep1 = '填入模型服务';
+  static const onboardingStep1 = '配置模型服务';
   static const onboardingStep2 = '选择你的模型';
   static const onboardingStep3 = '让 Agent 用工具';
   static const skip = '跳过';

@@ -20,14 +20,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../application/chat_controller.dart';
 import '../../application/app_lock_service.dart';
 import '../../application/providers.dart';
+import '../../application/skill_intent_matcher.dart';
 import '../../domain/sensitive_tool_policy.dart';
 import '../../domain/models.dart';
 import '../../domain/session_metrics.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../../infrastructure/skills/skill_parser.dart';
+import '../../infrastructure/skills/skill_store.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
 import '../../infrastructure/share/deep_link_service.dart';
 import '../../infrastructure/share/sharing_service.dart';
-import '../agents/agents_page.dart';
 import '../dashboard/dashboard_page.dart';
 import '../history/history_page.dart';
 import '../tasks/development_tasks_page.dart';
@@ -38,8 +40,11 @@ import 'widgets/plan_panel.dart';
 import '../settings/provider_list_page.dart';
 import '../settings/settings_page.dart';
 import 'chat_layout_controller.dart';
+import 'composer_skill_slot.dart';
 import '../workspace/file_tree_sheet.dart';
 import '../workspace/terminal_sheet.dart';
+import '../workspace/development_workbench_page.dart';
+import '../utils/keyboard_insets.dart';
 
 import 'widgets/floating_capsule_input.dart';
 import 'widgets/session_metrics_bar.dart';
@@ -53,6 +58,8 @@ import 'widgets/chat_empty_state.dart';
 import 'widgets/chat_message_list.dart';
 import 'widgets/model_picker_sheet.dart';
 import 'widgets/tool_activity_section.dart';
+import 'widgets/run_status_card.dart';
+import 'widgets/skill_suggestion_bar.dart';
 import 'widgets/chat_catalog_drawer.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/immersive_action_sheet.dart';
@@ -188,6 +195,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   final _controller = TextEditingController();
+  final _skillStore = SkillStore();
+  final _skillMatcher = SkillIntentMatcher();
+  final _installedSkills = <_InstalledSkill>[];
+  final _loadedSessionSkillIds = <String>{};
+  List<_InstalledSkill> _skillSuggestions = const [];
+  List<_InstalledSkill> _slashSkillSuggestions = const [];
+  Timer? _skillSuggestionDebounce;
+  bool _skillSuggestionsDismissed = false;
   final _attachments = <PlatformFile>[];
   final _picker = ImagePicker();
   final _scrollController = ScrollController();
@@ -260,6 +275,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         selection: TextSelection.collapsed(offset: initialText.length),
       );
     }
+    _resetSessionSkills();
   }
 
   Future<void> _startNewConversationWithAttachment(
@@ -279,11 +295,23 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
     _attachments.clear();
     _restoreDraft(conversation.id);
+    _resetSessionSkills();
+  }
+
+  void _resetSessionSkills() {
+    setState(() {
+      _loadedSessionSkillIds.clear();
+      _skillSuggestions = const [];
+      _slashSkillSuggestions = const [];
+      _skillSuggestionsDismissed = false;
+    });
+    _onSkillInputChanged();
   }
 
   @override
   void initState() {
     super.initState();
+    _controller.addListener(_onSkillInputChanged);
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
     // 消费冷启动缓冲的分享内容。
@@ -304,6 +332,136 @@ class _ChatPageState extends ConsumerState<ChatPage>
     });
     // 首页能力开关：读取「深度思考 / 智能搜索」的持久化状态。
     Future.microtask(_loadHomeToggles);
+    Future.microtask(_loadInstalledSkills);
+  }
+
+  Future<void> _loadInstalledSkills() async {
+    try {
+      final database = await ref.read(databaseProvider.future);
+      final installed = await _skillStore.all(database);
+      final skills = installed
+          .map((pack) {
+            final metadata = _skillStore.readMetadata(pack);
+            return metadata == null ? null : _InstalledSkill(pack, metadata);
+          })
+          .whereType<_InstalledSkill>()
+          .toList(growable: false);
+      if (!mounted) return;
+      setState(() {
+        _installedSkills
+          ..clear()
+          ..addAll(skills);
+      });
+      _refreshSkillSuggestions();
+    } catch (_) {
+      // Skill suggestions are an optional local enhancement.
+    }
+  }
+
+  void _onSkillInputChanged() {
+    _skillSuggestionDebounce?.cancel();
+    _skillSuggestionDebounce =
+        Timer(const Duration(milliseconds: 320), _refreshSkillSuggestions);
+  }
+
+  void _refreshSkillSuggestions() {
+    if (!mounted || _installedSkills.isEmpty) {
+      return;
+    }
+    final input = _controller.text.trim();
+    final slashMatch = RegExp(r'(?:^|\s)/([a-z0-9_-]*)$').firstMatch(input);
+    final slashSuggestions = slashMatch == null
+        ? const <_InstalledSkill>[]
+        : _installedSkills
+            .where((item) =>
+                item.metadata.name.startsWith(slashMatch.group(1)!) &&
+                !_loadedSessionSkillIds.contains(item.pack.id))
+            .take(5)
+            .toList(growable: false);
+    final suggestions = input.length < 2
+        ? const <_InstalledSkill>[]
+        : _skillSuggestionsDismissed
+            ? const <_InstalledSkill>[]
+            : _skillMatcher
+                .match(input, _installedSkills.map((item) => item.metadata))
+                .map((match) => _installedSkills.firstWhere(
+                    (item) => item.metadata.name == match.metadata.name))
+                .where((item) => !_loadedSessionSkillIds.contains(item.pack.id))
+                .toList(growable: false);
+    if (_sameSkillSuggestions(suggestions, _skillSuggestions) &&
+        _sameSkillSuggestions(slashSuggestions, _slashSkillSuggestions)) {
+      return;
+    }
+    setState(() {
+      _skillSuggestions = suggestions;
+      _slashSkillSuggestions = slashSuggestions;
+    });
+  }
+
+  bool _sameSkillSuggestions(
+      List<_InstalledSkill> left, List<_InstalledSkill> right) {
+    if (left.length != right.length) return false;
+    for (var index = 0; index < left.length; index++) {
+      if (left[index].pack.id != right[index].pack.id) return false;
+    }
+    return true;
+  }
+
+  void _dismissSkillSuggestions() {
+    _skillSuggestionDebounce?.cancel();
+    setState(() {
+      _skillSuggestionsDismissed = true;
+      _skillSuggestions = const [];
+    });
+  }
+
+  void _loadSuggestedSkill(SkillSuggestionItem item) {
+    final skill = _installedSkills
+        .where((candidate) => candidate.pack.id == item.id)
+        .firstOrNull;
+    if (skill == null) return;
+    final body = _skillStore.readBody(skill.pack, maxChars: 8000);
+    if (body == null || body.trim().isEmpty) {
+      FloatingToast.show(context, 'Skill 内容不可用', tone: ToastTone.warning);
+      return;
+    }
+    _chat.addSessionSkillInstruction(
+      id: skill.pack.id,
+      name: skill.metadata.name,
+      instruction: '## 当前会话已加载 Skill：${skill.metadata.name}\n\n$body',
+    );
+    setState(() {
+      _loadedSessionSkillIds.add(skill.pack.id);
+      _skillSuggestions = _skillSuggestions
+          .where((candidate) => candidate.pack.id != skill.pack.id)
+          .toList(growable: false);
+    });
+    HapticFeedback.selectionClick();
+    FloatingToast.show(context, '已为当前会话加载 ${skill.metadata.name}');
+  }
+
+  void _insertSlashSkillReference(SkillSuggestionItem item) {
+    final current = _controller.text;
+    final match = RegExp(r'(?:^|\s)/[a-z0-9_-]*$').firstMatch(current);
+    if (match == null) return;
+    final prefix = current.substring(0, match.start);
+    final matchedText = match.group(0)!;
+    final separator = matchedText.startsWith(RegExp(r'\s'))
+        ? matchedText.substring(0, 1)
+        : '';
+    final next = '$prefix$separator/${item.name} ';
+    _controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
+    setState(() => _slashSkillSuggestions = const []);
+    HapticFeedback.selectionClick();
+  }
+
+  void _removeSessionSkill(String id) {
+    _chat.removeSessionSkillInstruction(id);
+    setState(() => _loadedSessionSkillIds.remove(id));
+    _refreshSkillSuggestions();
   }
 
   /// 读取首页两个能力开关的持久化状态（默认均开启）。
@@ -359,12 +517,66 @@ class _ChatPageState extends ConsumerState<ChatPage>
   ///
   /// 空会话与纯聊天不渲染，避免在首页制造噪音；自定义聊天背景下
   /// 自动切深色半透明底，保证可读性。
+  /// 输入区上方的技能提示槽位。
+  ///
+  /// 三条技能提示（`/` 补全 / 自动建议 / 已加载）视觉同构、都只在非运行态出现，
+  /// 因此共用一个槽位，只渲染优先级最高的那条（规则见 [resolveComposerSkillSlot]）。
+  /// 输入区上方因此最多只剩：运行状态条（或指标条）+ 上下文提示 + 本槽位。
+  Widget _buildSkillPromptSlot({
+    required bool running,
+    required List<SessionSkillInstruction> sessionSkills,
+  }) {
+    final slot = resolveComposerSkillSlot(
+      running: running,
+      hasSlashMatches: _slashSkillSuggestions.isNotEmpty,
+      hasSuggestions: _skillSuggestions.isNotEmpty,
+      hasLoadedSkills: sessionSkills.isNotEmpty,
+    );
+
+    switch (slot) {
+      case ComposerSkillSlot.slash:
+        return SlashSkillReferenceBar(
+          skills: _toSkillItems(_slashSkillSuggestions),
+          onSelect: _insertSlashSkillReference,
+        );
+      case ComposerSkillSlot.suggestion:
+        return SkillSuggestionBar(
+          suggestions: _toSkillItems(_skillSuggestions),
+          onSelect: _loadSuggestedSkill,
+          onDismiss: _dismissSkillSuggestions,
+        );
+      case ComposerSkillSlot.loaded:
+        return LoadedSkillBar(
+          skills: sessionSkills
+              .map((skill) => SkillSuggestionItem(
+                    id: skill.id,
+                    name: skill.name,
+                    description: '',
+                  ))
+              .toList(growable: false),
+          onRemove: _removeSessionSkill,
+        );
+      case ComposerSkillSlot.none:
+        return const SizedBox.shrink();
+    }
+  }
+
+  List<SkillSuggestionItem> _toSkillItems(List<_InstalledSkill> skills) =>
+      skills
+          .map((skill) => SkillSuggestionItem(
+                id: skill.pack.id,
+                name: skill.metadata.name,
+                description: skill.metadata.description,
+              ))
+          .toList(growable: false);
+
   Widget _buildSessionMetricsBar({
     required List<ChatMessage> messages,
     required int totalSteps,
     required List<ToolActivity> toolActivities,
     required int liveContextTokens,
     required int contextTokens,
+    required bool running,
   }) {
     final metrics = SessionMetrics.from(
       messages: messages,
@@ -383,8 +595,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
         builder: (context, background, _) => SessionMetricsBar(
           metrics: metrics,
           onImageBackground: background.mode != 'default',
-          maxGroups:
-              MediaQuery.viewInsetsOf(context).bottom > 0 ? 2 : null,
+          // 键盘弹出或运行中时收窄为 2 组：前者要腾出键盘上方空间，
+          // 后者输入区已被运行状态条占用，不宜再堆一行满宽指标。
+          maxGroups: (running || isKeyboardVisible(context)) ? 2 : null,
           onTap: () => showSessionMetricsSheet(
             context,
             metrics: metrics,
@@ -529,6 +742,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _shareSub?.cancel();
+    _skillSuggestionDebounce?.cancel();
+    _controller.removeListener(_onSkillInputChanged);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -641,10 +856,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _send() async {
     final state = ref.read(chatControllerProvider);
-    final text = _controller.text.trim();
+    final input = _controller.text.trim();
     // 纯附件（无文本）同样允许发送，与输入框可发送状态一致（文档 7.4）。
-    final canSend = text.isNotEmpty || _attachments.isNotEmpty;
+    final canSend = input.isNotEmpty || _attachments.isNotEmpty;
     if (!canSend || state.running || state.loading) return;
+
+    final text = _resolveSlashSkillReferences(input);
+    if (text == null) return;
+    if (text.isEmpty && _attachments.isEmpty) {
+      FloatingToast.show(context, '已加载 Skill，请补充任务内容', tone: ToastTone.warning);
+      return;
+    }
 
     final configured = await _ensureProviderConfigured();
     if (!configured) return;
@@ -666,8 +888,111 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
+  /// Resolves explicit `/skill_name` references before the user message is sent.
+  /// The command itself stays out of conversation history; its content is injected
+  /// into this session only, exactly as a tapped suggestion would be.
+  String? _resolveSlashSkillReferences(String input) {
+    final matches = RegExp(r'(^|\s)/([a-z0-9_-]{1,64})(?=\s|$)')
+        .allMatches(input)
+        .toList(growable: false);
+    if (matches.isEmpty) return input;
+
+    for (final match in matches) {
+      final name = match.group(2)!;
+      final skill = _installedSkills
+          .where((candidate) => candidate.metadata.name == name)
+          .firstOrNull;
+      if (skill == null) {
+        FloatingToast.show(context, '未找到 Skill：/$name',
+            tone: ToastTone.warning);
+        return null;
+      }
+      if (!_loadedSessionSkillIds.contains(skill.pack.id)) {
+        final body = _skillStore.readBody(skill.pack, maxChars: 8000);
+        if (body == null || body.trim().isEmpty) {
+          FloatingToast.show(context, 'Skill 不可读取：/$name',
+              tone: ToastTone.warning);
+          return null;
+        }
+        _chat.addSessionSkillInstruction(
+          id: skill.pack.id,
+          name: skill.metadata.name,
+          instruction: '## 当前会话已加载 Skill：${skill.metadata.name}\n\n$body',
+        );
+        if (mounted) {
+          setState(() => _loadedSessionSkillIds.add(skill.pack.id));
+        }
+      }
+    }
+    return input
+        .replaceAll(RegExp(r'(^|\s)/[a-z0-9_-]{1,64}(?=\s|$)'), ' ')
+        .trim();
+  }
+
   void _regenerate() {
     _chat.regenerate(approveTool: _approveTool);
+  }
+
+  void _editLatestQuestion() {
+    final lastQuestion = ref.read(chatControllerProvider).messages.lastWhere(
+        (message) => message.role == MessageRole.user,
+        orElse: () => ChatMessage(role: MessageRole.user, parts: const []));
+    final text = lastQuestion.text.trim();
+    if (text.isEmpty) return;
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    FloatingToast.show(context, '已填回上一条问题，可修改后重新发送');
+  }
+
+  Widget _buildContextCompressionHint({
+    required int liveContextTokens,
+    required int contextTokens,
+    required bool running,
+  }) {
+    if (running || contextTokens <= 0 || liveContextTokens <= 0) {
+      return const SizedBox.shrink();
+    }
+    final ratio = liveContextTokens / contextTokens;
+    if (ratio < .8) return const SizedBox.shrink();
+    final warning = ratio >= .95;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: Material(
+        color: warning
+            ? AppPalette.warning.withValues(alpha: .14)
+            : AppPalette.brand.withValues(alpha: .10),
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          onTap: _showSessionContext,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Row(
+              children: [
+                Icon(
+                    warning
+                        ? Icons.warning_amber_rounded
+                        : Icons.compress_rounded,
+                    size: 16,
+                    color: warning ? AppPalette.warning : AppPalette.brand),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    warning
+                        ? '上下文已接近容量，下一轮可能压缩较早记录'
+                        : '上下文使用较高，较早记录将在接近上限时自动压缩',
+                    style: const TextStyle(fontSize: 12, height: 1.4),
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, size: 18),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _stop() => _chat.stop();
@@ -845,6 +1170,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       title: '更多操作',
       scrollable: true,
       items: [
+        const ActionSheetItem.section('当前会话'),
         ActionSheetItem(
           icon: Icons.tune_rounded,
           title: '会话上下文',
@@ -881,6 +1207,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           enabled: state.messages.isNotEmpty,
           onTap: _shareConversation,
         ),
+        const ActionSheetItem.section('工作台'),
         ActionSheetItem(
           icon: Icons.task_alt_outlined,
           title: '开发任务',
@@ -899,20 +1226,31 @@ class _ChatPageState extends ConsumerState<ChatPage>
           },
         ),
         ActionSheetItem(
-          icon: Icons.smart_toy_outlined,
-          title: 'Agent 管理',
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const AgentsPage()),
-            );
+          icon: Icons.build_circle_outlined,
+          title: '开发工作台',
+          subtitle: '一键执行构建模板并查看产物校验和',
+          onTap: () async {
+            final workspace =
+                ref.read(chatControllerProvider).currentWorkspacePath;
+            if (workspace == null || workspace.isEmpty) {
+              if (mounted) {
+                FloatingToast.show(context, '请先选择工作区', tone: ToastTone.warning);
+              }
+              return;
+            }
+            await Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) =>
+                  DevelopmentWorkbenchPage(workspacePath: workspace),
+            ));
           },
         ),
         ActionSheetItem(
-          icon: Icons.settings_outlined,
-          title: '设置',
+          icon: Icons.dashboard_outlined,
+          title: '仪表盘',
+          subtitle: 'Token 消耗、费用指标与运行态',
           onTap: () {
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsPage()),
+              MaterialPageRoute(builder: (_) => const DashboardPage()),
             );
           },
         ),
@@ -1008,9 +1346,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
         ),
         ActionSheetItem(
           icon: Icons.checklist_rounded,
-          title: ref.read(chatControllerProvider).planMode
-              ? '关闭计划模式'
-              : '开启计划模式',
+          title:
+              ref.read(chatControllerProvider).planMode ? '关闭计划模式' : '开启计划模式',
           value: 'plan',
         ),
         if (ref.read(chatControllerProvider).running)
@@ -1053,8 +1390,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     InputToolGridSheet.show(
       context,
       onCommandMenu: _openPromptLibrary,
-      onMcpMenu: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const McpServersPage())),
+      onMcpMenu: () => Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const McpServersPage())),
       onTerminalPreview: _openTerminal,
       onEnvSetup: _openEnvSetup,
       onOpenDashboard: () => Navigator.of(context).push(
@@ -1064,6 +1401,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         ),
       ),
+      onOpenWorkbench: () {
+        Navigator.of(context).pop();
+        final workspace = ref.read(chatControllerProvider).currentWorkspacePath;
+        if (workspace == null || workspace.isEmpty) {
+          FloatingToast.show(context, '请先选择工作区', tone: ToastTone.warning);
+          return;
+        }
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => DevelopmentWorkbenchPage(workspacePath: workspace),
+        ));
+      },
       planModeEnabled: state.planMode,
       onPlanModeToggle: () => _chat.setPlanMode(!state.planMode),
       approvalMode: state.approvalMode,
@@ -1395,6 +1743,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   // --- 渲染 ---
 
   void _fillSuggestion(QuickAction action) {
+    if (action.id == 'select_workspace') {
+      _pickWorkspace();
+      return;
+    }
     _pendingSourceType = 'quick_action';
     _pendingTaskType = _taskTypeForSuggestion(action.label);
     final state = ref.read(chatControllerProvider);
@@ -1440,21 +1792,32 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final state = ref.read(chatControllerProvider);
     final ws = state.currentWorkspacePath;
     final hasWorkspace = ws != null && ws.isNotEmpty;
-    const suggestions = [
-      QuickAction(label: '解读项目'),
-      QuickAction(label: '修复问题'),
-      QuickAction(
+    final suggestions = <QuickAction>[
+      if (!hasWorkspace)
+        const QuickAction(id: 'select_workspace', label: '选择工作区'),
+      const QuickAction(label: '解读项目'),
+      const QuickAction(label: '修复问题'),
+      const QuickAction(
         label: '头脑风暴',
         prompt: '帮我头脑风暴一下「」的创意方向。要求：先提出 3~5 个角度，再挑一个最有潜力的展开，最后给出下一步行动建议。',
       ),
-      QuickAction(label: '解读工作区'),
+      const QuickAction(label: '解读工作区'),
     ];
-    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    // 注意：此处的 context 来自 Scaffold body 内的 LayoutBuilder，
+    // 已是被消费过 inset 的作用域，必须用 isKeyboardVisible 而非
+    // MediaQuery.viewInsetsOf（后者在这里恒为 0）。详见 keyboard_insets.dart。
+    final keyboardVisible = isKeyboardVisible(context);
     return ChatEmptyState(
       suggestions: suggestions,
       hasWorkspace: hasWorkspace,
       keyboardVisible: keyboardVisible,
+      workspaceLabel: hasWorkspace ? p.basename(ws) : null,
+      modelLabel: state.activeModel.isNotEmpty
+          ? state.activeModel
+          : state.activeProviderName,
       onSuggestionTap: _fillSuggestion,
+      onWorkspaceTap: _handleTopBarWorkspace,
+      onModelTap: _switchProvider,
     );
   }
 
@@ -1504,8 +1867,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             ref.watch(chatControllerProvider.select((s) => s.loading));
         final conversationId =
             ref.watch(chatControllerProvider.select((s) => s.conversationId));
-        final currentWorkspacePath = ref
-            .watch(chatControllerProvider.select((s) => s.currentWorkspacePath));
+        final currentWorkspacePath = ref.watch(
+            chatControllerProvider.select((s) => s.currentWorkspacePath));
         final contextTokens =
             ref.watch(chatControllerProvider.select((s) => s.contextTokens));
         final liveContextTokens = ref
@@ -1533,6 +1896,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             .watch(chatControllerProvider.select((s) => s.conversationTitle));
         final totalSteps =
             ref.watch(chatControllerProvider.select((s) => s.totalSteps));
+        final sessionSkills = ref.watch(
+            chatControllerProvider.select((s) => s.sessionSkillInstructions));
 
         if (loading) {
           return const Scaffold(
@@ -1664,6 +2029,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                           _showMessageActions(index);
                                         },
                                         onRegenerate: _regenerate,
+                                        onEditPrompt: _editLatestQuestion,
+                                        onSwitchModel: _switchProvider,
                                         trailingWidgets: [
                                           if (planState != null &&
                                               planState.status != 'cancelled')
@@ -1674,14 +2041,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                 plan: planState,
                                                 goal: planState.steps.isEmpty
                                                     ? null
-                                                    : planState
-                                                        .steps.first.description,
+                                                    : planState.steps.first
+                                                        .description,
                                                 onApprove: () =>
                                                     _chat.respondToPlan(true),
                                                 onCancel: () =>
                                                     _chat.respondToPlan(false),
-                                                onResume: () => _chat
-                                                    .resumeFromBudgetPause(
+                                                onResume: () =>
+                                                    _chat.resumeFromBudgetPause(
                                                         approveTool:
                                                             _approveTool),
                                               ),
@@ -1857,6 +2224,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       toolActivities: toolActivities,
                       liveContextTokens: liveContextTokens,
                       contextTokens: contextTokens,
+                      running: running,
+                    ),
+                    if (running)
+                      RunStatusCard(
+                        stage: _currentRunningStage(
+                              toolActivities: toolActivities,
+                              running: running,
+                              paused: paused,
+                              planState: planState,
+                            ) ??
+                            '正在执行',
+                        toolCount: toolActivities.length,
+                        paused: paused,
+                        awaitingApproval:
+                            toolActivities.lastOrNull?.status == '等待确认',
+                        onStop: _stop,
+                      ),
+                    _buildContextCompressionHint(
+                      liveContextTokens: liveContextTokens,
+                      contextTokens: contextTokens,
+                      running: running,
+                    ),
+                    // 技能提示只占一个槽位（/ 补全 > 自动建议 > 已加载），
+                    // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
+                    _buildSkillPromptSlot(
+                      running: running,
+                      sessionSkills: sessionSkills,
                     ),
                     FloatingCapsuleInput(
                       controller: _controller,
@@ -1908,7 +2302,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         : (activeProviderName.isEmpty
                             ? null
                             : activeProviderName),
-                    sessionTitle: conversationTitle,
+                    sessionTitle: messages.isEmpty ? null : conversationTitle,
                     runningStage: _currentRunningStage(
                       toolActivities: toolActivities,
                       running: running,
@@ -1940,4 +2334,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       },
     );
   }
+}
+
+class _InstalledSkill {
+  const _InstalledSkill(this.pack, this.metadata);
+
+  final SkillPack pack;
+  final SkillMetadata metadata;
 }

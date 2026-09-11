@@ -30,6 +30,8 @@ class MessageBubble extends StatelessWidget {
     required this.running,
     required this.onLongPress,
     required this.onRegenerate,
+    this.onEditPrompt,
+    this.onSwitchModel,
   });
 
   final ChatMessage message;
@@ -37,6 +39,8 @@ class MessageBubble extends StatelessWidget {
   final bool running;
   final VoidCallback? onLongPress;
   final VoidCallback onRegenerate;
+  final VoidCallback? onEditPrompt;
+  final VoidCallback? onSwitchModel;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +66,10 @@ class MessageBubble extends StatelessWidget {
     // 错误消息拆分：人话正文正常渲染，原文技术细节折叠展示。
     final errorSplit = splitErrorDetail(message.text);
     final errorDetail = errorSplit.detail;
+    final canRetryFailure = errorDetail != null &&
+        isLast &&
+        message.role == MessageRole.assistant &&
+        !running;
 
     // 流式生成中的最后一条助手消息使用纯文本，避免每个增量都重新解析 Markdown。
     final lightweight = !isUser && !isTool && isLast && running;
@@ -293,7 +301,8 @@ class MessageBubble extends StatelessWidget {
                                 // 只在确实有思考内容（或正在思考）时才出现这一行。
                                 // 原先只要消息带 elapsed/usage 就渲染一行指标，与底部会话指标条重复，已移除。
                                 if (!isTool &&
-                                    ((reasoningText?.trim().isNotEmpty ?? false) ||
+                                    ((reasoningText?.trim().isNotEmpty ??
+                                            false) ||
                                         (running && !isUser)))
                                   ReasoningCompactBlock(
                                     reasoning: reasoningText ?? '',
@@ -311,10 +320,10 @@ class MessageBubble extends StatelessWidget {
                                     children: [
                                       IconButton(
                                         visualDensity: VisualDensity.compact,
-                                        iconSize: 16,
+                                        iconSize: 18,
                                         padding: EdgeInsets.zero,
                                         constraints: const BoxConstraints(
-                                            minWidth: 28, minHeight: 28),
+                                            minWidth: 48, minHeight: 48),
                                         onPressed: () {
                                           Clipboard.setData(ClipboardData(
                                               text: message.text));
@@ -329,16 +338,39 @@ class MessageBubble extends StatelessWidget {
                                             color: textMuted),
                                         tooltip: '复制',
                                       ),
-                                      if (isLast &&
+                                      if (canRetryFailure)
+                                        Wrap(
+                                          spacing: 4,
+                                          children: [
+                                            _failureAction(
+                                              label: '重试',
+                                              icon: Icons.refresh_rounded,
+                                              onPressed: onRegenerate,
+                                            ),
+                                            if (onEditPrompt != null)
+                                              _failureAction(
+                                                label: '编辑问题',
+                                                icon: Icons.edit_outlined,
+                                                onPressed: onEditPrompt!,
+                                              ),
+                                            if (onSwitchModel != null)
+                                              _failureAction(
+                                                label: '切换模型',
+                                                icon: Icons.tune_rounded,
+                                                onPressed: onSwitchModel!,
+                                              ),
+                                          ],
+                                        )
+                                      else if (isLast &&
                                           message.role ==
                                               MessageRole.assistant &&
                                           !running)
                                         IconButton(
                                           visualDensity: VisualDensity.compact,
-                                          iconSize: 16,
+                                          iconSize: 18,
                                           padding: EdgeInsets.zero,
                                           constraints: const BoxConstraints(
-                                              minWidth: 28, minHeight: 28),
+                                              minWidth: 48, minHeight: 48),
                                           onPressed: onRegenerate,
                                           icon: Icon(Icons.refresh_rounded,
                                               color: textMuted),
@@ -360,6 +392,20 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
+  Widget _failureAction({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) =>
+      TextButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 16),
+        label: Text(label),
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+        ),
+      );
 }
 
 /// Delays expensive Markdown and math parsing for long completed replies.
@@ -468,7 +514,8 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -530,9 +577,8 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
               ),
             ),
           ),
-          crossFadeState: _expanded
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
+          crossFadeState:
+              _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
           duration: AppTokens.durationSlow,
           firstCurve: AppTokens.curveStandard,
           secondCurve: AppTokens.curveStandard,

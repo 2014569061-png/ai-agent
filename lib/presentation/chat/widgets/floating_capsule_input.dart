@@ -131,8 +131,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
               padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
               decoration: BoxDecoration(
                 color: surface,
-                borderRadius:
-                    BorderRadius.circular(AppTokens.radiusComposer),
+                borderRadius: BorderRadius.circular(AppTokens.radiusComposer),
                 border: _focused
                     ? Border.all(color: AppPalette.brand, width: 1.0)
                     : null,
@@ -160,7 +159,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                           color: textColor,
                         ),
                         decoration: InputDecoration(
-                          hintText: '发消息或按住说话',
+                          hintText: '发消息',
                           hintStyle: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
@@ -177,12 +176,13 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                     ),
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 6),
 
-                  // 操作行：高 30px
+                  // 操作行：高 48px，各控件垂直居中
                   SizedBox(
-                    height: AppTokens.composerChipHeight,
+                    height: 48,
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         _ModeChip(
                           label: '深度思考',
@@ -198,14 +198,14 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                           onTap: widget.onWebSearchToggle,
                         ),
                         const Spacer(),
-                        // 「＋」：附件与更多工具
+                        // 「＋」：附件与更多工具（48x48 触控区）
                         _CircleIconButton(
                           icon: Icons.add_rounded,
                           iconSize: 18,
+                          tooltip: '添加附件或更多工具',
                           semanticLabel: '添加附件或更多工具',
                           onTap: widget.onAttachmentMenu,
                         ),
-                        const SizedBox(width: 8),
                         _buildTrailingAction(textMuted, textFaint, isDark),
                       ],
                     ),
@@ -225,6 +225,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
       return _FilledCircleButton(
         color: AppPalette.danger,
         icon: Icons.stop_rounded,
+        tooltip: '停止生成',
         semanticLabel: '停止生成',
         onTap: () {
           HapticFeedback.mediumImpact();
@@ -236,6 +237,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
       return _FilledCircleButton(
         color: AppPalette.brand,
         icon: Icons.arrow_upward_rounded,
+        tooltip: '发送',
         semanticLabel: '发送',
         onTap: () {
           HapticFeedback.mediumImpact();
@@ -243,11 +245,13 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         },
       );
     }
+    final voiceEnabled = widget.onVoiceInput != null;
     return _CircleIconButton(
       icon: Icons.graphic_eq_rounded,
       iconSize: 18,
-      color: textMuted,
-      semanticLabel: '按住说话',
+      color: voiceEnabled ? textMuted : textFaint.withValues(alpha: 0.5),
+      tooltip: voiceEnabled ? '按住说话' : '语音输入暂未开启',
+      semanticLabel: voiceEnabled ? '按住说话' : '语音输入暂未开启',
       onTap: widget.onVoiceInput == null
           ? null
           : () {
@@ -330,7 +334,8 @@ class _ModeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
     final brandSoft =
         isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
@@ -338,7 +343,7 @@ class _ModeChip extends StatelessWidget {
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     final bg = selected ? brandSoft : canvas;
-    final color = selected ? AppPalette.brand : textMuted;
+    final color = selected ? AppPalette.brandAction : textMuted;
 
     return Material(
       color: bg,
@@ -352,7 +357,9 @@ class _ModeChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppTokens.radiusPill),
             border: selected
-                ? null
+                ? Border.all(
+                    color: AppPalette.brandAction.withValues(alpha: 0.28),
+                    width: 1.0)
                 : Border.all(color: hairline, width: 1.0),
           ),
           alignment: Alignment.center,
@@ -365,7 +372,7 @@ class _ModeChip extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 13,
-                  fontWeight: FontWeight.w400,
+                  fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
                   height: 1.4,
                   color: color,
                 ),
@@ -378,12 +385,13 @@ class _ModeChip extends StatelessWidget {
   }
 }
 
-/// 圆形描边按钮（「＋」与语音键）。
+/// 圆形描边按钮（「＋」与语音键）。48x48 触控区，视觉尺寸 30dp。
 class _CircleIconButton extends StatelessWidget {
   const _CircleIconButton({
     required this.icon,
     required this.iconSize,
     required this.semanticLabel,
+    this.tooltip,
     this.onTap,
     this.color,
   });
@@ -391,67 +399,102 @@ class _CircleIconButton extends StatelessWidget {
   final IconData icon;
   final double iconSize;
   final String semanticLabel;
+  final String? tooltip;
   final VoidCallback? onTap;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final resolved = color ?? (isDark ? AppPalette.darkText : AppPalette.lightText);
+    final resolved =
+        color ?? (isDark ? AppPalette.darkText : AppPalette.lightText);
+
+    Widget button = SizedBox(
+      width: 48,
+      height: 48,
+      child: Material(
+        color: Colors.transparent,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 24,
+          child: Center(
+            child: Container(
+              width: AppTokens.composerCircleButton,
+              height: AppTokens.composerCircleButton,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: resolved, width: 1.5),
+              ),
+              alignment: Alignment.center,
+              child: Icon(icon, size: iconSize, color: resolved),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (tooltip != null) {
+      button = Tooltip(message: tooltip!, child: button);
+    }
 
     return Semantics(
       label: semanticLabel,
       button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: AppTokens.composerCircleButton,
-          height: AppTokens.composerCircleButton,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: resolved, width: 1.5),
-          ),
-          alignment: Alignment.center,
-          child: Icon(icon, size: iconSize, color: resolved),
-        ),
-      ),
+      enabled: onTap != null,
+      child: button,
     );
   }
 }
 
-/// 实心圆形按钮（发送 / 停止）。
+/// 实心圆形按钮（发送 / 停止）。48x48 触控区，视觉尺寸 30dp。
 class _FilledCircleButton extends StatelessWidget {
   const _FilledCircleButton({
     required this.color,
     required this.icon,
     required this.semanticLabel,
+    this.tooltip,
     required this.onTap,
   });
 
   final Color color;
   final IconData icon;
   final String semanticLabel;
+  final String? tooltip;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    Widget button = SizedBox(
+      width: 48,
+      height: 48,
+      child: Material(
+        color: Colors.transparent,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 24,
+          child: Center(
+            child: AnimatedContainer(
+              duration: AppTokens.durationFast,
+              curve: AppTokens.curveStandard,
+              width: AppTokens.composerCircleButton,
+              height: AppTokens.composerCircleButton,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+              alignment: Alignment.center,
+              child: Icon(icon, size: 18, color: Colors.white),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (tooltip != null) {
+      button = Tooltip(message: tooltip!, child: button);
+    }
+
     return Semantics(
       label: semanticLabel,
       button: true,
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: AppTokens.durationFast,
-          curve: AppTokens.curveStandard,
-          width: AppTokens.composerCircleButton,
-          height: AppTokens.composerCircleButton,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-          alignment: Alignment.center,
-          child: Icon(icon, size: 18, color: Colors.white),
-        ),
-      ),
+      child: button,
     );
   }
 }

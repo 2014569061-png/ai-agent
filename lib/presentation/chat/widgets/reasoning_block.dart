@@ -55,7 +55,8 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     final hasReasoning = widget.reasoning.trim().isNotEmpty;
     final thinking = widget.streaming && widget.duration == null;

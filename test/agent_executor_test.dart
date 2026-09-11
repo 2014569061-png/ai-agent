@@ -49,7 +49,8 @@ void main() {
     ToolResult? rejected;
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('run')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
       approveTool: (call, risk) async {
@@ -74,7 +75,8 @@ void main() {
     var asked = false;
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('run')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
       approvalMode: ApprovalMode.fullAccess,
@@ -104,7 +106,8 @@ void main() {
       tools: registry,
     ).run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('执行')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('执行')])
       ],
       model: 'test',
       confirmPlan: (calls, text) async {
@@ -198,7 +201,8 @@ void main() {
     await for (final event in executor.run(
       history: [
         ChatMessage(
-            role: MessageRole.user, parts: [const MessagePart.text('calculate')])
+            role: MessageRole.user,
+            parts: [const MessagePart.text('calculate')])
       ],
       model: 'test',
     )) {
@@ -223,7 +227,8 @@ void main() {
       tools: registry,
     ).run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('run')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
       maxSteps: 2,
@@ -257,7 +262,8 @@ void main() {
       tools: registry,
     ).run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('run')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
       maxSteps: 2,
@@ -309,7 +315,8 @@ void main() {
     final executor = AgentExecutor(provider: provider, tools: registry);
     await for (final _ in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
       model: 'test',
       temperature: 0.3,
@@ -331,7 +338,8 @@ void main() {
     var requested = 0;
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('run')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
     )) {
@@ -351,7 +359,8 @@ void main() {
     var completionTokens = 0;
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
       model: 'test',
     )) {
@@ -370,10 +379,11 @@ void main() {
     final executor = AgentExecutor(provider: provider, tools: registry);
     await for (final _ in executor.run(
       history: [
+        ChatMessage(role: MessageRole.user, parts: [
+          const MessagePart.text('old message that should be dropped')
+        ]),
         ChatMessage(
-            role: MessageRole.user,
-            parts: [const MessagePart.text('old message that should be dropped')]),
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('new')]),
+            role: MessageRole.user, parts: [const MessagePart.text('new')]),
       ],
       model: 'test',
       contextBudgetTokens: 12,
@@ -394,7 +404,8 @@ void main() {
     final output = StringBuffer();
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
       model: 'test',
       maxRetries: 2,
@@ -413,7 +424,8 @@ void main() {
     var error = '';
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
       model: 'test',
       maxRetries: 2,
@@ -433,7 +445,8 @@ void main() {
     var error = '';
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
       model: 'test',
       maxRetries: 2,
@@ -459,7 +472,8 @@ void main() {
     var errors = 0;
     await for (final event in executor.run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('loop')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('loop')])
       ],
       model: 'test',
       maxSteps: 2,
@@ -487,7 +501,8 @@ void main() {
       tools: registry,
     ).run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('loop')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('loop')])
       ],
       model: 'test',
       maxSteps: 1,
@@ -573,7 +588,8 @@ void main() {
       tools: registry,
     ).run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('run')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
     )) {
@@ -608,7 +624,8 @@ void main() {
       tools: registry,
     ).run(
       history: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('run')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
     )) {

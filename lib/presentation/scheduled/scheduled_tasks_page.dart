@@ -10,7 +10,7 @@ import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/immersive_dropdown.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import '../widgets/floating_toast.dart';
 
@@ -80,103 +80,262 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
     }
   }
 
+  String _formatNextRun(ScheduleSpec spec, bool enabled) {
+    if (!enabled) return '已暂停';
+    final now = DateTime.now();
+    for (int dayOffset = 0; dayOffset < 8; dayOffset++) {
+      final targetDay = now.add(Duration(days: dayOffset));
+      if (spec.days.isNotEmpty && !spec.days.contains(targetDay.weekday)) {
+        continue;
+      }
+      final scheduledTime = DateTime(
+        targetDay.year,
+        targetDay.month,
+        targetDay.day,
+        spec.hour,
+        spec.minute,
+      );
+      if (dayOffset == 0 && !now.isBefore(scheduledTime)) {
+        continue;
+      }
+      final timeStr =
+          '${spec.hour.toString().padLeft(2, '0')}:${spec.minute.toString().padLeft(2, '0')}';
+      if (dayOffset == 0) return '今天 $timeStr';
+      if (dayOffset == 1) return '明天 $timeStr';
+      const weekdayMap = {
+        1: '周一',
+        2: '周二',
+        3: '周三',
+        4: '周四',
+        5: '周五',
+        6: '周六',
+        7: '周日',
+      };
+      return '${weekdayMap[targetDay.weekday]} $timeStr';
+    }
+    return '待定';
+  }
+
   Future<void> _create() async {
     final name = TextEditingController(text: '新闻摘要');
     final prompt = TextEditingController(text: '总结今日要闻，用 3 条要点输出');
     var hour = 9;
     var minute = 0;
     var days = <int>[];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final saved = await showImmersiveDialog<bool>(
+    final saved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('新建定时任务'),
-          content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                  controller: name,
-                  decoration: const InputDecoration(labelText: '任务名称')),
-              const SizedBox(height: 12),
-              TextField(
-                  controller: prompt,
-                  maxLines: 3,
-                  decoration: const InputDecoration(labelText: '提示词')),
-              const SizedBox(height: 12),
-              Row(children: [
-                Expanded(
-                  child: ImmersiveDropdown<int>(
-                    labelText: '时',
-                    initialValue: hour,
-                    items: [
-                      for (var i = 0; i < 24; i++)
-                        DropdownMenuItem(value: i, child: Text('$i 时'))
-                    ],
-                    onChanged: (v) => setDialogState(() => hour = v ?? 9),
+      isScrollControlled: true,
+      backgroundColor:
+          isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
+      ),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) => FractionallySizedBox(
+          heightFactor: 0.85,
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          '新建定时任务',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          tooltip: '关闭',
+                          onPressed: () => Navigator.pop(context, false),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ImmersiveDropdown<int>(
-                    labelText: '分',
-                    initialValue: minute,
-                    items: [
-                      for (var i = 0; i < 60; i += 5)
-                        DropdownMenuItem(value: i, child: Text('$i 分'))
-                    ],
-                    onChanged: (v) => setDialogState(() => minute = v ?? 0),
+                  Divider(
+                    height: 1,
+                    color: isDark
+                        ? AppPalette.darkHairline
+                        : AppPalette.lightHairline,
                   ),
-                ),
-              ]),
-              const SizedBox(height: 8),
-              Wrap(spacing: 6, children: [
-                for (final d in const [
-                  (1, '周一'),
-                  (2, '周二'),
-                  (3, '周三'),
-                  (4, '周四'),
-                  (5, '周五'),
-                  (6, '周六'),
-                  (7, '周日')
-                ])
-                  FilterChip(
-                    label: Text(d.$2),
-                    selected: days.contains(d.$1),
-                    onSelected: (sel) => setDialogState(() {
-                      if (sel) {
-                        days.add(d.$1);
-                      } else {
-                        days.remove(d.$1);
-                      }
-                    }),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          TextField(
+                            controller: name,
+                            decoration: const InputDecoration(
+                              labelText: '任务名称 *',
+                              hintText: '如：早间简报、自动整理',
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: prompt,
+                            maxLines: 4,
+                            minLines: 2,
+                            decoration: const InputDecoration(
+                              labelText: '执行提示词 *',
+                              hintText: '输入 Agent 定时执行的任务说明…',
+                              alignLabelWithHint: true,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            '执行时刻',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ImmersiveDropdown<int>(
+                                  labelText: '时',
+                                  initialValue: hour,
+                                  items: [
+                                    for (var i = 0; i < 24; i++)
+                                      DropdownMenuItem(
+                                          value: i,
+                                          child: Text(
+                                              '${i.toString().padLeft(2, '0')} 时'))
+                                  ],
+                                  onChanged: (v) =>
+                                      setSheetState(() => hour = v ?? 9),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ImmersiveDropdown<int>(
+                                  labelText: '分',
+                                  initialValue: minute,
+                                  items: [
+                                    for (var i = 0; i < 60; i += 5)
+                                      DropdownMenuItem(
+                                          value: i,
+                                          child: Text(
+                                              '${i.toString().padLeft(2, '0')} 分'))
+                                  ],
+                                  onChanged: (v) =>
+                                      setSheetState(() => minute = v ?? 0),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            '周期重复（不选则每天执行）',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final d in const [
+                                (1, '周一'),
+                                (2, '周二'),
+                                (3, '周三'),
+                                (4, '周四'),
+                                (5, '周五'),
+                                (6, '周六'),
+                                (7, '周日'),
+                              ])
+                                FilterChip(
+                                  label: Text(d.$2),
+                                  selected: days.contains(d.$1),
+                                  onSelected: (sel) => setSheetState(() {
+                                    if (sel) {
+                                      days.add(d.$1);
+                                    } else {
+                                      days.remove(d.$1);
+                                    }
+                                  }),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-              ]),
-              const SizedBox(height: 4),
-              Text('不选则每天执行',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? AppPalette.darkTextMuted
-                          : AppPalette.lightTextMuted)),
-            ]),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppPalette.darkSurface
+                          : AppPalette.lightSurface,
+                      border: Border(
+                        top: BorderSide(
+                          color: isDark
+                              ? AppPalette.darkHairline
+                              : AppPalette.lightHairline,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(
+                                  AppTokens.kMinTouchTarget),
+                            ),
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('取消'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(
+                                  AppTokens.kMinTouchTarget),
+                              backgroundColor: AppPalette.brandAction,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () {
+                              if (name.text.trim().isEmpty ||
+                                  prompt.text.trim().isEmpty) {
+                                return;
+                              }
+                              Navigator.pop(context, true);
+                            },
+                            child: const Text('创建'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消')),
-            FilledButton(
-                style: FilledButton.styleFrom(
-                  elevation: 0,
-                  backgroundColor: AppPalette.brand,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
-                  ),
-                ),
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('创建')),
-          ],
         ),
       ),
     );
@@ -198,7 +357,10 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
 
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
-      appBar: AppBar(title: const Text('定时任务')),
+      appBar: const NexusPageHeader(
+        title: '定时任务',
+        subtitle: '自动化循环计划与后台执行',
+      ),
       body: AsyncStateView(
         loading: _loading,
         error: _error,
@@ -217,30 +379,109 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                   final spec = ScheduleSpec.fromCron(task.cron);
                   final daysLabel =
                       spec.days.isEmpty ? '每天' : '周${spec.days.join('/')}';
+                  final timeLabel =
+                      '${spec.hour.toString().padLeft(2, '0')}:${spec.minute.toString().padLeft(2, '0')}';
+                  final nextRun = _formatNextRun(spec, task.enabled);
+                  final tz = DateTime.now().timeZoneName;
+
                   return SectionCard(
                     child: ListTile(
-                      leading: Switch(
-                          value: task.enabled,
-                          onChanged: (v) => _toggle(task, v)),
-                      title: Text(
-                        task.name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      leading: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: Center(
+                          child: Switch(
+                            value: task.enabled,
+                            onChanged: (v) => _toggle(task, v),
+                          ),
                         ),
                       ),
-                      subtitle: Text(
-                        '$daysLabel ${spec.hour}:${spec.minute.toString().padLeft(2, '0')} · ${task.prompt}',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: isDark
-                              ? AppPalette.darkTextMuted
-                              : AppPalette.lightTextMuted,
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              task.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: task.enabled
+                                  ? (isDark
+                                      ? AppPalette.brandSoftDark
+                                      : AppPalette.brandSoftLight)
+                                  : (isDark
+                                      ? AppPalette.darkCanvas
+                                      : AppPalette.lightCanvas),
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusControl),
+                            ),
+                            child: Text(
+                              task.enabled ? '已启用' : '已暂停',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: task.enabled
+                                    ? AppPalette.brandAction
+                                    : (isDark
+                                        ? AppPalette.darkTextMuted
+                                        : AppPalette.lightTextMuted),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      subtitle: Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$daysLabel $timeLabel · 下次：$nextRun · 时区：$tz',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: task.enabled
+                                    ? (isDark ? Colors.white70 : Colors.black87)
+                                    : (isDark
+                                        ? AppPalette.darkTextMuted
+                                        : AppPalette.lightTextMuted),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              task.prompt,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? AppPalette.darkTextMuted
+                                    : AppPalette.lightTextMuted,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       trailing: IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => _delete(task)),
+                        icon: const Icon(Icons.delete_outline),
+                        tooltip: '删除任务',
+                        constraints: const BoxConstraints(
+                          minWidth: AppTokens.kMinTouchTarget,
+                          minHeight: AppTokens.kMinTouchTarget,
+                        ),
+                        onPressed: () => _delete(task),
+                      ),
                     ),
                   );
                 },
@@ -248,7 +489,8 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _create,
-        backgroundColor: AppPalette.brand,
+        tooltip: '新建定时任务',
+        backgroundColor: AppPalette.brandAction,
         foregroundColor: Colors.white,
         elevation: 0,
         focusElevation: 0,

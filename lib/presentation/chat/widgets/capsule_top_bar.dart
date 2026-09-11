@@ -60,20 +60,23 @@ class CapsuleTopBar extends StatelessWidget {
       color: canvas,
       child: Row(
         children: [
-          // 左侧：40px 触控区，两段式抽屉图标
+          // 左侧：至少 48px 触控区，两段式抽屉图标
           SizedBox(
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
             child: Semantics(
               label: '打开会话列表',
               button: true,
-              child: GestureDetector(
-                onTap: onMenu,
-                behavior: HitTestBehavior.opaque,
-                child: Center(
-                  child: CustomPaint(
-                    size: const Size(22, 14),
-                    painter: _DrawerGlyphPainter(color: textColor),
+              child: Material(
+                color: Colors.transparent,
+                child: InkResponse(
+                  onTap: onMenu,
+                  radius: 24,
+                  child: Center(
+                    child: CustomPaint(
+                      size: const Size(22, 14),
+                      painter: _DrawerGlyphPainter(color: textColor),
+                    ),
                   ),
                 ),
               ),
@@ -121,26 +124,30 @@ class CapsuleTopBar extends StatelessWidget {
                   ),
           ),
 
-          // 右侧：40px 触控区，圆圈加号
+          // 右侧：至少 48px 触控区，圆圈加号
           SizedBox(
-            width: 40,
-            height: 40,
+            width: 48,
+            height: 48,
             child: Semantics(
               label: '新建对话',
               button: true,
-              child: GestureDetector(
-                onTap: onNewChat,
-                behavior: HitTestBehavior.opaque,
-                child: Center(
-                  child: Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: textColor, width: 1.5),
+              child: Material(
+                color: Colors.transparent,
+                child: InkResponse(
+                  onTap: onNewChat,
+                  radius: 24,
+                  child: Center(
+                    child: Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: textColor, width: 1.5),
+                      ),
+                      alignment: Alignment.center,
+                      child:
+                          Icon(Icons.add_rounded, size: 16, color: textColor),
                     ),
-                    alignment: Alignment.center,
-                    child: Icon(Icons.add_rounded, size: 16, color: textColor),
                   ),
                 ),
               ),

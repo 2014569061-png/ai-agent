@@ -9,8 +9,8 @@ import 'package:mobile_agent/domain/models.dart';
 /// `RunCoordinator` 的独立单元测试：它决定"一次运行还能不能写回状态"，
 /// 是并发安全的核心，因此不依赖 ChatController 也能单独验证。
 void main() {
-  RunCoordinator build([String? Function()? conversation]) => RunCoordinator(
-      currentConversationId: conversation ?? () => 'c1');
+  RunCoordinator build([String? Function()? conversation]) =>
+      RunCoordinator(currentConversationId: conversation ?? () => 'c1');
 
   test('beginRun 自增代次并解除该代次的取消标记', () {
     final runs = build();
@@ -70,7 +70,8 @@ void main() {
     runs.dioCancelToken = dioToken;
     runs.runController = controller;
     runs.budgetPauseContext = [
-      ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('预算暂停上下文')])
+      ChatMessage(
+          role: MessageRole.user, parts: [const MessagePart.text('预算暂停上下文')])
     ];
 
     runs.invalidateActiveRun();

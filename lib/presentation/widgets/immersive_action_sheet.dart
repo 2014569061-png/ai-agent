@@ -17,7 +17,20 @@ class ActionSheetItem<T> {
     this.enabled = true,
     this.selected = false,
     this.destructive = false,
+    this.isSectionHeader = false,
   });
+
+  const ActionSheetItem.section(this.title)
+      : subtitle = null,
+        icon = null,
+        leading = null,
+        trailing = null,
+        value = null,
+        onTap = null,
+        enabled = false,
+        selected = false,
+        destructive = false,
+        isSectionHeader = true;
 
   final String title;
   final String? subtitle;
@@ -29,6 +42,7 @@ class ActionSheetItem<T> {
   final bool enabled;
   final bool selected;
   final bool destructive;
+  final bool isSectionHeader;
 }
 
 /// 统一的沉浸式操作表 (ImmersiveActionSheet)
@@ -106,6 +120,21 @@ Future<T?> showImmersiveActionSheet<T>({
                 separatorBuilder: (_, __) => const SizedBox(height: 2),
                 itemBuilder: (itemCtx, index) {
                   final item = items[index];
+                  if (item.isSectionHeader) {
+                    return Padding(
+                      padding:
+                          EdgeInsets.fromLTRB(14, index == 0 ? 4 : 14, 14, 6),
+                      child: Text(
+                        item.title,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: semantic.mutedOnGlass,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    );
+                  }
                   final itemColor = item.destructive
                       ? semantic.danger
                       : (item.selected

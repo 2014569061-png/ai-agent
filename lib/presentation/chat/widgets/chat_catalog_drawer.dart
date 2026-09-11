@@ -6,7 +6,9 @@ import 'package:flutter/services.dart';
 import '../../../infrastructure/database/app_database.dart';
 import '../../../infrastructure/database/database_provider.dart';
 import '../../../domain/models.dart';
+import '../../agents/agents_page.dart';
 import '../../history/history_page.dart';
+import '../../l10n/app_strings.dart';
 import '../../settings/settings_page.dart';
 import '../../widgets/brand_mark.dart';
 import '../../widgets/floating_toast.dart';
@@ -109,8 +111,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
     final buckets = <String, List<Conversation>>{};
     for (final c in list) {
       final d = c.updatedAt;
-      final days =
-          today.difference(DateTime(d.year, d.month, d.day)).inDays;
+      final days = today.difference(DateTime(d.year, d.month, d.day)).inDays;
       final label = days <= 0
           ? '今天'
           : days < 7
@@ -181,13 +182,13 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final width = math.min(MediaQuery.sizeOf(context).width * 0.86, 320.0);
     final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
@@ -339,8 +340,8 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                         if (widget.onOpenHistory != null) {
                           widget.onOpenHistory!();
                         } else {
-                          final selected = await Navigator.of(context)
-                              .push<Conversation>(
+                          final selected =
+                              await Navigator.of(context).push<Conversation>(
                             MaterialPageRoute(
                                 builder: (_) => const HistoryPage()),
                           );
@@ -395,7 +396,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Mobile Agent',
+                          AppStrings.appTitle,
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
@@ -413,6 +414,19 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                       ],
                     ),
                   ),
+                  // Agent 管理入口
+                  IconButton(
+                    tooltip: 'Agent 管理',
+                    icon: const Icon(Icons.smart_toy_outlined, size: 20),
+                    color: textMuted,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const AgentsPage()),
+                      );
+                    },
+                  ),
                   // 设置入口（对标 DeepSeek 抽屉右下角 ⋯ 的位置）
                   IconButton(
                     tooltip: '设置',
@@ -422,8 +436,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                     onPressed: () {
                       Navigator.pop(context);
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                            builder: (_) => const SettingsPage()),
+                        MaterialPageRoute(builder: (_) => const SettingsPage()),
                       );
                     },
                   ),
@@ -489,9 +502,8 @@ class _DrawerSearchBarState extends State<_DrawerSearchBar> {
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-        border: _focused
-            ? Border.all(color: AppPalette.brand, width: 1.0)
-            : null,
+        border:
+            _focused ? Border.all(color: AppPalette.brand, width: 1.0) : null,
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       alignment: Alignment.center,

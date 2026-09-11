@@ -25,7 +25,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   static const _steps = [
     (
       Icons.key_outlined,
-      '填入模型服务',
+      AppStrings.onboardingStep1,
       '在「设置 → 模型连接」里填入你的 API Key，或用本地模型（Ollama）免 Key 直连。'
     ),
     (
@@ -80,6 +80,9 @@ class _OnboardingPageState extends State<OnboardingPage> {
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, AppTokens.kMinTouchTarget),
+              ),
               onPressed: _finish,
               child: const Text(AppStrings.skip),
             ),
@@ -101,8 +104,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           height: 96,
                           decoration: BoxDecoration(
                               color: AppPalette.brand,
-                              borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusModal)),
+                              borderRadius:
+                                  BorderRadius.circular(AppTokens.radiusModal)),
                           child: Icon(ic, color: Colors.white, size: 44),
                         ),
                         const SizedBox(height: 28),
@@ -119,23 +122,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                 height: 1.5)),
                         if (i == 0) ...[
                           const SizedBox(height: 20),
-                          FilledButton(
-                            style: FilledButton.styleFrom(
-                              elevation: 0,
-                              backgroundColor: isDark
-                                  ? AppPalette.darkSurface
-                                  : AppPalette.lightSurface,
+                          OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize:
+                                  const Size(140, AppTokens.kMinTouchTarget),
                               foregroundColor: isDark
                                   ? AppPalette.darkText
                                   : AppPalette.lightText,
+                              side: BorderSide(
+                                color: isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline,
+                              ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(
                                     AppTokens.radiusControl),
-                                side: BorderSide(
-                                  color: isDark
-                                      ? AppPalette.darkHairline
-                                      : AppPalette.lightHairline,
-                                ),
                               ),
                             ),
                             onPressed: () => Navigator.of(context).push(
@@ -167,7 +168,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                     fontSize: 15, fontWeight: FontWeight.w500),
                               ),
                               subtitle: Text(
-                                AppStrings.crashReportHint,
+                                '默认关闭。开启后仅匿名上报程序崩溃堆栈用于优化稳定性，绝不包含任何对话内容或密钥。',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: isDark
@@ -212,9 +213,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     elevation: 0,
-                    backgroundColor: AppPalette.brand,
+                    backgroundColor: AppPalette.brandAction,
                     foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(44),
+                    minimumSize:
+                        const Size.fromHeight(AppTokens.kMinTouchTarget),
                     shape: RoundedRectangleBorder(
                       borderRadius:
                           BorderRadius.circular(AppTokens.radiusControl),

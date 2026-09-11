@@ -32,7 +32,8 @@ class SectionCard extends StatelessWidget {
       // 卡片用纯白底 + hairline 描边；浅灰 surface 只用于悬停 / 分组底，
       // 避免「灰底 + 灰边框」在纯白画布上读成凹陷或禁用态。
       final base = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
-      final border = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+      final border =
+          isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
       return Container(
         margin: margin,

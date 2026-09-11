@@ -15,6 +15,7 @@ class CollaborationSynthesizer {
     final evidence = <String>[];
     final nextSteps = <String>[];
     final risks = <String>[];
+    final votes = <String, int>{};
     final findingsByTitle =
         <String, List<(CollaborationAgentRole, CollaborationFinding)>>{};
     var confidenceTotal = 0.0;
@@ -50,6 +51,10 @@ class CollaborationSynthesizer {
       evidence.addAll(_stringList(decoded['evidence']));
       nextSteps.addAll(_stringList(decoded['nextSteps']));
       risks.addAll(_stringList(decoded['risks']));
+      final vote = decoded['vote']?.toString().trim();
+      if (vote != null && vote.isNotEmpty) {
+        votes.update(vote, (count) => count + 1, ifAbsent: () => 1);
+      }
       final confidence = (decoded['confidence'] as num?)?.toDouble();
       if (confidence != null) {
         confidenceTotal += confidence.clamp(0.0, 1.0);
@@ -92,7 +97,16 @@ class CollaborationSynthesizer {
           ? 0.0
           : (confidenceTotal / confidenceCount).clamp(0.0, 1.0),
       rawSynthesis: rawTexts.join('\n\n'),
+      votes: votes,
+      decision: _winningVote(votes),
     );
+  }
+
+  String? _winningVote(Map<String, int> votes) {
+    if (votes.isEmpty) return null;
+    return (votes.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))
+        .first
+        .key;
   }
 
   Map<String, dynamic>? _decode(String text) {

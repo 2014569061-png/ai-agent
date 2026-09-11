@@ -131,10 +131,10 @@ class _CollaborationPlanSheetState
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: AppPalette.brand.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusCard),
                             border: Border.all(
-                              color:
-                                  AppPalette.brand.withValues(alpha: 0.2),
+                              color: AppPalette.brand.withValues(alpha: 0.2),
                             ),
                           ),
                           child: Column(
@@ -319,7 +319,8 @@ class _CollaborationPlanSheetState
                                   style: FilledButton.styleFrom(
                                     minimumSize: const Size(0, 46),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                                      borderRadius: BorderRadius.circular(
+                                          AppTokens.radiusControl),
                                     ),
                                   ),
                                   onPressed: _starting ? null : _start,

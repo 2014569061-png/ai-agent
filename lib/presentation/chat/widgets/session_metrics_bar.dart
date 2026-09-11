@@ -148,7 +148,8 @@ class SessionMetricsBar extends StatelessWidget {
             runSpacing: 5,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              for (final group in visible) _buildGroup(group, labelColor, valueColor),
+              for (final group in visible)
+                _buildGroup(group, labelColor, valueColor),
               if (hidden > 0)
                 Text(
                   '+$hidden',
@@ -186,8 +187,7 @@ class SessionMetricsBar extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: segment.isValue ? FontWeight.w500 : FontWeight.w400,
-                fontFamily:
-                    segment.isValue ? 'JetBrains Mono' : null,
+                fontFamily: segment.isValue ? 'JetBrains Mono' : null,
                 fontFeatures: segment.isValue
                     ? const [FontFeature.tabularFigures()]
                     : null,

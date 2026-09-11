@@ -13,16 +13,18 @@ abstract final class AppPalette {
   static const lightTextFaint = Color(0xFF8B90A0);
 
   // 深色模式语义色
-  static const darkCanvas = Color(0xFF0A0A23);
-  static const darkSurface = Color(0xFF1A1A3A);
-  static const darkSurfaceHover = Color(0xFF22224A);
+  static const darkCanvas = Color(0xFF0F121C);
+  static const darkSurface = Color(0xFF181D2A);
+  static const darkSurfaceHover = Color(0xFF22283A);
   static const darkHairline = Color(0x1FFFFFFF); // rgba(255,255,255,.12)
   static const darkText = Color(0xFFE6E8EF);
   static const darkTextMuted = Color(0xFFA8B0C4);
   static const darkTextFaint = Color(0xFF7C8298);
 
-  // 全站唯一强调色及其衍生
+  // 全站强调色及其衍生
   static const brand = Color(0xFF4D6BFE);
+  static const brandDecorative = brand;
+  static const brandAction = Color(0xFF3A55E5);
   static const lightBrandHover = Color(0xFF3A55E5);
   static const darkBrandHover = Color(0xFF5F7BFF);
   static const lightBrandActive = Color(0xFF2A44CC);

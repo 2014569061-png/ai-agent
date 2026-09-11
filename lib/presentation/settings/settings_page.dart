@@ -146,6 +146,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     }
   }
 
+  Future<void> _openMcpServers() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const McpServersPage()),
+    );
+    if (mounted) unawaited(_loadAll());
+  }
+
   bool get _isInTest =>
       WidgetsBinding.instance.runtimeType.toString().contains('Test');
 
@@ -361,16 +369,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
-        height: AppTokens.kSearchBoxHeight,
+        height: 38,
         decoration: BoxDecoration(
           color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          border: Border.all(
+            color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+            width: 0.8,
+          ),
         ),
         child: TextField(
           controller: _searchController,
@@ -386,12 +398,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             hintStyle: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
-              color: textFaint,
+              color: textMuted,
             ),
             prefixIcon: Icon(
               Icons.search_rounded,
               size: 18,
-              color: textFaint,
+              color: textMuted,
             ),
             prefixIconConstraints: const BoxConstraints(
               minWidth: 36,
@@ -403,7 +415,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     child: Icon(
                       Icons.cancel_rounded,
                       size: 16,
-                      color: textFaint,
+                      color: textMuted,
                     ),
                   )
                 : null,
@@ -414,7 +426,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
               borderSide: const BorderSide(color: AppPalette.brand, width: 1.0),
             ),
             contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -424,20 +436,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     );
   }
 
-  // 分组标题 12/500 textFaint，上 24 下 8
+  // 分组标题 13/500 textMuted，上 24 下 8
   Widget _buildSectionTitle(String title) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
       child: Text(
         title,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: FontWeight.w500,
-          color: textFaint,
+          color: textMuted,
         ),
       ),
     );
@@ -450,7 +462,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -475,7 +488,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   // 卡内行分隔线：1px hairline，从图标右侧起始（左缩进 48px）
   Widget _buildDivider(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     return Divider(
       height: 1.0,
       thickness: 1.0,
@@ -513,7 +527,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       child: InkWell(
         onTap: onTap,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: AppTokens.kListRowHeight),
+          constraints:
+              const BoxConstraints(minHeight: AppTokens.kListRowHeight),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
@@ -622,7 +637,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   Widget _buildLogoutCard(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -693,7 +709,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
 
     return Center(
       child: Text(
-        'Mobile Agent ${AppStrings.appVersionName}\n简洁克制 · 内容优先',
+        '${AppStrings.appTitle} ${AppStrings.appVersionName}\n简洁克制 · 内容优先',
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 11,
@@ -757,7 +773,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               ),
               showChevron: !supportsReasoning,
               onTap: supportsReasoning
-                  ? null
+                  ? () => _toggleDeepReasoning(!_deepReasoningEnabled)
                   : () async {
                       await Navigator.push(
                         context,
@@ -780,7 +796,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   Widget _buildContextExtensionSection(BuildContext context) {
     final mcpCount = _mcpServers.length;
     final mcpEnabledCount = _mcpServers.where((s) => s.enabled).length;
-    final mcpSummary = mcpCount == 0 ? '未连接' : '$mcpEnabledCount 个已连接';
+    final mcpSummary = mcpCount == 0
+        ? AppStrings.mcpNotConnected
+        : AppStrings.mcpConnectedCount(mcpEnabledCount);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -825,13 +843,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               iconColor: settingsMutedColor(context),
               title: AppStrings.mcpServersSectionTitle,
               trailingText: mcpSummary,
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const McpServersPage()),
-                );
-                unawaited(_loadAll());
-              },
+              onTap: _openMcpServers,
             ),
           ],
         ),
@@ -878,6 +890,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 ),
               ),
               showChevron: false,
+              onTap: () => _toggleTool(
+                'settings.tool.web_browsing',
+                !_webBrowsingEnabled,
+                (v) => setState(() => _webBrowsingEnabled = v),
+              ),
             ),
             _buildDivider(context),
             _buildSettingsRow(
@@ -894,6 +911,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                 ),
               ),
               showChevron: false,
+              onTap: () => _toggleTool(
+                'settings.tool.terminal_file',
+                !_terminalFileEnabled,
+                (v) => setState(() => _terminalFileEnabled = v),
+              ),
             ),
             _buildDivider(context),
             _buildSettingsRow(
@@ -1042,9 +1064,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         : (_ignoringBattery ? AppStrings.permGranted : AppStrings.permDenied);
     final batteryColor = kIsWeb
         ? Colors.grey
-        : (_ignoringBattery
-            ? AppPalette.success
-            : AppPalette.danger);
+        : (_ignoringBattery ? AppPalette.success : AppPalette.danger);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1203,12 +1223,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           context, MaterialPageRoute(builder: (_) => const PluginsPage())),
     );
     checkItem(
-      title: 'MCP 服务器',
-      subtitle: '管理 Model Context Protocol 扩展端点',
+      title: AppStrings.mcpServers,
+      subtitle: AppStrings.mcpServersSearchHint,
       icon: Icons.dns_rounded,
       iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const McpServersPage())),
+      onTap: _openMcpServers,
     );
     checkItem(
       title: '受控工具清单',

@@ -304,7 +304,8 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primaryContainer
                           .withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
                     ),
                     child: Text(
                       task.type,
@@ -340,7 +341,8 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppPalette.warning.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
                     border: Border.all(
                       color: AppPalette.warning.withValues(alpha: 0.3),
                     ),

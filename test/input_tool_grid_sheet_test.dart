@@ -90,8 +90,7 @@ void main() {
     expect(planModeCalled, isTrue);
   });
 
-  testWidgets('首页输入区只呈现「深度思考 / 智能搜索」两个能力 chip',
-      (tester) async {
+  testWidgets('首页输入区只呈现「深度思考 / 智能搜索」两个能力 chip', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
@@ -117,8 +116,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 占位符与 DeepSeek 首页保持一致
-    expect(find.text('发消息或按住说话'), findsOneWidget);
+    // 占位符按新规范显示为「发消息」
+    expect(find.text('发消息'), findsOneWidget);
 
     // 只保留两个能力 chip，不再出现「工具 / 计划」
     expect(find.text('深度思考'), findsOneWidget);

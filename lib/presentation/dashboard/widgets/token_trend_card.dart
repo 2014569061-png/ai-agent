@@ -22,7 +22,8 @@ class TokenTrendCard extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final faint = isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     final data = days.isNotEmpty
         ? days.map((d) => d.promptTokens + d.completionTokens).toList()
@@ -111,7 +112,9 @@ class TokenTrendCard extends StatelessWidget {
                   width: 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
+                    color: isDark
+                        ? AppPalette.darkSurfaceHover
+                        : AppPalette.lightSurfaceHover,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -180,8 +183,11 @@ class _TokenBarPainter extends CustomPainter {
       final top = size.height - barHeight;
 
       final today = i == isToday;
-      final color = today ? AppPalette.brand
-          : (isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover);
+      final color = today
+          ? AppPalette.brand
+          : (isDark
+              ? AppPalette.darkSurfaceHover
+              : AppPalette.lightSurfaceHover);
 
       // 柱体（今天品牌色/其余中性灰，微圆角顶）
       final rrect = RRect.fromRectAndCorners(
@@ -201,7 +207,9 @@ class _TokenBarPainter extends CustomPainter {
             fontWeight: FontWeight.w500,
             color: today
                 ? AppPalette.brand
-                : (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted),
+                : (isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted),
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
@@ -214,7 +222,8 @@ class _TokenBarPainter extends CustomPainter {
         canvas,
         Offset(
           labelLeft,
-          (top - 2 - textPainter.height).clamp(2.0, size.height - textPainter.height),
+          (top - 2 - textPainter.height)
+              .clamp(2.0, size.height - textPainter.height),
         ),
       );
     }

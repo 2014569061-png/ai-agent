@@ -19,9 +19,11 @@ import 'presentation/chat/chat_layout_controller.dart';
 import 'presentation/navigation/app_shell.dart';
 import 'presentation/l10n/app_locale_controller.dart';
 import 'presentation/onboarding/onboarding_page.dart';
+import 'presentation/theme/app_palette.dart';
 import 'presentation/theme/app_theme.dart';
 import 'presentation/theme/app_theme_controller.dart';
 import 'presentation/theme/app_appearance_controller.dart';
+import 'presentation/widgets/brand_mark.dart';
 import 'presentation/widgets/immersive_background.dart';
 
 void main() {
@@ -184,12 +186,42 @@ class _StartupLoadingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+
     return Scaffold(
+      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       body: Center(
-        child: CircularProgressIndicator(
-          color: theme.colorScheme.primary,
-          strokeWidth: 2.5,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const BrandMark(size: 36),
+            const SizedBox(height: 16),
+            Text(
+              'NEXUS Agent',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: 120,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  minHeight: 3,
+                  backgroundColor: isDark
+                      ? AppPalette.darkHairline
+                      : AppPalette.lightHairline,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isDark ? AppPalette.brand : AppPalette.brandAction,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

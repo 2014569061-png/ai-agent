@@ -29,7 +29,8 @@ class TokenUsageHero extends StatelessWidget {
     final faint = isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
 
     final today = _today;
-    final hasData = today != null && today.promptTokens + today.completionTokens > 0;
+    final hasData =
+        today != null && today.promptTokens + today.completionTokens > 0;
 
     final prompt = hasData ? today.promptTokens : 0;
     final cached = hasData ? today.cachedTokens.clamp(0, prompt).toInt() : 0;
@@ -64,7 +65,9 @@ class TokenUsageHero extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
+                    color: isDark
+                        ? AppPalette.darkBrandSoft
+                        : AppPalette.lightBrandSoft,
                     borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                   ),
                   child: Text(
@@ -72,9 +75,7 @@ class TokenUsageHero extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? AppPalette.brand
-                          : AppPalette.brandOnSoft,
+                      color: isDark ? AppPalette.brand : AppPalette.brandOnSoft,
                     ),
                   ),
                 ),
@@ -91,7 +92,7 @@ class TokenUsageHero extends StatelessWidget {
                     Text(
                       formatExact(total),
                       style: TextStyle(
-                        fontSize: 32,
+                        fontSize: 28,
                         height: 1.1,
                         fontWeight: FontWeight.w500,
                         color: text,
@@ -105,14 +106,31 @@ class TokenUsageHero extends StatelessWidget {
                     ),
                   ],
                 )
-              : Text(
-                  '--',
-                  style: TextStyle(
-                    fontSize: 32,
-                    height: 1.1,
-                    fontWeight: FontWeight.w500,
-                    color: faint,
-                  ),
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '--',
+                      style: TextStyle(
+                        fontSize: 28,
+                        height: 1.1,
+                        fontWeight: FontWeight.w500,
+                        color: faint,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'tok',
+                      style: TextStyle(fontSize: 13, color: faint),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '（今日暂无消耗）',
+                      style: TextStyle(fontSize: 12, color: faint),
+                    ),
+                  ],
                 ),
           const SizedBox(height: 14),
 
@@ -128,7 +146,9 @@ class TokenUsageHero extends StatelessWidget {
           Row(
             children: [
               _SegmentLegend(
-                color: isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint,
+                color: isDark
+                    ? AppPalette.darkTextFaint
+                    : AppPalette.lightTextFaint,
                 label: AppStrings.promptTokens,
                 value: formatExact(freshInput),
               ),
@@ -144,7 +164,9 @@ class TokenUsageHero extends StatelessWidget {
           Row(
             children: [
               _SegmentLegend(
-                color: isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
+                color: isDark
+                    ? AppPalette.darkBrandSoft
+                    : AppPalette.lightBrandSoft,
                 label: AppStrings.cachedTokens,
                 value: formatExact(cached),
               ),
@@ -153,7 +175,11 @@ class TokenUsageHero extends StatelessWidget {
           const SizedBox(height: 12),
 
           // 底部分隔 + 调用次数 / 费用
-          Divider(height: 1, thickness: 1, color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
+          Divider(
+              height: 1,
+              thickness: 1,
+              color:
+                  isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
           const SizedBox(height: 12),
           Row(
             children: [

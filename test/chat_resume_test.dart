@@ -90,7 +90,8 @@ void main() {
         'runId': 'run-applied',
         'context': encodeChatContextForPersistence([
           ChatMessage(
-              role: MessageRole.user, parts: [const MessagePart.text('CHECKPOINT')])
+              role: MessageRole.user,
+              parts: [const MessagePart.text('CHECKPOINT')])
         ]),
       },
     );
@@ -191,8 +192,8 @@ void main() {
     // maxSteps=1：第一轮必然耗尽预算并进入可恢复的 paused 状态。
     final env = await _Env.boot(upstream: upstream, maxSteps: 1);
 
-    await env.controller.send(
-        text: '开始', attachments: const [], approveTool: _allowOnce);
+    await env.controller
+        .send(text: '开始', attachments: const [], approveTool: _allowOnce);
 
     expect(env.state.paused, isTrue);
     expect(env.state.running, isFalse);
@@ -227,8 +228,8 @@ void main() {
     final upstream = await _FakeUpstream.start(_UpstreamMode.text);
     final env = await _Env.boot(upstream: upstream);
 
-    await env.controller.send(
-        text: '你好', attachments: const [], approveTool: _allowOnce);
+    await env.controller
+        .send(text: '你好', attachments: const [], approveTool: _allowOnce);
     expect(upstream.requests, hasLength(1));
     expect(env.controller.budgetPauseContext, isNull);
     final before = env.state.messages.length;
@@ -263,8 +264,8 @@ void main() {
 
     await env.controller
         .switchConversation((await env.db.findConversation('c1'))!);
-    final pending = env.controller.send(
-        text: '在会话一里提问', attachments: const [], approveTool: _allowOnce);
+    final pending = env.controller
+        .send(text: '在会话一里提问', attachments: const [], approveTool: _allowOnce);
     await Future<void>.delayed(const Duration(milliseconds: 80));
     expect(env.state.running, isTrue);
 
@@ -288,8 +289,8 @@ void main() {
   test('resumeFromBudgetPause 在运行中不会插队', () async {
     final upstream = await _FakeUpstream.start(_UpstreamMode.toolLoop);
     final env = await _Env.boot(upstream: upstream, maxSteps: 1);
-    await env.controller.send(
-        text: '开始', attachments: const [], approveTool: _allowOnce);
+    await env.controller
+        .send(text: '开始', attachments: const [], approveTool: _allowOnce);
     expect(env.controller.budgetPauseContext, isNotNull);
 
     // 让暂停上下文仍在（新一轮已开始但尚未结束），此时恢复必须被 running 拦住。
@@ -306,8 +307,8 @@ void main() {
   });
 }
 
-Future<void> _pendingSend(_Env env) => env.controller.send(
-    text: '第二轮', attachments: const [], approveTool: _allowOnce);
+Future<void> _pendingSend(_Env env) => env.controller
+    .send(text: '第二轮', attachments: const [], approveTool: _allowOnce);
 
 Future<ToolApproval> _allowOnce(ToolCall call, ToolRisk risk) async =>
     ToolApproval.allowOnce;

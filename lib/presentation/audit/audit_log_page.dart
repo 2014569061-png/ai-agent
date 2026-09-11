@@ -10,6 +10,7 @@ import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
 /// 审计日志页（G2）：展示工具调用审批链路，支持导出 Markdown / CSV。
@@ -79,11 +80,12 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
 
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
-      appBar: AppBar(
-        title: const Text('审计日志'),
+      appBar: NexusPageHeader(
+        title: '审计日志',
+        subtitle: '工具调用与审批追踪记录',
         actions: [
           IconButton(
-            icon: const Icon(Icons.copy_outlined),
+            icon: const Icon(Icons.copy_outlined, size: 20),
             tooltip: '复制 Markdown',
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: _markdown()));
@@ -105,8 +107,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                   color: isDark
                       ? AppPalette.brandSoftDark
                       : AppPalette.brandSoftLight,
-                  borderRadius:
-                      BorderRadius.circular(AppTokens.radiusControl),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                 ),
                 child: const Icon(Icons.security_outlined,
                     size: 20, color: AppPalette.brand),

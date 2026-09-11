@@ -14,6 +14,7 @@ class EmptyStateView extends StatelessWidget {
   final Color? iconColor;
   final MainAxisAlignment mainAxisAlignment;
   final Widget? footer;
+  final bool compact;
 
   const EmptyStateView({
     super.key,
@@ -28,7 +29,23 @@ class EmptyStateView extends StatelessWidget {
     this.iconColor,
     this.mainAxisAlignment = MainAxisAlignment.center,
     this.footer,
+    this.compact = false,
   });
+
+  const EmptyStateView.compact({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.message,
+    this.action,
+    this.actionLabel,
+    this.onAction,
+    this.padding = const EdgeInsets.all(16),
+    this.iconSize = 32,
+    this.iconColor,
+    this.mainAxisAlignment = MainAxisAlignment.center,
+    this.footer,
+  }) : compact = true;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +53,8 @@ class EmptyStateView extends StatelessWidget {
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     final resolvedAction = action ??
         (actionLabel != null && onAction != null
@@ -44,7 +62,8 @@ class EmptyStateView extends StatelessWidget {
                 onPressed: onAction,
                 style: OutlinedButton.styleFrom(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
                     side: BorderSide(color: hairline, width: 1.0),
                   ),
                   minimumSize: const Size(0, AppTokens.kControlHeight),
@@ -52,7 +71,8 @@ class EmptyStateView extends StatelessWidget {
                 ),
                 child: Text(
                   actionLabel!,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w500),
                 ),
               )
             : null);
@@ -69,11 +89,11 @@ class EmptyStateView extends StatelessWidget {
               size: iconSize,
               color: iconColor ?? textMuted,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: compact ? 10 : 16),
             Text(
               title,
               style: TextStyle(
-                fontSize: 17,
+                fontSize: compact ? 15 : 17,
                 fontWeight: FontWeight.w500,
                 height: 1.4,
                 color: textColor,
@@ -81,7 +101,7 @@ class EmptyStateView extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (message != null && message!.isNotEmpty) ...[
-              const SizedBox(height: 8),
+              SizedBox(height: compact ? 4 : 8),
               Text(
                 message!,
                 style: TextStyle(
@@ -94,11 +114,11 @@ class EmptyStateView extends StatelessWidget {
               ),
             ],
             if (resolvedAction != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: compact ? 12 : 16),
               resolvedAction,
             ],
             if (footer != null) ...[
-              const SizedBox(height: 16),
+              SizedBox(height: compact ? 12 : 16),
               footer!,
             ],
           ],

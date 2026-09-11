@@ -51,7 +51,8 @@ ToolRegistry _buildFullRegistry(AppDatabase db) {
   ));
   registry.register(SkillsReadTool(database: db));
   registry.register(SkillsReadResourceTool(database: db));
-  registry.register(SubAgentTool(onRun: (agentId, prompt, budget) async => 'ok'));
+  registry
+      .register(SubAgentTool(onRun: (agentId, prompt, budget) async => 'ok'));
   registry.register(ManagePlanTool(onPlanUpdated: (steps) async {}));
 
   const workspace = '/tmp/nexus-sensitive-policy-test';
@@ -75,8 +76,7 @@ void main() {
 
   setUp(() {
     db = AppDatabase(NativeDatabase.memory());
-    realToolNames =
-        _buildFullRegistry(db).manifests.map((m) => m.name).toSet();
+    realToolNames = _buildFullRegistry(db).manifests.map((m) => m.name).toSet();
   });
 
   tearDown(() async {
@@ -105,15 +105,13 @@ void main() {
   });
 
   test('脱敏名单里的每个名字都真实存在（防死条目回归）', () {
-    final deadArguments = SensitiveToolPolicy.argumentRedactedTools
-        .difference(realToolNames);
+    final deadArguments =
+        SensitiveToolPolicy.argumentRedactedTools.difference(realToolNames);
     final deadResults =
         SensitiveToolPolicy.resultRedactedTools.difference(realToolNames);
 
-    expect(deadArguments, isEmpty,
-        reason: '参数脱敏名单包含不存在的工具：$deadArguments');
-    expect(deadResults, isEmpty,
-        reason: '结果脱敏名单包含不存在的工具：$deadResults');
+    expect(deadArguments, isEmpty, reason: '参数脱敏名单包含不存在的工具：$deadArguments');
+    expect(deadResults, isEmpty, reason: '结果脱敏名单包含不存在的工具：$deadResults');
   });
 
   test('凡 manifest.sensitive == true 的工具都被结果脱敏覆盖（防漏配）', () {
@@ -122,8 +120,7 @@ void main() {
         .where((m) => m.sensitive)
         .map((m) => m.name)
         .toList(growable: false);
-    expect(sensitiveManifests, isNotEmpty,
-        reason: '当前存在 sensitive 工具，覆盖断言应非空');
+    expect(sensitiveManifests, isNotEmpty, reason: '当前存在 sensitive 工具，覆盖断言应非空');
 
     for (final name in sensitiveManifests) {
       expect(SensitiveToolPolicy.isResultSensitive(name), isTrue,

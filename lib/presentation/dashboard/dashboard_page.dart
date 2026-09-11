@@ -153,28 +153,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     children: [
-                      // M0: 今日 Token 用量 Hero（大数字 + 输入/缓存/输出分项）
+                      // 1. 今日 Token 与费用概览 Hero
                       TokenUsageHero(days: summary.weeklyUsage),
 
                       const SizedBox(height: 16),
 
-                      // M1: 2×2 核心指标行
-                      KpiCardGrid(kpis: summary.kpis),
-
-                      const SizedBox(height: 16),
-
-                      // M2: Token 7 天用量趋势
-                      TokenTrendCard(days: summary.weeklyUsage),
-
-                      const SizedBox(height: 16),
-
-                      // M4: 待我处理聚合区（有待办时展示，无待办隐去）
+                      // 2. 待我处理聚合区（工具审批、计划确认，置顶展示）
                       TodoSection(
                         todos: summary.todos,
                         onConversationSelected: widget.onConversationSelected,
                       ),
 
-                      // M3: 运行状态与最近任务
+                      // 3. 运行状态与任务队列
                       RunStatusList(
                         runs: summary.recentRuns,
                         onConversationSelected: widget.onConversationSelected,
@@ -182,7 +172,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
 
                       const SizedBox(height: 16),
 
-                      // M5: 最近会话
+                      // 4. 2×2 核心指标网格
+                      KpiCardGrid(kpis: summary.kpis),
+
+                      const SizedBox(height: 16),
+
+                      // 5. Token 7 天用量趋势
+                      TokenTrendCard(days: summary.weeklyUsage),
+
+                      const SizedBox(height: 16),
+
+                      // 6. 最近会话
                       _RecentConversationsSection(
                         conversations: summary.recentConversations,
                         onConversationSelected: widget.onConversationSelected,
@@ -279,7 +279,8 @@ class _RecentConversationsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
@@ -319,8 +320,7 @@ class _RecentConversationsSection extends StatelessWidget {
                 child: Center(
                   child: Text(
                     AppStrings.noRecentConversations,
-                    style:
-                        TextStyle(fontSize: 13, color: textMuted),
+                    style: TextStyle(fontSize: 13, color: textMuted),
                   ),
                 ),
               )

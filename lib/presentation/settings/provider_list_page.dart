@@ -157,13 +157,10 @@ class _ProviderListPageState extends State<ProviderListPage> {
                 if (_profiles.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(
-                      height: 160,
-                      child: EmptyStateView(
-                        icon: Icons.cloud_outlined,
-                        title: '还没有服务商',
-                        message: '从上方选择一个服务商开始配置',
-                      ),
+                    child: EmptyStateView.compact(
+                      icon: Icons.cloud_outlined,
+                      title: '还没有服务商',
+                      message: '从上方选择一个服务商开始配置',
                     ),
                   )
                 else
@@ -306,8 +303,7 @@ class _ProviderTile extends StatelessWidget {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 1.5),
                             decoration: BoxDecoration(
-                              color: AppPalette.success
-                                  .withValues(alpha: 0.15),
+                              color: AppPalette.success.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(
@@ -345,9 +341,8 @@ class _ProviderTile extends StatelessWidget {
                   active
                       ? Icons.check_circle_rounded
                       : Icons.radio_button_unchecked_rounded,
-                  color: active
-                      ? AppPalette.brand
-                      : settingsMutedColor(context),
+                  color:
+                      active ? AppPalette.brand : settingsMutedColor(context),
                 ),
                 onPressed: onActivate,
               ),

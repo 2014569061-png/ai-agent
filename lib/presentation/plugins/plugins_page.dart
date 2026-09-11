@@ -120,12 +120,29 @@ class _DeclarativePluginsViewState
       return;
     }
     final map = jsonDecode(manifest) as Map<String, dynamic>;
+    final pluginName = (map['name'] as String?) ?? '未命名插件';
+    final pluginKind = (map['kind'] as String?) ?? 'tool';
+    final pluginVersion = (map['version'] as String?) ?? '1.0.0';
+    final tools = (map['tools'] as List?) ?? [];
+
+    final confirmed = await showConfirmAction(
+      context,
+      title: '导入插件？',
+      message: '即将安装声明式插件“$pluginName”。请核对以下权限与声明范围：',
+      confirmLabel: '确认导入',
+      bulletItems: [
+        '插件名称：$pluginName',
+        '插件类型：$pluginKind',
+        '声明版本：v$pluginVersion',
+        if (tools.isNotEmpty) '包含工具：${tools.length} 个声明式工具',
+        '权限范围：受应用内受控沙箱与二次确认策略保护',
+      ],
+    );
+    if (!confirmed || !mounted) return;
+
     final db = await ref.read(databaseProvider.future);
     await store.importPlugin(
-        db: db,
-        name: (map['name'] as String?) ?? '未命名插件',
-        kind: (map['kind'] as String?) ?? 'tool',
-        manifestJson: manifest);
+        db: db, name: pluginName, kind: pluginKind, manifestJson: manifest);
     await store.importAgents(db);
     await _load();
     if (mounted) FloatingToast.show(context, '插件已导入');
@@ -138,10 +155,18 @@ class _DeclarativePluginsViewState
   }
 
   Future<void> _delete(Plugin plugin) async {
-    final confirmed = await showConfirmAction(context,
-        title: '删除插件？',
-        message: '将移除“${plugin.name}”及其配置。',
-        confirmLabel: '删除');
+    final confirmed = await showConfirmAction(
+      context,
+      title: '删除插件？',
+      message: '将移除“${plugin.name}”及其本地配置。',
+      confirmLabel: '删除',
+      isDanger: true,
+      bulletItems: [
+        '插件名称：${plugin.name}',
+        '插件类型：${plugin.kind}',
+        '版本：v${plugin.version}',
+      ],
+    );
     if (!confirmed || !mounted) return;
     try {
       final db = await ref.read(databaseProvider.future);
@@ -164,10 +189,13 @@ class _DeclarativePluginsViewState
           error: _error,
           onRetry: _load,
           child: _plugins.isEmpty
-              ? const EmptyStateView(
+              ? EmptyStateView(
                   icon: Icons.extension_outlined,
                   title: '暂无插件',
-                  message: '导入 JSON manifest 声明式工具包或 Agent 预设')
+                  message: '导入 JSON manifest 声明式工具包或 Agent 预设',
+                  actionLabel: '导入插件',
+                  onAction: _import,
+                )
               : ListView.separated(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -176,45 +204,164 @@ class _DeclarativePluginsViewState
                   itemBuilder: (context, index) {
                     final plugin = _plugins[index];
                     return SectionCard(
-                      child: ListTile(
-                        leading: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppPalette.brandSoftDark
-                                : AppPalette.brandSoftLight,
-                            borderRadius: BorderRadius.circular(
-                                AppTokens.radiusControl),
-                          ),
-                          child: const Icon(Icons.extension_outlined,
-                              size: 20, color: AppPalette.brand),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 38,
+                                  height: 38,
+                                  decoration: BoxDecoration(
+                                    color: plugin.enabled
+                                        ? (isDark
+                                            ? AppPalette.brandSoftDark
+                                            : AppPalette.brandSoftLight)
+                                        : (isDark
+                                            ? AppPalette.darkSurface
+                                            : AppPalette.lightSurface),
+                                    borderRadius: BorderRadius.circular(
+                                        AppTokens.radiusControl),
+                                    border: Border.all(
+                                      color: plugin.enabled
+                                          ? AppPalette.brand
+                                          : (isDark
+                                              ? AppPalette.darkHairline
+                                              : AppPalette.lightHairline),
+                                    ),
+                                  ),
+                                  child: const Icon(Icons.extension_outlined,
+                                      size: 20, color: AppPalette.brandAction),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        plugin.name,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: plugin.enabled
+                                                  ? AppPalette.success
+                                                      .withValues(alpha: 0.12)
+                                                  : (isDark
+                                                      ? AppPalette.darkSurface
+                                                      : AppPalette
+                                                          .lightSurface),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      AppTokens.radiusPill),
+                                            ),
+                                            child: Text(
+                                              plugin.enabled ? '已启用' : '已停用',
+                                              style: TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: plugin.enabled
+                                                    ? AppPalette.success
+                                                    : (isDark
+                                                        ? AppPalette
+                                                            .darkTextMuted
+                                                        : AppPalette
+                                                            .lightTextMuted),
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: isDark
+                                                  ? AppPalette.darkSurface
+                                                  : AppPalette.lightSurface,
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      AppTokens.radiusPill),
+                                              border: Border.all(
+                                                color: isDark
+                                                    ? AppPalette.darkHairline
+                                                    : AppPalette.lightHairline,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'JSON 声明式',
+                                              style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: isDark
+                                                      ? AppPalette.darkTextMuted
+                                                      : AppPalette
+                                                          .lightTextMuted),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: AppPalette.brand
+                                                  .withValues(alpha: 0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                      AppTokens.radiusPill),
+                                            ),
+                                            child: Text(
+                                              plugin.kind == 'tool'
+                                                  ? '受控工具'
+                                                  : 'Agent 预设',
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w500,
+                                                color: AppPalette.brand,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Switch(
+                                  value: plugin.enabled,
+                                  onChanged: (v) => _toggle(plugin, v),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded,
+                                      size: 20),
+                                  tooltip: '删除插件',
+                                  constraints: const BoxConstraints(
+                                      minWidth: 44, minHeight: 44),
+                                  onPressed: () => _delete(plugin),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '版本 v${plugin.version} · 类型 ${plugin.kind}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? AppPalette.darkTextMuted
+                                    : AppPalette.lightTextMuted,
+                              ),
+                            ),
+                          ],
                         ),
-                        title: Text(
-                          plugin.name,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${plugin.kind} · v${plugin.version}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark
-                                ? AppPalette.darkTextMuted
-                                : AppPalette.lightTextMuted,
-                          ),
-                        ),
-                        trailing:
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                          Switch(
-                              value: plugin.enabled,
-                              onChanged: (v) => _toggle(plugin, v)),
-                          IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _delete(plugin)),
-                        ]),
                       ),
                     );
                   },
@@ -225,7 +372,7 @@ class _DeclarativePluginsViewState
           bottom: 16,
           child: FloatingActionButton.extended(
             onPressed: _import,
-            backgroundColor: AppPalette.brand,
+            backgroundColor: AppPalette.brandAction,
             foregroundColor: Colors.white,
             elevation: 0,
             focusElevation: 0,

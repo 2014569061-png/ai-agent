@@ -4,6 +4,7 @@ import '../../theme/app_theme.dart';
 
 import '../../../application/chat_controller.dart';
 import '../../../domain/models.dart';
+import '../../../infrastructure/tools/tool_humanizer.dart';
 
 /// 统一「会话上下文」面板：一次看清并修改模型/服务、Agent、工作区、
 /// 思考程度、计划模式。把原先散落在头像菜单、底栏、顶部 chip、输入区的
@@ -39,7 +40,7 @@ class SessionContextSheet extends StatelessWidget {
       required IconData icon,
       required String label,
       required String value,
-      required VoidCallback onTap,
+      VoidCallback? onTap,
       Widget? trailing,
     }) {
       return ListTile(
@@ -51,11 +52,16 @@ class SessionContextSheet extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
                 fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
-        trailing: trailing ?? const Icon(Icons.chevron_right_rounded, size: 20),
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap();
-        },
+        trailing: trailing ??
+            (onTap == null
+                ? null
+                : const Icon(Icons.chevron_right_rounded, size: 20)),
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap();
+              },
       );
     }
 
@@ -117,6 +123,24 @@ class SessionContextSheet extends StatelessWidget {
                     )
                   : const Icon(Icons.chevron_right_rounded, size: 20),
             ),
+            if (state.sessionSkillInstructions.isNotEmpty)
+              tile(
+                icon: Icons.extension_rounded,
+                label: '本轮已加载 Skill',
+                value: state.sessionSkillInstructions
+                    .map((skill) => skill.name)
+                    .join('、'),
+              ),
+            if (state.toolActivities.isNotEmpty)
+              tile(
+                icon: Icons.handyman_outlined,
+                label: '本轮工具',
+                value: state.toolActivities
+                    .map((activity) =>
+                        const ToolHumanizer().summaryOf(activity.call) ??
+                        activity.call.name)
+                    .join('、'),
+              ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               secondary: Icon(Icons.checklist_rounded,

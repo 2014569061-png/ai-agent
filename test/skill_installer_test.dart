@@ -28,6 +28,9 @@ Uint8List _tarGz(Archive archive) {
   return Uint8List.fromList(const GZipEncoder().encode(tar));
 }
 
+Uint8List _zip(Archive archive) =>
+    Uint8List.fromList(ZipEncoder().encode(archive));
+
 GithubSkillRef _ref() => GithubSkillRef(
     original: 'o/r', owner: 'o', repo: 'r', ref: 'main', subPath: null);
 
@@ -46,6 +49,20 @@ void main() {
     expect(preview.fileList, ['SKILL.md', 'assets/guide.txt']);
     expect(preview.totalBytes, greaterThan(0));
     expect(preview.sha256Hex, isNotEmpty);
+  });
+
+  test('accepts a ZIP archive with SKILL.md at its root', () async {
+    final archive = Archive()
+      ..addFile(ArchiveFile.bytes('SKILL.md', utf8.encode(_skillMd)))
+      ..addFile(ArchiveFile.bytes('assets/guide.txt', utf8.encode('guide')));
+
+    final preview = await installer.previewFromArchiveBytes(
+      _zip(archive),
+      GithubSkillRef.localArchive('demo-skill.zip'),
+    );
+
+    expect(preview.source.isLocalArchive, isTrue);
+    expect(preview.fileList, ['SKILL.md', 'assets/guide.txt']);
   });
 
   test('rejects path traversal entries', () async {

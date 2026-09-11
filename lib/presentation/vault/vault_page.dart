@@ -6,8 +6,10 @@ import '../../application/providers.dart';
 import '../../infrastructure/files/vault_exporter.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
 /// 隐私保险箱（G3）：加密导出/导入全量本地数据（AES-256-GCM 密码保护）。
@@ -36,33 +38,22 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     }
   }
 
-  Future<bool?> _confirmSensitiveExport() => showImmersiveDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('导出密钥？'),
-          content:
-              const Text('默认只导出会话、记忆和应用数据。包含 API Key 和工具密钥会增加备份泄露风险，是否明确包含？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('不包含密钥'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                elevation: 0,
-                backgroundColor: AppPalette.brand,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppTokens.radiusControl),
-                ),
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('包含密钥'),
-            ),
-          ],
-        ),
-      );
+  Future<bool?> _confirmSensitiveExport() async {
+    final include = await showConfirmAction(
+      context,
+      title: '导出密钥？',
+      message: '默认只导出会话、记忆和应用数据。包含 API Key 和工具密钥会增加备份泄露风险，是否明确包含？',
+      confirmLabel: '包含密钥',
+      cancelLabel: '不包含密钥',
+      isDanger: false,
+      bulletItems: const [
+        '会话记录与提示词模板',
+        '长期记忆与知识库索引',
+        '敏感密钥：API Key 与工具凭据',
+      ],
+    );
+    return include;
+  }
 
   Future<void> _import() async {
     final result =
@@ -75,31 +66,20 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     }
     final password = await _askPassword('输入加密密码');
     if (password == null || !mounted) return;
-    final confirmed = await showImmersiveDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('将覆盖本地数据'),
-        content: const Text('导入将清空并覆盖当前本机会话/记忆/设置，且无法撤销。是否继续？'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消')),
-          FilledButton(
-              style: FilledButton.styleFrom(
-                elevation: 0,
-                backgroundColor: AppPalette.brand,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppTokens.radiusControl),
-                ),
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('继续导入')),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '将覆盖本地数据',
+      message: '导入将清空并覆盖当前本机会话/记忆/设置，且无法撤销。是否继续？',
+      confirmLabel: '继续导入',
+      isDanger: true,
+      requiredKeyword: '覆盖导入',
+      bulletItems: const [
+        '当前所有本地会话将被清空',
+        '记忆与知识库将被备份全量替换',
+        '模型与服务商设置将被恢复为备份状态',
+      ],
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     try {
       final db = await ref.read(databaseProvider.future);
       final summary = await importVaultBytes(db, bytes, password);
@@ -125,11 +105,10 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           FilledButton(
               style: FilledButton.styleFrom(
                 elevation: 0,
-                backgroundColor: AppPalette.brand,
+                backgroundColor: AppPalette.brandAction,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius:
-                      BorderRadius.circular(AppTokens.radiusControl),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                 ),
               ),
               onPressed: () => Navigator.pop(context, controller.text),
@@ -147,7 +126,10 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
-      appBar: AppBar(title: const Text('隐私保险箱')),
+      appBar: const NexusPageHeader(
+        title: '隐私保险箱',
+        subtitle: '全量加密导出与备份恢复',
+      ),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         SectionCard(
           child: ListTile(
@@ -158,8 +140,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                 color: isDark
                     ? AppPalette.brandSoftDark
                     : AppPalette.brandSoftLight,
-                borderRadius:
-                    BorderRadius.circular(AppTokens.radiusControl),
+                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
               ),
               child: const Icon(Icons.upload_file_outlined,
                   size: 20, color: AppPalette.brand),
@@ -191,8 +172,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                 color: isDark
                     ? AppPalette.brandSoftDark
                     : AppPalette.brandSoftLight,
-                borderRadius:
-                    BorderRadius.circular(AppTokens.radiusControl),
+                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
               ),
               child: const Icon(Icons.download_outlined,
                   size: 20, color: AppPalette.brand),

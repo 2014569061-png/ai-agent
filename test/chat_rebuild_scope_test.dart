@@ -53,8 +53,8 @@ void main() {
           theme: AppTheme.light(),
           home: Consumer(
             builder: (context, ref, _) {
-              controller =
-                  ref.read(chatControllerProvider.notifier) as _TestChatController;
+              controller = ref.read(chatControllerProvider.notifier)
+                  as _TestChatController;
               return const ChatPage();
             },
           ),
@@ -121,8 +121,8 @@ void main() {
           theme: AppTheme.light(),
           home: Consumer(
             builder: (context, ref, _) {
-              controller =
-                  ref.read(chatControllerProvider.notifier) as _TestChatController;
+              controller = ref.read(chatControllerProvider.notifier)
+                  as _TestChatController;
               return const ChatPage();
             },
           ),
@@ -147,9 +147,7 @@ void main() {
         reason: '订阅字段变化时页面应当重建（证明 select 未把整页冻结）');
   });
 
-  testWidgets(
-      'F-1 对照：改造前的「整状态 watch」在同样 20 帧下重建 20 次（基线上限）',
-      (tester) async {
+  testWidgets('F-1 对照：改造前的「整状态 watch」在同样 20 帧下重建 20 次（基线上限）', (tester) async {
     late _TestChatController controller;
     var rebuilds = 0;
 

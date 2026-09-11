@@ -8,7 +8,9 @@ const Set<String> _allowedKeys = {
   'description',
   'author',
   'version',
-  'tags'
+  'tags',
+  'triggers',
+  'examples'
 };
 
 /// 安装后允许保留的文件扩展名白名单。
@@ -35,6 +37,8 @@ class SkillMetadata {
     this.author,
     this.version = '0.0.1',
     this.tags = const [],
+    this.triggers = const [],
+    this.examples = const [],
   });
 
   final String name;
@@ -42,6 +46,8 @@ class SkillMetadata {
   final String? author;
   final String version;
   final List<String> tags;
+  final List<String> triggers;
+  final List<String> examples;
 
   Map<String, dynamic> toJson() => {
         'name': name,
@@ -49,6 +55,8 @@ class SkillMetadata {
         'author': author,
         'version': version,
         'tags': tags,
+        'triggers': triggers,
+        'examples': examples,
       };
 }
 
@@ -121,6 +129,8 @@ SkillParseResult parseSkillMarkdown(String text) {
       .map((e) => e.trim())
       .where((e) => e.isNotEmpty)
       .toList();
+  final triggers = _splitList(map['triggers']);
+  final examples = _splitList(map['examples']);
   if (tags.length > 5) {
     throw SkillValidationException('tags 最多 5 个');
   }
@@ -132,7 +142,16 @@ SkillParseResult parseSkillMarkdown(String text) {
       author: author,
       version: version,
       tags: tags,
+      triggers: triggers,
+      examples: examples,
     ),
     body: body,
   );
 }
+
+List<String> _splitList(String? value) => (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .where((item) => item.isNotEmpty)
+    .take(12)
+    .toList(growable: false);

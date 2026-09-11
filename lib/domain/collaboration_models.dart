@@ -377,6 +377,8 @@ class CollaborationResult {
     this.risks = const [],
     required this.confidence,
     this.rawSynthesis,
+    this.votes = const {},
+    this.decision,
   });
 
   final String summary;
@@ -390,6 +392,8 @@ class CollaborationResult {
   final List<String> risks;
   final double confidence;
   final String? rawSynthesis;
+  final Map<String, int> votes;
+  final String? decision;
 
   Map<String, dynamic> toJson() => {
         'summary': summary,
@@ -401,6 +405,8 @@ class CollaborationResult {
         'risks': risks,
         'confidence': confidence,
         if (rawSynthesis != null) 'rawSynthesis': rawSynthesis,
+        'votes': votes,
+        if (decision != null) 'decision': decision,
       };
 
   String encode() => jsonEncode(toJson());
@@ -421,6 +427,8 @@ class CollaborationResult {
       risks: _stringList(json['risks']),
       confidence: (json['confidence'] as num?)?.toDouble() ?? 0.0,
       rawSynthesis: json['rawSynthesis']?.toString(),
+      votes: _intMap(json['votes']),
+      decision: json['decision']?.toString(),
     );
   }
 
@@ -499,4 +507,12 @@ class CollaborationErrorEvent extends CollaborationEvent {
 List<String> _stringList(dynamic value) {
   if (value is! List) return const [];
   return value.map((item) => item.toString()).toList(growable: false);
+}
+
+Map<String, int> _intMap(dynamic value) {
+  if (value is! Map) return const {};
+  return Map<String, int>.fromEntries(value.entries
+      .where((entry) => entry.key != null && entry.value is num)
+      .map((entry) =>
+          MapEntry(entry.key.toString(), (entry.value as num).toInt())));
 }

@@ -119,8 +119,7 @@ class SessionMetrics {
       avgTtft: ttftCount > 0
           ? Duration(milliseconds: (ttftSumMs / ttftCount).round())
           : null,
-      tokensPerSecond:
-          generationMs > 0 ? completion * 1000 / generationMs : 0,
+      tokensPerSecond: generationMs > 0 ? completion * 1000 / generationMs : 0,
       cacheHitRate: prompt > 0 ? cached / prompt : null,
       promptTokens: prompt,
       completionTokens: completion,

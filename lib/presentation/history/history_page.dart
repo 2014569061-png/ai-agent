@@ -7,9 +7,11 @@ import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
 /// 历史会话管理页'///
@@ -134,26 +136,14 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _delete(Conversation conversation) async {
-    final confirmed = await showImmersiveDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除会话'),
-        content: Text('确定删除“${conversation.title}”吗？'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消')),
-          FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error,
-                foregroundColor: Theme.of(context).colorScheme.onError,
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('删除')),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '删除会话',
+      message: '确定删除“${conversation.title}”吗？',
+      confirmLabel: '删除',
+      isDanger: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     final db = await _db();
     await db.deleteConversation(conversation.id);
     await _reload();
@@ -269,20 +259,9 @@ class _HistoryPageState extends State<HistoryPage> {
 
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
-      appBar: AppBar(title: const Text('历史会话')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _newConversation,
-        backgroundColor: AppPalette.brand,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        focusElevation: 0,
-        hoverElevation: 0,
-        highlightElevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-        ),
-        icon: const Icon(Icons.add_comment_outlined),
-        label: const Text('新建会话'),
+      appBar: const NexusPageHeader(
+        title: '历史会话',
+        subtitle: '搜索、置顶与管理历史记录',
       ),
       body: Column(
         children: [
@@ -334,7 +313,10 @@ class _HistoryPageState extends State<HistoryPage> {
                                 : (_filterType == 'pinned'
                                     ? '暂无置顶会话'
                                     : '未找到匹配的会话')),
-                        message: _conversations.isEmpty ? '点击右下角新建会话' : null,
+                        message: _conversations.isEmpty ? '开启新会话以记录交流历史' : null,
+                        actionLabel: _conversations.isEmpty ? '新建会话' : null,
+                        onAction:
+                            _conversations.isEmpty ? _newConversation : null,
                       )
                     : ListView(
                         padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
@@ -408,9 +390,7 @@ class _HistoryPageState extends State<HistoryPage> {
           conversation.isPinned ? Icons.push_pin : Icons.chat_bubble_outline,
           color: conversation.isPinned
               ? AppPalette.brand
-              : (isDark
-                  ? AppPalette.darkTextMuted
-                  : AppPalette.lightTextMuted),
+              : (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted),
         ),
         title: Row(
           children: [
@@ -435,9 +415,8 @@ class _HistoryPageState extends State<HistoryPage> {
           _relativeTime(conversation.updatedAt),
           style: TextStyle(
             fontSize: 13,
-            color: isDark
-                ? AppPalette.darkTextMuted
-                : AppPalette.lightTextMuted,
+            color:
+                isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
           ),
         ),
         trailing: IconButton(

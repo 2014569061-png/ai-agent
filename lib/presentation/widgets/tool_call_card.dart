@@ -54,7 +54,8 @@ class ToolCallCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
@@ -71,8 +72,7 @@ class ToolCallCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppTokens.radiusCard),
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(
-                color: waiting ? AppPalette.warning : hairline),
+            border: Border.all(color: waiting ? AppPalette.warning : hairline),
             borderRadius: BorderRadius.circular(AppTokens.radiusCard),
           ),
           child: ExpansionTile(
@@ -193,16 +193,15 @@ class _JsonSection extends StatelessWidget {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
             style: TextStyle(
-                fontSize: 11,
-                color: textMuted,
-                fontWeight: FontWeight.w500)),
+                fontSize: 11, color: textMuted, fontWeight: FontWeight.w500)),
         const SizedBox(height: 4),
         Container(
           width: double.infinity,

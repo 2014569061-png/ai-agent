@@ -8,6 +8,7 @@ import '../l10n/app_strings.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 import '../widgets/empty_state_view.dart';
@@ -27,11 +28,19 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   bool _loading = true;
   Object? _error;
   bool _enabled = true;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -147,30 +156,187 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   }
 
   Future<void> _delete(Memory memory) async {
-    final confirmed = await showImmersiveDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除记忆'),
-        content: Text(memory.content),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text(AppStrings.cancel)),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text(AppStrings.delete)),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '删除记忆？',
+      message: '确定要删除此条记忆吗？删除后 Agent 将不再检索此记忆。',
+      confirmLabel: '删除',
+      isDanger: true,
+      bulletItems: [
+        '记忆：${memory.content}',
+        '分类：${memory.category}',
+        '重要度：${memory.importance}/5',
+      ],
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     final database = await ref.read(databaseProvider.future);
     await ref.read(memoryServiceProvider).delete(database, memory.id);
     await _load();
+    if (mounted) FloatingToast.show(context, '记忆已删除');
+  }
+
+  String _formatDate(DateTime time) {
+    final y = time.year.toString().padLeft(4, '0');
+    final m = time.month.toString().padLeft(2, '0');
+    final d = time.day.toString().padLeft(2, '0');
+    final hh = time.hour.toString().padLeft(2, '0');
+    final mm = time.minute.toString().padLeft(2, '0');
+    return '$y-$m-$d $hh:$mm';
+  }
+
+  Widget _buildMemoryCard(Memory memory, bool isDark) {
+    final isPreference = memory.category.toLowerCase().contains('pref') ||
+        memory.category.contains('偏好');
+    final isFact = memory.category.toLowerCase().contains('fact') ||
+        memory.category.contains('事实');
+    final typeLabel = isPreference ? '偏好' : (isFact ? '事实' : memory.category);
+
+    final isAuto = memory.sourceType == 'auto';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SectionCard(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isPreference
+                          ? AppPalette.brand.withValues(alpha: 0.12)
+                          : (isFact
+                              ? AppPalette.success.withValues(alpha: 0.12)
+                              : (isDark
+                                  ? AppPalette.darkSurface
+                                  : AppPalette.lightSurface)),
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      border: Border.all(
+                        color: isPreference
+                            ? AppPalette.brand.withValues(alpha: 0.3)
+                            : (isFact
+                                ? AppPalette.success.withValues(alpha: 0.3)
+                                : (isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline)),
+                      ),
+                    ),
+                    child: Text(
+                      typeLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isPreference
+                            ? AppPalette.brand
+                            : (isFact
+                                ? AppPalette.success
+                                : (isDark
+                                    ? AppPalette.darkText
+                                    : AppPalette.lightText)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star_rounded,
+                            size: 13, color: Colors.amber),
+                        const SizedBox(width: 2),
+                        Text(
+                          '重要度 ${memory.importance}/5',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.amber.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isAuto ? '自动沉淀' : '手动录入',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                    tooltip: '编辑',
+                    constraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                    onPressed: () => _addOrEdit(memory),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    tooltip: '删除',
+                    constraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                    onPressed: () => _delete(memory),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SelectableText(
+                memory.content,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.schedule_rounded,
+                      size: 12,
+                      color: isDark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted),
+                  const SizedBox(width: 4),
+                  Text(
+                    '更新于 ${_formatDate(memory.updatedAt)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: isDark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final filtered = _memories.where((m) {
+      if (_searchQuery.isEmpty) return true;
+      return m.content.toLowerCase().contains(_searchQuery) ||
+          m.category.toLowerCase().contains(_searchQuery);
+    }).toList();
 
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
@@ -187,7 +353,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _addOrEdit(),
-        backgroundColor: AppPalette.brand,
+        backgroundColor: AppPalette.brandAction,
         foregroundColor: Colors.white,
         elevation: 0,
         focusElevation: 0,
@@ -205,6 +371,58 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            // 搜索栏
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: SizedBox(
+                height: 40,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (v) =>
+                      setState(() => _searchQuery = v.trim().toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: '搜索记忆内容或分类...',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted,
+                    ),
+                    prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 16),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    filled: true,
+                    fillColor: isDark
+                        ? AppPalette.darkSurface
+                        : AppPalette.lightSurface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? AppPalette.darkHairline
+                            : AppPalette.lightHairline,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      borderSide: BorderSide(
+                        color: isDark
+                            ? AppPalette.darkHairline
+                            : AppPalette.lightHairline,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
             SectionCard(
               child: SwitchListTile(
                 secondary: Container(
@@ -249,69 +467,26 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             ),
             const SizedBox(height: 12),
             if (_memories.isEmpty)
-              const EmptyStateView(
+              EmptyStateView(
                 icon: Icons.psychology_outlined,
                 title: '暂无记忆',
-                message: '还没有记忆，Agent 会在聊天中自动为您沉淀长期记忆，或点击右下角手动添加',
+                message: '还没有记忆，Agent 会在聊天中自动为您沉淀长期记忆，或点击下方按钮手动添加',
+                actionLabel: '添加记忆',
+                onAction: () => _addOrEdit(),
+              )
+            else if (filtered.isEmpty)
+              EmptyStateView(
+                icon: Icons.search_off_rounded,
+                title: '未找到相关记忆',
+                message: '没有匹配 "$_searchQuery" 的记忆条目',
+                actionLabel: '清空搜索',
+                onAction: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                },
               )
             else
-              ..._memories.map((memory) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: SectionCard(
-                      child: ListTile(
-                        leading: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppPalette.darkSurface
-                                : AppPalette.lightSurface,
-                            borderRadius: BorderRadius.circular(
-                                AppTokens.radiusControl),
-                            border: Border.all(
-                              color: isDark
-                                  ? AppPalette.darkHairline
-                                  : AppPalette.lightHairline,
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.bookmark_outline,
-                            size: 18,
-                            color: isDark
-                                ? AppPalette.darkText
-                                : AppPalette.lightText,
-                          ),
-                        ),
-                        title: Text(
-                          memory.content,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${memory.category} · 权重 ${memory.importance} · ${memory.sourceType == "auto" ? "自动" : "手动"}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isDark
-                                ? AppPalette.darkTextMuted
-                                : AppPalette.lightTextMuted,
-                          ),
-                        ),
-                        trailing:
-                            Row(mainAxisSize: MainAxisSize.min, children: [
-                          IconButton(
-                              icon: const Icon(Icons.edit_outlined),
-                              onPressed: () => _addOrEdit(memory)),
-                          IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () => _delete(memory)),
-                        ]),
-                      ),
-                    ),
-                  )),
+              ...filtered.map((memory) => _buildMemoryCard(memory, isDark)),
           ],
         ),
       ),

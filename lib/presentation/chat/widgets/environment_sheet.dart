@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../infrastructure/update/update_service.dart';
+import '../../widgets/nexus_page_header.dart';
 
 /// G1 开发环境引导:检测 Termux / 桥授权 / Go 工具链,分步引导新设备
 /// 在无电脑的情况下完成手机端开发环境的一次性配置。
@@ -228,7 +229,10 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('开发环境检测')),
+      appBar: const NexusPageHeader(
+        title: '开发环境检测',
+        subtitle: 'Termux 桥与离线编译工具链',
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

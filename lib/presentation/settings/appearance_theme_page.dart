@@ -156,14 +156,33 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                     const Text('动效等级',
                         style: TextStyle(fontWeight: FontWeight.w500)),
                     const SizedBox(height: 8),
-                    SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'full', label: Text('完整动效')),
-                        ButtonSegment(value: 'reduced', label: Text('节能平滑')),
-                        ButtonSegment(value: 'off', label: Text('关闭动效')),
-                      ],
-                      selected: {_effectMode},
-                      onSelectionChanged: (s) => _updateEffects(s.first),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final textScale =
+                            MediaQuery.textScalerOf(context).scale(1.0);
+                        if (textScale > 1.15 || constraints.maxWidth < 310) {
+                          return Column(
+                            children: [
+                              _buildEffectOption('full', '完整动效', '沉浸式流体动画与转场'),
+                              const SizedBox(height: 6),
+                              _buildEffectOption(
+                                  'reduced', '节能平滑', '减少大面积缩放与模糊'),
+                              const SizedBox(height: 6),
+                              _buildEffectOption('off', '关闭动效', '即时切换，性能最优'),
+                            ],
+                          );
+                        }
+                        return SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'full', label: Text('完整动效')),
+                            ButtonSegment(
+                                value: 'reduced', label: Text('节能平滑')),
+                            ButtonSegment(value: 'off', label: Text('关闭动效')),
+                          ],
+                          selected: {_effectMode},
+                          onSelectionChanged: (s) => _updateEffects(s.first),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -257,6 +276,35 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
 
                         return Column(
                           children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.preview_rounded,
+                                        size: 16,
+                                        color: settingsMutedColor(context),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '真实效果预览',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: settingsMutedColor(context),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _buildChatPreview(current),
+                                ],
+                              ),
+                            ),
+                            const SettingsDivider(),
                             SettingsTile(
                               icon: Icons.wallpaper_rounded,
                               iconColor: settingsMutedColor(context),
@@ -339,6 +387,208 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildEffectOption(String value, String title, String subtitle) {
+    final isSelected = _effectMode == value;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _updateEffects(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected
+                  ? AppPalette.brandAction
+                  : (isDark
+                      ? AppPalette.darkHairline
+                      : AppPalette.lightHairline),
+              width: isSelected ? 1.5 : 1.0,
+            ),
+            color: isSelected
+                ? (isDark
+                    ? AppPalette.darkBrandSoft
+                    : AppPalette.lightBrandSoft)
+                : Colors.transparent,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight:
+                            isSelected ? FontWeight.w500 : FontWeight.w400,
+                        color: isSelected
+                            ? AppPalette.brandAction
+                            : (isDark
+                                ? AppPalette.darkText
+                                : AppPalette.lightText),
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: settingsMutedColor(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected)
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppPalette.brandAction,
+                  size: 20,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatPreview(BackgroundConfig config) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    Widget backgroundWidget;
+    if (config.mode == 'clouds') {
+      backgroundWidget = Image.asset(
+        BackgroundService.cloudsAsset,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    } else if (config.mode == 'custom' && config.customPath != null) {
+      backgroundWidget = Image.file(
+        File(config.customPath!),
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder: (_, __, ___) => Container(
+            color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface),
+      );
+    } else {
+      backgroundWidget = Container(
+        color: isDark ? AppPalette.darkCanvas : AppPalette.lightSurface,
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 136,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+            width: 0.8,
+          ),
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(child: backgroundWidget),
+            Positioned.fill(
+              child: Container(
+                color: (isDark ? Colors.black : Colors.white)
+                    .withValues(alpha: 0.18),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF222938)
+                            : const Color(0xFFE5ECF6),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '你好，请帮我分析项目进度',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF161B26).withValues(alpha: 0.88)
+                            : Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: (isDark ? Colors.white : Colors.black)
+                              .withValues(alpha: 0.08),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.auto_awesome,
+                                  size: 11, color: AppPalette.brand),
+                              const SizedBox(width: 4),
+                              Text(
+                                'NEXUS',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '已就绪，当前有 3 个待办任务。',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: textColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

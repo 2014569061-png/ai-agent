@@ -52,7 +52,8 @@ void main() {
     await for (final event in provider.stream(UnifiedRequest(
       model: 'test-model',
       messages: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
     ))) {
       if (event is TextDeltaEvent) text.write(event.text);
@@ -103,7 +104,8 @@ void main() {
     await for (final event in provider.stream(UnifiedRequest(
       model: 'test-model',
       messages: [
-        ChatMessage(role: MessageRole.user, parts: [const MessagePart.text('hi')])
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('hi')])
       ],
     ))) {
       if (event is TextDeltaEvent) text.write(event.text);

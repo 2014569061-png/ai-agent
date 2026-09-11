@@ -21,9 +21,8 @@ extension _ToneStyle on ToastTone {
         ToastTone.danger => Icons.error_outline_rounded,
       };
   Color accent(bool isDark) => switch (this) {
-        ToastTone.neutral => isDark
-            ? AppPalette.darkText
-            : AppPalette.lightText,
+        ToastTone.neutral =>
+          isDark ? AppPalette.darkText : AppPalette.lightText,
         ToastTone.success => AppPalette.success,
         ToastTone.warning => AppPalette.warning,
         ToastTone.danger => AppPalette.danger,

@@ -166,7 +166,8 @@ class _CollaborationTimelinePageState
                     decoration: BoxDecoration(
                       color: AppPalette.warning.withValues(alpha: 0.14),
                       border: const Border(
-                        bottom: BorderSide(color: AppPalette.warning, width: 0.8),
+                        bottom:
+                            BorderSide(color: AppPalette.warning, width: 0.8),
                       ),
                     ),
                     child: Row(
@@ -189,7 +190,8 @@ class _CollaborationTimelinePageState
                             minimumSize: const Size(0, 32),
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusControl),
                             ),
                             visualDensity: VisualDensity.compact,
                           ),

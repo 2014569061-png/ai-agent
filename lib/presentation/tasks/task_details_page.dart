@@ -14,6 +14,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
 import '../diagnostics/run_analysis_page.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
@@ -48,6 +49,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   RunRecord? _run;
   RunAuditReport? _auditReport;
   bool _auditLoading = false;
+  bool _auditExpanded = false;
   Object? _auditError;
 
   @override
@@ -130,22 +132,13 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
       FloatingToast.show(context, '当前任务没有可用工作区', tone: ToastTone.warning);
       return;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('回滚文件修改？'),
-        content: Text('将尝试恢复 ${entry.path ?? '目标文件'} 在该步骤之前的内容。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('回滚'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '回滚文件修改？',
+      message: '将尝试恢复 ${entry.path ?? '目标文件'} 在该步骤之前的内容。',
+      confirmLabel: '确认回滚',
+      cancelLabel: '取消',
+      isDanger: true,
     );
     if (confirmed != true || !mounted) return;
     final result = await AuditRollbackService().rollbackEditFile(
@@ -303,7 +296,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 decoration: BoxDecoration(
                                   color: theme.colorScheme.primary
                                       .withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                                  borderRadius: BorderRadius.circular(
+                                      AppTokens.radiusControl),
                                 ),
                                 child: Text(
                                   '类型：${_task.type}',
@@ -322,7 +316,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                   color: theme
                                       .colorScheme.surfaceContainerHighest
                                       .withValues(alpha: 0.6),
-                                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                                  borderRadius: BorderRadius.circular(
+                                      AppTokens.radiusControl),
                                 ),
                                 child: Text(
                                   '来源：${_task.sourceType}',
@@ -569,10 +564,13 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               decoration: BoxDecoration(
-                color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                color:
+                    isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+                    color: isDark
+                        ? AppPalette.darkHairline
+                        : AppPalette.lightHairline,
                   ),
                 ),
               ),
@@ -585,7 +583,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                         style: FilledButton.styleFrom(
                           minimumSize: const Size(0, 44),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusControl),
                           ),
                         ),
                         onPressed: _openConversation,
@@ -602,7 +601,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                           style: OutlinedButton.styleFrom(
                             minimumSize: const Size(0, 44),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusControl),
                             ),
                           ),
                           onPressed: _startCollaboration,
@@ -616,7 +616,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                           style: FilledButton.styleFrom(
                             minimumSize: const Size(0, 44),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                              borderRadius: BorderRadius.circular(
+                                  AppTokens.radiusControl),
                             ),
                           ),
                           onPressed: _task.conversationId.isEmpty
@@ -673,45 +674,101 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.fact_check_outlined, size: 18),
-              const SizedBox(width: 8),
-              const Expanded(
-                child: Text('副作用审计',
-                    style: TextStyle(fontWeight: FontWeight.w500)),
+          InkWell(
+            onTap: () => setState(() => _auditExpanded = !_auditExpanded),
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.fact_check_outlined, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '副作用审计 (${report.entries.length} 项)',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                  ),
+                  Text(
+                    _auditExpanded ? '收起' : '展开详情',
+                    style: const TextStyle(
+                        fontSize: 12, color: AppPalette.brandAction),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    _auditExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 18,
+                    color: AppPalette.brandAction,
+                  ),
+                ],
               ),
-              IconButton(
-                tooltip: '导出审计 JSON',
-                onPressed: _exportAuditJson,
-                icon: const Icon(Icons.data_object, size: 19),
-              ),
-              if (_run != null)
-                IconButton(
-                  tooltip: '打开完整运行报告',
-                  onPressed: _openRunReport,
-                  icon: const Icon(Icons.open_in_new, size: 18),
+            ),
+          ),
+          if (_auditExpanded) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: [
+                Text(
+                  '输入 ${metrics.promptTokens} tok',
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
                 ),
-            ],
-          ),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            children: [
-              Text('输入 ${metrics.promptTokens} tok'),
-              Text('输出 ${metrics.completionTokens} tok'),
-              Text('缓存 ${metrics.cachedTokens} tok'),
-              Text('重试 ${metrics.retryCount} 次'),
-              if (metrics.estimatedCostCents != null)
-                Text('预计 ${metrics.estimatedCostCents} 分'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (report.entries.isEmpty)
-            const Text('本次运行没有记录到文件、终端或设备副作用。',
-                style: TextStyle(fontSize: 12.5))
-          else
-            ...report.entries.map((entry) => _auditEntry(entry)),
+                Text(
+                  '输出 ${metrics.completionTokens} tok',
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                ),
+                Text(
+                  '缓存 ${metrics.cachedTokens} tok',
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                ),
+                Text(
+                  '重试 ${metrics.retryCount} 次',
+                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                ),
+                if (metrics.estimatedCostCents != null)
+                  Text(
+                    '预计 ${metrics.estimatedCostCents} 分',
+                    style:
+                        const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    minimumSize: const Size(0, 36),
+                  ),
+                  onPressed: _exportAuditJson,
+                  icon: const Icon(Icons.data_object, size: 16),
+                  label: const Text('导出审计 JSON'),
+                ),
+                if (_run != null) ...[
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      minimumSize: const Size(0, 36),
+                    ),
+                    onPressed: _openRunReport,
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    label: const Text('完整运行报告'),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (report.entries.isEmpty)
+              const Text('本次运行没有记录到文件、终端或设备副作用。',
+                  style: TextStyle(fontSize: 12.5))
+            else
+              ...report.entries.map((entry) => _auditEntry(entry)),
+          ],
         ],
       ),
     );
@@ -752,14 +809,22 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('${entry.tool} · effect=${entry.effect}',
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(
+                  '${entry.tool} · effect=${entry.effect}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: 'monospace',
+                  ),
+                ),
                 if (details.isNotEmpty)
-                  Text(details,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12)),
+                  Text(
+                    details,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  ),
               ],
             ),
           ),

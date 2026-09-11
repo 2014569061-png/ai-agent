@@ -59,6 +59,7 @@ abstract final class AppTokens {
   static const kTopBarHeight = 56.0;
   static const kListRowHeight = 52.0;
   static const kControlHeight = 44.0;
+  static const kMinTouchTarget = 48.0;
   static const kChipHeight = 32.0;
   static const kSearchBoxHeight = 36.0;
   @Deprecated('请改用 kTopBarHeight')

@@ -197,9 +197,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
   Widget build(BuildContext context) {
     final bridgeColor = kIsWeb
         ? AppPalette.lightTextFaint
-        : (_bridgeAvailable
-            ? AppPalette.success
-            : AppPalette.warning);
+        : (_bridgeAvailable ? AppPalette.success : AppPalette.warning);
     final bridgeText = kIsWeb ? '仅预览' : (_bridgeAvailable ? '已连接' : '待配置');
 
     return Scaffold(
@@ -231,7 +229,8 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                             horizontal: 7, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: bridgeColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusControl),
                         ),
                         child: Text(
                           bridgeText,

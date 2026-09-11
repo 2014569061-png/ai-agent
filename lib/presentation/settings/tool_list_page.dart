@@ -1,4 +1,5 @@
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/models.dart';
@@ -245,7 +246,7 @@ class _ToolListPageState extends State<ToolListPage> {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return Container(
           decoration: BoxDecoration(
-            color: isDark ? AppPalette.lightText : Colors.white,
+            color: isDark ? AppPalette.darkSurface : Colors.white,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
@@ -269,23 +270,37 @@ class _ToolListPageState extends State<ToolListPage> {
               Row(
                 children: [
                   Container(
-                    width: 32,
-                    height: 32,
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
                       color: _toolColor(tool),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
-                    child: Icon(_toolIcon(tool), color: Colors.white, size: 19),
+                    child: Icon(_toolIcon(tool), color: Colors.white, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      tool.displayName,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          tool.displayName,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '代码: ${tool.name} · 分类: ${tool.category}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? AppPalette.darkTextMuted
+                                : AppPalette.lightTextMuted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   _buildRiskBadge(tool),
@@ -296,10 +311,8 @@ class _ToolListPageState extends State<ToolListPage> {
                 tool.description,
                 style: TextStyle(
                   fontSize: 14,
-                  color: isDark
-                      ? AppPalette.lightHairline
-                      : AppPalette.darkHairline,
-                  height: 1.4,
+                  color: isDark ? AppPalette.darkText : AppPalette.lightText,
+                  height: 1.45,
                 ),
               ),
               const SizedBox(height: 16),
@@ -307,7 +320,7 @@ class _ToolListPageState extends State<ToolListPage> {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? AppPalette.darkHairline
+                      ? AppPalette.darkHairline.withValues(alpha: 0.5)
                       : AppPalette.lightSurface,
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -318,17 +331,17 @@ class _ToolListPageState extends State<ToolListPage> {
                       '权限与审批策略',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: isDark ? Colors.white : Colors.black,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : Colors.black87,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       tool.approvalPolicy,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: isDark
-                            ? AppPalette.lightTextFaint
+                            ? AppPalette.darkTextMuted
                             : AppPalette.lightTextMuted,
                         height: 1.4,
                       ),
@@ -340,7 +353,7 @@ class _ToolListPageState extends State<ToolListPage> {
                           tool.isSensitive
                               ? Icons.warning_amber_rounded
                               : Icons.verified_user_outlined,
-                          size: 15,
+                          size: 16,
                           color: tool.isSensitive
                               ? AppPalette.warning
                               : AppPalette.brand,
@@ -350,13 +363,13 @@ class _ToolListPageState extends State<ToolListPage> {
                           child: Text(
                             tool.isSensitive
                                 ? '敏感权限：涉及设备硬件或隐私操作，强制二次审批。'
-                                : '遵循全局当前生效的审批策略。',
+                                : '遵循全局当前生效的审批策略与沙箱安全边界。',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 11.5,
                               color: tool.isSensitive
                                   ? AppPalette.warning
                                   : (isDark
-                                      ? AppPalette.lightTextFaint
+                                      ? AppPalette.darkTextMuted
                                       : AppPalette.lightTextMuted),
                             ),
                           ),
@@ -372,7 +385,7 @@ class _ToolListPageState extends State<ToolListPage> {
                 height: 44,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppPalette.brand,
+                    backgroundColor: AppPalette.brandAction,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -445,11 +458,16 @@ class _ToolListPageState extends State<ToolListPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
-              height: 36,
+              height: 38,
               decoration: BoxDecoration(
                 color:
-                    isDark ? AppPalette.lightText : AppPalette.lightHairline,
-                borderRadius: BorderRadius.circular(10),
+                    isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                border: Border.all(
+                  color: isDark
+                      ? AppPalette.darkHairline
+                      : AppPalette.lightHairline,
+                ),
               ),
               child: TextField(
                 controller: _searchController,
@@ -458,7 +476,7 @@ class _ToolListPageState extends State<ToolListPage> {
                 decoration: InputDecoration(
                   hintText: '搜索工具名称、功能或分类…',
                   hintStyle: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13.5,
                     color: settingsMutedColor(context),
                   ),
                   prefixIcon: Icon(
@@ -466,7 +484,7 @@ class _ToolListPageState extends State<ToolListPage> {
                     size: 18,
                     color: settingsMutedColor(context),
                   ),
-                  prefixIconConstraints: const BoxConstraints(minWidth: 34),
+                  prefixIconConstraints: const BoxConstraints(minWidth: 36),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? GestureDetector(
                           onTap: () {
@@ -480,7 +498,7 @@ class _ToolListPageState extends State<ToolListPage> {
                           ),
                         )
                       : null,
-                  suffixIconConstraints: const BoxConstraints(minWidth: 32),
+                  suffixIconConstraints: const BoxConstraints(minWidth: 36),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 8),
                   isDense: true,
@@ -510,12 +528,17 @@ class _ToolListPageState extends State<ToolListPage> {
           const SizedBox(height: 8),
           SettingsSectionTitle('可用工具 (${tools.length})'),
           if (tools.isEmpty)
-            const SizedBox(
-              height: 200,
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
               child: EmptyStateView(
                 icon: Icons.build_circle_outlined,
                 title: '未找到匹配的工具',
                 message: '尝试更换搜索关键字或切换风险筛选条件',
+                actionLabel: '重置筛选',
+                onAction: () {
+                  _searchController.clear();
+                  setState(() => _filter = _RiskFilter.all);
+                },
               ),
             )
           else
@@ -549,22 +572,26 @@ class _ToolListPageState extends State<ToolListPage> {
         label,
         style: TextStyle(
           fontSize: 12.5,
-          fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
           color: selected
               ? Colors.white
-              : (isDark ? AppPalette.lightTextFaint : AppPalette.lightTextMuted),
+              : (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted),
         ),
       ),
       selected: selected,
-      selectedColor: AppPalette.brand,
+      selectedColor: AppPalette.brandAction,
       backgroundColor:
-          isDark ? AppPalette.lightText : AppPalette.lightHairline,
-      side: BorderSide.none,
+          isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+      side: BorderSide(
+        color: selected
+            ? Colors.transparent
+            : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
+      ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
       ),
       visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       onSelected: (val) {
         if (val) setState(() => _filter = value);
       },

@@ -7,9 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/nexus_page_header.dart';
 
 class LogViewerPage extends ConsumerStatefulWidget {
   const LogViewerPage({super.key, this.runId});
@@ -245,22 +248,14 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
       '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 
   Future<void> _clear() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('清理诊断日志'),
-        content: const Text('将删除本设备上的全部运行日志，无法恢复。'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('清理')),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '清理诊断日志',
+      message: '将删除本设备上的全部运行日志，无法恢复。',
+      confirmLabel: '清理',
+      isDanger: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     final db = await ref.read(databaseProvider.future);
     await db.clearLogRecords();
     await _load();
@@ -286,15 +281,25 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.runId == null ? '诊断日志' : '任务日志'),
+      appBar: NexusPageHeader(
+        title: widget.runId == null ? '诊断日志' : '任务日志',
+        subtitle: widget.runId == null ? '运行追踪与错误排查' : 'Run: ${widget.runId}',
         actions: [
           IconButton(
-              tooltip: '筛选日志',
-              icon: const Icon(Icons.filter_alt_outlined),
-              onPressed: _openFilters),
+            tooltip: '筛选日志',
+            constraints: const BoxConstraints(
+              minWidth: AppTokens.kMinTouchTarget,
+              minHeight: AppTokens.kMinTouchTarget,
+            ),
+            icon: const Icon(Icons.filter_alt_outlined),
+            onPressed: _openFilters,
+          ),
           IconButton(
             tooltip: '复制日志',
+            constraints: const BoxConstraints(
+              minWidth: AppTokens.kMinTouchTarget,
+              minHeight: AppTokens.kMinTouchTarget,
+            ),
             icon: const Icon(Icons.copy_outlined),
             onPressed: _logs.isEmpty
                 ? null
@@ -305,13 +310,23 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
                   },
           ),
           IconButton(
-              tooltip: '导出诊断包',
-              icon: const Icon(Icons.file_download_outlined),
-              onPressed: _logs.isEmpty ? null : _export),
+            tooltip: '导出诊断包',
+            constraints: const BoxConstraints(
+              minWidth: AppTokens.kMinTouchTarget,
+              minHeight: AppTokens.kMinTouchTarget,
+            ),
+            icon: const Icon(Icons.file_download_outlined),
+            onPressed: _logs.isEmpty ? null : _export,
+          ),
           IconButton(
-              tooltip: '清理日志',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _clear),
+            tooltip: '清理日志',
+            constraints: const BoxConstraints(
+              minWidth: AppTokens.kMinTouchTarget,
+              minHeight: AppTokens.kMinTouchTarget,
+            ),
+            icon: const Icon(Icons.delete_outline),
+            onPressed: _clear,
+          ),
         ],
       ),
       body: AsyncStateView(

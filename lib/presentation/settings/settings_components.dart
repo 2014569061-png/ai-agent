@@ -23,7 +23,7 @@ Color settingsDividerColor(BuildContext context) {
 
 Color settingsMutedColor(BuildContext context) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
-  return isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+  return isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 }
 
 /// 图标色归一化。
@@ -66,7 +66,7 @@ class SettingsSectionTitle extends StatelessWidget {
       child: Text(
         title,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 13,
           fontWeight: FontWeight.w500,
           color: settingsMutedColor(context),
         ),
@@ -134,8 +134,7 @@ class SettingsTile extends StatelessWidget {
     super.key,
     this.icon,
     this.iconColor,
-    @Deprecated('图标已统一为单色描边，不再使用独立字形色')
-    this.iconGlyphColor = Colors.white,
+    @Deprecated('图标已统一为单色描边，不再使用独立字形色') this.iconGlyphColor = Colors.white,
     this.leading,
     required this.title,
     this.titleColor,

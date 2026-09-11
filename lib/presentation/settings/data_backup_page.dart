@@ -11,6 +11,7 @@ import '../../application/providers.dart';
 import '../../infrastructure/files/vault_exporter.dart';
 import '../../infrastructure/files/local_crypto_service.dart';
 import '../vault/vault_page.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
@@ -81,63 +82,33 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
   }
 
   Future<void> _clearLocalData() async {
-    final firstConfirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('⚠️ 危险操作：清除本地全部数据？'),
-        content: const Text(
-          '此操作将永久清空本地数据库中的全部历史会话、长期记忆、自定义 Prompt 预设与本地缓存。\n\n此操作不可撤销，请确保已事先导出备份！',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('下一步确认'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '危险操作：清除本地全部数据？',
+      message: '此操作将永久抹掉本机上的所有 NEXUS 数据，操作不可撤销，请确保已事先导出备份。请输入确认词继续：',
+      confirmLabel: '确认清空',
+      cancelLabel: '取消',
+      isDanger: true,
+      requiredKeyword: '清空',
+      bulletItems: const [
+        '全部历史会话与消息记录',
+        '长期记忆库与用户偏好',
+        '自定义 Prompt 模板与定时任务',
+        '模型调用缓存与本地诊断日志',
+      ],
     );
 
-    if (firstConfirm != true || !mounted) return;
+    if (confirmed != true || !mounted) return;
 
-    final secondConfirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('最终二次确认'),
-        content: const Text('你确定要完全抹掉本机上的所有 NEXUS 数据吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('放弃'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red.shade800,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确定立即清除'),
-          ),
-        ],
-      ),
-    );
-
-    if (secondConfirm == true && mounted) {
-      try {
-        final db = await ref.read(databaseProvider.future);
-        await db.clearAllUserData();
-        if (mounted) {
-          FloatingToast.show(context, '本地核心数据已成功清空', tone: ToastTone.success);
-        }
-      } catch (e) {
-        if (mounted) FloatingToast.show(context, '清除数据失败: ');
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await db.clearAllUserData();
+      if (mounted) {
+        FloatingToast.show(context, '本地核心数据已成功清空', tone: ToastTone.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        FloatingToast.show(context, '清除数据失败: $e', tone: ToastTone.danger);
       }
     }
   }

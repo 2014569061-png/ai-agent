@@ -12,6 +12,8 @@ class ChatMessageList extends StatefulWidget {
     required this.running,
     required this.onLongPress,
     required this.onRegenerate,
+    this.onEditPrompt,
+    this.onSwitchModel,
     this.trailingWidgets = const [],
     this.sessionKey,
     this.liveReply,
@@ -22,6 +24,8 @@ class ChatMessageList extends StatefulWidget {
   final bool running;
   final ValueChanged<int> onLongPress;
   final VoidCallback onRegenerate;
+  final VoidCallback? onEditPrompt;
+  final VoidCallback? onSwitchModel;
   final List<Widget> trailingWidgets;
   final String? sessionKey;
   final LiveReply? liveReply;
@@ -130,6 +134,8 @@ class _ChatMessageListState extends State<ChatMessageList> {
           running: widget.running,
           onLongPress: () => widget.onLongPress(index),
           onRegenerate: widget.onRegenerate,
+          onEditPrompt: widget.onEditPrompt,
+          onSwitchModel: widget.onSwitchModel,
         );
       },
     );

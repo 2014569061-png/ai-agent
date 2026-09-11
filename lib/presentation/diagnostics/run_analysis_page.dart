@@ -15,6 +15,7 @@ import '../theme/app_tokens.dart';
 import '../markdown/markdown_render_metrics.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/floating_toast.dart';
 import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
@@ -681,11 +682,16 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
     final savedCost = _savedCostCents();
     return Scaffold(
       backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
-      appBar: AppBar(
-        title: const Text('任务详情'),
+      appBar: NexusPageHeader(
+        title: '任务详情',
+        subtitle: 'Run: ${_run.runId}',
         actions: [
           IconButton(
             tooltip: '复制运行报告',
+            constraints: const BoxConstraints(
+              minWidth: AppTokens.kMinTouchTarget,
+              minHeight: AppTokens.kMinTouchTarget,
+            ),
             icon: const Icon(Icons.copy_all_outlined),
             onPressed: _events.isEmpty
                 ? null
@@ -693,8 +699,7 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
                     await Clipboard.setData(
                         ClipboardData(text: _reportMarkdown()));
                     if (!context.mounted) return;
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(const SnackBar(content: Text('运行报告已复制')));
+                    FloatingToast.show(context, '运行报告已复制');
                   },
           ),
           PopupMenuButton<String>(
@@ -707,6 +712,10 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
           ),
           IconButton(
             tooltip: '查看任务日志',
+            constraints: const BoxConstraints(
+              minWidth: AppTokens.kMinTouchTarget,
+              minHeight: AppTokens.kMinTouchTarget,
+            ),
             icon: const Icon(Icons.receipt_long_outlined),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => LogViewerPage(runId: _run.runId))),

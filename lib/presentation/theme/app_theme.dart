@@ -198,7 +198,8 @@ abstract final class AppTheme {
     final isDark = brightness == Brightness.dark;
     final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final text = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
@@ -207,7 +208,7 @@ abstract final class AppTheme {
 
     final scheme = ColorScheme(
       brightness: brightness,
-      primary: AppPalette.brand,
+      primary: isDark ? AppPalette.brand : AppPalette.brandAction,
       onPrimary: Colors.white,
       secondary:
           isDark ? AppPalette.darkBrandHover : AppPalette.lightBrandHover,
@@ -338,6 +339,13 @@ abstract final class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          backgroundColor: isDark ? AppPalette.brand : AppPalette.brandAction,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: isDark
+              ? AppPalette.darkSurfaceHover
+              : AppPalette.lightSurfaceHover,
+          disabledForegroundColor:
+              isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
@@ -348,6 +356,13 @@ abstract final class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          backgroundColor: isDark ? AppPalette.brand : AppPalette.brandAction,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: isDark
+              ? AppPalette.darkSurfaceHover
+              : AppPalette.lightSurfaceHover,
+          disabledForegroundColor:
+              isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
