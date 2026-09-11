@@ -185,5 +185,26 @@ void main() {
       expect(result.ok, isFalse);
       expect(result.code, ToolCodes.sandboxViolation);
     });
+
+    test('拦截经由符号链接逃逸出工作区的路径（B-5）', () async {
+      final outside = await Directory.systemTemp.createTemp('workspace_escape_');
+      addTearDown(() => outside.delete(recursive: true));
+      final Link link;
+      try {
+        link = await Link('${tempDir.path}${Platform.pathSeparator}escape')
+            .create(outside.path);
+      } on FileSystemException {
+        // Windows 创建符号链接需要开发者模式/管理员权限；拿不到就跳过本用例
+        //（CI 的 ubuntu 与开了开发者模式的本机仍会真实执行）。
+        return;
+      }
+      addTearDown(link.delete);
+
+      // 词法层面 escape/secret.txt 完全合法，只有 realpath 复检能拦住。
+      expect(
+        () => sandbox.resolvePath('escape/secret.txt'),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
   });
 }

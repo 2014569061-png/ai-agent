@@ -96,7 +96,14 @@ class RetryInterceptor extends Interceptor {
       return;
     }
 
-    err.requestOptions.extra[_retryCountKey] = attempts + 1;
+    // B-12：不原地修改 err.requestOptions.extra —— 复制一份再带计数重发，
+    // 防御未来 RequestOptions 被复用时的计数串扰。
+    final retryOptions = err.requestOptions.copyWith(
+      extra: <String, Object?>{
+        ...err.requestOptions.extra,
+        _retryCountKey: attempts + 1,
+      },
+    );
     final delay = baseDelay * pow(2, attempts);
     final cancelToken = err.requestOptions.cancelToken;
     if (cancelToken != null) {
@@ -113,7 +120,7 @@ class RetryInterceptor extends Interceptor {
     }
 
     try {
-      final response = await dio.fetch<dynamic>(err.requestOptions);
+      final response = await dio.fetch<dynamic>(retryOptions);
       handler.resolve(response);
     } catch (retryError) {
       handler.next(err);

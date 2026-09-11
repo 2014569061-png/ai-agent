@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../../domain/models.dart';
 import 'message_bubble.dart';
@@ -104,6 +105,10 @@ class _ChatMessageListState extends State<ChatMessageList> {
       controller: widget.controller,
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       itemCount: totalCount,
+      // F-4：预渲染视口外 400px，快速滚动时不露白；消息气泡自带独立状态，
+      // 关闭自动 KeepAlive 省下不可见子树的存活开销。
+      scrollCacheExtent: const ScrollCacheExtent.pixels(400),
+      addAutomaticKeepAlives: false,
       itemBuilder: (context, localIndex) {
         if (localIndex >= count) {
           return widget.trailingWidgets[localIndex - count];

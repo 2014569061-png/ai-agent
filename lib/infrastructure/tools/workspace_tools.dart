@@ -14,6 +14,9 @@ class WorkspaceSandbox {
   WorkspaceSandbox(this.rootPath);
   final String rootPath;
 
+  /// 真实根目录缓存（解析符号链接后的 realpath，惰性求值一次）。
+  String? _realRoot;
+
   /// 解析并验证绝对路径，确保在根目录内
   String resolvePath(String relativePath) {
     // 规范化路径
@@ -25,7 +28,28 @@ class WorkspaceSandbox {
     if (relative == '..' || relative.startsWith('..${p.separator}')) {
       throw ArgumentError('非法路径访问：禁止超出当前工作区根目录');
     }
+    _guardSymlinkEscape(fullPath);
     return fullPath;
+  }
+
+  /// B-5：词法校验挡不住符号链接 —— 工作区内指向外部的 symlink 能骗过纯字符串
+  /// 的 normalize。对目标（尚不存在时取其最近的已存在祖先）做 realpath 解析后
+  /// 再验一次真实边界。每次调用只多 1-2 次系统调用，不值得引入缓存失效逻辑。
+  void _guardSymlinkEscape(String fullPath) {
+    var probe = fullPath;
+    while (FileSystemEntity.typeSync(probe) == FileSystemEntityType.notFound) {
+      final parent = p.dirname(probe);
+      if (parent == probe) return; // 到达文件系统根仍不存在，无链接可解析
+      probe = parent;
+    }
+    _realRoot ??= Directory(rootPath).existsSync()
+        ? Directory(rootPath).resolveSymbolicLinksSync()
+        : p.normalize(rootPath);
+    final realProbe = Directory(probe).resolveSymbolicLinksSync();
+    final realRelative = p.relative(realProbe, from: _realRoot!);
+    if (realRelative == '..' || realRelative.startsWith('..${p.separator}')) {
+      throw ArgumentError('非法路径访问：路径经由符号链接超出工作区根目录');
+    }
   }
 
   /// 获取相对路径展示
