@@ -10,6 +10,20 @@ import 'package:mobile_agent/infrastructure/tools/command_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/tool_registry.dart';
 
 void main() {
+  // Windows 下刚退出的子进程可能仍短暂持有工作目录句柄，直接删会抛
+  // PathAccessException（并发跑测试时偶发）。带退避重试几次；最终仍失败
+  // 则放弃删除 —— 目录位于系统临时区，留着无害，不该让它染红测试。
+  Future<void> deleteTempDir(Directory directory) async {
+    for (var attempt = 0; attempt < 5; attempt++) {
+      try {
+        await directory.delete(recursive: true);
+        return;
+      } on FileSystemException {
+        await Future<void>.delayed(Duration(milliseconds: 120 * (attempt + 1)));
+      }
+    }
+  }
+
   test('agent executor preserves reasoning in the next request context',
       () async {
     final provider = _ReasoningProvider();
@@ -35,7 +49,7 @@ void main() {
       () async {
     final directory =
         await Directory.systemTemp.createTemp('nexus-terminal-test-');
-    addTearDown(() => directory.delete(recursive: true));
+    addTearDown(() => deleteTempDir(directory));
     final service = TerminalCommandService(workspacePath: directory.path);
 
     final rejected = await service.run('pwd && whoami');
@@ -51,7 +65,7 @@ void main() {
     final result = await service.run(command);
     expect(result.exitCode, 0);
     expect(result.output, isNotEmpty);
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('terminal tool requires confirmation', () {
     final tool = TerminalCommandTool(
@@ -63,7 +77,7 @@ void main() {
   test('terminal service blocks interpreter inline-eval escapes', () async {
     final directory =
         await Directory.systemTemp.createTemp('nexus-terminal-eval-');
-    addTearDown(() => directory.delete(recursive: true));
+    addTearDown(() => deleteTempDir(directory));
     final service = TerminalCommandService(workspacePath: directory.path);
 
     final python = await service.run(r'python -c "import os; os.system(1)"');
@@ -81,7 +95,7 @@ void main() {
     // 启动失败，但拒绝原因绝不能是内联求值）。
     final benign = await service.run('python script.py');
     expect(benign.output, isNot(contains('内联求值')));
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
 
 class _NoopTool implements AgentTool {
