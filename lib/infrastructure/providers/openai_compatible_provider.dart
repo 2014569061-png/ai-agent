@@ -5,15 +5,13 @@ import 'package:dio/dio.dart';
 import '../../domain/models.dart';
 import 'http_client.dart';
 import 'provider_config.dart';
-import 'llm_provider.dart';
-import 'sse_decoder.dart';
+import 'streaming_provider_base.dart';
 
-class OpenAiCompatibleProvider implements LlmProvider {
+class OpenAiCompatibleProvider extends StreamingProviderBase {
   OpenAiCompatibleProvider({required this.config, Dio? dio})
-      : _dio = dio ?? buildHttpClient();
+      : super(dio ?? buildHttpClient());
 
   final ProviderConfig config;
-  final Dio _dio;
 
   bool _supportsReasoning(String model) {
     final lower = model.toLowerCase();
@@ -26,7 +24,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
 
   Future<String?> testConnection() async {
     try {
-      final response = await _dio.get<dynamic>(
+      final response = await dio.get<dynamic>(
         '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/models',
         options: Options(headers: {'Authorization': 'Bearer ${config.apiKey}'}),
       );
@@ -35,7 +33,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
       }
 
       // /models 正常不代表实际聊天接口可用；继续执行最小聊天探测。
-      final chatResponse = await _dio.post<dynamic>(
+      final chatResponse = await dio.post<dynamic>(
         '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/chat/completions',
         data: {
           'model': config.model,
@@ -61,7 +59,7 @@ class OpenAiCompatibleProvider implements LlmProvider {
   }
 
   Future<List<ModelInfo>> listModels() async {
-    final response = await _dio.get<dynamic>(
+    final response = await dio.get<dynamic>(
       '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/models',
       options: Options(headers: {'Authorization': 'Bearer ${config.apiKey}'}),
     );
@@ -109,85 +107,51 @@ class OpenAiCompatibleProvider implements LlmProvider {
         'reasoning_effort': request.reasoningEffort.name,
     };
 
-    try {
-      final response = await _dio.post<ResponseBody>(
-        '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/chat/completions',
-        data: payload,
-        cancelToken: cancelToken,
-        options: Options(
-          responseType: ResponseType.stream,
-          headers: {
-            'Authorization': 'Bearer ${config.apiKey}',
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
-          },
-        ),
-      );
+    final toolAccumulators = <int, _ToolAccumulator>{};
+    var nextToolIndex = 0;
+    var stopReason = StopReason.unknown;
+    // finish_reason 可能出现在任意一帧（含 delta 为空的收尾帧），逐帧记录，
+    // 后到的覆盖先到的。
+    void noteStop(_SseChunk parsed) {
+      final raw = parsed.finishReason;
+      if (raw != null && raw.isNotEmpty) {
+        stopReason = StopReason.parse(raw);
+      }
+    }
 
-      final stream = response.data?.stream;
-      if (stream == null) {
-        yield const ProviderErrorEvent(
-          'Provider 返回了空响应',
-          failureKind: 'protocol',
-        );
-        return;
-      }
-      final sse = SseDecoder();
-      final toolAccumulators = <int, _ToolAccumulator>{};
-      var nextToolIndex = 0;
-      var stopReason = StopReason.unknown;
-      // finish_reason 可能出现在任意一帧（含 delta 为空的收尾帧），逐帧记录，
-      // 后到的覆盖先到的。
-      void noteStop(_SseChunk parsed) {
-        final raw = parsed.finishReason;
-        if (raw != null && raw.isNotEmpty) {
-          stopReason = StopReason.parse(raw);
+    void collect(_SseChunk parsed) {
+      for (final fragment in parsed.tools) {
+        final index = fragment.index ?? nextToolIndex++;
+        final accumulator =
+            toolAccumulators.putIfAbsent(index, _ToolAccumulator.new);
+        if (fragment.id != null) accumulator.id = fragment.id;
+        if (fragment.name != null && fragment.name!.isNotEmpty) {
+          accumulator.name = fragment.name;
+        }
+        if (fragment.arguments != null) {
+          accumulator.arguments.write(fragment.arguments);
         }
       }
+    }
 
-      void collect(_SseChunk parsed) {
-        for (final fragment in parsed.tools) {
-          final index = fragment.index ?? nextToolIndex++;
-          final accumulator =
-              toolAccumulators.putIfAbsent(index, _ToolAccumulator.new);
-          if (fragment.id != null) accumulator.id = fragment.id;
-          if (fragment.name != null && fragment.name!.isNotEmpty) {
-            accumulator.name = fragment.name;
-          }
-          if (fragment.arguments != null) {
-            accumulator.arguments.write(fragment.arguments);
-          }
-        }
+    List<UnifiedEvent> onFrame(String data) {
+      final parsed = _parseSseData(data);
+      if (parsed == null) return const [];
+      final events = <UnifiedEvent>[];
+      if (parsed.text != null && parsed.text!.isNotEmpty) {
+        events.add(TextDeltaEvent(parsed.text!));
       }
+      if (parsed.reasoning != null && parsed.reasoning!.isNotEmpty) {
+        events.add(ReasoningDeltaEvent(parsed.reasoning!));
+      }
+      collect(parsed);
+      noteStop(parsed);
+      if (parsed.usage != null) events.add(parsed.usage!);
+      return events;
+    }
 
-      await for (final chunk in stream) {
-        for (final data in sse.add(chunk)) {
-          final parsed = _parseSseData(data);
-          if (parsed == null) continue;
-          if (parsed.text != null && parsed.text!.isNotEmpty) {
-            yield TextDeltaEvent(parsed.text!);
-          }
-          if (parsed.reasoning != null && parsed.reasoning!.isNotEmpty) {
-            yield ReasoningDeltaEvent(parsed.reasoning!);
-          }
-          collect(parsed);
-          noteStop(parsed);
-          if (parsed.usage != null) yield parsed.usage!;
-        }
-      }
-      for (final data in sse.close()) {
-        final parsed = _parseSseData(data);
-        if (parsed == null) continue;
-        if (parsed.text != null && parsed.text!.isNotEmpty) {
-          yield TextDeltaEvent(parsed.text!);
-        }
-        if (parsed.reasoning != null && parsed.reasoning!.isNotEmpty) {
-          yield ReasoningDeltaEvent(parsed.reasoning!);
-        }
-        collect(parsed);
-        noteStop(parsed);
-        if (parsed.usage != null) yield parsed.usage!;
-      }
+    List<UnifiedEvent> finalize() {
+      final events = <UnifiedEvent>[];
       for (final accumulator in toolAccumulators.values) {
         final rawArguments = accumulator.arguments.toString();
         Map<String, dynamic> arguments;
@@ -200,13 +164,29 @@ class OpenAiCompatibleProvider implements LlmProvider {
           // 单个工具解析失败不应中断整轮对话：降级保留原始参数交给上层处理。
           arguments = {'_unparsed': rawArguments};
         }
-        yield ToolCallEvent(ToolCall(
+        events.add(ToolCallEvent(ToolCall(
           id: accumulator.id ?? 'streamed-tool-call',
           name: accumulator.name ?? '',
           arguments: arguments,
-        ));
+        )));
       }
-      yield CompletedEvent(stopReason: stopReason);
+      events.add(CompletedEvent(stopReason: stopReason));
+      return events;
+    }
+
+    try {
+      yield* runStreaming(
+        url: '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/chat/completions',
+        payload: payload,
+        headers: {
+          'Authorization': 'Bearer ${config.apiKey}',
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        cancelToken: cancelToken,
+        onFrame: onFrame,
+        finalize: finalize,
+      );
     } on DioException catch (error) {
       // 主动取消时静默结束，避免把"已取消"渲染成错误提示。
       if (error.type == DioExceptionType.cancel) return;

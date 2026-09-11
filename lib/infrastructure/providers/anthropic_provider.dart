@@ -4,9 +4,8 @@ import 'package:dio/dio.dart';
 
 import '../../domain/models.dart';
 import 'http_client.dart';
-import 'llm_provider.dart';
+import 'streaming_provider_base.dart';
 import 'provider_config.dart';
-import 'sse_decoder.dart';
 
 /// Anthropic Messages API 原生适配器。
 ///
@@ -14,13 +13,12 @@ import 'sse_decoder.dart';
 /// 工具结果为 `tool_result` 块、认证用 `x-api-key` 头。流式解析按
 /// `message_start / content_block_start / content_block_delta / message_delta`
 /// 事件类型累积文本与工具调用。
-class AnthropicProvider implements LlmProvider {
+class AnthropicProvider extends StreamingProviderBase {
   AnthropicProvider({required this.config, Dio? dio})
-      : _dio = dio ?? buildHttpClient();
+      : super(dio ?? buildHttpClient());
 
   static const _apiVersion = '2023-06-01';
   final ProviderConfig config;
-  final Dio _dio;
 
   String get _endpoint =>
       '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/v1/messages';
@@ -34,7 +32,7 @@ class AnthropicProvider implements LlmProvider {
 
   Future<String?> testConnection() async {
     try {
-      final response = await _dio.get<dynamic>(
+      final response = await dio.get<dynamic>(
         '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/v1/models',
         options: Options(headers: _headers),
       );
@@ -53,101 +51,70 @@ class AnthropicProvider implements LlmProvider {
       {CancelToken? cancelToken}) async* {
     final payload = buildRequestPayload(request, stream: true);
 
-    try {
-      final response = await _dio.post<ResponseBody>(
-        _endpoint,
-        data: payload,
-        cancelToken: cancelToken,
-        options: Options(responseType: ResponseType.stream, headers: _headers),
-      );
-      final stream = response.data?.stream;
-      if (stream == null) {
-        yield const ProviderErrorEvent(
-          'Provider 返回了空响应',
-          failureKind: 'protocol',
-        );
-        return;
-      }
+    final toolAccumulators = <int, _AnthropicToolAcc>{};
+    var inputTokens = 0;
+    var cacheCreationTokens = 0;
+    var cacheReadTokens = 0;
+    var outputTokens = 0;
+    var stopReason = StopReason.unknown;
 
-      final sse = SseDecoder();
-      final toolAccumulators = <int, _AnthropicToolAcc>{};
-      var inputTokens = 0;
-      var cacheCreationTokens = 0;
-      var cacheReadTokens = 0;
-      var outputTokens = 0;
-      var stopReason = StopReason.unknown;
+    void updateUsage(Map<String, dynamic> usage) {
+      final input = _asInt(usage['input_tokens']);
+      if (input != null) inputTokens = input;
+      final cacheCreation = _asInt(usage['cache_creation_input_tokens']);
+      if (cacheCreation != null) cacheCreationTokens = cacheCreation;
+      final cacheRead = _asInt(usage['cache_read_input_tokens']);
+      if (cacheRead != null) cacheReadTokens = cacheRead;
+      final output = _asInt(usage['output_tokens']);
+      if (output != null) outputTokens = output;
+    }
 
-      void updateUsage(Map<String, dynamic> usage) {
-        final input = _asInt(usage['input_tokens']);
-        if (input != null) inputTokens = input;
-        final cacheCreation = _asInt(usage['cache_creation_input_tokens']);
-        if (cacheCreation != null) cacheCreationTokens = cacheCreation;
-        final cacheRead = _asInt(usage['cache_read_input_tokens']);
-        if (cacheRead != null) cacheReadTokens = cacheRead;
-        final output = _asInt(usage['output_tokens']);
-        if (output != null) outputTokens = output;
-      }
-
-      await for (final chunk in stream) {
-        for (final data in sse.add(chunk)) {
-          final json = _parseSseData(data);
-          if (json == null) continue;
-          final type = json['type'] as String?;
-          if (type == 'message_start') {
-            final message =
-                json['message'] as Map<String, dynamic>? ?? const {};
-            final usage = message['usage'] as Map<String, dynamic>? ?? const {};
-            updateUsage(usage);
-          } else if (type == 'content_block_start') {
-            final block =
-                json['content_block'] as Map<String, dynamic>? ?? const {};
-            if (block['type'] == 'tool_use') {
-              final index = json['index'] as int? ?? 0;
-              toolAccumulators[index] = _AnthropicToolAcc(
-                id: block['id'] as String?,
-                name: block['name'] as String?,
-              );
-            }
-          } else if (type == 'content_block_delta') {
-            final delta = json['delta'] as Map<String, dynamic>? ?? const {};
-            final index = json['index'] as int? ?? 0;
-            if (delta['type'] == 'text_delta') {
-              final text = delta['text'] as String? ?? '';
-              if (text.isNotEmpty) yield TextDeltaEvent(text);
-            } else if (delta['type'] == 'thinking_delta') {
-              final thinking = delta['thinking'] as String? ?? '';
-              if (thinking.isNotEmpty) yield ReasoningDeltaEvent(thinking);
-            } else if (delta['type'] == 'input_json_delta') {
-              toolAccumulators
-                  .putIfAbsent(index, _AnthropicToolAcc.new)
-                  .arguments
-                  .write(delta['partial_json'] ?? '');
-            }
-          } else if (type == 'message_delta') {
-            final usage = json['usage'] as Map<String, dynamic>? ?? const {};
-            updateUsage(usage);
-            // stop_reason 在 message_delta.delta 里，是能否执行工具调用的判据。
-            final delta = json['delta'] as Map<String, dynamic>? ?? const {};
-            final raw = delta['stop_reason'] as String?;
-            if (raw != null && raw.isNotEmpty) {
-              stopReason = StopReason.parse(raw);
-            }
-          }
+    List<UnifiedEvent> onFrame(String data) {
+      final json = _parseSseData(data);
+      if (json == null) return const [];
+      final events = <UnifiedEvent>[];
+      final type = json['type'] as String?;
+      if (type == 'message_start') {
+        final message = json['message'] as Map<String, dynamic>? ?? const {};
+        updateUsage(message['usage'] as Map<String, dynamic>? ?? const {});
+      } else if (type == 'content_block_start') {
+        final block = json['content_block'] as Map<String, dynamic>? ?? const {};
+        if (block['type'] == 'tool_use') {
+          final index = json['index'] as int? ?? 0;
+          toolAccumulators[index] = _AnthropicToolAcc(
+            id: block['id'] as String?,
+            name: block['name'] as String?,
+          );
+        }
+      } else if (type == 'content_block_delta') {
+        final delta = json['delta'] as Map<String, dynamic>? ?? const {};
+        final index = json['index'] as int? ?? 0;
+        if (delta['type'] == 'text_delta') {
+          final text = delta['text'] as String? ?? '';
+          if (text.isNotEmpty) events.add(TextDeltaEvent(text));
+        } else if (delta['type'] == 'thinking_delta') {
+          final thinking = delta['thinking'] as String? ?? '';
+          if (thinking.isNotEmpty) events.add(ReasoningDeltaEvent(thinking));
+        } else if (delta['type'] == 'input_json_delta') {
+          toolAccumulators
+              .putIfAbsent(index, _AnthropicToolAcc.new)
+              .arguments
+              .write(delta['partial_json'] ?? '');
+        }
+      } else if (type == 'message_delta') {
+        updateUsage(json['usage'] as Map<String, dynamic>? ?? const {});
+        // stop_reason 在 message_delta.delta 里，是能否执行工具调用的判据。
+        final delta = json['delta'] as Map<String, dynamic>? ?? const {};
+        final raw = delta['stop_reason'] as String?;
+        if (raw != null && raw.isNotEmpty) {
+          stopReason = StopReason.parse(raw);
         }
       }
-      for (final data in sse.close()) {
-        final trailing = _parseSseData(data);
-        if (trailing != null && trailing['type'] == 'message_delta') {
-          final usage = trailing['usage'] as Map<String, dynamic>? ?? const {};
-          updateUsage(usage);
-          final delta = trailing['delta'] as Map<String, dynamic>? ?? const {};
-          final raw = delta['stop_reason'] as String?;
-          if (raw != null && raw.isNotEmpty) {
-            stopReason = StopReason.parse(raw);
-          }
-        }
-      }
+      return events;
+    }
 
+    List<UnifiedEvent> finalize() {
+      final events = <UnifiedEvent>[];
       final sortedIndexes = toolAccumulators.keys.toList()..sort();
       for (final index in sortedIndexes) {
         final acc = toolAccumulators[index]!;
@@ -162,17 +129,29 @@ class AnthropicProvider implements LlmProvider {
           // 参数不完整时必须交给 AgentExecutor 拦截，不能降级为空对象后误执行。
           args = {'_unparsed': rawArgs};
         }
-        yield ToolCallEvent(ToolCall(
+        events.add(ToolCallEvent(ToolCall(
           id: acc.id ?? 'anthropic-tool-$index',
           name: acc.name ?? '',
           arguments: args,
-        ));
+        )));
       }
-      yield UsageEvent(
+      events.add(UsageEvent(
           promptTokens: inputTokens + cacheCreationTokens + cacheReadTokens,
           completionTokens: outputTokens,
-          cachedTokens: cacheReadTokens);
-      yield CompletedEvent(stopReason: stopReason);
+          cachedTokens: cacheReadTokens));
+      events.add(CompletedEvent(stopReason: stopReason));
+      return events;
+    }
+
+    try {
+      yield* runStreaming(
+        url: _endpoint,
+        payload: payload,
+        headers: _headers,
+        cancelToken: cancelToken,
+        onFrame: onFrame,
+        finalize: finalize,
+      );
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;

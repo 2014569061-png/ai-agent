@@ -4,27 +4,25 @@ import 'package:dio/dio.dart';
 
 import '../../domain/models.dart';
 import 'http_client.dart';
-import 'llm_provider.dart';
+import 'streaming_provider_base.dart';
 import 'provider_config.dart';
-import 'sse_decoder.dart';
 
 /// Google Gemini generateContent 原生适配器。
 ///
 /// 与 OpenAI 不同：角色为 `user`/`model`，工具结果为 `functionResponse` 分块、
 /// 认证走 `?key=` 查询参数、系统提示词为顶层 `systemInstruction`、图片用
 /// `inlineData`。流式解析从 `candidates[].content.parts[]` 中取文本与函数调用。
-class GeminiProvider implements LlmProvider {
+class GeminiProvider extends StreamingProviderBase {
   GeminiProvider({required this.config, Dio? dio})
-      : _dio = dio ?? buildHttpClient();
+      : super(dio ?? buildHttpClient());
 
   final ProviderConfig config;
-  final Dio _dio;
 
   String get _base => config.baseUrl.replaceAll(RegExp(r'/$'), '');
 
   Future<String?> testConnection() async {
     try {
-      final response = await _dio.get<dynamic>(
+      final response = await dio.get<dynamic>(
         '$_base/v1beta/models?pageSize=5&key=${Uri.encodeQueryComponent(config.apiKey)}',
       );
       if (response.statusCode == 200) return null;
@@ -90,123 +88,96 @@ class GeminiProvider implements LlmProvider {
         '$_base/v1beta/models/${Uri.encodeComponent(request.model)}:streamGenerateContent'
         '?alt=sse&key=${Uri.encodeQueryComponent(config.apiKey)}';
 
-    try {
-      final response = await _dio.post<ResponseBody>(
-        url,
-        data: payload,
-        cancelToken: cancelToken,
-        options: Options(
-          responseType: ResponseType.stream,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
-          },
-        ),
-      );
-      final stream = response.data?.stream;
-      if (stream == null) {
-        yield const ProviderErrorEvent(
-          'Provider 返回了空响应',
-          failureKind: 'protocol',
-        );
-        return;
+    final pendingCalls = <ToolCall>[];
+    var promptTokens = 0;
+    var completionTokens = 0;
+    var cachedTokens = 0;
+    var stopReason = StopReason.unknown;
+
+    void updateUsage(Map<String, dynamic> usage) {
+      final prompt = _asInt(usage['promptTokenCount']);
+      if (prompt != null) promptTokens = prompt;
+      final completion = _asInt(usage['candidatesTokenCount']);
+      if (completion != null) completionTokens = completion;
+      final cached = _asInt(usage['cachedContentTokenCount']) ??
+          _asInt(usage['cached_content_token_count']);
+      if (cached != null) cachedTokens = cached;
+    }
+
+    List<UnifiedEvent> onFrame(String data) {
+      final json = _parseSseData(data);
+      if (json == null) return const [];
+      final events = <UnifiedEvent>[];
+      final usage = json['usageMetadata'];
+      if (usage is Map<String, dynamic>) {
+        updateUsage(usage);
       }
-
-      final sse = SseDecoder();
-      final pendingCalls = <ToolCall>[];
-      var promptTokens = 0;
-      var completionTokens = 0;
-      var cachedTokens = 0;
-      var stopReason = StopReason.unknown;
-
-      void updateUsage(Map<String, dynamic> usage) {
-        final prompt = _asInt(usage['promptTokenCount']);
-        if (prompt != null) promptTokens = prompt;
-        final completion = _asInt(usage['candidatesTokenCount']);
-        if (completion != null) completionTokens = completion;
-        final cached = _asInt(usage['cachedContentTokenCount']) ??
-            _asInt(usage['cached_content_token_count']);
-        if (cached != null) cachedTokens = cached;
-      }
-
-      await for (final chunk in stream) {
-        for (final data in sse.add(chunk)) {
-          final json = _parseSseData(data);
-          if (json == null) continue;
-          final usage = json['usageMetadata'];
-          if (usage is Map<String, dynamic>) {
-            updateUsage(usage);
+      final candidates = json['candidates'] as List<dynamic>? ?? const [];
+      for (final candidate in candidates.whereType<Map<String, dynamic>>()) {
+        // Gemini 用大写枚举（STOP / MAX_TOKENS / SAFETY / …），
+        // MALFORMED_FUNCTION_CALL 等未识别值会落到 unknown，不执行工具。
+        final finish = candidate['finishReason'] as String?;
+        if (finish != null && finish.isNotEmpty) {
+          stopReason = StopReason.parse(finish);
+        }
+        final content = candidate['content'] as Map<String, dynamic>? ?? const {};
+        final parts = content['parts'] as List<dynamic>? ?? const [];
+        for (final part in parts.whereType<Map<String, dynamic>>()) {
+          final text = part['text'] as String?;
+          // Gemini thinking parts use thought=true and carry their text in part.text.
+          if (text != null && text.isNotEmpty) {
+            if (part['thought'] == true) {
+              events.add(ReasoningDeltaEvent(text));
+            } else {
+              events.add(TextDeltaEvent(text));
+            }
           }
-          final candidates = json['candidates'] as List<dynamic>? ?? const [];
-          for (final candidate
-              in candidates.whereType<Map<String, dynamic>>()) {
-            // Gemini 用大写枚举（STOP / MAX_TOKENS / SAFETY / …），
-            // MALFORMED_FUNCTION_CALL 等未识别值会落到 unknown，不执行工具。
-            final finish = candidate['finishReason'] as String?;
-            if (finish != null && finish.isNotEmpty) {
-              stopReason = StopReason.parse(finish);
-            }
-            final content =
-                candidate['content'] as Map<String, dynamic>? ?? const {};
-            final parts = content['parts'] as List<dynamic>? ?? const [];
-            for (final part in parts.whereType<Map<String, dynamic>>()) {
-              final text = part['text'] as String?;
-              // Gemini thinking parts use thought=true and carry their text in part.text.
-              if (text != null && text.isNotEmpty) {
-                if (part['thought'] == true) {
-                  yield ReasoningDeltaEvent(text);
-                } else {
-                  yield TextDeltaEvent(text);
-                }
-              }
-              final functionCall = part['functionCall'];
-              if (functionCall is Map<String, dynamic>) {
-                final args = functionCall['args'];
-                final parsedArguments = args == null
-                    ? const <String, dynamic>{}
-                    : args is Map<String, dynamic>
-                        ? args
-                        : <String, dynamic>{
-                            '_unparsed': jsonEncode(args),
-                          };
-                pendingCalls.add(ToolCall(
-                  id: 'gemini-call-${pendingCalls.length}',
-                  name: functionCall['name'] as String? ?? '',
-                  arguments: parsedArguments,
-                ));
-              }
-            }
+          final functionCall = part['functionCall'];
+          if (functionCall is Map<String, dynamic>) {
+            final args = functionCall['args'];
+            final parsedArguments = args == null
+                ? const <String, dynamic>{}
+                : args is Map<String, dynamic>
+                    ? args
+                    : <String, dynamic>{
+                        '_unparsed': jsonEncode(args),
+                      };
+            pendingCalls.add(ToolCall(
+              id: 'gemini-call-${pendingCalls.length}',
+              name: functionCall['name'] as String? ?? '',
+              arguments: parsedArguments,
+            ));
           }
         }
       }
-      for (final data in sse.close()) {
-        final trailing = _parseSseData(data);
-        if (trailing != null) {
-          final usage = trailing['usageMetadata'];
-          if (usage is Map<String, dynamic>) {
-            updateUsage(usage);
-          }
-          // 收尾帧常只带 usageMetadata + finishReason，同样要取到结束原因。
-          final trailingCandidates =
-              trailing['candidates'] as List<dynamic>? ?? const [];
-          for (final candidate
-              in trailingCandidates.whereType<Map<String, dynamic>>()) {
-            final finish = candidate['finishReason'] as String?;
-            if (finish != null && finish.isNotEmpty) {
-              stopReason = StopReason.parse(finish);
-            }
-          }
-        }
-      }
+      return events;
+    }
 
+    List<UnifiedEvent> finalize() {
+      final events = <UnifiedEvent>[];
       for (final call in pendingCalls) {
-        yield ToolCallEvent(call);
+        events.add(ToolCallEvent(call));
       }
-      yield UsageEvent(
+      events.add(UsageEvent(
           promptTokens: promptTokens,
           completionTokens: completionTokens,
-          cachedTokens: cachedTokens);
-      yield CompletedEvent(stopReason: stopReason);
+          cachedTokens: cachedTokens));
+      events.add(CompletedEvent(stopReason: stopReason));
+      return events;
+    }
+
+    try {
+      yield* runStreaming(
+        url: url,
+        payload: payload,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
+        },
+        cancelToken: cancelToken,
+        onFrame: onFrame,
+        finalize: finalize,
+      );
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;
