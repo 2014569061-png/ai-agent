@@ -15,6 +15,7 @@ import '../../domain/models.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
+import '../widgets/immersive_sheet.dart';
 
 class WorkspaceFilesPage extends ConsumerStatefulWidget {
   const WorkspaceFilesPage({super.key});
@@ -252,7 +253,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                       title: '文件访问授权策略',
                       subtitle: '删除文件与关键代码编辑始终经过弹窗确认',
                       onTap: () {
-                        showDialog(
+                        showImmersiveDialog<void>(
                           context: context,
                           builder: (ctx) => AlertDialog(
                             title: const Text('文件授权说明'),

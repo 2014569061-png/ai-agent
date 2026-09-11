@@ -1,7 +1,7 @@
 name: mobile_agent
 description: A mobile-first multi-provider AI Agent client.
 publish_to: "none"
-version: 0.8.7+88
+version: 0.9.0+90
 
 environment:
   sdk: ^3.5.0
