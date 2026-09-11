@@ -817,6 +817,13 @@ class AppDatabase extends _$AppDatabase {
         ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
       .get();
 
+  /// 可恢复任务：进程被杀遗留的 running + 预算暂停的 paused 都要给恢复入口，
+  /// 否则 paused 任务（resumeTask 本身支持）永远无法被用户发现。
+  Future<List<Task>> resumableTasks() => (select(tasks)
+        ..where((row) => row.status.isIn(const ['running', 'paused']))
+        ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
+      .get();
+
   Future<List<Task>> allTasks({int limit = 100}) => (select(tasks)
         ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
         ..limit(limit))

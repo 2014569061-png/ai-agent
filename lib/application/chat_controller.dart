@@ -1096,11 +1096,11 @@ class ChatController extends Notifier<ChatState> {
     // A3 连续语音对话：占位，后续接入 TTS/ASR 循环。
   }
 
-  /// C2 断点恢复：列出上次被中断（仍为 running）的后台任务。
+  /// C2 断点恢复：列出可续跑的后台任务（被杀遗留的 running + 预算暂停的 paused）。
   Future<List<Task>> recoverableTasks() async {
     try {
       final database = await ref.read(databaseProvider.future);
-      return await TaskService().runningTasks(database);
+      return await TaskService().resumableTasks(database);
     } catch (_) {
       return const [];
     }

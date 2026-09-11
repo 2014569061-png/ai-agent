@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -55,7 +56,17 @@ class StructuredTaskResult {
 class TaskService {
   static const maxAppliedRunIds = 128;
 
+  // id 若只用微秒时间戳，Windows 时钟粒度下连续两次 create 可能取到同值，
+  // insertOnConflictUpdate 会静默覆盖上一条任务。这里用随机后缀保证唯一。
+  static final Random _idRandom = Random();
+
+  static String _newTaskId() =>
+      'task-${DateTime.now().microsecondsSinceEpoch}-${_idRandom.nextInt(0x7fffffff)}';
+
   Future<List<Task>> runningTasks(AppDatabase db) => db.runningTasks();
+
+  /// 恢复入口用：running（进程被杀遗留）与 paused（预算暂停）都可续跑。
+  Future<List<Task>> resumableTasks(AppDatabase db) => db.resumableTasks();
 
   Future<List<Task>> allTasks(AppDatabase db, {int limit = 100}) =>
       db.allTasks(limit: limit);
@@ -69,7 +80,7 @@ class TaskService {
   }) async {
     final now = DateTime.now();
     final task = Task(
-      id: 'task-${now.microsecondsSinceEpoch}',
+      id: _newTaskId(),
       conversationId: conversationId,
       type: type,
       status: 'running',

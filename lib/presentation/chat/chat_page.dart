@@ -710,7 +710,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
-  /// 检测是否有进程被杀前遗留的「运行中」任务，提示用户是否继续。
+  /// 检测可续跑的后台任务（进程被杀遗留的 running + 预算暂停的 paused），提示用户是否继续。
   Future<void> _checkRecoverableTask() async {
     try {
       final tasks = await _chat.recoverableTasks();
@@ -719,7 +719,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('发现未完成的任务'),
-          content: const Text('上次有一个 Agent 任务在后台中断，是否继续执行？'),
+          content: const Text('上次有 Agent 任务在后台中断或暂停，是否继续执行？'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),

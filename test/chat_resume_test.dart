@@ -37,7 +37,7 @@ void main() {
   // 否则恢复路径会以 MissingPluginException 整轮失败。
   SharedPreferences.setMockInitialValues(<String, Object>{});
 
-  test('recoverableTasks 只把 running 任务当作「上次被中断」的候选', () async {
+  test('recoverableTasks 把 running 与 paused 任务都当作可恢复候选', () async {
     final env = await _Env.boot();
     final service = TaskService();
     final running = await service.create(
@@ -60,11 +60,10 @@ void main() {
 
     final tasks = await env.controller.recoverableTasks();
 
-    expect(tasks.map((task) => task.id), [running.id]);
-    // 记录当前边界：预算暂停（paused）任务不会被 recoverableTasks 发现，
-    // 只有进程被杀时留下的 running 任务会触发「是否继续执行」提示。
-    // 若将来要让 paused 也可恢复，这里会先变红，提示同步修改 UI 提示语。
-    expect(tasks.map((task) => task.status), everyElement('running'));
+    // 2026-09-12 决策：paused（预算暂停）任务也必须有恢复入口，
+    // 否则用户没有任何途径发现它们（resumeTask 本就接受 paused）。
+    expect(tasks.map((task) => task.id), containsAll([running.id, paused.id]));
+    expect(tasks.map((task) => task.id), isNot(contains(completed.id)));
   });
 
   test('resumeTask 对已应用过的 checkpoint 只清理、不重复写回会话', () async {

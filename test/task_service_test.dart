@@ -34,6 +34,33 @@ void main() {
     expect(running.map((t) => t.id), contains(task.id));
   });
 
+  test('rapid creates never collide on id (Windows clock granularity)', () async {
+    final ids = <String>{};
+    for (var i = 0; i < 200; i++) {
+      final task = await taskService.create(
+          db: db, conversationId: 'c$i', requestJson: '{}');
+      expect(ids.add(task.id), isTrue,
+          reason: 'create 的 id 在时钟同刻度下发生碰撞: ${task.id}');
+    }
+  });
+
+  test('resumableTasks lists running and paused, excludes terminal', () async {
+    final a = await taskService.create(
+        db: db, conversationId: 'c1', requestJson: '{}');
+    final b = await taskService.create(
+        db: db, conversationId: 'c1', requestJson: '{}');
+    final c = await taskService.create(
+        db: db, conversationId: 'c1', requestJson: '{}');
+
+    await taskService.updateStatus(db, b.id, 'paused');
+    await taskService.updateStatus(db, c.id, 'completed');
+
+    final ids = (await taskService.resumableTasks(db)).map((t) => t.id);
+    expect(ids, contains(a.id), reason: 'running 应可恢复');
+    expect(ids, contains(b.id), reason: 'paused 应可恢复（resumeTask 本就支持）');
+    expect(ids, isNot(contains(c.id)), reason: 'completed 不应出现在恢复入口');
+  });
+
   test('updateStatus completes a task and removes it from running', () async {
     final task = await taskService.create(
         db: db, conversationId: 'c1', requestJson: '{}');
