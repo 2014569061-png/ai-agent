@@ -6,8 +6,8 @@ abstract final class AppLocaleController {
   static const key = 'settings.language';
   static final locale = ValueNotifier<Locale?>(null);
 
-  static Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
+  static Future<void> load([SharedPreferences? shared]) async {
+    final prefs = shared ?? await SharedPreferences.getInstance();
     locale.value = _parse(prefs.getString(key));
   }
 

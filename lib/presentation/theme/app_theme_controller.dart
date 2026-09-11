@@ -6,8 +6,8 @@ class AppThemeController {
 
   static final mode = ValueNotifier<ThemeMode>(ThemeMode.system);
 
-  static Future<void> load() async {
-    final preferences = await SharedPreferences.getInstance();
+  static Future<void> load([SharedPreferences? shared]) async {
+    final preferences = shared ?? await SharedPreferences.getInstance();
     final saved = preferences.getString('app.theme_mode');
     mode.value = switch (saved) {
       'light' => ThemeMode.light,

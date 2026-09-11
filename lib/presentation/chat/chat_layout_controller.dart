@@ -9,8 +9,8 @@ abstract final class ChatLayoutController {
   static const customDefault = .75;
   static final widthFactor = ValueNotifier<double>(adaptive);
 
-  static Future<void> load() async {
-    final preferences = await SharedPreferences.getInstance();
+  static Future<void> load([SharedPreferences? shared]) async {
+    final preferences = shared ?? await SharedPreferences.getInstance();
     widthFactor.value =
         _normalize(preferences.getDouble('chat.bubble_width') ?? adaptive);
   }

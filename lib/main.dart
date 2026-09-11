@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:app_links/app_links.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,14 +30,23 @@ import 'presentation/widgets/immersive_background.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  AppThemeController.load();
-  ChatLayoutController.load();
-  AppLocaleController.load();
-  AppAppearanceController.load();
+  // F-5：四处分头 load() 各自触发一次平台通道往返，合并为一次实例获取后并发载入。
+  // 仍不阻塞首帧（unawaited），只是把 4 次 SharedPreferences 往返压成 1 次。
+  unawaited(_loadUiPreferences());
 
   // The first Flutter frame must not wait for platform services or storage.
   runApp(const ProviderScope(child: MobileAgentApp()));
   unawaited(_initializeServices());
+}
+
+Future<void> _loadUiPreferences() async {
+  final prefs = await SharedPreferences.getInstance();
+  await Future.wait([
+    AppThemeController.load(prefs),
+    ChatLayoutController.load(prefs),
+    AppLocaleController.load(prefs),
+    AppAppearanceController.load(prefs),
+  ]);
 }
 
 Future<void> _initializeServices() async {

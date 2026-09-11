@@ -7,8 +7,8 @@ abstract final class AppAppearanceController {
   static final glassIntensity = ValueNotifier<double>(.8);
   static final effects = ValueNotifier<String>('full');
 
-  static Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
+  static Future<void> load([SharedPreferences? shared]) async {
+    final prefs = shared ?? await SharedPreferences.getInstance();
     glassIntensity.value = (prefs.getDouble(glassKey) ?? .8).clamp(0.0, 1.0);
     effects.value = prefs.getString(effectsKey) ?? 'full';
   }

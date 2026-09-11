@@ -330,23 +330,29 @@ class ChatController extends Notifier<ChatState> {
 
   Future<void> _initialize() async {
     try {
-      String? activeWorkspace;
-      try {
-        activeWorkspace =
-            await ref.read(workspaceServiceProvider).getActiveWorkspace();
-      } catch (_) {}
-      final store = ref.read(providerConfigStoreProvider);
-      final config = await store.load();
+      // 四路互不依赖的读取并发执行（F-5），替代逐个串行等待。
       // Workspace is managed via state.currentWorkspacePath
       final database = await ref.read(databaseProvider.future);
+      final results = await Future.wait([
+        ref
+            .read(workspaceServiceProvider)
+            .getActiveWorkspace()
+            .catchError((_) => null),
+        ref.read(providerConfigStoreProvider).load(),
+        database.recentConversations(limit: 200),
+        database.allAgents(),
+      ]);
+      final activeWorkspace = results[0] as String?;
+      final config = results[1] as ProviderConfig;
+      final conversations = results[2] as List<Conversation>;
+      var agents = results[3] as List<Agent>;
       // 历史脏数据修复：统一修复早期版本遗留的乱码文本。
+      // F-5：版本位短路 —— 完整跑过一次后不再每次启动全表扫描。
       await _healMojibakeAgents(database);
-      final conversations = await database.recentConversations();
       final conversation = conversations.isNotEmpty
           ? conversations.first
           : await _createConversation(database);
       final storedMessages = await database.messagesFor(conversation.id);
-      var agents = await database.allAgents();
       if (agents.isEmpty) {
         final now = DateTime.now();
         await database.insertAgent(AgentsCompanion.insert(
@@ -389,9 +395,14 @@ class ChatController extends Notifier<ChatState> {
     '鏂颁細': '新会话',
   };
 
+  static const _mojibakeHealedFlag = 'settings.mojibakeHealed.v1';
+
   Future<void> _healMojibakeAgents(AppDatabase database) async {
-    final agents = await database.allAgents();
-    for (final agent in agents) {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_mojibakeHealedFlag) == true) return;
+      final agents = await database.allAgents();
+      for (final agent in agents) {
       final repaired = _nameRepairs[agent.name];
       if (repaired != null) {
         await database.insertAgent(AgentsCompanion.insert(
@@ -407,6 +418,10 @@ class ChatController extends Notifier<ChatState> {
           updatedAt: DateTime.now(),
         ));
       }
+      }
+      await prefs.setBool(_mojibakeHealedFlag, true);
+    } catch (_) {
+      // 读不到 prefs（单测/插件缺失）时退回每次扫描，不阻断初始化。
     }
   }
 
