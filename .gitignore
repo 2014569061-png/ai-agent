@@ -90,7 +90,6 @@ UI_REVIEW_FIX_GUIDE.txt
 current_home*.png
 menu.png
 settings*.png
-CHANGELOG.md
 MCP_Implementation_Plan.md
 Workspace_Coding_Agent_Plan.md
 fix_chat_page.py
