@@ -82,7 +82,7 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 22,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
                 height: 1.35,
                 color: textColor,
               ),
@@ -181,7 +181,7 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
                     '建议任务',
                     style:
                         Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                   ),
                 ),
