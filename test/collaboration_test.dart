@@ -12,7 +12,7 @@ import 'package:mobile_agent/application/task_service.dart';
 import 'package:mobile_agent/domain/collaboration_models.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/domain/tool_result.dart';
-import 'package:mobile_agent/infrastructure/collaboration/agent_runner.dart';
+import 'package:mobile_agent/application/collaboration_agent_runner.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/providers/llm_provider.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config.dart';

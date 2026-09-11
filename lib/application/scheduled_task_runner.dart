@@ -9,13 +9,13 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../application/headless_executor.dart';
-import '../../application/scheduled_task_service.dart';
-import '../database/app_database.dart';
-import '../notifications/notification_service.dart';
-import '../providers/provider_config_store.dart';
-import '../files/vault_exporter_io.dart';
-import '../files/local_crypto_service.dart';
+import 'headless_executor.dart';
+import 'scheduled_task_service.dart';
+import '../infrastructure/database/app_database.dart';
+import '../infrastructure/notifications/notification_service.dart';
+import '../infrastructure/providers/provider_config_store.dart';
+import '../infrastructure/files/vault_exporter_io.dart';
+import '../infrastructure/files/local_crypto_service.dart';
 
 /// C5 定时任务的后台入口（WorkManager 回调）。
 /// 在独立 isolate 中打开数据库、取到点任务、无 UI 运行 Agent、写入结果并弹通知。

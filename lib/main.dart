@@ -11,7 +11,7 @@ import 'package:workmanager/workmanager.dart';
 
 import 'application/onboarding_service.dart';
 import 'infrastructure/background/foreground_service.dart';
-import 'infrastructure/background/scheduled_task_runner.dart';
+import 'application/scheduled_task_runner.dart';
 import 'infrastructure/notifications/notification_service.dart';
 import 'infrastructure/observability/sentry_service.dart';
 import 'infrastructure/share/deep_link_service.dart';

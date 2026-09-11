@@ -5,7 +5,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/collaboration_models.dart';
-import '../infrastructure/collaboration/agent_runner.dart';
+import 'collaboration_agent_runner.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/provider_config_store.dart';
 import 'agent_executor.dart';

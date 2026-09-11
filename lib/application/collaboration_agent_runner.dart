@@ -1,10 +1,10 @@
 import 'package:crypto/crypto.dart';
 
-import '../../application/agent_executor.dart';
-import '../../application/headless_executor.dart';
-import '../../domain/collaboration_models.dart';
-import '../../infrastructure/database/app_database.dart';
-import '../providers/provider_config.dart';
+import 'agent_executor.dart';
+import 'headless_executor.dart';
+import '../domain/collaboration_models.dart';
+import '../infrastructure/database/app_database.dart';
+import '../infrastructure/providers/provider_config.dart';
 
 abstract interface class CollaborationAgentRunner {
   Future<CollaborationAgentOutput> run({
