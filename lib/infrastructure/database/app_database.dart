@@ -18,7 +18,8 @@ class Conversations extends Table {
 }
 
 /// 会话消息按会话查询 / 删除是高频路径，为 conversationId 建索引避免全表扫描。
-@TableIndex(name: 'idx_messages_conversation', columns: {#conversationId})
+@TableIndex(
+    name: 'idx_messages_conversation', columns: {#conversationId, #createdAt})
 class Messages extends Table {
   TextColumn get id => text()();
   TextColumn get conversationId => text()();
@@ -34,6 +35,7 @@ class Messages extends Table {
 }
 
 /// 长期记忆（跨会话）。本地优先，符合隐私叙事；注入时按权重/更新时间排序并截断。
+@TableIndex(name: 'idx_memories_enabled', columns: {#enabled})
 class Memories extends Table {
   TextColumn get id => text()();
   TextColumn get content => text()();
@@ -93,6 +95,7 @@ class ModelProfiles extends Table {
 }
 
 /// 后台任务持久化（C2）：记录 Agent / 定时任务的运行状态与请求快照，用于断点恢复。
+@TableIndex(name: 'idx_tasks_status_updated', columns: {#status, #updatedAt})
 class Tasks extends Table {
   TextColumn get id => text()();
   TextColumn get conversationId => text()();
@@ -235,6 +238,7 @@ class KnowledgeChunks extends Table {
 }
 
 /// 定时任务（C5）。
+@TableIndex(name: 'idx_scheduled_tasks_enabled', columns: {#enabled})
 class ScheduledTasks extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
@@ -251,6 +255,7 @@ class ScheduledTasks extends Table {
 }
 
 /// 审计日志（G2）：记录工具调用审批的决策链路。
+@TableIndex(name: 'idx_audit_logs_created', columns: {#createdAt})
 class AuditLogs extends Table {
   TextColumn get id => text()();
   TextColumn get conversationId => text().nullable()();
@@ -265,6 +270,7 @@ class AuditLogs extends Table {
 }
 
 /// Agent 单次运行摘要，用于任务级可观测性。
+@TableIndex(name: 'idx_run_records_started', columns: {#startedAt})
 class RunRecords extends Table {
   TextColumn get runId => text()();
   TextColumn get conversationId => text()();
@@ -427,7 +433,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -583,15 +589,32 @@ class AppDatabase extends _$AppDatabase {
               await m.addColumn(runRecords, runRecords.cancelDurationMs);
             }
           }
+          if (from < 17) {
+            // B-4：补齐热查询索引 —— 任务恢复按 (status, updatedAt)、Agent 过滤按
+            // enabled、消息列表按 (conversationId, createdAt) 免排序、审计/运行记录
+            // 按时间清理。同名消息索引从单列重建为复合，需先删旧索引。
+            await customStatement('DROP INDEX IF EXISTS idx_messages_conversation');
+            await m.createIndex(idxMessagesConversation);
+            await m.createIndex(idxTasksStatusUpdated);
+            await m.createIndex(idxMemoriesEnabled);
+            await m.createIndex(idxScheduledTasksEnabled);
+            await m.createIndex(idxAuditLogsCreated);
+            await m.createIndex(idxRunRecordsStarted);
+          }
         },
       );
 
-  Future<List<Conversation>> recentConversations() => (select(conversations)
-        ..orderBy([
-          (row) => OrderingTerm.desc(row.isPinned),
-          (row) => OrderingTerm.desc(row.updatedAt),
-        ]))
-      .get();
+  /// [limit]/[offset] 供列表页分页（B-2）：热路径（抽屉、启动恢复）必须显式限流，
+  /// 不传则全量 —— 保险箱导出等确实需要完整数据的场景保持原语义。
+  Future<List<Conversation>> recentConversations({int? limit, int offset = 0}) {
+    final query = select(conversations)
+      ..orderBy([
+        (row) => OrderingTerm.desc(row.isPinned),
+        (row) => OrderingTerm.desc(row.updatedAt),
+      ]);
+    if (limit != null) query.limit(limit, offset: offset);
+    return query.get();
+  }
 
   /// [since] 之后"活跃过"（更新或新建）的会话，按置顶 + 更新时间倒序。
   /// 供仪表盘统计今日会话与最近会话，避免无 limit 拉全表。
@@ -657,10 +680,21 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<List<Message>> messagesFor(String conversationId) => (select(messages)
-        ..where((row) => row.conversationId.equals(conversationId))
-        ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
-      .get();
+  /// [before]/[limit] 为键集分页参数（B-2）：传入 before 则只取该时刻之前的消息，
+  /// 返回仍按 createdAt 升序。不传时保持全量语义（现有调用方无需改动）。
+  Future<List<Message>> messagesFor(String conversationId,
+      {DateTime? before, int? limit}) {
+    final query = select(messages)
+      ..where((row) => before == null
+          ? row.conversationId.equals(conversationId)
+          : (row.conversationId.equals(conversationId) &
+              row.createdAt.isSmallerThanValue(before)))
+      ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]);
+    if (limit != null) query.limit(limit);
+    return query
+        .get()
+        .then((rows) => rows.reversed.toList(growable: false));
+  }
 
   /// 删除最后一次用户消息之后的所有助手/工具消息（用于"重新生成"时清理上一轮结果）。
   Future<void> deleteTrailingAssistantAndTool(String conversationId) async {

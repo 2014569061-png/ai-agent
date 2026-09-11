@@ -11327,7 +11327,18 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CollaborationMessagesTable collaborationMessages =
       $CollaborationMessagesTable(this);
   late final Index idxMessagesConversation = Index('idx_messages_conversation',
-      'CREATE INDEX idx_messages_conversation ON messages (conversation_id)');
+      'CREATE INDEX idx_messages_conversation ON messages (conversation_id, created_at)');
+  late final Index idxMemoriesEnabled = Index('idx_memories_enabled',
+      'CREATE INDEX idx_memories_enabled ON memories (enabled)');
+  late final Index idxTasksStatusUpdated = Index('idx_tasks_status_updated',
+      'CREATE INDEX idx_tasks_status_updated ON tasks (status, updated_at)');
+  late final Index idxScheduledTasksEnabled = Index(
+      'idx_scheduled_tasks_enabled',
+      'CREATE INDEX idx_scheduled_tasks_enabled ON scheduled_tasks (enabled)');
+  late final Index idxAuditLogsCreated = Index('idx_audit_logs_created',
+      'CREATE INDEX idx_audit_logs_created ON audit_logs (created_at)');
+  late final Index idxRunRecordsStarted = Index('idx_run_records_started',
+      'CREATE INDEX idx_run_records_started ON run_records (started_at)');
   late final Index idxRunEventsRunSequence = Index(
       'idx_run_events_run_sequence',
       'CREATE UNIQUE INDEX idx_run_events_run_sequence ON run_events (run_id, sequence_no)');
@@ -11378,6 +11389,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         collaborationArtifacts,
         collaborationMessages,
         idxMessagesConversation,
+        idxMemoriesEnabled,
+        idxTasksStatusUpdated,
+        idxScheduledTasksEnabled,
+        idxAuditLogsCreated,
+        idxRunRecordsStarted,
         idxRunEventsRunSequence,
         idxLogRecordsRunCreated,
         idxLogRecordsLevelCreated,
