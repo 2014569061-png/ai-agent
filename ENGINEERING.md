@@ -25,7 +25,7 @@
 | 决策 | 内容 | 落点 |
 | --- | --- | --- |
 | 仅中文，不做 i18n | 不做 ARB/gen-l10n；内联中文行数不得上升 | `tool/check_inline_zh.sh` + `tool/inline_zh_baseline.txt` + CI 门禁 |
-| 字体 | 不声明 `fontFamily: 'Inter'`（未随包分发，声明只会导致字重合成不稳定）；Latin 交给系统字体。将来打包 Inter 须同时改 `app_theme.dart` 头注释处清单 + pubspec | `lib/presentation/theme/app_theme.dart` |
+| 字体 | **Inter 已随包分发**（2026-09-12，`assets/fonts/Inter-{Regular,Medium}.ttf` 400/500 两档，仅 Latin）；pubspec fonts 段与 `app_theme.dart` 的 fontFamily/_fontFallback 必须同时改，勿只声明不打包 | `lib/presentation/theme/app_theme.dart`、`pubspec.yaml` |
 | 多设备云同步 | 已移除，仅保留本地加解密（保险箱/备份）。`sync.salt`/`sync.secret` 旧 Secure Storage 键名**不可改名**（老数据解密依赖） | `lib/infrastructure/files/local_crypto_service.dart` |
 | `MANAGE_EXTERNAL_STORAGE` | **保留**：终端/Termux 桥（`/sdcard/pocketforge-bridge`）依赖，删除即功能失效 | `AndroidManifest.xml` |
 
