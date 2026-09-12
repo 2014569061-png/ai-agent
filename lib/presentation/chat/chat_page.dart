@@ -507,14 +507,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     FloatingToast.show(context, next ? '智能搜索已开启' : '智能搜索已关闭');
   }
 
-  /// 语音输入入口。当前工程未接入语音识别能力（无 speech 依赖、
-  /// AndroidManifest 也未声明 RECORD_AUDIO），因此先给出明确提示，
-  /// 待接入后把这里替换为「按住说话」的录音 / 转写流程即可。
-  void _handleVoiceInput() {
-    HapticFeedback.mediumImpact();
-    FloatingToast.show(context, '语音输入尚未接入，可先用键盘输入');
-  }
-
   /// 会话指标条（对标 DeepSeek 输入区上方的指标胶囊）。
   ///
   /// 空会话与纯聊天不渲染，避免在首页制造噪音；自定义聊天背景下
@@ -2315,7 +2307,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       onSend: _send,
                       onStop: _stop,
                       onAttachmentMenu: _showAttachmentMenu,
-                      onVoiceInput: _handleVoiceInput,
                       deepThinking: _deepThinking,
                       onDeepThinkingToggle: _toggleDeepThinking,
                       webSearch: _webSearch,

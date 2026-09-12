@@ -8,10 +8,15 @@ import '../../theme/app_tokens.dart';
 ///
 /// 结构：
 ///   外层 24px 大圆角 + surface 底色，聚焦时描边转 brand
-///   ├─ 输入行：最小高 44px，占位符「发消息或按住说话」
+///   ├─ 输入行：最小高 44px，占位符「发消息」
 ///   └─ 操作行：高 30px
 ///        ├─ 左：深度思考 / 智能搜索 两个能力 chip（胶囊）
-///        └─ 右：「＋」圆形描边按钮 + 语音按钮（有输入内容时切换为发送键）
+///        └─ 右：「＋」圆形描边按钮 + 尾键
+///           （生成中 = 停止 / 有内容 = 发送 / 空输入 = 置灰发送，不可点）
+///
+/// 尾键不再有语音入口：本项目未接入语音识别，此前那个"看着能用、点了只弹提示"
+/// 的语音键是纯假按钮（2026-09-12 移除）。**若将来接入语音，请在这里新增一个真实
+/// 可用的入口，不要恢复成占位 toast。**
 class FloatingCapsuleInput extends StatefulWidget {
   const FloatingCapsuleInput({
     super.key,
@@ -21,7 +26,6 @@ class FloatingCapsuleInput extends StatefulWidget {
     required this.onSend,
     required this.onStop,
     required this.onAttachmentMenu,
-    this.onVoiceInput,
     this.deepThinking = true,
     this.onDeepThinkingToggle,
     this.webSearch = true,
@@ -38,9 +42,6 @@ class FloatingCapsuleInput extends StatefulWidget {
 
   /// 「＋」按钮：附件与更多工具
   final VoidCallback onAttachmentMenu;
-
-  /// 语音输入（长按按住说话）
-  final VoidCallback? onVoiceInput;
 
   final bool deepThinking;
   final VoidCallback? onDeepThinkingToggle;
@@ -206,7 +207,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                           semanticLabel: '添加附件或更多工具',
                           onTap: widget.onAttachmentMenu,
                         ),
-                        _buildTrailingAction(textMuted, textFaint, isDark),
+                        _buildTrailingAction(textFaint, isDark),
                       ],
                     ),
                   ),
@@ -219,8 +220,11 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
     );
   }
 
-  /// 生成中 → 停止键；有内容 → 发送键；否则 → 语音键。
-  Widget _buildTrailingAction(Color textMuted, Color textFaint, bool isDark) {
+  /// 生成中 → 停止键；有内容 → 发送键；空输入 → 置灰的发送键（不可点）。
+  ///
+  /// 空输入保留一个置灰发送键，而不是留空：位置固定、用户能预期"打完字这个按钮就能用"，
+  /// 也让操作行右侧不会因为状态切换而左右跳动。
+  Widget _buildTrailingAction(Color textFaint, bool isDark) {
     if (widget.isRunning) {
       return _FilledCircleButton(
         color: AppPalette.danger,
@@ -245,19 +249,13 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         },
       );
     }
-    final voiceEnabled = widget.onVoiceInput != null;
-    return _CircleIconButton(
-      icon: Icons.graphic_eq_rounded,
-      iconSize: 18,
-      color: voiceEnabled ? textMuted : textFaint.withValues(alpha: 0.5),
-      tooltip: voiceEnabled ? '按住说话' : '语音输入暂未开启',
-      semanticLabel: voiceEnabled ? '按住说话' : '语音输入暂未开启',
-      onTap: widget.onVoiceInput == null
-          ? null
-          : () {
-              HapticFeedback.selectionClick();
-              widget.onVoiceInput!();
-            },
+    return _FilledCircleButton(
+      color: isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
+      icon: Icons.arrow_upward_rounded,
+      iconColor: textFaint,
+      tooltip: '发送',
+      semanticLabel: '发送',
+      onTap: null,
     );
   }
 
@@ -385,7 +383,7 @@ class _ModeChip extends StatelessWidget {
   }
 }
 
-/// 圆形描边按钮（「＋」与语音键）。48x48 触控区，视觉尺寸 30dp。
+/// 圆形描边按钮（「＋」附件与工具入口）。48x48 触控区，视觉尺寸 30dp。
 class _CircleIconButton extends StatelessWidget {
   const _CircleIconButton({
     required this.icon,
@@ -393,7 +391,6 @@ class _CircleIconButton extends StatelessWidget {
     required this.semanticLabel,
     this.tooltip,
     this.onTap,
-    this.color,
   });
 
   final IconData icon;
@@ -401,13 +398,11 @@ class _CircleIconButton extends StatelessWidget {
   final String semanticLabel;
   final String? tooltip;
   final VoidCallback? onTap;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final resolved =
-        color ?? (isDark ? AppPalette.darkText : AppPalette.lightText);
+    final resolved = isDark ? AppPalette.darkText : AppPalette.lightText;
 
     Widget button = SizedBox(
       width: 48,
@@ -446,21 +441,26 @@ class _CircleIconButton extends StatelessWidget {
   }
 }
 
-/// 实心圆形按钮（发送 / 停止）。48x48 触控区，视觉尺寸 30dp。
+/// 实心圆形按钮（发送 / 停止 / 置灰发送）。48x48 触控区，视觉尺寸 30dp。
+///
+/// [onTap] 为 null 时渲染为不可点的置灰态 —— 视觉位置不变，但语义上 `enabled: false`，
+/// 读屏会把它读成"不可用"，而不是一个点了没反应的按钮。
 class _FilledCircleButton extends StatelessWidget {
   const _FilledCircleButton({
     required this.color,
     required this.icon,
     required this.semanticLabel,
     this.tooltip,
-    required this.onTap,
+    this.onTap,
+    this.iconColor = Colors.white,
   });
 
   final Color color;
   final IconData icon;
   final String semanticLabel;
   final String? tooltip;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final Color iconColor;
 
   @override
   Widget build(BuildContext context) {
@@ -480,7 +480,7 @@ class _FilledCircleButton extends StatelessWidget {
               height: AppTokens.composerCircleButton,
               decoration: BoxDecoration(shape: BoxShape.circle, color: color),
               alignment: Alignment.center,
-              child: Icon(icon, size: 18, color: Colors.white),
+              child: Icon(icon, size: 18, color: iconColor),
             ),
           ),
         ),
@@ -494,6 +494,7 @@ class _FilledCircleButton extends StatelessWidget {
     return Semantics(
       label: semanticLabel,
       button: true,
+      enabled: onTap != null,
       child: button,
     );
   }

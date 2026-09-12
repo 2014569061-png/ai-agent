@@ -1110,10 +1110,6 @@ class ChatController extends Notifier<ChatState> {
 
   Completer<bool>? _planCompleter;
 
-  void setVoiceLoopMode(bool value) {
-    // A3 连续语音对话：占位，后续接入 TTS/ASR 循环。
-  }
-
   /// C2 断点恢复：列出可续跑的后台任务（被杀遗留的 running + 预算暂停的 paused）。
   Future<List<Task>> recoverableTasks() async {
     try {

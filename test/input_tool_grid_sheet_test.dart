@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/chat/widgets/input_tool_grid_sheet.dart';
 import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.dart';
+import 'package:mobile_agent/presentation/theme/app_palette.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 
 void main() {
@@ -139,12 +140,11 @@ void main() {
     expect(attachTapped, isTrue);
   });
 
-  testWidgets('有输入内容时语音键切换为发送键', (tester) async {
+  testWidgets('空输入时尾键是置灰发送键（不可点），有输入后变为可发送', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
     bool sent = false;
-    bool voiceTapped = false;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -156,7 +156,6 @@ void main() {
             onSend: () => sent = true,
             onStop: () {},
             onAttachmentMenu: () {},
-            onVoiceInput: () => voiceTapped = true,
             onDeepThinkingToggle: () {},
             onWebSearchToggle: () {},
           ),
@@ -165,20 +164,37 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 空输入 → 语音键
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsOneWidget);
-    await tester.tap(find.byIcon(Icons.graphic_eq_rounded));
-    await tester.pumpAndSettle();
-    expect(voiceTapped, isTrue);
+    // 空输入：尾键是置灰的发送键。语音入口已移除（未接入语音识别，
+    // 留着只会是"看着能用、点了没反应"的假按钮）。
+    expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(_trailingButtonColor(tester), AppPalette.lightSurfaceHover);
 
-    // 有输入 → 发送键
+    await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
+    await tester.pumpAndSettle();
+    expect(sent, isFalse, reason: '空输入时发送键必须不可点');
+
+    // 有输入：同一位置变可发送
     controller.text = '你好';
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
-    expect(find.byIcon(Icons.graphic_eq_rounded), findsNothing);
+    expect(_trailingButtonColor(tester), AppPalette.brand);
 
     await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
     await tester.pumpAndSettle();
     expect(sent, isTrue);
   });
+}
+
+/// 尾键（发送/停止）的实心底色：置灰态与可用态靠它区分。
+Color? _trailingButtonColor(WidgetTester tester) {
+  final container = tester.widget<AnimatedContainer>(
+    find
+        .ancestor(
+          of: find.byIcon(Icons.arrow_upward_rounded),
+          matching: find.byType(AnimatedContainer),
+        )
+        .first,
+  );
+  return (container.decoration as BoxDecoration?)?.color;
 }
