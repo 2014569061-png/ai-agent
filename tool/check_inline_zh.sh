@@ -9,6 +9,7 @@
 # 只统计"内容行"：纯注释行（// 开头）与空行不计 —— 门禁拦的是用户可见文案，
 # 不是代码注释（2026-09-12 实测：注释里的中文说明会把门禁误伤成红）。
 set -euo pipefail
+export LC_ALL=C.UTF-8
 cd "$(dirname "$0")/.."
 
 BASELINE_FILE="tool/inline_zh_baseline.txt"

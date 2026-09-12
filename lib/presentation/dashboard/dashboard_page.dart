@@ -9,6 +9,7 @@ import '../history/history_page.dart';
 import '../l10n/app_strings.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
 import '../widgets/section_card.dart';
@@ -120,32 +121,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                 loading: () => const _DashboardSkeleton(),
                 error: (err, stack) {
                   final humanized = humanizeError(err.toString());
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.error_outline_rounded,
-                              size: 40, color: AppPalette.danger),
-                          const SizedBox(height: 12),
-                          Text(
-                            humanized.summary,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                fontSize: 14,
-                                color: isDark
-                                    ? AppPalette.darkText
-                                    : AppPalette.lightText),
-                          ),
-                          const SizedBox(height: 16),
-                          FilledButton.tonal(
-                            onPressed: _refresh,
-                            child: const Text(AppStrings.retry),
-                          ),
-                        ],
-                      ),
-                    ),
+                  return EmptyStateView(
+                    icon: Icons.error_outline_rounded,
+                    title: humanized.summary,
+                    actionLabel: AppStrings.retry,
+                    onAction: _refresh,
                   );
                 },
                 data: (summary) => RefreshIndicator(
@@ -314,14 +294,11 @@ class _RecentConversationsSection extends StatelessWidget {
       child: SectionCard(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: conversations.isEmpty
-            ? Padding(
-                padding:
-                    const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                child: Center(
-                  child: Text(
-                    AppStrings.noRecentConversations,
-                    style: TextStyle(fontSize: 13, color: textMuted),
-                  ),
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                child: EmptyStateView.compact(
+                  icon: Icons.history_rounded,
+                  title: AppStrings.noRecentConversations,
                 ),
               )
             : ListView.separated(

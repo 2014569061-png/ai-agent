@@ -376,7 +376,8 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : filtered.isEmpty
                     ? const EmptyStateView(
                         icon: Icons.lightbulb_outline,

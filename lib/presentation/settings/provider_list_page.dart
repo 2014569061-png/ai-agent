@@ -125,7 +125,7 @@ class _ProviderListPageState extends State<ProviderListPage> {
         subtitle: '管理大语言模型与 API 接入',
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [

@@ -124,7 +124,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
         subtitle: '全量数据导出、备份恢复与本地存储管理',
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [

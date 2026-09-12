@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_strings.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/immersive_sheet.dart';
 
@@ -274,39 +276,22 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
           // 列表
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : _error != null
                     ? Center(
-                        child:
-                            Column(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.error_outline,
-                              size: 44, color: theme.colorScheme.error),
-                          const SizedBox(height: 10),
-                          const Text('目录读取失败'),
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: _loadDirectory,
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('重试'),
-                          ),
-                        ]),
+                        child: EmptyStateView.compact(
+                          icon: Icons.error_outline_rounded,
+                          title: '目录读取失败',
+                          actionLabel: AppStrings.retry,
+                          onAction: _loadDirectory,
+                        ),
                       )
                     : _entities.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.folder_open_outlined,
-                                    size: 48,
-                                    color: theme.colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.5)),
-                                const SizedBox(height: 10),
-                                Text('此目录为空',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        color: theme
-                                            .colorScheme.onSurfaceVariant)),
-                              ],
+                        ? const Center(
+                            child: EmptyStateView.compact(
+                              icon: Icons.folder_open_rounded,
+                              title: '此目录为空',
                             ),
                           )
                         : ListView.builder(

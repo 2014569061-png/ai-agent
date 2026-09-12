@@ -486,7 +486,8 @@ class _AgentsPageState extends State<AgentsPage> {
           future: _agents,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2));
             }
             final agents = snapshot.data!;
             if (agents.isEmpty) {

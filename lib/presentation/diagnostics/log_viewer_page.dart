@@ -355,7 +355,9 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
                       if (index >= _logs.length) {
                         return const Padding(
                             padding: EdgeInsets.all(16),
-                            child: Center(child: CircularProgressIndicator()));
+                            child: Center(
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2)));
                       }
                       final log = _logs[index];
                       final detail = _decodeDetail(log.detailJson)?.toString();

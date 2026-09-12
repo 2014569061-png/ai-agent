@@ -20,7 +20,7 @@ class AsyncStateView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (error != null) {
       final isDark = Theme.of(context).brightness == Brightness.dark;

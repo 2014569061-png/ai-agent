@@ -51,7 +51,7 @@ class _LanguagePageState extends State<LanguagePage> {
         subtitle: '选择应用界面显示语言与多语言支持',
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [

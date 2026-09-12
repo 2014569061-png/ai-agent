@@ -80,7 +80,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
         subtitle: '界面质感 · 动效与聊天视觉定制',
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [

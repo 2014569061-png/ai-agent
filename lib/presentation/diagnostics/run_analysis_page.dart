@@ -823,7 +823,8 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
               if (_loadingMore)
                 const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Center(child: CircularProgressIndicator())),
+                    child: Center(
+                        child: CircularProgressIndicator(strokeWidth: 2))),
             ],
           ),
         ),

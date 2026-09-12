@@ -5,6 +5,7 @@ import '../../application/orchestration_module.dart';
 import '../../domain/collaboration_models.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/section_card.dart';
 import 'collaboration_timeline.dart';
 
@@ -113,7 +114,7 @@ class _CollaborationPlanSheetState
         child: _loading
             ? const SizedBox(
                 height: 260,
-                child: Center(child: CircularProgressIndicator()),
+                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               )
             : _error != null
                 ? _errorView()
@@ -397,7 +398,11 @@ class _CollaborationPlanSheetState
   Widget _errorView() => SizedBox(
         height: 260,
         child: Center(
-          child: Text('协作方案生成失败：$_error'),
+          child: EmptyStateView.compact(
+            icon: Icons.error_outline_rounded,
+            title: '协作方案生成失败',
+            message: '$_error',
+          ),
         ),
       );
 

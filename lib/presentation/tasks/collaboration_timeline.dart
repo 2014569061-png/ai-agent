@@ -8,9 +8,11 @@ import '../../application/orchestration_module.dart';
 import '../../application/providers.dart';
 import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../l10n/app_strings.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
@@ -154,7 +156,13 @@ class _CollaborationTimelinePageState
         ],
       ),
       body: _error != null
-          ? Center(child: Text('加载失败：$_error'))
+          ? EmptyStateView(
+              icon: Icons.error_outline_rounded,
+              title: '加载失败',
+              message: _error?.toString(),
+              actionLabel: AppStrings.retry,
+              onAction: _load,
+            )
           : Column(
               children: [
                 // 1. 等待执行审批时置顶固定提示条

@@ -207,7 +207,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
         subtitle: 'Termux · proot · 宿主终端交互管理',
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [

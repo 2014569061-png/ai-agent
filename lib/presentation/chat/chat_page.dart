@@ -1901,7 +1901,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
         if (loading) {
           return const Scaffold(
-              body: Center(child: CircularProgressIndicator()));
+              body: Center(child: CircularProgressIndicator(strokeWidth: 2)));
         }
         return Scaffold(
           key: _scaffoldKey,

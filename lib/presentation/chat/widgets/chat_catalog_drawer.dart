@@ -306,9 +306,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                         icon: _filterQuery.isEmpty
                             ? Icons.history_rounded
                             : Icons.search_off_rounded,
-                        title: _filterQuery.isEmpty
-                            ? '暂无历史会话'
-                            : '未找到匹配会话',
+                        title: _filterQuery.isEmpty ? '暂无历史会话' : '未找到匹配会话',
                       ),
                     )
                   else

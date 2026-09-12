@@ -302,7 +302,8 @@ class _HistoryPageState extends State<HistoryPage> {
           const SizedBox(height: 8),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(
+                    child: CircularProgressIndicator(strokeWidth: 2))
                 : filtered.isEmpty
                     ? EmptyStateView(
                         icon: Icons.forum_outlined,

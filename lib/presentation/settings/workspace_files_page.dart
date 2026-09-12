@@ -188,7 +188,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
         subtitle: '沙箱环境 · 目录访问与存储管理',
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [
