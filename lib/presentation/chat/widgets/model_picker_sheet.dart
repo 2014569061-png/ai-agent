@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../widgets/empty_state_view.dart';
 import '../../../infrastructure/providers/provider_config.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
@@ -341,24 +342,11 @@ class _EmptyModels extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.tune_rounded, size: 38),
-            const SizedBox(height: 10),
-            const Text('还没有可用模型'),
-            if (onOpenSettings != null) ...[
-              const SizedBox(height: 10),
-              TextButton.icon(
-                onPressed: onOpenSettings,
-                icon: const Icon(Icons.settings_outlined),
-                label: const Text('去设置添加 Provider'),
-              ),
-            ],
-          ],
-        ),
+      child: EmptyStateView.compact(
+        icon: Icons.tune_rounded,
+        title: '还没有可用模型',
+        actionLabel: onOpenSettings == null ? null : '去设置添加 Provider',
+        onAction: onOpenSettings,
       ),
     );
   }

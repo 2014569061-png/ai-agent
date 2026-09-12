@@ -16,6 +16,7 @@ import '../../widgets/immersive_sheet.dart';
 import '../../widgets/immersive_action_sheet.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/empty_state_view.dart';
 
 /// 侧边工作台目录抽屉 (Catalog Drawer) - 对标 DeepSeek 极简风格
 /// 1. 分组标签 11/500 textFaint，上间距 24 / 下间距 8，无背景
@@ -301,13 +302,13 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                   else if (filteredConversations.isEmpty)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        _filterQuery.isEmpty ? '暂无历史会话' : '未找到匹配会话',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: textMuted,
-                        ),
+                      child: EmptyStateView.compact(
+                        icon: _filterQuery.isEmpty
+                            ? Icons.history_rounded
+                            : Icons.search_off_rounded,
+                        title: _filterQuery.isEmpty
+                            ? '暂无历史会话'
+                            : '未找到匹配会话',
                       ),
                     )
                   else
