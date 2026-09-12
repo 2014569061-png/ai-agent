@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 
 /// 知识库 / RAG 服务（C4）。
@@ -36,7 +37,7 @@ class KnowledgeService {
     final chunks = _chunk(content.trim());
     final now = DateTime.now();
     final doc = KnowledgeDoc(
-      id: 'kd-${now.microsecondsSinceEpoch}',
+      id: UniqueId.generate('kd', now: now),
       name: name,
       sourceType: sourceType,
       chunkCount: chunks.length,
@@ -46,7 +47,7 @@ class KnowledgeService {
     await db.saveKnowledgeDoc(doc);
     for (var i = 0; i < chunks.length; i++) {
       await db.saveKnowledgeChunk(KnowledgeChunk(
-        id: 'kc-${now.microsecondsSinceEpoch}-$i',
+        id: '${doc.id}:chunk:$i',
         docId: doc.id,
         content: chunks[i],
         embeddingJson: null,

@@ -81,7 +81,20 @@ class KpiCardGrid extends StatelessWidget {
             ),
           ),
 
-          // 4. 任务成功率（无已完成/失败任务时展示 --）
+          // 4. 用户好评率（样本数）
+          SizedBox(
+            width: itemWidth,
+            child: NexusMetricTile(
+              label: AppStrings.taskFeedbackRate,
+              value: kpis.taskFeedbackRate == null
+                  ? '--'
+                  : '${kpis.taskFeedbackRate!.toStringAsFixed(0)}%',
+              unit: AppStrings.taskFeedbackSamples(kpis.taskFeedbackSamples),
+              icon: Icons.thumb_up_alt_outlined,
+            ),
+          ),
+
+          // 5. 任务成功率（无已完成/失败任务时展示 --）
           SizedBox(
             width: itemWidth,
             child: NexusMetricTile(

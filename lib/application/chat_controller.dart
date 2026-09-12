@@ -16,6 +16,7 @@ import 'autonomous_delegation.dart';
 import '../domain/models.dart';
 import '../domain/tool_codes.dart';
 import '../domain/tool_result.dart';
+import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/files/document_extractor.dart';
 import '../infrastructure/providers/anthropic_provider.dart';
@@ -299,7 +300,6 @@ class ChatState {
 
 /// Chat orchestration controller.
 class ChatController extends Notifier<ChatState> {
-  static int _messageSeq = 0;
   static const _maxAttachmentBytes = 8 * 1024 * 1024;
   static const _maxTextAttachmentChars = 100000;
   static const _documentExtractor = DocumentExtractor();
@@ -352,8 +352,7 @@ class ChatController extends Notifier<ChatState> {
       final conversation = conversations.isNotEmpty
           ? conversations.first
           : await _createConversation(database);
-      final storedPage =
-          await _loadConversationPage(database, conversation.id);
+      final storedPage = await _loadConversationPage(database, conversation.id);
       _trackLoadedWindow(storedPage);
       final storedMessages = storedPage.map((e) => e.$1).toList();
       if (agents.isEmpty) {
@@ -406,21 +405,21 @@ class ChatController extends Notifier<ChatState> {
       if (prefs.getBool(_mojibakeHealedFlag) == true) return;
       final agents = await database.allAgents();
       for (final agent in agents) {
-      final repaired = _nameRepairs[agent.name];
-      if (repaired != null) {
-        await database.insertAgent(AgentsCompanion.insert(
-          id: agent.id,
-          name: repaired,
-          systemPrompt: Value(agent.systemPrompt),
-          modelProfileId: agent.modelProfileId,
-          enabledToolsJson: Value(agent.enabledToolsJson),
-          temperature: Value(agent.temperature),
-          maxTokens: Value(agent.maxTokens),
-          maxSteps: Value(agent.maxSteps),
-          topP: Value(agent.topP),
-          updatedAt: DateTime.now(),
-        ));
-      }
+        final repaired = _nameRepairs[agent.name];
+        if (repaired != null) {
+          await database.insertAgent(AgentsCompanion.insert(
+            id: agent.id,
+            name: repaired,
+            systemPrompt: Value(agent.systemPrompt),
+            modelProfileId: agent.modelProfileId,
+            enabledToolsJson: Value(agent.enabledToolsJson),
+            temperature: Value(agent.temperature),
+            maxTokens: Value(agent.maxTokens),
+            maxSteps: Value(agent.maxSteps),
+            topP: Value(agent.topP),
+            updatedAt: DateTime.now(),
+          ));
+        }
       }
       await prefs.setBool(_mojibakeHealedFlag, true);
     } catch (_) {
@@ -431,7 +430,7 @@ class ChatController extends Notifier<ChatState> {
   Future<Conversation> _createConversation(AppDatabase database) async {
     final now = DateTime.now();
     final conversation = Conversation(
-      id: 'conversation-${now.microsecondsSinceEpoch}',
+      id: UniqueId.generate('conversation', now: now),
       title: '新会话',
       agentId: null,
       isPinned: false,
@@ -545,7 +544,7 @@ class ChatController extends Notifier<ChatState> {
       }
     }
     await database.insertMessage(MessagesCompanion.insert(
-      id: 'message-${DateTime.now().microsecondsSinceEpoch}-${_messageSeq++}',
+      id: UniqueId.generate('message'),
       conversationId: conversationId,
       role: message.role.name,
       content: content,
@@ -568,7 +567,7 @@ class ChatController extends Notifier<ChatState> {
     if (conversationId == null) return;
     final database = await ref.read(databaseProvider.future);
     await database.insertMessage(MessagesCompanion.insert(
-      id: 'message-${DateTime.now().microsecondsSinceEpoch}-${_messageSeq++}',
+      id: UniqueId.generate('message'),
       conversationId: conversationId,
       role: 'assistant',
       content: '',
@@ -827,8 +826,7 @@ class ChatController extends Notifier<ChatState> {
   Future<void> send({
     required String text,
     required List<PlatformFile> attachments,
-    required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
-        approveTool,
+    required ToolApprovalCallback approveTool,
     String taskType = 'general',
     String sourceType = 'manual',
   }) async {
@@ -977,9 +975,7 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  Future<void> regenerate(
-      {required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
-          approveTool}) async {
+  Future<void> regenerate({required ToolApprovalCallback approveTool}) async {
     if (state.running || state.loading) return;
     if (state.messages.isEmpty ||
         state.messages.last.role != MessageRole.assistant) {
@@ -1008,22 +1004,38 @@ class ChatController extends Notifier<ChatState> {
       clearLiveReply: true,
     );
 
-    final prep = await _prepareRun(database);
-    if (!_runs.ownsRun(runGeneration, conversationId)) return;
-    await _runAgent(
-        assistantIndex,
-        prep.model,
-        prep.config,
-        prep.registry,
-        prep.maxSteps,
-        prep.temperature,
-        prep.maxTokens,
-        prep.topP,
-        prep.config.reasoningEffort,
-        approveTool,
-        null,
-        runGeneration,
-        conversationId);
+    try {
+      final prep = await _prepareRun(database);
+      if (!_runs.ownsRun(runGeneration, conversationId)) return;
+      await _runAgent(
+          assistantIndex,
+          prep.model,
+          prep.config,
+          prep.registry,
+          prep.maxSteps,
+          prep.temperature,
+          prep.maxTokens,
+          prep.topP,
+          prep.config.reasoningEffort,
+          approveTool,
+          null,
+          runGeneration,
+          conversationId);
+    } catch (error) {
+      if (_runs.ownsRun(runGeneration, conversationId)) {
+        final failed = ChatMessage(
+          role: MessageRole.assistant,
+          parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
+        );
+        state = _withMessageAt(state, assistantIndex, failed).copyWith(
+          running: false,
+          clearLiveReply: true,
+        );
+        try {
+          await _persistMessage(failed);
+        } catch (_) {}
+      }
+    }
   }
 
   /// 编辑历史用户消息并重发：替换该条内容，删除其后的所有回复与工具记录，
@@ -1031,8 +1043,7 @@ class ChatController extends Notifier<ChatState> {
   Future<void> editAndResend({
     required int messageIndex,
     required String newText,
-    required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
-        approveTool,
+    required ToolApprovalCallback approveTool,
   }) async {
     if (state.running || state.loading) return;
     if (messageIndex < 0 || messageIndex >= state.messages.length) return;
@@ -1090,22 +1101,38 @@ class ChatController extends Notifier<ChatState> {
       clearLiveReply: true,
     );
 
-    final prep = await _prepareRun(database);
-    if (!_runs.ownsRun(runGeneration, conversationId)) return;
-    await _runAgent(
-        assistantIndex,
-        prep.model,
-        prep.config,
-        prep.registry,
-        prep.maxSteps,
-        prep.temperature,
-        prep.maxTokens,
-        prep.topP,
-        prep.config.reasoningEffort,
-        approveTool,
-        null,
-        runGeneration,
-        conversationId);
+    try {
+      final prep = await _prepareRun(database);
+      if (!_runs.ownsRun(runGeneration, conversationId)) return;
+      await _runAgent(
+          assistantIndex,
+          prep.model,
+          prep.config,
+          prep.registry,
+          prep.maxSteps,
+          prep.temperature,
+          prep.maxTokens,
+          prep.topP,
+          prep.config.reasoningEffort,
+          approveTool,
+          null,
+          runGeneration,
+          conversationId);
+    } catch (error) {
+      if (_runs.ownsRun(runGeneration, conversationId)) {
+        final failed = ChatMessage(
+          role: MessageRole.assistant,
+          parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
+        );
+        state = _withMessageAt(state, assistantIndex, failed).copyWith(
+          running: false,
+          clearLiveReply: true,
+        );
+        try {
+          await _persistMessage(failed);
+        } catch (_) {}
+      }
+    }
   }
 
   Completer<bool>? _planCompleter;
@@ -1122,8 +1149,7 @@ class ChatController extends Notifier<ChatState> {
 
   /// C2 断点恢复：重新执行一个被中断的后台任务，并把结果写回会话。
   Future<void> resumeTask(String taskId,
-      {required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
-          approveTool}) async {
+      {required ToolApprovalCallback approveTool}) async {
     AppDatabase? database;
     Task? task;
     String? uiConversationId;
@@ -1196,7 +1222,7 @@ class ChatController extends Notifier<ChatState> {
       final checkpointContext = checkpoint is Map
           ? decodeChatContext(checkpoint['context'])
           : const <ChatMessage>[];
-      final executionRunId = 'run-${DateTime.now().microsecondsSinceEpoch}';
+      final executionRunId = UniqueId.generate('run');
       final result = await HeadlessExecutor.runDetailed(
         db: db,
         config: config,
@@ -1283,8 +1309,7 @@ class ChatController extends Notifier<ChatState> {
 
   /// 预算暂停后从保存的 Agent 上下文续跑，而不是重新提交原始 prompt。
   Future<void> resumeFromBudgetPause({
-    required Future<ToolApproval> Function(ToolCall call, ToolRisk risk)
-        approveTool,
+    required ToolApprovalCallback approveTool,
   }) async {
     final context = _runs.budgetPauseContext;
     if (context == null || context.isEmpty || state.running || state.loading) {
@@ -1963,8 +1988,7 @@ class ChatController extends Notifier<ChatState> {
 
   Future<List<(Message, int)>> _loadConversationPage(
       AppDatabase database, String conversationId) {
-    return database.messagesPage(conversationId,
-        limit: _conversationPageSize);
+    return database.messagesPage(conversationId, limit: _conversationPageSize);
   }
 
   void _trackLoadedWindow(List<(Message, int)> page) {

@@ -68,6 +68,35 @@ void main() {
       }
     });
 
+    testWidgets('approval sheet hides trust choices when disallowed',
+        (tester) async {
+      const call = ToolCall(
+        id: 'call-sensitive',
+        name: 'memory_get',
+        arguments: {},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(
+            body: ToolApprovalSheet(
+              call: call,
+              risk: ToolRisk.safe,
+              allowPersistentTrust: false,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('拒绝'), findsOneWidget);
+      expect(find.text('允许一次'), findsOneWidget);
+      expect(find.text('仅本次允许'), findsNothing);
+      expect(find.text('始终允许'), findsNothing);
+    });
+
     testWidgets('ToolApprovalSheet semantics compliance', (tester) async {
       const call = ToolCall(
         id: 'call-1',

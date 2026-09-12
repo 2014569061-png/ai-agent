@@ -99,8 +99,7 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
         _set(2, _StepState.action, hint: '桥已就绪但缺少 Go,点击下方按钮复制工具链安装命令');
       }
     } finally {
-      setState(() => _running = false);
-      if (mounted) setState(() {});
+      if (mounted) setState(() => _running = false);
     }
   }
 
@@ -154,13 +153,17 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
     setState(() => _installStatus = '正在下载 Termux(约 90MB,清华镜像)...');
     for (final url in _termuxApkUrls) {
       final ok = await UpdateService().downloadAndInstall(url);
+      if (!mounted) return;
       if (ok) {
         setState(() => _installStatus = '已拉起系统安装,完成后回来点"重新检测"');
         return;
       }
       setState(() => _installStatus = '源 $url 失败,尝试下一个源...');
     }
-    setState(() => _installStatus = '全部下载源失败,请检查网络后重试,或手动从 F-Droid 安装 Termux');
+    if (mounted) {
+      setState(
+          () => _installStatus = '全部下载源失败,请检查网络后重试,或手动从 F-Droid 安装 Termux');
+    }
   }
 
   void _copy(String label, String command) {

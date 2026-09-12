@@ -53,7 +53,7 @@ void main() {
             role: MessageRole.user, parts: [const MessagePart.text('run')])
       ],
       model: 'test',
-      approveTool: (call, risk) async {
+      approveTool: (call, risk, sensitive) async {
         asked = true;
         return ToolApproval.reject;
       },
@@ -81,8 +81,9 @@ void main() {
       model: 'test',
       approvalMode: ApprovalMode.fullAccess,
       isToolTrusted: (name, risk) => true,
-      approveTool: (call, risk) async {
+      approveTool: (call, risk, sensitive) async {
         asked = true;
+        expect(sensitive, isTrue);
         return ToolApproval.reject;
       },
     )) {

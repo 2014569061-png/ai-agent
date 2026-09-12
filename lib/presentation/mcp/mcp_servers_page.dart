@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../application/mcp_service.dart';
+import '../../domain/unique_id.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/mcp/mcp_tool_provider.dart';
 import '../l10n/app_strings.dart';
@@ -75,7 +76,7 @@ class _McpServersPageState extends State<McpServersPage> {
     );
     if (ok != true || url.text.trim().isEmpty) return;
     await _service.save(McpServerConfig(
-      id: 'mcp-${DateTime.now().microsecondsSinceEpoch}',
+      id: UniqueId.generate('mcp'),
       name: name.text.trim().isEmpty ? 'MCP Server' : name.text.trim(),
       kind: McpServerKind.http,
       url: url.text.trim(),

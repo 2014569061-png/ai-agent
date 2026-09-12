@@ -8,7 +8,7 @@ import '../../domain/models.dart';
 import '../chat/widgets/tool_approval_sheet.dart';
 import 'immersive_sheet.dart';
 
-/// 共享工具审批入口：信任清单直通 → 审批弹窗 → 记录信任授予与审计。
+/// 共享工具审批入口：审批弹窗 → 记录允许范围与审计。
 ///
 /// 聊天页与仪表盘（恢复任务）共用此入口，保证"危险操作必须确认"
 /// 的安全语义在任意入口一致。
@@ -19,25 +19,28 @@ Future<ToolApproval> promptToolApproval(
   WidgetRef ref,
   ToolCall call,
   ToolRisk risk,
+  bool sensitive,
 ) async {
   // 页面未挂载时无法弹窗，保守拒绝，让执行层暂停等待。
   if (!context.mounted) return ToolApproval.reject;
   final trust = await ref.read(toolTrustStoreProvider.future);
   if (!context.mounted) return ToolApproval.reject;
 
-  // 信任清单直通：命中（含本会话允许/始终允许）直接放行，不再打断用户。
-  if (trust.isTrusted(call.name, risk)) {
-    return ToolApproval.allowAlways;
-  }
-
+  final allowPersistentTrust = !sensitive &&
+      risk != ToolRisk.dangerous &&
+      risk != ToolRisk.requiresConfirmation;
   final decision = await showImmersiveSheet<ToolApproval>(
     context: context,
-    builder: (context) => ToolApprovalSheet(call: call, risk: risk),
+    builder: (context) => ToolApprovalSheet(
+      call: call,
+      risk: risk,
+      allowPersistentTrust: allowPersistentTrust,
+    ),
   );
 
-  // 记录会话级/始终允许的授予，便于审计追溯；授予失败不阻断主流程。
-  if (decision == ToolApproval.allowAlways ||
-      decision == ToolApproval.allowSession) {
+  if (allowPersistentTrust &&
+      (decision == ToolApproval.allowAlways ||
+          decision == ToolApproval.allowSession)) {
     if (decision == ToolApproval.allowAlways) {
       await trust.allowAlways(call.name);
     } else {

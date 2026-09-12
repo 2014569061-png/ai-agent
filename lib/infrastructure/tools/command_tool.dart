@@ -873,9 +873,9 @@ class TerminalCommandTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'terminal',
-    description: '在当前工作区内运行受限的终端命令（git/python/node 等）。命令会经过用户确认；'
+    description: '在当前工作区内运行终端命令（git/python/node 等）。默认始终需要用户确认；在“完全访问”模式下可自动执行。'
         '禁止 shell 管道、重定向与解释器内联求值参数（如 python -c）。'
-        '注意：python/node 等解释器实际执行的脚本代码本身不受工作区沙箱限制。'
+        '注意：cwd 仅限制命令启动目录，不是完整沙箱；python/node 等解释器执行的脚本代码可能访问工作区外资源。'
         'Android 上优先使用内置 Alpine Linux（PRoot + ARM64 rootfs），失败时自动回退到 Termux，'
         '最后使用 Android Shell。内置 rootfs 提供 Linux shell 与基础 BusyBox 工具；Go/Git/Node/Python 等'
         '开发工具需要在 Alpine 中通过 apk 安装，或在需要完整工具链时配置 Termux。',

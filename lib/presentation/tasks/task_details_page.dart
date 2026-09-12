@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
 import '../../application/run_audit_report.dart';
+import '../../application/task_feedback_service.dart';
 import '../../application/task_service.dart';
 import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
@@ -13,6 +14,7 @@ import '../../infrastructure/files/conversation_exporter.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
+import '../l10n/app_strings.dart';
 import '../diagnostics/run_analysis_page.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
@@ -51,12 +53,49 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   bool _auditLoading = false;
   bool _auditExpanded = false;
   Object? _auditError;
+  bool? _helpful;
+  bool _feedbackLoading = false;
 
   @override
   void initState() {
     super.initState();
     _task = widget.task;
     _loadAudit();
+    _loadFeedback();
+  }
+
+  Future<void> _loadFeedback() async {
+    if (!_feedbackEligible) return;
+    final db = await ref.read(databaseProvider.future);
+    final feedback =
+        await const TaskFeedbackService().feedbackForTask(db, _task.id);
+    if (mounted) setState(() => _helpful = feedback?.helpful);
+  }
+
+  bool get _feedbackEligible {
+    final status = _task.status.toLowerCase();
+    return (_task.type.toLowerCase().startsWith('development') ||
+            const {
+              'project_analysis',
+              'bug_fix',
+              'code_review',
+              'release_check'
+            }.contains(_task.type.toLowerCase())) &&
+        (status == 'completed' || status == 'failed' || status == 'cancelled');
+  }
+
+  Future<void> _saveFeedback(bool helpful) async {
+    setState(() {
+      _helpful = helpful;
+      _feedbackLoading = true;
+    });
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await const TaskFeedbackService()
+          .save(db: db, taskId: _task.id, runId: _task.runId, helpful: helpful);
+    } finally {
+      if (mounted) setState(() => _feedbackLoading = false);
+    }
   }
 
   Future<void> _loadAudit() async {
@@ -544,6 +583,43 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                         ),
                                       )),
                             ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  if (_feedbackEligible) ...[
+                    NexusSection(
+                      title: AppStrings.taskFeedbackTitle,
+                      child: SectionCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const Expanded(
+                                child: Text(AppStrings.taskFeedbackPrompt)),
+                            IconButton(
+                              tooltip: AppStrings.taskHelpful,
+                              onPressed: _feedbackLoading
+                                  ? null
+                                  : () => _saveFeedback(true),
+                              icon: Icon(
+                                _helpful == true
+                                    ? Icons.thumb_up_alt
+                                    : Icons.thumb_up_alt_outlined,
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: AppStrings.taskNotHelpful,
+                              onPressed: _feedbackLoading
+                                  ? null
+                                  : () => _saveFeedback(false),
+                              icon: Icon(
+                                _helpful == false
+                                    ? Icons.thumb_down_alt
+                                    : Icons.thumb_down_alt_outlined,
+                              ),
+                            ),
                           ],
                         ),
                       ),

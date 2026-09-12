@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models.dart';
@@ -63,7 +64,8 @@ class HeadlessExecutor {
     int maxTokens = 1024,
     List<ChatMessage>? initialHistory,
     AgentCancellationToken? cancellationToken,
-    Future<ToolApproval> Function(ToolCall call, ToolRisk risk)? approveTool,
+    CancelToken? cancelToken,
+    ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
   }) async {
     final result = await runDetailed(
@@ -77,6 +79,7 @@ class HeadlessExecutor {
       maxTokens: maxTokens,
       initialHistory: initialHistory,
       cancellationToken: cancellationToken,
+      cancelToken: cancelToken,
       approveTool: approveTool,
       approvalMode: approvalMode,
     );
@@ -94,7 +97,8 @@ class HeadlessExecutor {
     int maxTokens = 1024,
     List<ChatMessage>? initialHistory,
     AgentCancellationToken? cancellationToken,
-    Future<ToolApproval> Function(ToolCall call, ToolRisk risk)? approveTool,
+    CancelToken? cancelToken,
+    ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
   }) async {
     final provider =
@@ -277,9 +281,10 @@ class HeadlessExecutor {
         maxTokens: maxTokens,
         contextBudgetTokens: config.contextTokens,
         cancellationToken: cancellationToken,
-        // 无 UI 的后台路径（子 Agent/定时任务）没有真人审批，非 safe 工具一律拒绝。
+        cancelToken: cancelToken,
+        // 无 UI 的后台路径（子 Agent/定时任务）没有真人审批，敏感或非 safe 工具一律拒绝。
         approveTool: approveTool ??
-            (call, risk) async => risk == ToolRisk.safe
+            (call, risk, sensitive) async => !sensitive && risk == ToolRisk.safe
                 ? ToolApproval.allowOnce
                 : ToolApproval.reject,
         approvalMode: approvalMode,

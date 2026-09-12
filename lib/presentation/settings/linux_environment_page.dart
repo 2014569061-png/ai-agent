@@ -126,8 +126,9 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
       if (text.isNotEmpty) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_workDirKey, text);
+        if (!mounted) return;
         setState(() => _defaultWorkDir = text);
-        if (mounted) FloatingToast.show(context, '工作目录已更新');
+        FloatingToast.show(context, '工作目录已更新');
       }
     }
   }
@@ -157,8 +158,9 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
     if (chosen != null && mounted) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_shellTypeKey, chosen);
+      if (!mounted) return;
       setState(() => _shellType = chosen);
-      if (mounted) FloatingToast.show(context, 'Shell 类型已更新为 $chosen');
+      FloatingToast.show(context, 'Shell 类型已更新为 $chosen');
     }
   }
 
@@ -196,7 +198,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
   @override
   Widget build(BuildContext context) {
     final bridgeColor = kIsWeb
-        ? AppPalette.lightTextFaint
+        ? AppPalette.lightTextMuted
         : (_bridgeAvailable ? AppPalette.success : AppPalette.warning);
     final bridgeText = kIsWeb ? '仅预览' : (_bridgeAvailable ? '已连接' : '待配置');
 

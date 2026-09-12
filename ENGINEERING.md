@@ -44,7 +44,7 @@
 - 2026-09-12 清理：`web_preview_dialog.dart`（连 `phone_preview_view*` 三件套）已删除，其色值保留区资格一并撤销。
 
 ### 4.4 数据库
-- `schemaVersion` 当前 **16**；schema 变更必须升版本 + 写 `onUpgrade` 迁移 + 迁移测试。
+- `schemaVersion` 当前 **19**；schema 变更必须升版本 + 写 `onUpgrade` 迁移 + 迁移测试。
 - **绝不手改** `lib/infrastructure/database/app_database.g.dart`（build_runner 生成）。
 - PRAGMA（WAL/foreign_keys/cache_size/synchronous）在 `database_executor_io.dart` 的 `setup:` 逐连接注入，别挪走。
 - `foreign_keys=ON` 当前是空操作（全库无 FK 声明，23 张表裸 `text()` 存 id），级联清理靠手写（`pruneRunRecords`）。

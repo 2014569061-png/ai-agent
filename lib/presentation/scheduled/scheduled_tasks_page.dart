@@ -12,6 +12,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/immersive_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
 
 /// 定时任务管理页（C5）：新建「每天/每周某时刻」执行指定提示词的 Agent 任务。
@@ -377,8 +378,11 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                 itemBuilder: (context, index) {
                   final task = _tasks[index];
                   final spec = ScheduleSpec.fromCron(task.cron);
-                  final daysLabel =
-                      spec.days.isEmpty ? '每天' : '周${spec.days.join('/')}';
+                  final daysLabel = spec.days.isEmpty
+                      ? AppStrings.everyDay
+                      : spec.days
+                          .map((day) => AppStrings.weekdays[day] ?? AppStrings.weekday(day))
+                          .join('/');
                   final timeLabel =
                       '${spec.hour.toString().padLeft(2, '0')}:${spec.minute.toString().padLeft(2, '0')}';
                   final nextRun = _formatNextRun(spec, task.enabled);

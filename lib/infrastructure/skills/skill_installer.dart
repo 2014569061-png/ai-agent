@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
 import '../../domain/tool_codes.dart';
+import '../../domain/unique_id.dart';
 import 'skill_parser.dart';
 
 /// 解析后的 GitHub Skill 来源引用。
@@ -247,7 +248,7 @@ class SkillInstaller {
 
       final existing = await db.findSkillPackByName(preview.metadata.name);
       final pack = SkillPack(
-        id: existing?.id ?? 'skill-${now.microsecondsSinceEpoch}',
+        id: existing?.id ?? UniqueId.generate('skill', now: now),
         name: preview.metadata.name,
         description: preview.metadata.description,
         author: preview.metadata.author,

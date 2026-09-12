@@ -108,6 +108,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
       if (bytes == null || bytes.isEmpty) {
         throw SkillValidationException('无法读取所选压缩包');
       }
+      if (!mounted) return;
       setState(() {
         _previewing = true;
         _previewPack = null;
@@ -149,6 +150,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     try {
       final db = await ref.read(databaseProvider.future);
       await _installer.install(db, preview);
+      if (!mounted) return;
       setState(() {
         _installing = false;
         _previewPack = null;
@@ -519,7 +521,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                                   fontSize: 11,
                                   color: isDark
                                       ? AppPalette.darkTextFaint
-                                      : AppPalette.lightTextFaint,
+                                      : AppPalette.lightTextMuted,
                                 ),
                               ),
                             ],

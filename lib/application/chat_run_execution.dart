@@ -21,7 +21,7 @@ extension ChatRunExecution on ChatController {
     int maxTokens,
     double topP,
     ReasoningEffort reasoningEffort,
-    Future<ToolApproval> Function(ToolCall call, ToolRisk risk) approveTool,
+    ToolApprovalCallback approveTool,
     String? taskId,
     int runGeneration,
     String? runConversationId, {
@@ -37,7 +37,7 @@ extension ChatRunExecution on ChatController {
     final runSystemPrompt = _currentState.systemPrompt;
     final sessionSkillInstructions = _currentState.sessionSkillInstructions;
     bool ownsRun() => _runs.ownsRun(runGeneration, runConversationId);
-    final runId = 'run-${DateTime.now().microsecondsSinceEpoch}';
+    final runId = UniqueId.generate('run');
     final logService = ref.read(logServiceProvider);
     final runStartedAt = DateTime.now();
     var eventSequence = 0;
@@ -613,27 +613,27 @@ extension ChatRunExecution on ChatController {
           runStatus = 'cancelled';
         }
         if (runStatus == 'running') runStatus = 'failed';
-        if (activeNetworkEvent != null) {
-          await tracker?.finish(activeNetworkEvent,
-              status: runStatus == 'cancelled' ? 'cancelled' : 'failed');
-          activeNetworkEvent = null;
-        }
-        if (modelEvent != null) {
-          await tracker?.finish(modelEvent,
-              status: runStatus == 'cancelled' ? 'cancelled' : 'failed');
-          modelEvent = null;
-        }
-        if (toolEvents.isNotEmpty) {
-          final status = runStatus == 'cancelled' ? 'cancelled' : 'failed';
-          for (final handle in toolEvents.values) {
-            await tracker?.finish(handle, status: status);
+        try {
+          if (activeNetworkEvent != null) {
+            await tracker?.finish(activeNetworkEvent,
+                status: runStatus == 'cancelled' ? 'cancelled' : 'failed');
+            activeNetworkEvent = null;
           }
-          toolEvents.clear();
-        }
-        // Event/log writes are queued so streaming stays responsive. Make the
-        // run completion the durability boundary before reading/uploading.
-        await tracker?.flush();
-        await logService.flush();
+          if (modelEvent != null) {
+            await tracker?.finish(modelEvent,
+                status: runStatus == 'cancelled' ? 'cancelled' : 'failed');
+            modelEvent = null;
+          }
+          if (toolEvents.isNotEmpty) {
+            final status = runStatus == 'cancelled' ? 'cancelled' : 'failed';
+            for (final handle in toolEvents.values) {
+              await tracker?.finish(handle, status: status);
+            }
+            toolEvents.clear();
+          }
+          await tracker?.flush();
+          await logService.flush();
+        } catch (_) {}
         final cancelDurationMs =
             runStatus == 'cancelled' && _cancelRequestedAt != null
                 ? DateTime.now().difference(_cancelRequestedAt!).inMilliseconds
@@ -649,25 +649,38 @@ extension ChatRunExecution on ChatController {
                                 .inMilliseconds))
                     .round()
                 : null;
-        await runDb.updateRunRecord(
-            runId,
-            RunRecordsCompanion(
-              status: Value(runStatus),
-              endedAt: Value(DateTime.now()),
-              inputTokens: Value(usage.promptTokens),
-              outputTokens: Value(usage.completionTokens),
-              cachedTokens: Value(usage.cachedTokens),
-              estimatedCostCents: Value(estimatedCostCents),
-              eventCount: Value(eventSequence),
-              totalDurationMs: Value(stopwatch.elapsedMilliseconds),
-              retryCount: Value(retryCount),
-              firstTokenDurationMs: Value(firstTokenDurationMs),
-              outputRateMilli: Value(outputRateMilli),
-              maxStallDurationMs: Value(maxStallDurationMs),
-              stallCount: Value(stallCount),
-              cancelDurationMs: Value(cancelDurationMs),
-            ));
-        await runDb.pruneRunRecords();
+        final terminalRecord = RunRecordsCompanion.insert(
+          runId: runId,
+          conversationId: runConversationId ?? 'unknown',
+          model: Value(model),
+          status: Value(runStatus),
+          startedAt: runStartedAt,
+          endedAt: Value(DateTime.now()),
+          inputTokens: Value(usage.promptTokens),
+          outputTokens: Value(usage.completionTokens),
+          cachedTokens: Value(usage.cachedTokens),
+          estimatedCostCents: Value(estimatedCostCents),
+          eventCount: Value(eventSequence),
+          totalDurationMs: Value(stopwatch.elapsedMilliseconds),
+          retryCount: Value(retryCount),
+          firstTokenDurationMs: Value(firstTokenDurationMs),
+          outputRateMilli: Value(outputRateMilli),
+          maxStallDurationMs: Value(maxStallDurationMs),
+          stallCount: Value(stallCount),
+          cancelDurationMs: Value(cancelDurationMs),
+        );
+        for (var attempt = 0; attempt < 3; attempt++) {
+          try {
+            await runDb.insertRunRecord(terminalRecord);
+            break;
+          } catch (_) {
+            if (attempt == 2) rethrow;
+            await Future<void>.delayed(Duration(milliseconds: 20 << attempt));
+          }
+        }
+        try {
+          await runDb.pruneRunRecords();
+        } catch (_) {}
       } catch (_) {}
     }
     final assistantMessage = ChatMessage(

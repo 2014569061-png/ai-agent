@@ -66,6 +66,12 @@ enum ApprovalMode { ask, autoSafe, fullAccess }
 /// 工具审批决策：拒绝 / 仅本次 / 本会话内 / 始终允许（全局信任）。
 enum ToolApproval { reject, allowOnce, allowSession, allowAlways }
 
+typedef ToolApprovalCallback = Future<ToolApproval> Function(
+  ToolCall call,
+  ToolRisk risk,
+  bool sensitive,
+);
+
 class MessagePart {
   const MessagePart.text(this.value)
       : type = 'text',

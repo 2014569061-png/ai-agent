@@ -5,9 +5,9 @@ import 'package:mobile_agent/infrastructure/database/app_database.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('schemaVersion 已升至 17', () {
+  test('schemaVersion 已升至 19', () {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 17);
+    expect(db.schemaVersion, 19);
     db.close();
   });
 
@@ -28,23 +28,45 @@ void main() {
     final m = db.createMigrator();
     await db.migration.onUpgrade(m, 16, 17);
 
-    final rows = await db.customSelect(
-      "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN "
-      "('idx_messages_conversation', 'idx_tasks_status_updated', "
-      "'idx_memories_enabled', 'idx_scheduled_tasks_enabled', "
-      "'idx_audit_logs_created', 'idx_run_records_started')",
-    ).get();
+    final rows = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN "
+          "('idx_messages_conversation', 'idx_tasks_status_updated', "
+          "'idx_memories_enabled', 'idx_scheduled_tasks_enabled', "
+          "'idx_audit_logs_created', 'idx_run_records_started')",
+        )
+        .get();
     final names = rows.map((row) => row.data['name'] as String).toSet();
     expect(names, hasLength(6), reason: '迁移后 6 个索引都应存在');
 
     // 消息索引必须是 (conversation_id, created_at) 复合 —— 单列索引无法免排序。
-    final msgSql = await db.customSelect(
-      "SELECT sql FROM sqlite_master WHERE type = 'index' "
-      "AND name = 'idx_messages_conversation'",
-    ).getSingle();
+    final msgSql = await db
+        .customSelect(
+          "SELECT sql FROM sqlite_master WHERE type = 'index' "
+          "AND name = 'idx_messages_conversation'",
+        )
+        .getSingle();
     final sql = msgSql.data['sql'] as String;
     expect(sql, contains('conversation_id'));
     expect(sql, contains('created_at'));
+    await db.close();
+  });
+
+  test('v17→v18 迁移新增定时任务独立执行标记', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.customStatement(
+        'CREATE TABLE scheduled_tasks_v17 AS SELECT id, name, prompt, cron, '
+        'agent_id, enabled, last_result, created_at, updated_at FROM scheduled_tasks');
+    await db.customStatement('DROP TABLE scheduled_tasks');
+    await db.customStatement(
+        'ALTER TABLE scheduled_tasks_v17 RENAME TO scheduled_tasks');
+
+    final m = db.createMigrator();
+    await db.migration.onUpgrade(m, 17, 18);
+
+    final columns =
+        await db.customSelect('PRAGMA table_info(scheduled_tasks)').get();
+    expect(columns.map((row) => row.data['name']), contains('last_run_at'));
     await db.close();
   });
 
@@ -88,7 +110,8 @@ void main() {
     expect(first3.map((m) => m.id).toList(), ['m7', 'm8', 'm9']);
 
     // 以第 3 条为键，取其之前的消息 → m2、m1、m0（升序不变）。
-    final older = await db.messagesFor('c1', before: base.add(const Duration(minutes: 3)));
+    final older = await db.messagesFor('c1',
+        before: base.add(const Duration(minutes: 3)));
     expect(older.map((m) => m.id).toList(), ['m0', 'm1', 'm2']);
     await db.close();
   });

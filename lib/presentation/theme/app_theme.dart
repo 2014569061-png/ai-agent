@@ -206,7 +206,7 @@ abstract final class AppTheme {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
 
     final scheme = ColorScheme(
       brightness: brightness,
@@ -347,7 +347,7 @@ abstract final class AppTheme {
               ? AppPalette.darkSurfaceHover
               : AppPalette.lightSurfaceHover,
           disabledForegroundColor:
-              isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint,
+              isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
@@ -364,7 +364,7 @@ abstract final class AppTheme {
               ? AppPalette.darkSurfaceHover
               : AppPalette.lightSurfaceHover,
           disabledForegroundColor:
-              isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint,
+              isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
@@ -509,7 +509,7 @@ class AppSemanticColors {
     hairline: AppPalette.lightHairline,
     textPrimary: AppPalette.lightText,
     textMuted: AppPalette.lightTextMuted,
-    textFaint: AppPalette.lightTextFaint,
+    textFaint: AppPalette.lightTextMuted,
     brand: AppPalette.brand,
     brandHover: AppPalette.lightBrandHover,
     brandActive: AppPalette.lightBrandActive,

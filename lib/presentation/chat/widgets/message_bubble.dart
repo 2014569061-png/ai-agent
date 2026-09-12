@@ -152,86 +152,86 @@ class MessageBubble extends StatelessWidget {
                       p: plainStyle,
                       blockSpacing: 12,
                       listIndent: 20,
-                  h1: TextStyle(
-                    color: textColor,
-                    fontSize: 17,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  h1Padding: const EdgeInsets.only(top: 20, bottom: 8),
-                  h2: TextStyle(
-                    color: textColor,
-                    fontSize: 17,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
-                  h3: TextStyle(
-                    color: textColor,
-                    fontSize: 15,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  h3Padding: const EdgeInsets.only(top: 16, bottom: 6),
-                  h4: TextStyle(
-                    color: textColor,
-                    fontSize: 15,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  h5: TextStyle(
-                    color: textColor,
-                    fontSize: 15,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  h6: TextStyle(
-                    color: textColor,
-                    fontSize: 15,
-                    height: 1.4,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  listBullet: TextStyle(
-                    color: textColor,
-                    height: 1.6,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  code: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontFamily: 'JetBrains Mono',
-                  ),
-                  blockquote: TextStyle(
-                    color: textColor,
-                    height: 1.6,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  tableHead: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  tableBody: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    height: 1.55,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  blockquoteDecoration: BoxDecoration(
-                    color: surface,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
-                    border: const Border(
-                      left: BorderSide(
-                        color: AppPalette.brand,
-                        width: 3,
+                      h1: TextStyle(
+                        color: textColor,
+                        fontSize: 17,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h1Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h2: TextStyle(
+                        color: textColor,
+                        fontSize: 17,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h3: TextStyle(
+                        color: textColor,
+                        fontSize: 15,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h3Padding: const EdgeInsets.only(top: 16, bottom: 6),
+                      h4: TextStyle(
+                        color: textColor,
+                        fontSize: 15,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h5: TextStyle(
+                        color: textColor,
+                        fontSize: 15,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h6: TextStyle(
+                        color: textColor,
+                        fontSize: 15,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      listBullet: TextStyle(
+                        color: textColor,
+                        height: 1.6,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      code: TextStyle(
+                        color: textColor,
+                        fontSize: 13,
+                        fontFamily: 'JetBrains Mono',
+                      ),
+                      blockquote: TextStyle(
+                        color: textColor,
+                        height: 1.6,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      tableHead: TextStyle(
+                        color: textColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      tableBody: TextStyle(
+                        color: textColor,
+                        fontSize: 13,
+                        height: 1.55,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      blockquoteDecoration: BoxDecoration(
+                        color: surface,
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusControl),
+                        border: const Border(
+                          left: BorderSide(
+                            color: AppPalette.brand,
+                            width: 3,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              );
+                  );
 
     final reasoningText = message.reasoning;
     final content = Column(

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart' show CancelToken;
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:workmanager/workmanager.dart';
@@ -9,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'agent_executor.dart';
 import 'headless_executor.dart';
 import 'scheduled_task_service.dart';
 import '../infrastructure/database/app_database.dart';
@@ -33,41 +35,56 @@ void scheduledTaskCallbackDispatcher() {
       await NotificationService.instance.init();
       final usedNotificationIds = <int>{};
       for (final task in due) {
-        String? systemPrompt;
-        if (task.agentId != null) {
-          systemPrompt = (await db.findAgent(task.agentId!))?.systemPrompt;
-        }
-        String result;
         try {
-          // 单任务超时护栏：避免某个卡死的 Agent 拖垮整批任务，
-          // 超出 WorkManager 的 10 分钟预算导致整批被系统 kill。
-          result = await HeadlessExecutor.run(
+          String? systemPrompt;
+          if (task.agentId != null) {
+            systemPrompt = (await db.findAgent(task.agentId!))?.systemPrompt;
+          }
+          final cancellationToken = AgentCancellationToken();
+          final cancelToken = CancelToken();
+          final execution = HeadlessExecutor.run(
             db: db,
             config: config,
             prompt: task.prompt,
             systemPrompt: systemPrompt,
-          ).timeout(const Duration(minutes: 2));
-        } on TimeoutException {
-          result = '任务执行超时（超过 2 分钟），已中止';
+            cancellationToken: cancellationToken,
+            cancelToken: cancelToken,
+          );
+          String result;
+          try {
+            result = await execution.timeout(const Duration(minutes: 2));
+          } on TimeoutException {
+            cancellationToken.cancel();
+            cancelToken.cancel('scheduled task timeout');
+            try {
+              await execution;
+            } catch (_) {}
+            result = '任务执行超时（超过 2 分钟），已中止';
+          } catch (error, stack) {
+            debugPrint('定时任务 ${task.id} 执行失败: $error\n$stack');
+            result = '任务执行失败：$error';
+          }
+          final completedAt = DateTime.now();
+          await db.saveScheduledTask(task.copyWith(
+            lastResult: Value<String?>(result),
+            lastRunAt: Value<DateTime?>(completedAt),
+            updatedAt: completedAt,
+          ));
+          final preview =
+              result.length > 60 ? '${result.substring(0, 60)}…' : result;
+          var notifId = task.id.hashCode & 0x7fffffff;
+          while (usedNotificationIds.contains(notifId)) {
+            notifId = (notifId + 1) & 0x7fffffff;
+          }
+          usedNotificationIds.add(notifId);
+          await NotificationService.instance.show(
+            id: notifId,
+            title: '定时任务 · ${task.name}',
+            body: preview.isEmpty ? '任务完成' : preview,
+          );
+        } catch (error, stack) {
+          debugPrint('定时任务 ${task.id} 收尾失败: $error\n$stack');
         }
-        await db.saveScheduledTask(task.copyWith(
-          lastResult: Value<String?>(result),
-          updatedAt: DateTime.now(),
-        ));
-        final preview =
-            result.length > 60 ? '${result.substring(0, 60)}…' : result;
-        // 同一批内保证通知 id 不碰撞（String.hashCode 理论上有碰撞可能，
-        // 碰撞会导致不同任务的通知互相覆盖）。
-        var notifId = task.id.hashCode & 0x7fffffff;
-        while (usedNotificationIds.contains(notifId)) {
-          notifId = (notifId + 1) & 0x7fffffff;
-        }
-        usedNotificationIds.add(notifId);
-        await NotificationService.instance.show(
-          id: notifId,
-          title: '定时任务 · ${task.name}',
-          body: preview.isEmpty ? '任务完成' : preview,
-        );
       }
     } catch (error, stack) {
       // 后台执行失败不再静默：记录日志便于排查（下次周期仍会重试）。

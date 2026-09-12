@@ -21,7 +21,7 @@ class TokenTrendCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final faint = isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+    final faint = isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
     final hairline =
         isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 

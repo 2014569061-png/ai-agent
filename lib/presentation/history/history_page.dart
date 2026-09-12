@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
@@ -113,7 +114,7 @@ class _HistoryPageState extends State<HistoryPage> {
         ],
       ),
     );
-    controller.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     if (result == null || result.isEmpty) return;
     final db = await _db();
     await db.saveConversation(
@@ -174,7 +175,7 @@ class _HistoryPageState extends State<HistoryPage> {
     final db = await _db();
     final now = DateTime.now();
     final conversation = Conversation(
-      id: 'conversation-${now.microsecondsSinceEpoch}',
+      id: UniqueId.generate('conversation', now: now),
       title: '新会话',
       agentId: null,
       isPinned: false,
@@ -302,8 +303,7 @@ class _HistoryPageState extends State<HistoryPage> {
           const SizedBox(height: 8),
           Expanded(
             child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : filtered.isEmpty
                     ? EmptyStateView(
                         icon: Icons.forum_outlined,

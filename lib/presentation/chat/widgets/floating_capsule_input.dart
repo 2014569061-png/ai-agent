@@ -107,7 +107,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
 
     final bottomPadding = MediaQuery.viewInsetsOf(context).bottom > 0
@@ -250,7 +250,8 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
       );
     }
     return _FilledCircleButton(
-      color: isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
+      color:
+          isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
       icon: Icons.arrow_upward_rounded,
       iconColor: textFaint,
       tooltip: '发送',

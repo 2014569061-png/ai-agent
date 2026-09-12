@@ -137,9 +137,8 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final oldExtent = widget.controller.hasClients
         ? widget.controller.position.maxScrollExtent
         : 0.0;
-    final oldPixels = widget.controller.hasClients
-        ? widget.controller.position.pixels
-        : 0.0;
+    final oldPixels =
+        widget.controller.hasClients ? widget.controller.position.pixels : 0.0;
     bool hadMore;
     try {
       hadMore = await widget.onLoadOlder!();
@@ -206,9 +205,10 @@ class _ChatMessageListState extends State<ChatMessageList> {
           onEditPrompt: widget.onEditPrompt,
           onSwitchModel: widget.onSwitchModel,
           // 朗读只对助手正文开放（工具气泡与用户消息不提供该读屏动作）。
-          onSpeak: message.role == MessageRole.assistant && widget.onSpeak != null
-              ? () => widget.onSpeak!(index)
-              : null,
+          onSpeak:
+              message.role == MessageRole.assistant && widget.onSpeak != null
+                  ? () => widget.onSpeak!(index)
+                  : null,
           speakingListenable: widget.speakingListenable,
           selecting: widget.selectionIndex == index,
           onExitSelection: widget.onExitSelection,

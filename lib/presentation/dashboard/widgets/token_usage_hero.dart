@@ -26,7 +26,7 @@ class TokenUsageHero extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final text = isDark ? AppPalette.darkText : AppPalette.lightText;
     final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final faint = isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+    final faint = isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
 
     final today = _today;
     final hasData =
@@ -148,7 +148,7 @@ class TokenUsageHero extends StatelessWidget {
               _SegmentLegend(
                 color: isDark
                     ? AppPalette.darkTextFaint
-                    : AppPalette.lightTextFaint,
+                    : AppPalette.lightTextMuted,
                 label: AppStrings.promptTokens,
                 value: formatExact(freshInput),
               ),
@@ -245,7 +245,7 @@ class _TokenSegmentBar extends StatelessWidget {
         child: Row(
           children: [
             segment(freshInput,
-                isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint),
+                isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted),
             segment(cached,
                 isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft),
             segment(completion, AppPalette.brand),

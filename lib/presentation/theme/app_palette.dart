@@ -10,7 +10,7 @@ abstract final class AppPalette {
   static const lightHairline = Color(0xFFE2E7F1);
   static const lightText = Color(0xFF1A1A1A);
   static const lightTextMuted = Color(0xFF6B7280);
-  static const lightTextFaint = Color(0xFF8B90A0);
+  static const lightTextFaint = Color(0xFF6B7280);
 
   // 深色模式语义色
   static const darkCanvas = Color(0xFF0F121C);
@@ -19,7 +19,7 @@ abstract final class AppPalette {
   static const darkHairline = Color(0x1FFFFFFF); // rgba(255,255,255,.12)
   static const darkText = Color(0xFFE6E8EF);
   static const darkTextMuted = Color(0xFFA8B0C4);
-  static const darkTextFaint = Color(0xFF7C8298);
+  static const darkTextFaint = Color(0xFF8A90A4);
 
   // 全站强调色及其衍生
   static const brand = Color(0xFF4D6BFE);

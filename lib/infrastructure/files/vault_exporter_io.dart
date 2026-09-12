@@ -166,6 +166,9 @@ Map<String, dynamic> _redactPersistedMessage(
 
 Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
     {ProviderConfigStore? providerStore}) async {
+  // Validate optional secret payload before clearing the database. A malformed
+  // profile must not turn a later restore failure into data loss.
+  _providerConfigsFromJson(json['providerProfiles']);
   await db.transaction(() async {
     await db.clearAllUserData();
     for (final m in (json['conversations'] as List? ?? const [])
@@ -226,54 +229,54 @@ Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
       db, json, providerStore ?? ProviderConfigStore());
 }
 
+List<ProviderConfig> _providerConfigsFromJson(Object? raw) {
+  if (raw is! List) return const [];
+  return raw
+      .whereType<Map<String, dynamic>>()
+      .map((item) => ProviderConfig(
+            id: item['id'] as String? ?? 'default',
+            name: item['name'] as String? ?? 'Provider',
+            baseUrl: item['baseUrl'] as String? ?? '',
+            model: item['model'] as String? ?? '',
+            apiKey: item['apiKey'] as String? ?? '',
+            type: ProviderType.values.firstWhere((t) => t.name == item['type'],
+                orElse: () => ProviderType.openaiCompatible),
+            reasoningEffort: ReasoningEffort.values.firstWhere(
+                (e) => e.name == item['reasoningEffort'],
+                orElse: () => ReasoningEffort.medium),
+            contextTokens: (item['contextTokens'] as num?)?.toInt() ??
+                ProviderConfig.defaultContextTokens,
+            inputPricePerMillionCents:
+                (item['inputPricePerMillionCents'] as num?)?.toInt(),
+            outputPricePerMillionCents:
+                (item['outputPricePerMillionCents'] as num?)?.toInt(),
+            cachedPricePerMillionCents:
+                (item['cachedPricePerMillionCents'] as num?)?.toInt(),
+          ))
+      .where((config) => config.model.trim().isNotEmpty)
+      .toList();
+}
+
 /// 恢复 Provider 配置（含 API Key）与工具密钥到安全存储；旧版备份无该段时跳过。
 Future<void> _restoreProviderSecrets(AppDatabase db, Map<String, dynamic> json,
     ProviderConfigStore store) async {
-  try {
-    final profilesJson = json['providerProfiles'];
-    if (profilesJson is List) {
-      final configs = profilesJson
-          .whereType<Map<String, dynamic>>()
-          .map((item) => ProviderConfig(
-                id: item['id'] as String? ?? 'default',
-                name: item['name'] as String? ?? 'Provider',
-                baseUrl: item['baseUrl'] as String? ?? '',
-                model: item['model'] as String? ?? '',
-                apiKey: item['apiKey'] as String? ?? '',
-                type: ProviderType.values.firstWhere(
-                    (t) => t.name == item['type'],
-                    orElse: () => ProviderType.openaiCompatible),
-                reasoningEffort: ReasoningEffort.values.firstWhere(
-                    (e) => e.name == item['reasoningEffort'],
-                    orElse: () => ReasoningEffort.medium),
-                contextTokens: (item['contextTokens'] as num?)?.toInt() ??
-                    ProviderConfig.defaultContextTokens,
-                inputPricePerMillionCents:
-                    (item['inputPricePerMillionCents'] as num?)?.toInt(),
-                outputPricePerMillionCents:
-                    (item['outputPricePerMillionCents'] as num?)?.toInt(),
-                cachedPricePerMillionCents:
-                    (item['cachedPricePerMillionCents'] as num?)?.toInt(),
-              ))
-          .where((config) => config.model.trim().isNotEmpty)
-          .toList();
-      if (configs.isNotEmpty) {
-        // 导出时 profiles 首个不一定是激活项，但备份快照顺序即 loadAll 顺序
-        // （首项为激活配置），恢复后保持一致。
-        await store.restoreProfiles(configs, activeId: configs.first.id);
+  final profilesJson = json['providerProfiles'];
+  if (profilesJson is List) {
+    final configs = _providerConfigsFromJson(profilesJson);
+    if (configs.isNotEmpty) {
+      // 导出时 profiles 首个不一定是激活项，但备份快照顺序即 loadAll 顺序
+      // （首项为激活配置），恢复后保持一致。
+      await store.restoreProfiles(configs, activeId: configs.first.id);
+    }
+  }
+  final toolKeys = json['toolKeys'];
+  if (toolKeys is Map) {
+    for (final entry in toolKeys.entries) {
+      final value = entry.value;
+      if (value is String && value.isNotEmpty) {
+        await store.saveToolKey(entry.key, value);
       }
     }
-    final toolKeys = json['toolKeys'];
-    if (toolKeys is Map) {
-      for (final entry in toolKeys.entries) {
-        final value = entry.value;
-        if (value is String && value.isNotEmpty) {
-          await store.saveToolKey(entry.key, value);
-        }
-      }
-    }
-  } catch (_) {
-    // 密钥恢复失败不阻断整体导入。
   }
 }
 

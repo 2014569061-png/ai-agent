@@ -309,7 +309,11 @@ void main() {
 Future<void> _pendingSend(_Env env) => env.controller
     .send(text: '第二轮', attachments: const [], approveTool: _allowOnce);
 
-Future<ToolApproval> _allowOnce(ToolCall call, ToolRisk risk) async =>
+Future<ToolApproval> _allowOnce(
+  ToolCall call,
+  ToolRisk risk,
+  bool sensitive,
+) async =>
     ToolApproval.allowOnce;
 
 Future<Conversation> _seedConversation(

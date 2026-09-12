@@ -78,7 +78,8 @@ class AnthropicProvider extends StreamingProviderBase {
         final message = json['message'] as Map<String, dynamic>? ?? const {};
         updateUsage(message['usage'] as Map<String, dynamic>? ?? const {});
       } else if (type == 'content_block_start') {
-        final block = json['content_block'] as Map<String, dynamic>? ?? const {};
+        final block =
+            json['content_block'] as Map<String, dynamic>? ?? const {};
         if (block['type'] == 'tool_use') {
           final index = json['index'] as int? ?? 0;
           toolAccumulators[index] = _AnthropicToolAcc(

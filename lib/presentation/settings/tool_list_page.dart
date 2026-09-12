@@ -139,9 +139,9 @@ class _ToolListPageState extends State<ToolListPage> {
     _ToolEntry(
       name: 'terminal',
       displayName: '终端命令执行 (Terminal Command)',
-      description: '在 Termux 或系统沙箱中执行 Shell 脚本与系统命令。',
-      risk: ToolRisk.dangerous,
-      approvalPolicy: '具备底层系统交互能力，强制逐次审批。',
+      description: '在 Termux 或系统环境中执行 Shell 脚本与系统命令。cwd 不是完整沙箱边界。',
+      risk: ToolRisk.requiresConfirmation,
+      approvalPolicy: '默认始终需要确认；完全访问模式下终端可自动执行。cwd 不是完整沙箱。',
       category: '终端与执行',
     ),
     _ToolEntry(
@@ -233,7 +233,7 @@ class _ToolListPageState extends State<ToolListPage> {
       '终端与执行' => AppPalette.danger,
       'Agent 与上下文' => AppPalette.lightTextMuted,
       '多模态' => AppPalette.danger,
-      _ => AppPalette.lightTextFaint,
+      _ => AppPalette.lightTextMuted,
     };
   }
 

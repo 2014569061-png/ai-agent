@@ -52,6 +52,19 @@ abstract final class AppStrings {
   static const toolArguments = '调用参数';
   static const reject = '拒绝';
   static const allowOnce = '允许一次';
+  static const closeApprovalSheet = '关闭审批弹窗';
+  static const closeDialog = '关闭弹窗';
+  static const everyDay = '每天';
+  static String weekday(int day) => '周$day';
+  static const weekdays = <int, String>{
+    1: '周一',
+    2: '周二',
+    3: '周三',
+    4: '周四',
+    5: '周五',
+    6: '周六',
+    7: '周日',
+  };
   static const dangerOperation = '危险操作';
   static const requiresConfirmation = '需要确认';
   static const awaitExecution = '等待执行';
@@ -114,7 +127,7 @@ abstract final class AppStrings {
   static const permUnsupported = '系统不支持';
   static const aboutSection = '关于';
   static const currentVersionLabel = '当前版本';
-  static const appVersionName = 'v0.10.0';
+  static const appVersionName = 'v0.8.8';
   static const sourceCode = '源代码';
   static const openSourceLicenses = '开源许可';
   static const privacyAndCompliance = '隐私与合规';
@@ -276,6 +289,12 @@ abstract final class AppStrings {
   static const cacheHitRateHint = '今日命中缓存的 Token 占比';
   static const runningTasks = '进行中任务';
   static const taskSuccessRate = '任务成功率';
+  static const taskFeedbackRate = '用户好评率';
+  static String taskFeedbackSamples(int count) => '$count 个样本';
+  static const taskFeedbackTitle = '任务反馈';
+  static const taskFeedbackPrompt = '这个结果对你有帮助吗？';
+  static const taskHelpful = '有帮助';
+  static const taskNotHelpful = '没帮助';
   static const tokenTrend7Days = 'Token 用量（近 7 天）';
   static const runStatus = '运行状态';
   static const pendingActions = '待我处理';

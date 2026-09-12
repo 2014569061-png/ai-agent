@@ -26,6 +26,11 @@ Color settingsMutedColor(BuildContext context) {
   return isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 }
 
+Color settingsFaintColor(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  return isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
+}
+
 /// 图标色归一化。
 ///
 /// 视觉规范禁止彩色图标：历史调用点大量传入 iOS 系统色

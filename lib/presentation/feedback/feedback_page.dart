@@ -83,12 +83,12 @@ class _FeedbackPageState extends State<FeedbackPage> {
         TextField(
             controller: _contact,
             decoration: const InputDecoration(labelText: '联系方式（选填，便于跟进）')),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
         FilledButton.icon(
             style: FilledButton.styleFrom(
               elevation: 0,
               backgroundColor: AppPalette.brand,
-              foregroundColor: Colors.white,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
               minimumSize: const Size.fromHeight(44),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppTokens.radiusControl),
@@ -100,7 +100,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
         const SizedBox(height: 8),
         Text('当前通过邮件客户端提交，无需注册账号。',
             style: TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 color: isDark
                     ? AppPalette.darkTextMuted
                     : AppPalette.lightTextMuted)),

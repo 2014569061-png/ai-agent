@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 
 /// 定时任务调度规格（C5）。cron 字段存 JSON：
@@ -33,15 +34,20 @@ class ScheduleSpec {
 
   String toCron() => jsonEncode({'hour': hour, 'minute': minute, 'days': days});
 
-  /// 是否到点（15 分钟宽限窗口，适配 WorkManager 的最小周期粒度）。
-  /// [lastRunAt] 传上次执行时间（用 updatedAt 近似），避免同周期重复执行。
   bool isDue(DateTime now, DateTime? lastRunAt) {
-    if (days.isNotEmpty && !days.contains(now.weekday)) return false;
-    final scheduled = DateTime(now.year, now.month, now.day, hour, minute);
-    if (now.isBefore(scheduled)) return false;
-    if (now.difference(scheduled) > const Duration(minutes: 15)) return false;
-    if (lastRunAt != null && !lastRunAt.isBefore(scheduled)) return false;
-    return true;
+    final scheduled = latestScheduledAt(now);
+    if (scheduled == null) return false;
+    return lastRunAt == null || lastRunAt.isBefore(scheduled);
+  }
+
+  DateTime? latestScheduledAt(DateTime now) {
+    for (var daysAgo = 0; daysAgo <= 7; daysAgo++) {
+      final date = now.subtract(Duration(days: daysAgo));
+      if (days.isNotEmpty && !days.contains(date.weekday)) continue;
+      final candidate = DateTime(date.year, date.month, date.day, hour, minute);
+      if (!candidate.isAfter(now)) return candidate;
+    }
+    return null;
   }
 }
 
@@ -56,13 +62,14 @@ class ScheduledTaskService {
   }) async {
     final now = DateTime.now();
     final task = ScheduledTask(
-      id: 'sched-${now.microsecondsSinceEpoch}',
+      id: UniqueId.generate('sched', now: now),
       name: name,
       prompt: prompt,
       cron: schedule.toCron(),
       agentId: agentId,
       enabled: true,
       lastResult: null,
+      lastRunAt: null,
       createdAt: now,
       updatedAt: now,
     );
@@ -73,8 +80,10 @@ class ScheduledTaskService {
   Future<List<ScheduledTask>> dueTasks(AppDatabase db, DateTime now) async {
     final all = await db.allScheduledTasks();
     return all
-        .where((t) =>
-            t.enabled && ScheduleSpec.fromCron(t.cron).isDue(now, t.updatedAt))
+        .where((task) =>
+            task.enabled &&
+            ScheduleSpec.fromCron(task.cron)
+                .isDue(now, task.lastRunAt ?? task.createdAt))
         .toList();
   }
 }

@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/collaboration_models.dart';
+import '../domain/unique_id.dart';
 import 'collaboration_agent_runner.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/provider_config_store.dart';
@@ -55,8 +56,7 @@ class OrchestrationService implements OrchestrationModule {
 
   @override
   Future<CollaborationPlan> propose(DevelopmentTaskInput task) async {
-    final now = DateTime.now().microsecondsSinceEpoch;
-    final runId = 'collab-$now';
+    final runId = UniqueId.generate('collab');
     final template = templates.forTask(task);
     final roles = _rolesFor(task.taskType);
     final maxAgents = roles.length.clamp(2, budget.maxAgents).toInt();
@@ -167,6 +167,7 @@ class OrchestrationService implements OrchestrationModule {
     await db.saveCollaborationRun(cancelled);
     await TaskService().updateStatus(db, run.taskId, 'cancelled');
     _emit(runId, CollaborationRunEvent(runId, _snapshot(cancelled)));
+    _closeController(runId);
   }
 
   @override
@@ -184,6 +185,7 @@ class OrchestrationService implements OrchestrationModule {
     await db.saveCollaborationRun(completed);
     await TaskService().updateStatus(db, run.taskId, 'completed');
     _emit(runId, CollaborationRunEvent(runId, _snapshot(completed)));
+    _closeController(runId);
   }
 
   @override
@@ -521,6 +523,7 @@ class OrchestrationService implements OrchestrationModule {
       _emit(original.id,
           CollaborationRunEvent(original.id, _snapshot(failed, plan: plan)));
       _emit(original.id, CollaborationErrorEvent(original.id, message));
+      _closeController(original.id);
     } catch (_) {
       // 状态收敛本身也可能遇到数据库错误，不能把异常继续抛回后台任务。
     }
@@ -626,6 +629,13 @@ class OrchestrationService implements OrchestrationModule {
     final controller = _controllers.putIfAbsent(
         runId, () => StreamController<CollaborationEvent>.broadcast());
     if (!controller.isClosed) controller.add(event);
+  }
+
+  void _closeController(String runId) {
+    final controller = _controllers.remove(runId);
+    if (controller != null && !controller.isClosed) {
+      unawaited(controller.close());
+    }
   }
 
   Map<String, dynamic> _decode(String value) {

@@ -34,7 +34,7 @@ void main() {
     await controller.send(
       text: '你好',
       attachments: const [],
-      approveTool: (call, risk) async => ToolApproval.allowOnce,
+      approveTool: (call, risk, sensitive) async => ToolApproval.allowOnce,
     );
 
     final state = container.read(chatControllerProvider);
@@ -186,7 +186,7 @@ void main() {
     await controller.send(
         text: '你好',
         attachments: const [],
-        approveTool: (call, risk) async => ToolApproval.allowOnce);
+        approveTool: (call, risk, sensitive) async => ToolApproval.allowOnce);
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
@@ -199,7 +199,7 @@ void main() {
     await controller.send(
         text: '再试一次',
         attachments: const [],
-        approveTool: (call, risk) async => ToolApproval.allowOnce);
+        approveTool: (call, risk, sensitive) async => ToolApproval.allowOnce);
     expect(container.read(chatControllerProvider).messages.length, 4);
   });
 
@@ -222,7 +222,7 @@ void main() {
     final future = controller.send(
         text: '长文本',
         attachments: const [],
-        approveTool: (call, risk) async => ToolApproval.allowOnce);
+        approveTool: (call, risk, sensitive) async => ToolApproval.allowOnce);
     // 等流真正开始（DemoProvider 每字符延迟 12ms）。
     await Future<void>.delayed(const Duration(milliseconds: 60));
     expect(container.read(chatControllerProvider).running, isTrue);
@@ -257,11 +257,11 @@ void main() {
     await controller.send(
         text: '你好',
         attachments: const [],
-        approveTool: (call, risk) async => ToolApproval.allowOnce);
+        approveTool: (call, risk, sensitive) async => ToolApproval.allowOnce);
     expect(container.read(chatControllerProvider).messages.length, 2);
 
     await controller.regenerate(
-        approveTool: (call, risk) async => ToolApproval.allowOnce);
+        approveTool: (call, risk, sensitive) async => ToolApproval.allowOnce);
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
@@ -432,7 +432,11 @@ class _FailingConfigStore extends _FakeConfigStore {
       );
 }
 
-Future<ToolApproval> _allowOnce(ToolCall call, ToolRisk risk) async =>
+Future<ToolApproval> _allowOnce(
+  ToolCall call,
+  ToolRisk risk,
+  bool sensitive,
+) async =>
     ToolApproval.allowOnce;
 
 class _FakeConfigStore extends ProviderConfigStore {

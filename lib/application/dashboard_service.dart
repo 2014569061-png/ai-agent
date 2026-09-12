@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models.dart';
 import '../infrastructure/database/app_database.dart';
+import 'task_feedback_service.dart';
 import 'task_service.dart';
 
 /// 本地运行统计日聚合，不依赖账户或计费服务。
@@ -35,6 +36,8 @@ class DashboardKpis {
     required this.todayCachedTokens,
     required this.runningTasks,
     required this.taskSuccessRate,
+    required this.taskFeedbackRate,
+    required this.taskFeedbackSamples,
   });
 
   final int todayConversations;
@@ -44,6 +47,8 @@ class DashboardKpis {
 
   /// 近 7 天任务成功率（0-100）。无已完成/失败样本时为 null，UI 展示 `--`。
   final double? taskSuccessRate;
+  final double? taskFeedbackRate;
+  final int taskFeedbackSamples;
 
   double get cacheHitRate => todayTokens <= 0
       ? 0.0
@@ -130,12 +135,14 @@ class DashboardService {
     final runsF = db.runsSince(sevenDaysAgo);
     final weekTasksF = db.tasksSince(sevenDaysAgo);
     final runningTasksF = db.runningTasks();
+    final feedbackMetricsF = const TaskFeedbackService().metrics(db);
 
     final todayConvs = await conversationsF;
     final weekConvs = await weekConversationsF;
     final runs = await runsF;
     final weekTasks = await weekTasksF;
     final runningTasks = await runningTasksF;
+    final feedbackMetrics = await feedbackMetricsF;
 
     // 1. 今日会话
     final todayConversations = todayConvs.length;
@@ -271,6 +278,8 @@ class DashboardService {
         todayCachedTokens: todayCachedTokens,
         runningTasks: runningCount,
         taskSuccessRate: successRate,
+        taskFeedbackRate: feedbackMetrics.helpfulRate,
+        taskFeedbackSamples: feedbackMetrics.samples,
       ),
       weeklyUsage: weeklyUsage,
       recentRuns: recentRuns,

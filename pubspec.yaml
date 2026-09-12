@@ -1,7 +1,7 @@
 name: mobile_agent
 description: A mobile-first multi-provider AI Agent client.
 publish_to: "none"
-version: 0.8.7+89
+version: 0.8.8+90
 
 environment:
   sdk: ^3.5.0
@@ -50,6 +50,7 @@ dev_dependencies:
   drift_dev: ^2.22.1
   build_runner: ^2.4.14
   flutter_secure_storage_platform_interface: ^1.1.0
+  sqlite3: ^3.5.2
 
 flutter:
   uses-material-design: true

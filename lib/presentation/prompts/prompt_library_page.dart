@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
 import '../theme/app_palette.dart';
@@ -221,14 +222,16 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
         );
       },
     );
-    name.dispose();
-    category.dispose();
-    content.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      category.dispose();
+      content.dispose();
+    });
     if (result == null || result.$1.isEmpty) return;
     final db = await DatabaseProvider.instance.database;
     final now = DateTime.now();
     await db.savePromptTemplate(PromptTemplate(
-      id: existing?.id ?? 'prompt-${now.microsecondsSinceEpoch}',
+      id: existing?.id ?? UniqueId.generate('prompt', now: now),
       name: result.$1,
       content: result.$3,
       category: result.$2.isEmpty ? '通用' : result.$2,
@@ -376,8 +379,7 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
           ),
           Expanded(
             child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : filtered.isEmpty
                     ? const EmptyStateView(
                         icon: Icons.lightbulb_outline,

@@ -61,8 +61,9 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
             .take(5)
             .toList();
         await prefs.setStringList(_recentDirsKey, updated);
+        if (!mounted) return;
         setState(() => _recentDirs = updated);
-        if (mounted) FloatingToast.show(context, '已切换工作区到: $selected');
+        FloatingToast.show(context, '已切换工作区到: $selected');
       }
     } catch (e) {
       if (mounted) FloatingToast.show(context, '选取目录失败: $e');
@@ -287,7 +288,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                           trailingWidget: const Icon(
                             Icons.arrow_forward_rounded,
                             size: 16,
-                            color: AppPalette.lightTextFaint,
+                            color: AppPalette.lightTextMuted,
                           ),
                           onTap: () {
                             ref

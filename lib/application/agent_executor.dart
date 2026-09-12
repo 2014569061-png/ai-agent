@@ -36,7 +36,7 @@ class AgentExecutor {
     Duration retryBackoff = const Duration(seconds: 2),
     AgentCancellationToken? cancellationToken,
     CancelToken? cancelToken,
-    Future<ToolApproval> Function(ToolCall call, ToolRisk risk)? approveTool,
+    ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
     bool Function(String toolName, ToolRisk risk)? isToolTrusted,
     String? systemPrompt,
@@ -373,9 +373,12 @@ class AgentExecutor {
         );
         if (decision.requiresUser) {
           yield ApprovalRequiredEvent(pendingCall, registration.spec.risk);
-          final userDecision =
-              await approveTool?.call(pendingCall, registration.spec.risk) ??
-                  ToolApproval.reject;
+          final userDecision = await approveTool?.call(
+                pendingCall,
+                registration.spec.risk,
+                registration.spec.sensitive,
+              ) ??
+              ToolApproval.reject;
           if (userDecision == ToolApproval.reject) {
             final toolResult = ToolResult.failure(
               code: ToolCodes.approvalRejected,

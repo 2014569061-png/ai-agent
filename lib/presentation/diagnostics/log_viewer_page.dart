@@ -240,7 +240,7 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
         ),
       ),
     );
-    keyword.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) => keyword.dispose());
     if (mounted) await _load();
   }
 

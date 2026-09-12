@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/observability/unified_diff.dart';
 import 'log_service.dart';
@@ -33,14 +34,15 @@ class AuditService {
   }) async {
     if (!await isEnabled()) return;
     try {
+      final now = DateTime.now();
       await db.insertAuditLog(AuditLogsCompanion.insert(
-        id: 'audit-${DateTime.now().microsecondsSinceEpoch}',
+        id: UniqueId.generate('audit', now: now),
         conversationId: Value(conversationId),
         type: toSafeLogToken(type),
         detail: _redactDetail(detail),
         decision: Value(decision == null ? null : toSafeLogToken(decision)),
         risk: Value(risk == null ? null : toSafeLogToken(risk)),
-        createdAt: DateTime.now(),
+        createdAt: now,
       ));
     } catch (_) {
       // 审计写入失败不阻断主流程。

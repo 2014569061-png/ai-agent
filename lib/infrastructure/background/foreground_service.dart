@@ -15,6 +15,7 @@ class ForegroundService {
   static const _channelName = 'NEXUS 正在运行';
 
   bool _initialized = false;
+  int _activeRuns = 0;
 
   /// 需要在 main() 里调用，初始化平台通道。
   static void initCommunicationPort() {
@@ -50,6 +51,7 @@ class ForegroundService {
   Future<bool> start(
       {String title = 'NEXUS 正在运行', String text = 'Agent 任务执行中…'}) async {
     if (kIsWeb) return false;
+    _activeRuns++;
     try {
       await _ensureInit();
       if (await FlutterForegroundTask.isRunningService) return true;
@@ -59,14 +61,16 @@ class ForegroundService {
         notificationText: text,
         callback: startCallback,
       );
-      return result is ServiceRequestSuccess;
-    } catch (_) {
-      return false;
-    }
+      if (result is ServiceRequestSuccess) return true;
+    } catch (_) {}
+    _activeRuns--;
+    return false;
   }
 
   Future<void> stop() async {
-    if (kIsWeb) return;
+    if (kIsWeb || _activeRuns == 0) return;
+    _activeRuns--;
+    if (_activeRuns > 0) return;
     try {
       if (await FlutterForegroundTask.isRunningService) {
         await FlutterForegroundTask.stopService();

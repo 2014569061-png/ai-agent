@@ -276,8 +276,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
           // 列表
           Expanded(
             child: _loading
-                ? const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
                 : _error != null
                     ? Center(
                         child: EmptyStateView.compact(

@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/observability/unified_diff.dart';
 import '../domain/sensitive_tool_policy.dart';
+import '../domain/unique_id.dart';
 import 'providers.dart';
 
 /// 将外部名称压缩为可安全落日志的 token。日志不应携带 prompt、路径、命令
@@ -142,7 +143,7 @@ class LogService {
             ? null
             : _truncate(jsonEncode(_sanitize(detail)), _maxDetailLength);
         await db.insertLogRecord(LogRecordsCompanion.insert(
-          logId: 'log-${now.microsecondsSinceEpoch}',
+          logId: UniqueId.generate('log', now: now),
           runId: Value(runId == null ? null : toSafeLogToken(runId)),
           eventId: Value(eventId == null ? null : toSafeLogToken(eventId)),
           level: level,

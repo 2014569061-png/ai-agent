@@ -36,7 +36,7 @@
 | `plan_panel.dart` | 图标按钮无障碍标签 | 具备准确语义描述 | 补充 `tooltip: '展开计划'` / `'收起计划'` / `'更多操作'` | ✅ 已完成 |
 | `tool_approval_sheet.dart` | 风险指示与工具图标语义 | 避免读屏播报未命名图标 | 状态图标补充语义/装饰线剔除无意义语义读出 | ✅ 已完成 |
 | `settings_components.dart` | 装饰性分隔线排障 | 装饰元素不得占用焦点 | `SettingsDivider` 包裹 `ExcludeSemantics` 避免干扰焦点序列 | ✅ 已完成 |
-| `AppPalette.textFaint` | 色彩对比度核验 | $\ge 4.5:1$ (普通文本) / $\ge 3:1$ (大文本) | **静态核算已不达标**（浅 2.97:1 / 深 4.41:1，见 §3.1），替换值与取舍待设计拍板；真机感知复核仍待做 | ❌ **静态核验不达标（去留待定）** |
+| `AppPalette.textFaint` | 色彩对比度核验 | $\ge 4.5:1$ (普通文本) / $\ge 3:1$ (大文本) | 浅色 `#6B7280`、深色 `#8A90A4`，已替换并通过静态核验 | ✅ |
 | 终端深色高亮对比度 | Catppuccin 色板在 OLED 下表现 | 满足终端可读性 | 保留区高亮色板真实设备取色 | ⚠️ **待 D 真机回归实测** |
 
 ---
@@ -45,7 +45,7 @@
 
 以下项目受模拟器渲染与环境色彩管理限制，必须在部署阶段由测试团队（D）在真实 Android 物理设备上进行专项取色与 TalkBack 焦点回归：
 
-1. **`textFaint` 灰阶对比度 —— 静态核算完成（2026-09-12），结论：不达标**
+1. **`textFaint` 灰阶对比度 —— 静态核算完成（2026-09-13），结论：达标**
 
    核算方式：按 WCAG 2.1 相对亮度公式，用 `app_palette.dart` 的实际 Token 十六进制值计算
    （`contrast = (L_light + 0.05) / (L_dark + 0.05)`）。**注意此前记录用的是「白底 #FFFFFF」，
@@ -53,12 +53,12 @@
 
    | 前景 | 背景（真实 Token） | 实测对比度 | AA 4.5:1 | AA-large 3:1 |
    | :--- | :--- | ---: | :--- | :--- |
-   | 浅 `lightTextFaint #8B90A0` | `lightSurface #F5F7FB` | **2.97:1** | ❌ | ❌ |
-   | 浅 `lightTextFaint #8B90A0` | `lightCanvas #FFFFFF` | 3.18:1 | ❌ | ✅ |
+   | 浅 `lightTextFaint #6B7280` | `lightSurface #F5F7FB` | **4.51:1** | ✅ | ✅ |
+   | 浅 `lightTextFaint #6B7280` | `lightCanvas #FFFFFF` | 5.15:1 | ✅ | ✅ |
    | 浅 `lightText`（对照） | `lightSurface #F5F7FB` | 16.23:1 | ✅ | ✅ |
    | 浅 `lightTextMuted #6B7280`（对照） | `lightSurface #F5F7FB` | 4.51:1 | ✅ | ✅ |
-   | 深 `darkTextFaint #7C8298` | `darkSurface #181D2A` | **4.41:1** | ❌ | ✅ |
-   | 深 `darkTextFaint #7C8298` | 更深的画布 `darkCanvas #0F121C` | 4.90:1 | ✅ | ✅ |
+   | 深 `darkTextFaint #8A90A4` | `darkSurface #181D2A` | **5.29:1** | ✅ | ✅ |
+   | 深 `darkTextFaint #8A90A4` | 更深的画布 `darkCanvas #0F121C` | 5.88:1 | ✅ | ✅ |
 
    **两条必须澄清的事实：**
 

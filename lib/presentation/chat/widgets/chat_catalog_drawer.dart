@@ -494,7 +494,7 @@ class _DrawerSearchBarState extends State<_DrawerSearchBar> {
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
 
     return Container(
       height: AppTokens.kSearchBoxHeight,
@@ -560,7 +560,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
 
     return Padding(
       padding: const EdgeInsets.only(top: 24, bottom: 8),

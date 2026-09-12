@@ -1429,6 +1429,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           source: source, maxWidth: 1280, maxHeight: 1280, imageQuality: 80);
       if (xfile == null || !mounted) return;
       final bytes = await xfile.readAsBytes();
+      if (!mounted) return;
       final name = xfile.name;
       setState(() => _attachments
           .add(PlatformFile(name: name, size: bytes.length, bytes: bytes)));
@@ -1631,8 +1632,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
         .timeout(const Duration(seconds: 8), onTimeout: () => null);
   }
 
-  Future<ToolApproval> _approveTool(ToolCall call, ToolRisk risk) =>
-      promptToolApproval(context, ref, call, risk);
+  Future<ToolApproval> _approveTool(
+    ToolCall call,
+    ToolRisk risk,
+    bool sensitive,
+  ) =>
+      promptToolApproval(context, ref, call, risk, sensitive);
 
   Future<void> _selectApprovalMode() async {
     final currentMode = ref.read(chatControllerProvider).approvalMode;
@@ -2094,8 +2099,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         speakingListenable: TtsService
                                             .instance.speakingListenable,
                                         selectionIndex: _selectingMessageIndex,
-                                        onExitSelection: () => setState(
-                                            () => _selectingMessageIndex = null),
+                                        onExitSelection: () => setState(() =>
+                                            _selectingMessageIndex = null),
                                         trailingWidgets: [
                                           if (planState != null &&
                                               planState.status != 'cancelled')

@@ -124,7 +124,7 @@ class SessionMetricsBar extends StatelessWidget {
         : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline);
     final labelColor = onImage
         ? AppPalette.darkTextFaint
-        : (isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint);
+        : (isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted);
     final valueColor = onImage
         ? AppPalette.darkText
         : (isDark ? AppPalette.darkText : AppPalette.lightText);

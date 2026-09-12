@@ -3119,6 +3119,319 @@ class TasksCompanion extends UpdateCompanion<Task> {
   }
 }
 
+class $TaskFeedbackTable extends TaskFeedback
+    with TableInfo<$TaskFeedbackTable, TaskFeedbackData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TaskFeedbackTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+      'task_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+      'run_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _helpfulMeta =
+      const VerificationMeta('helpful');
+  @override
+  late final GeneratedColumn<bool> helpful = GeneratedColumn<bool>(
+      'helpful', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("helpful" IN (0, 1))'));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [taskId, runId, helpful, createdAt, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'task_feedback';
+  @override
+  VerificationContext validateIntegrity(Insertable<TaskFeedbackData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('task_id')) {
+      context.handle(_taskIdMeta,
+          taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta));
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+          _runIdMeta, runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta));
+    }
+    if (data.containsKey('helpful')) {
+      context.handle(_helpfulMeta,
+          helpful.isAcceptableOrUnknown(data['helpful']!, _helpfulMeta));
+    } else if (isInserting) {
+      context.missing(_helpfulMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {taskId};
+  @override
+  TaskFeedbackData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TaskFeedbackData(
+      taskId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}task_id'])!,
+      runId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}run_id']),
+      helpful: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}helpful'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $TaskFeedbackTable createAlias(String alias) {
+    return $TaskFeedbackTable(attachedDatabase, alias);
+  }
+}
+
+class TaskFeedbackData extends DataClass
+    implements Insertable<TaskFeedbackData> {
+  final String taskId;
+  final String? runId;
+  final bool helpful;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const TaskFeedbackData(
+      {required this.taskId,
+      this.runId,
+      required this.helpful,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['task_id'] = Variable<String>(taskId);
+    if (!nullToAbsent || runId != null) {
+      map['run_id'] = Variable<String>(runId);
+    }
+    map['helpful'] = Variable<bool>(helpful);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  TaskFeedbackCompanion toCompanion(bool nullToAbsent) {
+    return TaskFeedbackCompanion(
+      taskId: Value(taskId),
+      runId:
+          runId == null && nullToAbsent ? const Value.absent() : Value(runId),
+      helpful: Value(helpful),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory TaskFeedbackData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TaskFeedbackData(
+      taskId: serializer.fromJson<String>(json['taskId']),
+      runId: serializer.fromJson<String?>(json['runId']),
+      helpful: serializer.fromJson<bool>(json['helpful']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'taskId': serializer.toJson<String>(taskId),
+      'runId': serializer.toJson<String?>(runId),
+      'helpful': serializer.toJson<bool>(helpful),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  TaskFeedbackData copyWith(
+          {String? taskId,
+          Value<String?> runId = const Value.absent(),
+          bool? helpful,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      TaskFeedbackData(
+        taskId: taskId ?? this.taskId,
+        runId: runId.present ? runId.value : this.runId,
+        helpful: helpful ?? this.helpful,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  TaskFeedbackData copyWithCompanion(TaskFeedbackCompanion data) {
+    return TaskFeedbackData(
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      helpful: data.helpful.present ? data.helpful.value : this.helpful,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TaskFeedbackData(')
+          ..write('taskId: $taskId, ')
+          ..write('runId: $runId, ')
+          ..write('helpful: $helpful, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(taskId, runId, helpful, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TaskFeedbackData &&
+          other.taskId == this.taskId &&
+          other.runId == this.runId &&
+          other.helpful == this.helpful &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class TaskFeedbackCompanion extends UpdateCompanion<TaskFeedbackData> {
+  final Value<String> taskId;
+  final Value<String?> runId;
+  final Value<bool> helpful;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const TaskFeedbackCompanion({
+    this.taskId = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.helpful = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TaskFeedbackCompanion.insert({
+    required String taskId,
+    this.runId = const Value.absent(),
+    required bool helpful,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  })  : taskId = Value(taskId),
+        helpful = Value(helpful),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<TaskFeedbackData> custom({
+    Expression<String>? taskId,
+    Expression<String>? runId,
+    Expression<bool>? helpful,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (taskId != null) 'task_id': taskId,
+      if (runId != null) 'run_id': runId,
+      if (helpful != null) 'helpful': helpful,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TaskFeedbackCompanion copyWith(
+      {Value<String>? taskId,
+      Value<String?>? runId,
+      Value<bool>? helpful,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return TaskFeedbackCompanion(
+      taskId: taskId ?? this.taskId,
+      runId: runId ?? this.runId,
+      helpful: helpful ?? this.helpful,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (helpful.present) {
+      map['helpful'] = Variable<bool>(helpful.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TaskFeedbackCompanion(')
+          ..write('taskId: $taskId, ')
+          ..write('runId: $runId, ')
+          ..write('helpful: $helpful, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncMetaTable extends SyncMeta
     with TableInfo<$SyncMetaTable, SyncMetaData> {
   @override
@@ -4178,6 +4491,12 @@ class $ScheduledTasksTable extends ScheduledTasks
   late final GeneratedColumn<String> lastResult = GeneratedColumn<String>(
       'last_result', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _lastRunAtMeta =
+      const VerificationMeta('lastRunAt');
+  @override
+  late final GeneratedColumn<DateTime> lastRunAt = GeneratedColumn<DateTime>(
+      'last_run_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -4199,6 +4518,7 @@ class $ScheduledTasksTable extends ScheduledTasks
         agentId,
         enabled,
         lastResult,
+        lastRunAt,
         createdAt,
         updatedAt
       ];
@@ -4249,6 +4569,12 @@ class $ScheduledTasksTable extends ScheduledTasks
           lastResult.isAcceptableOrUnknown(
               data['last_result']!, _lastResultMeta));
     }
+    if (data.containsKey('last_run_at')) {
+      context.handle(
+          _lastRunAtMeta,
+          lastRunAt.isAcceptableOrUnknown(
+              data['last_run_at']!, _lastRunAtMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -4284,6 +4610,8 @@ class $ScheduledTasksTable extends ScheduledTasks
           .read(DriftSqlType.bool, data['${effectivePrefix}enabled'])!,
       lastResult: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}last_result']),
+      lastRunAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}last_run_at']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -4305,6 +4633,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
   final String? agentId;
   final bool enabled;
   final String? lastResult;
+  final DateTime? lastRunAt;
   final DateTime createdAt;
   final DateTime updatedAt;
   const ScheduledTask(
@@ -4315,6 +4644,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
       this.agentId,
       required this.enabled,
       this.lastResult,
+      this.lastRunAt,
       required this.createdAt,
       required this.updatedAt});
   @override
@@ -4330,6 +4660,9 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
     map['enabled'] = Variable<bool>(enabled);
     if (!nullToAbsent || lastResult != null) {
       map['last_result'] = Variable<String>(lastResult);
+    }
+    if (!nullToAbsent || lastRunAt != null) {
+      map['last_run_at'] = Variable<DateTime>(lastRunAt);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -4349,6 +4682,9 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
       lastResult: lastResult == null && nullToAbsent
           ? const Value.absent()
           : Value(lastResult),
+      lastRunAt: lastRunAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastRunAt),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -4365,6 +4701,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
       agentId: serializer.fromJson<String?>(json['agentId']),
       enabled: serializer.fromJson<bool>(json['enabled']),
       lastResult: serializer.fromJson<String?>(json['lastResult']),
+      lastRunAt: serializer.fromJson<DateTime?>(json['lastRunAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -4380,6 +4717,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
       'agentId': serializer.toJson<String?>(agentId),
       'enabled': serializer.toJson<bool>(enabled),
       'lastResult': serializer.toJson<String?>(lastResult),
+      'lastRunAt': serializer.toJson<DateTime?>(lastRunAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -4393,6 +4731,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
           Value<String?> agentId = const Value.absent(),
           bool? enabled,
           Value<String?> lastResult = const Value.absent(),
+          Value<DateTime?> lastRunAt = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt}) =>
       ScheduledTask(
@@ -4403,6 +4742,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
         agentId: agentId.present ? agentId.value : this.agentId,
         enabled: enabled ?? this.enabled,
         lastResult: lastResult.present ? lastResult.value : this.lastResult,
+        lastRunAt: lastRunAt.present ? lastRunAt.value : this.lastRunAt,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
@@ -4416,6 +4756,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
       enabled: data.enabled.present ? data.enabled.value : this.enabled,
       lastResult:
           data.lastResult.present ? data.lastResult.value : this.lastResult,
+      lastRunAt: data.lastRunAt.present ? data.lastRunAt.value : this.lastRunAt,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -4431,6 +4772,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
           ..write('agentId: $agentId, ')
           ..write('enabled: $enabled, ')
           ..write('lastResult: $lastResult, ')
+          ..write('lastRunAt: $lastRunAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -4439,7 +4781,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
 
   @override
   int get hashCode => Object.hash(id, name, prompt, cron, agentId, enabled,
-      lastResult, createdAt, updatedAt);
+      lastResult, lastRunAt, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4451,6 +4793,7 @@ class ScheduledTask extends DataClass implements Insertable<ScheduledTask> {
           other.agentId == this.agentId &&
           other.enabled == this.enabled &&
           other.lastResult == this.lastResult &&
+          other.lastRunAt == this.lastRunAt &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -4463,6 +4806,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
   final Value<String?> agentId;
   final Value<bool> enabled;
   final Value<String?> lastResult;
+  final Value<DateTime?> lastRunAt;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -4474,6 +4818,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
     this.agentId = const Value.absent(),
     this.enabled = const Value.absent(),
     this.lastResult = const Value.absent(),
+    this.lastRunAt = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4486,6 +4831,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
     this.agentId = const Value.absent(),
     this.enabled = const Value.absent(),
     this.lastResult = const Value.absent(),
+    this.lastRunAt = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -4503,6 +4849,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
     Expression<String>? agentId,
     Expression<bool>? enabled,
     Expression<String>? lastResult,
+    Expression<DateTime>? lastRunAt,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -4515,6 +4862,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
       if (agentId != null) 'agent_id': agentId,
       if (enabled != null) 'enabled': enabled,
       if (lastResult != null) 'last_result': lastResult,
+      if (lastRunAt != null) 'last_run_at': lastRunAt,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -4529,6 +4877,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
       Value<String?>? agentId,
       Value<bool>? enabled,
       Value<String?>? lastResult,
+      Value<DateTime?>? lastRunAt,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
@@ -4540,6 +4889,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
       agentId: agentId ?? this.agentId,
       enabled: enabled ?? this.enabled,
       lastResult: lastResult ?? this.lastResult,
+      lastRunAt: lastRunAt ?? this.lastRunAt,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -4570,6 +4920,9 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
     if (lastResult.present) {
       map['last_result'] = Variable<String>(lastResult.value);
     }
+    if (lastRunAt.present) {
+      map['last_run_at'] = Variable<DateTime>(lastRunAt.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -4592,6 +4945,7 @@ class ScheduledTasksCompanion extends UpdateCompanion<ScheduledTask> {
           ..write('agentId: $agentId, ')
           ..write('enabled: $enabled, ')
           ..write('lastResult: $lastResult, ')
+          ..write('lastRunAt: $lastRunAt, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -11305,6 +11659,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ModelProfilesTable modelProfiles = $ModelProfilesTable(this);
   late final $MemoriesTable memories = $MemoriesTable(this);
   late final $TasksTable tasks = $TasksTable(this);
+  late final $TaskFeedbackTable taskFeedback = $TaskFeedbackTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
   late final $KnowledgeDocsTable knowledgeDocs = $KnowledgeDocsTable(this);
   late final $KnowledgeChunksTable knowledgeChunks =
@@ -11372,6 +11727,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         modelProfiles,
         memories,
         tasks,
+        taskFeedback,
         syncMeta,
         knowledgeDocs,
         knowledgeChunks,
@@ -12943,6 +13299,179 @@ typedef $$TasksTableProcessedTableManager = ProcessedTableManager<
     (Task, BaseReferences<_$AppDatabase, $TasksTable, Task>),
     Task,
     PrefetchHooks Function()>;
+typedef $$TaskFeedbackTableCreateCompanionBuilder = TaskFeedbackCompanion
+    Function({
+  required String taskId,
+  Value<String?> runId,
+  required bool helpful,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$TaskFeedbackTableUpdateCompanionBuilder = TaskFeedbackCompanion
+    Function({
+  Value<String> taskId,
+  Value<String?> runId,
+  Value<bool> helpful,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$TaskFeedbackTableFilterComposer
+    extends Composer<_$AppDatabase, $TaskFeedbackTable> {
+  $$TaskFeedbackTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get helpful => $composableBuilder(
+      column: $table.helpful, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$TaskFeedbackTableOrderingComposer
+    extends Composer<_$AppDatabase, $TaskFeedbackTable> {
+  $$TaskFeedbackTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get helpful => $composableBuilder(
+      column: $table.helpful, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$TaskFeedbackTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TaskFeedbackTable> {
+  $$TaskFeedbackTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<bool> get helpful =>
+      $composableBuilder(column: $table.helpful, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$TaskFeedbackTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $TaskFeedbackTable,
+    TaskFeedbackData,
+    $$TaskFeedbackTableFilterComposer,
+    $$TaskFeedbackTableOrderingComposer,
+    $$TaskFeedbackTableAnnotationComposer,
+    $$TaskFeedbackTableCreateCompanionBuilder,
+    $$TaskFeedbackTableUpdateCompanionBuilder,
+    (
+      TaskFeedbackData,
+      BaseReferences<_$AppDatabase, $TaskFeedbackTable, TaskFeedbackData>
+    ),
+    TaskFeedbackData,
+    PrefetchHooks Function()> {
+  $$TaskFeedbackTableTableManager(_$AppDatabase db, $TaskFeedbackTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TaskFeedbackTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TaskFeedbackTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TaskFeedbackTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> taskId = const Value.absent(),
+            Value<String?> runId = const Value.absent(),
+            Value<bool> helpful = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TaskFeedbackCompanion(
+            taskId: taskId,
+            runId: runId,
+            helpful: helpful,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String taskId,
+            Value<String?> runId = const Value.absent(),
+            required bool helpful,
+            required DateTime createdAt,
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TaskFeedbackCompanion.insert(
+            taskId: taskId,
+            runId: runId,
+            helpful: helpful,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$TaskFeedbackTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $TaskFeedbackTable,
+    TaskFeedbackData,
+    $$TaskFeedbackTableFilterComposer,
+    $$TaskFeedbackTableOrderingComposer,
+    $$TaskFeedbackTableAnnotationComposer,
+    $$TaskFeedbackTableCreateCompanionBuilder,
+    $$TaskFeedbackTableUpdateCompanionBuilder,
+    (
+      TaskFeedbackData,
+      BaseReferences<_$AppDatabase, $TaskFeedbackTable, TaskFeedbackData>
+    ),
+    TaskFeedbackData,
+    PrefetchHooks Function()>;
 typedef $$SyncMetaTableCreateCompanionBuilder = SyncMetaCompanion Function({
   required String objectId,
   required String table,
@@ -13495,6 +14024,7 @@ typedef $$ScheduledTasksTableCreateCompanionBuilder = ScheduledTasksCompanion
   Value<String?> agentId,
   Value<bool> enabled,
   Value<String?> lastResult,
+  Value<DateTime?> lastRunAt,
   required DateTime createdAt,
   required DateTime updatedAt,
   Value<int> rowid,
@@ -13508,6 +14038,7 @@ typedef $$ScheduledTasksTableUpdateCompanionBuilder = ScheduledTasksCompanion
   Value<String?> agentId,
   Value<bool> enabled,
   Value<String?> lastResult,
+  Value<DateTime?> lastRunAt,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -13542,6 +14073,9 @@ class $$ScheduledTasksTableFilterComposer
 
   ColumnFilters<String> get lastResult => $composableBuilder(
       column: $table.lastResult, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastRunAt => $composableBuilder(
+      column: $table.lastRunAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -13580,6 +14114,9 @@ class $$ScheduledTasksTableOrderingComposer
   ColumnOrderings<String> get lastResult => $composableBuilder(
       column: $table.lastResult, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get lastRunAt => $composableBuilder(
+      column: $table.lastRunAt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -13616,6 +14153,9 @@ class $$ScheduledTasksTableAnnotationComposer
 
   GeneratedColumn<String> get lastResult => $composableBuilder(
       column: $table.lastResult, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastRunAt =>
+      $composableBuilder(column: $table.lastRunAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -13658,6 +14198,7 @@ class $$ScheduledTasksTableTableManager extends RootTableManager<
             Value<String?> agentId = const Value.absent(),
             Value<bool> enabled = const Value.absent(),
             Value<String?> lastResult = const Value.absent(),
+            Value<DateTime?> lastRunAt = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -13670,6 +14211,7 @@ class $$ScheduledTasksTableTableManager extends RootTableManager<
             agentId: agentId,
             enabled: enabled,
             lastResult: lastResult,
+            lastRunAt: lastRunAt,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -13682,6 +14224,7 @@ class $$ScheduledTasksTableTableManager extends RootTableManager<
             Value<String?> agentId = const Value.absent(),
             Value<bool> enabled = const Value.absent(),
             Value<String?> lastResult = const Value.absent(),
+            Value<DateTime?> lastRunAt = const Value.absent(),
             required DateTime createdAt,
             required DateTime updatedAt,
             Value<int> rowid = const Value.absent(),
@@ -13694,6 +14237,7 @@ class $$ScheduledTasksTableTableManager extends RootTableManager<
             agentId: agentId,
             enabled: enabled,
             lastResult: lastResult,
+            lastRunAt: lastRunAt,
             createdAt: createdAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -16882,6 +17426,8 @@ class $AppDatabaseManager {
       $$MemoriesTableTableManager(_db, _db.memories);
   $$TasksTableTableManager get tasks =>
       $$TasksTableTableManager(_db, _db.tasks);
+  $$TaskFeedbackTableTableManager get taskFeedback =>
+      $$TaskFeedbackTableTableManager(_db, _db.taskFeedback);
   $$SyncMetaTableTableManager get syncMeta =>
       $$SyncMetaTableTableManager(_db, _db.syncMeta);
   $$KnowledgeDocsTableTableManager get knowledgeDocs =>

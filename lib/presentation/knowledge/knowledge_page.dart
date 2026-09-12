@@ -142,8 +142,10 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     );
     final title = name.text.trim().isEmpty ? '粘贴文本' : name.text.trim();
     final text = content.text;
-    name.dispose();
-    content.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      name.dispose();
+      content.dispose();
+    });
     if (saved != true || !mounted) return;
     await _ingest(title, 'paste', text);
   }

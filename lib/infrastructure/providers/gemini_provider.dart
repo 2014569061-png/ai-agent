@@ -120,7 +120,8 @@ class GeminiProvider extends StreamingProviderBase {
         if (finish != null && finish.isNotEmpty) {
           stopReason = StopReason.parse(finish);
         }
-        final content = candidate['content'] as Map<String, dynamic>? ?? const {};
+        final content =
+            candidate['content'] as Map<String, dynamic>? ?? const {};
         final parts = content['parts'] as List<dynamic>? ?? const [];
         for (final part in parts.whereType<Map<String, dynamic>>()) {
           final text = part['text'] as String?;

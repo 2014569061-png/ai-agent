@@ -1,9 +1,8 @@
 import 'dart:convert';
-import 'dart:math';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models.dart';
+import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../domain/sensitive_tool_policy.dart';
 
@@ -56,12 +55,7 @@ class StructuredTaskResult {
 class TaskService {
   static const maxAppliedRunIds = 128;
 
-  // id 若只用微秒时间戳，Windows 时钟粒度下连续两次 create 可能取到同值，
-  // insertOnConflictUpdate 会静默覆盖上一条任务。这里用随机后缀保证唯一。
-  static final Random _idRandom = Random();
-
-  static String _newTaskId() =>
-      'task-${DateTime.now().microsecondsSinceEpoch}-${_idRandom.nextInt(0x7fffffff)}';
+  static String _newTaskId() => UniqueId.generate('task');
 
   Future<List<Task>> runningTasks(AppDatabase db) => db.runningTasks();
 

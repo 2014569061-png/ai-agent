@@ -40,6 +40,14 @@ class _RecordingStore extends _FakeStore {
 }
 
 void main() {
+  test('password encryption rejects empty and whitespace passwords', () async {
+    final service = LocalCryptoService();
+    for (final password in ['', '   ', '\n\t']) {
+      expect(() => service.encryptWithPassword('secret', password),
+          throwsA(isA<ArgumentError>()));
+    }
+  });
+
   test('vault encryption round-trips with the correct password', () async {
     final service = LocalCryptoService();
     final cipher =

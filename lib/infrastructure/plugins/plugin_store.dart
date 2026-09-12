@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../../domain/models.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
+import '../../domain/unique_id.dart';
 import '../database/app_database.dart';
 import '../tools/tool_registry.dart';
 
@@ -40,14 +41,18 @@ class PluginStore {
     required String manifestJson,
   }) async {
     final now = DateTime.now();
+    final normalizedName = name.trim();
+    final existing = (await db.allPlugins())
+        .where((plugin) => plugin.name == normalizedName && plugin.kind == kind)
+        .firstOrNull;
     final plugin = Plugin(
-      id: 'plugin-${now.microsecondsSinceEpoch}',
-      name: name,
+      id: existing?.id ?? UniqueId.generate('plugin', now: now),
+      name: normalizedName,
       kind: kind,
       manifestJson: manifestJson,
       version: '1.0.0',
       enabled: true,
-      createdAt: now,
+      createdAt: existing?.createdAt ?? now,
     );
     await db.savePlugin(plugin);
     return plugin;
@@ -79,13 +84,15 @@ class PluginStore {
       try {
         final map = jsonDecode(plugin.manifestJson) as Map<String, dynamic>;
         final agents = (map['agents'] as List? ?? const [])
-            .whereType<Map<String, dynamic>>();
-        for (final a in agents) {
+            .whereType<Map<String, dynamic>>()
+            .toList(growable: false);
+        for (var index = 0; index < agents.length; index++) {
+          final a = agents[index];
           final name = (a['name'] as String?)?.trim();
           if (name == null || name.isEmpty) continue;
           final now = DateTime.now();
           await db.saveAgent(Agent(
-            id: 'agent-plugin-${plugin.id}-${now.microsecondsSinceEpoch}',
+            id: 'agent-plugin-${plugin.id}-$index',
             name: name,
             systemPrompt: a['systemPrompt'] as String? ?? '你是一个有帮助的 AI Agent。',
             modelProfileId: a['modelProfileId'] as String? ?? 'default',

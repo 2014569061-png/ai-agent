@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 
 /// 长期记忆服务：负责记忆的增删改查与按预算构建注入块。
@@ -101,7 +102,7 @@ class MemoryService {
     }
     final now = DateTime.now();
     final memory = Memory(
-      id: 'memory-${now.microsecondsSinceEpoch}',
+      id: UniqueId.generate('memory', now: now),
       content: content.trim(),
       category: category,
       sourceConversationId: sourceConversationId,

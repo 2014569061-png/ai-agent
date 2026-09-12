@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import '../../domain/models.dart';
+import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
@@ -431,7 +432,7 @@ class _AgentsPageState extends State<AgentsPage> {
 
     if (agent == null) {
       await db.insertAgent(AgentsCompanion.insert(
-        id: 'agent-${now.microsecondsSinceEpoch}',
+        id: UniqueId.generate('agent', now: now),
         name: nameController.text.trim(),
         systemPrompt: Value(promptController.text.trim()),
         modelProfileId: 'default',

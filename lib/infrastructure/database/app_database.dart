@@ -111,6 +111,18 @@ class Tasks extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
+/// 用户对已结束开发任务结果的最小反馈记录。每个任务最多一条，可反复修改。
+class TaskFeedback extends Table {
+  TextColumn get taskId => text()();
+  TextColumn get runId => text().nullable()();
+  BoolColumn get helpful => boolean()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {taskId};
+}
+
 /// v0.9 鍗忎綔鍒嗘瀽杩愯鐘舵€併€佽鍒掍笌鎬荤粨銆?
 @TableIndex(
     name: 'idx_collaboration_runs_task_updated', columns: {#taskId, #updatedAt})
@@ -247,6 +259,7 @@ class ScheduledTasks extends Table {
   TextColumn get agentId => text().nullable()();
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
   TextColumn get lastResult => text().nullable()();
+  DateTimeColumn get lastRunAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -412,6 +425,7 @@ class AccountMeta extends Table {
   ModelProfiles,
   Memories,
   Tasks,
+  TaskFeedback,
   SyncMeta,
   KnowledgeDocs,
   KnowledgeChunks,
@@ -433,7 +447,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -593,13 +607,29 @@ class AppDatabase extends _$AppDatabase {
             // B-4：补齐热查询索引 —— 任务恢复按 (status, updatedAt)、Agent 过滤按
             // enabled、消息列表按 (conversationId, createdAt) 免排序、审计/运行记录
             // 按时间清理。同名消息索引从单列重建为复合，需先删旧索引。
-            await customStatement('DROP INDEX IF EXISTS idx_messages_conversation');
+            await customStatement(
+                'DROP INDEX IF EXISTS idx_messages_conversation');
             await m.createIndex(idxMessagesConversation);
             await m.createIndex(idxTasksStatusUpdated);
             await m.createIndex(idxMemoriesEnabled);
             await m.createIndex(idxScheduledTasksEnabled);
             await m.createIndex(idxAuditLogsCreated);
             await m.createIndex(idxRunRecordsStarted);
+          }
+          if (from < 18) {
+            if (!await hasColumn('scheduled_tasks', 'last_run_at')) {
+              await m.addColumn(scheduledTasks, scheduledTasks.lastRunAt);
+            }
+          }
+          if (from < 19) {
+            await customStatement(
+              'CREATE TABLE IF NOT EXISTS task_feedback ('
+              'task_id TEXT NOT NULL PRIMARY KEY, '
+              'run_id TEXT, '
+              'helpful INTEGER NOT NULL, '
+              'created_at TEXT NOT NULL, '
+              'updated_at TEXT NOT NULL)',
+            );
           }
         },
       );
@@ -660,6 +690,8 @@ class AppDatabase extends _$AppDatabase {
           linkedTasks.map((task) => task.id).toList(growable: false);
       await _deleteCollaborationForTasks(taskIds);
       if (taskIds.isNotEmpty) {
+        await (delete(taskFeedback)..where((row) => row.taskId.isIn(taskIds)))
+            .go();
         await (delete(tasks)..where((row) => row.id.isIn(taskIds))).go();
       }
       final runs = await (select(runRecords)
@@ -691,9 +723,7 @@ class AppDatabase extends _$AppDatabase {
               row.createdAt.isSmallerThanValue(before)))
       ..orderBy([(row) => OrderingTerm.desc(row.createdAt)]);
     if (limit != null) query.limit(limit);
-    return query
-        .get()
-        .then((rows) => rows.reversed.toList(growable: false));
+    return query.get().then((rows) => rows.reversed.toList(growable: false));
   }
 
   /// UI 分页专用的键集翻页（B-2）：游标是 (createdAt, rowid) 复合。
@@ -919,6 +949,43 @@ class AppDatabase extends _$AppDatabase {
   Future<void> insertTask(TasksCompanion task) =>
       into(tasks).insertOnConflictUpdate(task);
 
+  Future<TaskFeedbackData?> feedbackForTask(String taskId) =>
+      (select(taskFeedback)..where((row) => row.taskId.equals(taskId)))
+          .getSingleOrNull();
+
+  Future<void> saveTaskFeedback({
+    required String taskId,
+    String? runId,
+    required bool helpful,
+    DateTime? now,
+  }) async {
+    final timestamp = now ?? DateTime.now();
+    final existing = await feedbackForTask(taskId);
+    await into(taskFeedback).insertOnConflictUpdate(TaskFeedbackCompanion(
+      taskId: Value(taskId),
+      runId: Value(runId),
+      helpful: Value(helpful),
+      createdAt: Value(existing?.createdAt ?? timestamp),
+      updatedAt: Value(timestamp),
+    ));
+  }
+
+  Future<int> taskFeedbackCount() async =>
+      (selectOnly(taskFeedback)..addColumns([taskFeedback.taskId.count()]))
+          .getSingle()
+          .then((row) => row.read(taskFeedback.taskId.count()) ?? 0);
+
+  Future<int> helpfulTaskFeedbackCount() async => (selectOnly(taskFeedback)
+        ..addColumns([taskFeedback.taskId.count()])
+        ..where(taskFeedback.helpful.equals(true)))
+      .getSingle()
+      .then((row) => row.read(taskFeedback.taskId.count()) ?? 0);
+
+  Future<void> deleteTaskFeedback(String taskId) =>
+      (delete(taskFeedback)..where((row) => row.taskId.equals(taskId))).go();
+
+  Future<void> clearTaskFeedback() => delete(taskFeedback).go();
+
   // --- v0.9 协作分析 ---
 
   Future<CollaborationRun?> findCollaborationRun(String id) =>
@@ -1005,6 +1072,7 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> deleteTask(String id) => transaction(() async {
         await _deleteCollaborationForTasks([id]);
+        await deleteTaskFeedback(id);
         await (delete(tasks)..where((row) => row.id.equals(id))).go();
       });
 
@@ -1153,6 +1221,17 @@ class AppDatabase extends _$AppDatabase {
     if (maxRuns < 1) return;
     final cutoff = (now ?? DateTime.now()).subtract(maxAge);
     await transaction(() async {
+      final staleRunningCutoff = (now ?? DateTime.now()).subtract(
+        const Duration(days: 1),
+      );
+      await (update(runRecords)
+            ..where((row) =>
+                row.status.equals('running') &
+                row.startedAt.isSmallerThanValue(staleRunningCutoff)))
+          .write(RunRecordsCompanion(
+        status: const Value('failed'),
+        endedAt: Value(now ?? DateTime.now()),
+      ));
       final rows = await (select(runRecords)
             ..orderBy([(row) => OrderingTerm.desc(row.startedAt)]))
           .get();
@@ -1344,6 +1423,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(collaborationAgentRuns).go();
       await delete(collaborationRuns).go();
       await delete(tasks).go();
+      await delete(taskFeedback).go();
       await delete(messages).go();
       await delete(conversations).go();
       await delete(memories).go();

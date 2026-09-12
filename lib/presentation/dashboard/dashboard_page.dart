@@ -266,7 +266,7 @@ class _RecentConversationsSection extends StatelessWidget {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
 
     return NexusSection(
       title: AppStrings.recentConversations,

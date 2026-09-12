@@ -128,7 +128,7 @@ void main() {
     expect(filtered.map((log) => log.logId), ['log-1']);
   });
 
-  test('prunes old completed runs but keeps active runs', () async {
+  test('prunes old completed runs and converges stale running rows', () async {
     final now = DateTime(2026, 9, 6, 12);
     await db.insertRunRecord(RunRecordsCompanion.insert(
       runId: 'old',
@@ -154,7 +154,7 @@ void main() {
     await db.pruneRunRecords(now: now);
 
     expect(await db.findRunRecord('old'), isNull);
-    expect(await db.findRunRecord('active'), isNotNull);
+    expect(await db.findRunRecord('active'), isNull);
     expect(await db.eventsForRun('old'), isEmpty);
   });
 }

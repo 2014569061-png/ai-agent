@@ -15,8 +15,7 @@ String speakableText(String markdown) {
   var text = markdown.replaceAll('\r\n', '\n');
 
   // 1. 围栏代码块（``` / ~~~，含未闭合的流式半截块）→ 占位词。
-  text = text.replaceAll(
-      RegExp(r'```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)'),
+  text = text.replaceAll(RegExp(r'```[\s\S]*?(?:```|$)|~~~[\s\S]*?(?:~~~|$)'),
       kCodeBlockPlaceholder);
 
   // 2. 行内 HTML 标签（模型偶尔输出 <br> / <b>）→ 空格。只在同行内匹配，
@@ -37,11 +36,15 @@ String speakableText(String markdown) {
 
   // 6. 行首标记：标题 / 引用 / 列表 / 任务框。
   //    列表符必须先于任务框剥离：`- [ ] 待办` 去掉 `- ` 后才剩下 `[ ] 待办`。
-  text = text.replaceAll(RegExp(r'^[ \t]{0,3}#{1,6}[ \t]+', multiLine: true), '');
+  text =
+      text.replaceAll(RegExp(r'^[ \t]{0,3}#{1,6}[ \t]+', multiLine: true), '');
   text = text.replaceAll(RegExp(r'^[ \t]{0,3}>[ \t]?', multiLine: true), '');
-  text = text.replaceAll(RegExp(r'^[ \t]{0,3}[-*+][ \t]+', multiLine: true), '');
-  text = text.replaceAll(RegExp(r'^[ \t]{0,3}\d+[.)][ \t]+', multiLine: true), '');
-  text = text.replaceAll(RegExp(r'^[ \t]{0,3}\[[ xX]\][ \t]*', multiLine: true), '');
+  text =
+      text.replaceAll(RegExp(r'^[ \t]{0,3}[-*+][ \t]+', multiLine: true), '');
+  text =
+      text.replaceAll(RegExp(r'^[ \t]{0,3}\d+[.)][ \t]+', multiLine: true), '');
+  text = text.replaceAll(
+      RegExp(r'^[ \t]{0,3}\[[ xX]\][ \t]*', multiLine: true), '');
 
   // 7. 分隔线（--- / *** / ___）。
   text = text.replaceAll(

@@ -13,6 +13,7 @@ import '../../theme/app_palette.dart';
 import '../../widgets/floating_toast.dart';
 import '../../widgets/nexus_section.dart';
 import '../../widgets/section_card.dart';
+import '../../widgets/tool_approval_helper.dart';
 import '../dashboard_provider.dart';
 
 /// 待我处理聚合区：工具审批、计划确认和可恢复任务。
@@ -185,7 +186,13 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
           FloatingToast.show(context, AppStrings.resumingTask);
           await ref.read(chatControllerProvider.notifier).resumeTask(
                 item.taskId!,
-                approveTool: (call, risk) async => ToolApproval.allowOnce,
+                approveTool: (call, risk, sensitive) => promptToolApproval(
+                  context,
+                  ref,
+                  call,
+                  risk,
+                  sensitive,
+                ),
               );
           if (context.mounted) Navigator.of(context).pop();
         } else if (item.conversationId != null) {

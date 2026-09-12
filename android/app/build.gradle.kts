@@ -8,12 +8,19 @@ import java.util.Properties
 import java.io.FileInputStream
 
 // 读取 android/key.properties（storeFile 相对本文件所在目录解析）。
-// 缺失时回退 debug 签名，保证 `flutter run --release` 仍可用。
+// 正式 release 默认必须使用正式签名；仅显式 -PallowDebugSigning=true 才允许本地调试签名。
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseKey = keystorePropertiesFile.exists()
+val allowDebugSigning = providers.gradleProperty("allowDebugSigning").orNull == "true"
+val releaseTaskRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
 if (hasReleaseKey) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+if (releaseTaskRequested && !hasReleaseKey && !allowDebugSigning) {
+    throw GradleException("Missing android/key.properties. Refusing unsigned/debug-signed release; pass -PallowDebugSigning=true only for local testing.")
 }
 
 android {
@@ -29,8 +36,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: 正式包名（发布后不可修改）。当前为默认值 com.nexusagent.app。
-        // 如需更换请在首次上架前修改并重新出包。
+        // 正式包名固定为 com.nexusagent.app。
         applicationId = "com.nexusagent.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -73,8 +79,12 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
 
-            // 优先使用正式签名（key.properties）；缺失时回退 debug 签名。
-            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
+            // 正式密钥缺失时，仅显式 allowDebugSigning 开关允许调试签名。
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

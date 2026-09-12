@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -73,6 +74,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
 
   // General
   String _currentLanguage = '跟随系统';
+  String? _appVersion;
+  String? _appBuildNumber;
 
   @override
   void initState() {
@@ -141,6 +144,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
           prefs.getBool('settings.tool.terminal_file') ?? true;
 
       // Language
+      final packageInfo = await PackageInfo.fromPlatform();
+      _appVersion = 'v${packageInfo.version}';
+      _appBuildNumber = packageInfo.buildNumber;
       final langCode = prefs.getString('settings.language') ?? 'system';
       _currentLanguage = switch (langCode) {
         'zh' => '简体中文',
@@ -155,10 +161,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     }
   }
 
-  Future<void> _openMcpServers() async {
+  Future<void> _openMcpServers() => _openSettingsPage(const McpServersPage());
+
+  Future<void> _openSettingsPage(Widget page) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const McpServersPage()),
+      MaterialPageRoute(builder: (_) => page),
     );
     if (mounted) unawaited(_loadAll());
   }
@@ -260,7 +268,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       case UpdateCheckStatus.upToDate:
         FloatingToast.show(
           context,
-          '当前已是最新版本 ${result.currentVersion ?? AppStrings.appVersionName}',
+          '当前已是最新版本 ${result.currentVersion ?? _appVersion ?? AppStrings.appVersionName}',
         );
       case UpdateCheckStatus.failed:
         FloatingToast.show(context, result.error ?? '检查失败');
@@ -529,7 +537,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
 
     return Material(
       color: Colors.transparent,
@@ -714,11 +722,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
   Widget _buildFooter(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint;
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
 
     return Center(
       child: Text(
-        '${AppStrings.appTitle} ${AppStrings.appVersionName}\n简洁克制 · 内容优先',
+        '${AppStrings.appTitle} ${_appVersion ?? AppStrings.appVersionName} (+${_appBuildNumber ?? '90'})\n简洁克制 · 内容优先',
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 11,
@@ -1031,16 +1039,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     children: [
                       Text(
                         label,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
-                          color: AppPalette.lightTextFaint,
+                          color: settingsFaintColor(context),
                         ),
                       ),
                       const SizedBox(width: 4),
-                      const Icon(
+                      Icon(
                         Icons.chevron_right_rounded,
                         size: 20,
-                        color: AppPalette.lightTextFaint,
+                        color: settingsFaintColor(context),
                       ),
                     ],
                   );
@@ -1133,8 +1141,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               title: AppStrings.batteryExemption,
               trailingBadge: Container(
                 margin: const EdgeInsets.only(right: 4),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: batteryColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(AppTokens.radiusControl),
@@ -1256,24 +1263,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       subtitle: '配置 OpenAI, Claude, Gemini 等服务商',
       icon: Icons.auto_awesome_rounded,
       iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const ProviderListPage())),
+      onTap: () => _openSettingsPage(const ProviderListPage()),
     );
     checkItem(
       title: '记忆管理',
       subtitle: '查看与维护长期记忆事实库',
       icon: Icons.psychology_alt_rounded,
       iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const MemoryPage())),
+      onTap: () => _openSettingsPage(const MemoryPage()),
     );
     checkItem(
       title: 'Skills 技能 / 插件',
       subtitle: '浏览与安装技能扩展包',
       icon: Icons.extension_rounded,
       iconColor: AppPalette.warning,
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const PluginsPage())),
+      onTap: () => _openSettingsPage(const PluginsPage()),
     );
     checkItem(
       title: AppStrings.mcpServers,
@@ -1327,32 +1331,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       subtitle: '隐私保险箱加密导出、还原与清理',
       icon: Icons.cloud_upload_rounded,
       iconColor: AppPalette.success,
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const DataBackupPage())),
+      onTap: () => _openSettingsPage(const DataBackupPage()),
     );
     checkItem(
       title: AppStrings.knowledgeSectionTitle,
       subtitle: AppStrings.knowledgeSearchHint,
       icon: Icons.auto_stories_rounded,
       iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const KnowledgePage())),
+      onTap: () => _openSettingsPage(const KnowledgePage()),
     );
     checkItem(
       title: AppStrings.scheduledTasksEntry,
       subtitle: AppStrings.scheduledTasksSearchHint,
       icon: Icons.schedule_rounded,
       iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => const ScheduledTasksPage())),
+      onTap: () => _openSettingsPage(const ScheduledTasksPage()),
     );
     checkItem(
       title: AppStrings.auditLogEntry,
       subtitle: AppStrings.auditLogSearchHint,
       icon: Icons.fact_check_rounded,
       iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const AuditLogPage())),
+      onTap: () => _openSettingsPage(const AuditLogPage()),
     );
 
     if (results.isEmpty) {
@@ -1361,7 +1361,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
         child: Center(
           child: Text(
             '没有找到相关的设置项',
-            style: TextStyle(color: AppPalette.lightTextFaint, fontSize: 14),
+            style: TextStyle(color: AppPalette.lightTextMuted, fontSize: 14),
           ),
         ),
       );
@@ -1386,7 +1386,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               fontSize: 13,
               fontWeight: FontWeight.w500,
               color: Theme.of(context).brightness == Brightness.dark
-                  ? AppPalette.lightTextFaint
+                  ? AppPalette.lightTextMuted
                   : AppPalette.lightTextMuted,
             ),
           ),

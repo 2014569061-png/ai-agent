@@ -98,7 +98,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
         content: TextField(
             controller: controller,
             obscureText: true,
-            decoration: const InputDecoration(labelText: '密码')),
+            decoration: const InputDecoration(labelText: '密码（不能为空）')),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context), child: const Text('取消')),
@@ -111,12 +111,15 @@ class _VaultPageState extends ConsumerState<VaultPage> {
                   borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                 ),
               ),
-              onPressed: () => Navigator.pop(context, controller.text),
+              onPressed: () {
+                if (controller.text.trim().isEmpty) return;
+                Navigator.pop(context, controller.text);
+              },
               child: const Text('确定')),
         ],
       ),
     );
-    controller.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     return result;
   }
 

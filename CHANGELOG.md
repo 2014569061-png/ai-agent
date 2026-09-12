@@ -1,6 +1,12 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.8] - 2026-09-13（发布基线与 Android 侧载验证版）
+
+- 版本统一为 `0.8.8+90`，应用内版本从 `package_info_plus` 读取真实版本；发布 tag 规则为 `v0.8.8`。
+- Android release 缺少正式密钥时默认失败，仅显式 `-PallowDebugSigning=true` 允许本地 debug 签名。
+- Release 工作流增加版本、包名、ARM64 ABI、非 debug 签名、中文门禁和签名 secrets 校验，并上传 APK SHA-256 sidecar。
+- 明确 Android-only ARM64 中文侧载验证边界、权限用途、后台定时尽力而为和终端边界。
+
 - 修复三个"功能在、入口断线"的孤儿页面：定时任务页（后台 Workmanager 调度引擎一直在跑，
   但没有任何 UI 能创建/查看任务）、知识库页（聊天注入链路在线，却无法录入文档）、
   审计日志页（审批授予一直在写入，却无处查看）。入口统一接进设置页：

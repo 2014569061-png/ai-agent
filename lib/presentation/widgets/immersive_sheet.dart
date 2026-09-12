@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_strings.dart';
 import '../theme/app_tokens.dart';
 import 'immersive_surface.dart';
 
@@ -16,7 +17,7 @@ Future<T?> showImmersiveSheet<T>({
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
-    barrierLabel: 'Dismiss',
+    barrierLabel: AppStrings.closeApprovalSheet,
     barrierColor: barrierColor ?? Colors.black.withValues(alpha: 0.5),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
@@ -86,7 +87,7 @@ Future<T?> showImmersiveDialog<T>({
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
-    barrierLabel: 'Dialog',
+    barrierLabel: AppStrings.closeDialog,
     barrierColor: barrierColor ?? Colors.black.withValues(alpha: 0.5),
     transitionDuration: const Duration(milliseconds: 220),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {

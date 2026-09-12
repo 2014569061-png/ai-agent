@@ -12,10 +12,16 @@ import '../../../infrastructure/tools/tool_humanizer.dart';
 /// 工具审批弹窗主体：按风险展示人性化摘要与关键参数，「技术细节」折叠完整 JSON，
 /// 按钮返回 [ToolApproval] 决策由调用方处理（记录信任/审计）。
 class ToolApprovalSheet extends StatelessWidget {
-  const ToolApprovalSheet({super.key, required this.call, required this.risk});
+  const ToolApprovalSheet({
+    super.key,
+    required this.call,
+    required this.risk,
+    this.allowPersistentTrust = true,
+  });
 
   final ToolCall call;
   final ToolRisk risk;
+  final bool allowPersistentTrust;
 
   @override
   Widget build(BuildContext context) {
@@ -192,6 +198,7 @@ class ToolApprovalSheet extends StatelessWidget {
               children: [
                 Expanded(
                   child: OutlinedButton(
+                    autofocus: true,
                     onPressed: () {
                       HapticFeedback.selectionClick();
                       Navigator.pop(context, ToolApproval.reject);
@@ -214,7 +221,7 @@ class ToolApprovalSheet extends StatelessWidget {
                 ),
               ],
             ),
-            if (!danger) ...[
+            if (!danger && allowPersistentTrust) ...[
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -224,7 +231,7 @@ class ToolApprovalSheet extends StatelessWidget {
                         HapticFeedback.selectionClick();
                         Navigator.pop(context, ToolApproval.allowSession);
                       },
-                      child: const Text('仅本次会话'),
+                      child: const Text('仅本次允许'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -262,8 +269,8 @@ class ToolApprovalSheet extends StatelessWidget {
           const Row(
             children: [
               ExcludeSemantics(
-                child:
-                    Icon(Icons.terminal_rounded, size: 14, color: Color(0xFF89B4FA)),
+                child: Icon(Icons.terminal_rounded,
+                    size: 14, color: Color(0xFF89B4FA)),
               ),
               SizedBox(width: 6),
               Text('将要执行的指令',

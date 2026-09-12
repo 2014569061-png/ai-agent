@@ -78,6 +78,7 @@ class LocalCryptoService {
 
   /// 用用户口令加密（G3 隐私保险箱用）：盐 + 密文一起编码，跨设备/跨时间可解密。
   Future<String> encryptWithPassword(String plaintext, String password) async {
+    _requirePassword(password);
     final salt = _randomBytes(16);
     final key = await _deriveKey(password, salt);
     final box = await _encryptWithKey(plaintext, key);
@@ -86,11 +87,18 @@ class LocalCryptoService {
 
   /// 解密 [encryptWithPassword] 产出的密文。
   Future<String> decryptWithPassword(String payload, String password) async {
+    _requirePassword(password);
     final parts = payload.split('.');
     if (parts.length != 2) throw const FormatException('无效密文格式');
     final salt = base64Decode(parts[0]);
     final key = await _deriveKey(password, salt);
     return _decryptWithKey(parts[1], key);
+  }
+
+  void _requirePassword(String password) {
+    if (password.trim().isEmpty) {
+      throw ArgumentError('口令不能为空或仅包含空白字符');
+    }
   }
 
   Future<String> _encryptWithKey(String plaintext, SecretKey key) async {

@@ -109,7 +109,7 @@ class _ModelListPageState extends State<ModelListPage> {
                     : const Icon(
                         Icons.chevron_right_rounded,
                         size: 20,
-                        color: AppPalette.lightTextFaint,
+                        color: AppPalette.lightTextMuted,
                       ),
                 onTap: _loading ? null : _loadRemote,
               ),
@@ -252,8 +252,10 @@ class _ModelListPageState extends State<ModelListPage> {
         ],
       ),
     );
-    idController.dispose();
-    nameController.dispose();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      idController.dispose();
+      nameController.dispose();
+    });
     if (result != null && result.isNotEmpty && mounted) {
       Navigator.pop(context, result);
     }
