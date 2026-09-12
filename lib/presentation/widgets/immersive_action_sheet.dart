@@ -123,12 +123,12 @@ Future<T?> showImmersiveActionSheet<T>({
                   if (item.isSectionHeader) {
                     return Padding(
                       padding:
-                          EdgeInsets.fromLTRB(14, index == 0 ? 4 : 14, 14, 6),
+                          EdgeInsets.fromLTRB(16, index == 0 ? 4 : 16, 16, 8),
                       child: Text(
                         item.title,
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           color: semantic.mutedOnGlass,
                           letterSpacing: 0.3,
                         ),

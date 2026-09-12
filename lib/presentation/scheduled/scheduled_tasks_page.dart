@@ -152,7 +152,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                           '新建定时任务',
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                   ),
                         ),
                         const Spacer(),

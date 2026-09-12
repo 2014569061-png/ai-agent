@@ -247,7 +247,8 @@ class _ToolListPageState extends State<ToolListPage> {
         return Container(
           decoration: BoxDecoration(
             color: isDark ? AppPalette.darkSurface : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(AppTokens.radiusModal)),
           ),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
           child: Column(
@@ -288,7 +289,7 @@ class _ToolListPageState extends State<ToolListPage> {
                           tool.displayName,
                           style: const TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                         Text(
@@ -322,7 +323,7 @@ class _ToolListPageState extends State<ToolListPage> {
                   color: isDark
                       ? AppPalette.darkHairline.withValues(alpha: 0.5)
                       : AppPalette.lightSurface,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -331,7 +332,7 @@ class _ToolListPageState extends State<ToolListPage> {
                       '权限与审批策略',
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: isDark ? Colors.white : Colors.black87,
                       ),
                     ),
@@ -406,10 +407,10 @@ class _ToolListPageState extends State<ToolListPage> {
 
   Widget _buildRiskBadge(_ToolEntry tool) {
     Widget badge(String label, Color color) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
           child: Text(
             label,
@@ -572,7 +573,7 @@ class _ToolListPageState extends State<ToolListPage> {
         label,
         style: TextStyle(
           fontSize: 12.5,
-          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
           color: selected
               ? Colors.white
               : (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted),

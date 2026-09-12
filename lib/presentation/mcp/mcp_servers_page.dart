@@ -289,7 +289,7 @@ class _McpServersPageState extends State<McpServersPage> {
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       fontSize: 15,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
@@ -315,7 +315,7 @@ class _McpServersPageState extends State<McpServersPage> {
                                           server.enabled ? '已启用' : '已停用',
                                           style: TextStyle(
                                             fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight: FontWeight.w500,
                                             color: server.enabled
                                                 ? AppPalette.success
                                                 : (isDark

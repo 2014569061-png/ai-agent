@@ -56,7 +56,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
         },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(mainAxisSize: MainAxisSize.min, children: [
             if (widget.running)
               const SizedBox(
@@ -277,7 +277,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
               alignment: Alignment.centerLeft,
               child: Text('技术详情',
                   style: theme.textTheme.labelMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+                      ?.copyWith(fontWeight: FontWeight.w500)),
             ),
             const SizedBox(height: 4),
             Align(

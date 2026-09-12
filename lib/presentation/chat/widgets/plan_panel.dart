@@ -208,7 +208,7 @@ class _PlanPanelState extends State<PlanPanel> {
               icon: const Icon(Icons.expand_more_rounded, size: 20),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               onPressed: () => setState(() => _expanded = true),
             ),
           ],
@@ -255,7 +255,7 @@ class _PlanPanelState extends State<PlanPanel> {
                 icon: const Icon(Icons.expand_less_rounded, size: 20),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 onPressed: () => setState(() => _expanded = false),
               ),
             ],
@@ -428,12 +428,12 @@ class _PlanPanelState extends State<PlanPanel> {
         // 底部署名
         const Divider(height: 1, thickness: 0.8),
         const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
               Icon(Icons.auto_awesome_rounded,
                   size: 13, color: AppTheme.brandBright),
-              SizedBox(width: 5),
+              SizedBox(width: 4),
               Text(
                 'NEXUS 智能协同执行引擎',
                 style: TextStyle(
@@ -641,7 +641,7 @@ class _PlanPanelState extends State<PlanPanel> {
       tooltip: '更多操作',
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
       onPressed: _showActionsMenu,
     );
   }

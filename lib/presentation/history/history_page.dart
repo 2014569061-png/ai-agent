@@ -208,7 +208,7 @@ class _HistoryPageState extends State<HistoryPage> {
       borderRadius: BorderRadius.circular(AppTokens.radiusPill),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: selected
               ? (isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight)

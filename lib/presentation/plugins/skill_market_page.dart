@@ -355,7 +355,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                                           pack.name,
                                           style: const TextStyle(
                                             fontSize: 15,
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                         const SizedBox(height: 4),
@@ -384,7 +384,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                                                 pack.enabled ? '已启用' : '已停用',
                                                 style: TextStyle(
                                                   fontSize: 10.5,
-                                                  fontWeight: FontWeight.w600,
+                                                  fontWeight: FontWeight.w500,
                                                   color: pack.enabled
                                                       ? AppPalette.success
                                                       : (isDark

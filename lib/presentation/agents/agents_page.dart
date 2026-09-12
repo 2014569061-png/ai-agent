@@ -88,6 +88,7 @@ class _AgentsPageState extends State<AgentsPage> {
             .whereType<String>()
             .toSet()
         : const <String>{};
+    // 默认工具兜底集合：与 ToolRegistry 内注册的 safe 只读/计算工具保持一致（用于新建或空配置智能体）。
     final enabled = parsed.isEmpty
         ? <String>{'calculator', 'get_time', 'json_query'}
         : {...parsed};
@@ -124,7 +125,7 @@ class _AgentsPageState extends State<AgentsPage> {
                               : AppStrings.editAgent,
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w600,
+                                    fontWeight: FontWeight.w500,
                                   ),
                         ),
                         const Spacer(),
@@ -153,7 +154,7 @@ class _AgentsPageState extends State<AgentsPage> {
                             '基本信息',
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                               color: AppPalette.brandAction,
                             ),
                           ),
@@ -183,7 +184,7 @@ class _AgentsPageState extends State<AgentsPage> {
                             AppStrings.modelParams,
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                               color: AppPalette.brandAction,
                             ),
                           ),
@@ -197,7 +198,7 @@ class _AgentsPageState extends State<AgentsPage> {
                               Text('$steps 步',
                                   style: const TextStyle(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
+                                      fontWeight: FontWeight.w500)),
                             ],
                           ),
                           Slider(
@@ -218,7 +219,7 @@ class _AgentsPageState extends State<AgentsPage> {
                               Text(temperature.toStringAsFixed(2),
                                   style: const TextStyle(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
+                                      fontWeight: FontWeight.w500)),
                             ],
                           ),
                           Slider(
@@ -239,7 +240,7 @@ class _AgentsPageState extends State<AgentsPage> {
                               Text('$maxTokens Tokens',
                                   style: const TextStyle(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
+                                      fontWeight: FontWeight.w500)),
                             ],
                           ),
                           Slider(
@@ -260,7 +261,7 @@ class _AgentsPageState extends State<AgentsPage> {
                               Text(topP.toStringAsFixed(2),
                                   style: const TextStyle(
                                       fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
+                                      fontWeight: FontWeight.w500)),
                             ],
                           ),
                           Slider(
@@ -278,7 +279,7 @@ class _AgentsPageState extends State<AgentsPage> {
                             AppStrings.availableTools,
                             style: TextStyle(
                               fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                               color: AppPalette.brandAction,
                             ),
                           ),

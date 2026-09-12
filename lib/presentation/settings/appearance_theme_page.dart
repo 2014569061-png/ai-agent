@@ -518,11 +518,11 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                     alignment: Alignment.centerRight,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF222938)
-                            : const Color(0xFFE5ECF6),
+                            ? AppPalette.darkSurfaceHover
+                            : AppPalette.lightBrandSoft,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -539,11 +539,11 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                     alignment: Alignment.centerLeft,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF161B26).withValues(alpha: 0.88)
-                            : Colors.white.withValues(alpha: 0.9),
+                            ? AppPalette.darkSurface.withValues(alpha: 0.88)
+                            : AppPalette.lightCanvas.withValues(alpha: 0.9),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: (isDark ? Colors.white : Colors.black)
@@ -565,7 +565,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                                 'NEXUS',
                                 style: TextStyle(
                                   fontSize: 10.5,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w500,
                                   color: textMuted,
                                 ),
                               ),

@@ -50,7 +50,7 @@ class RunStatusCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w600)),
+                      fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
               Text(
                 toolCount == 0 ? '正在准备执行' : '已调用 $toolCount 个工具',

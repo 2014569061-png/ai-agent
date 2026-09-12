@@ -117,16 +117,16 @@ class SessionMetricsBar extends StatelessWidget {
     final onImage = onImageBackground;
 
     final bg = onImage
-        ? const Color(0xB80A0A23)
+        ? AppPalette.darkCanvas.withValues(alpha: 0.72)
         : (isDark ? AppPalette.darkSurface : AppPalette.lightSurface);
     final border = onImage
         ? Colors.transparent
         : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline);
     final labelColor = onImage
-        ? const Color(0x9EE6E8EF)
+        ? AppPalette.darkTextFaint
         : (isDark ? AppPalette.darkTextFaint : AppPalette.lightTextFaint);
     final valueColor = onImage
-        ? const Color(0xFFE6E8EF)
+        ? AppPalette.darkText
         : (isDark ? AppPalette.darkText : AppPalette.lightText);
 
     return LayoutBuilder(
@@ -137,7 +137,7 @@ class SessionMetricsBar extends StatelessWidget {
         final hidden = groups.length - visible.length;
 
         final content = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
             color: bg,
             borderRadius: BorderRadius.circular(AppTokens.radiusCard),

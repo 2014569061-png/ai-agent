@@ -2075,23 +2075,26 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               bottom: 16,
                               child: ImmersiveSurface(
                                 level: ImmersiveMaterialLevel.thick,
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius:
+                                    BorderRadius.circular(AppTokens.radiusPill),
                                 child: Material(
                                   color: Colors.transparent,
                                   child: InkWell(
                                     onTap: _scrollToBottom,
-                                    borderRadius: BorderRadius.circular(20),
+                                    borderRadius: BorderRadius.circular(
+                                        AppTokens.radiusPill),
                                     child: Container(
                                       padding: EdgeInsets.symmetric(
-                                        horizontal: running ? 10 : 8,
-                                        vertical: 7,
+                                        horizontal: running ? 12 : 8,
+                                        vertical: 8,
                                       ),
                                       decoration: BoxDecoration(
                                         color: Theme.of(context)
                                             .colorScheme
                                             .primaryContainer
                                             .withValues(alpha: 0.90),
-                                        borderRadius: BorderRadius.circular(20),
+                                        borderRadius: BorderRadius.circular(
+                                            AppTokens.radiusPill),
                                         border: Border.all(
                                           color: Theme.of(context)
                                               .colorScheme

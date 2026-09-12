@@ -126,7 +126,7 @@ class _DevelopmentWorkbenchPageState extends State<DevelopmentWorkbenchPage> {
                     Text(
                       '工作流步骤时间线',
                       style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -214,12 +214,13 @@ class _DevelopmentWorkbenchPageState extends State<DevelopmentWorkbenchPage> {
                                 Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
+                                      horizontal: 12, vertical: 8),
                                   decoration: BoxDecoration(
                                     color: isDark
-                                        ? const Color(0xFF161B26)
-                                        : const Color(0xFFF3F5F9),
-                                    borderRadius: BorderRadius.circular(6),
+                                        ? AppPalette.darkSurface
+                                        : AppPalette.lightSurface,
+                                    borderRadius: BorderRadius.circular(
+                                        AppTokens.radiusControl),
                                   ),
                                   child: Text(
                                     '\$ ${step.command}',
@@ -265,7 +266,7 @@ class _DevelopmentWorkbenchPageState extends State<DevelopmentWorkbenchPage> {
                         _result!.success ? '构建校验完成' : '构建遇到错误',
                         style: TextStyle(
                           fontSize: 15,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           color: _result!.success
                               ? AppPalette.success
                               : AppPalette.danger,

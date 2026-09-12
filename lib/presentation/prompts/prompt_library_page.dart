@@ -111,7 +111,7 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
                               .textTheme
                               .titleMedium
                               ?.copyWith(
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w500,
                               ),
                         ),
                         const Spacer(),

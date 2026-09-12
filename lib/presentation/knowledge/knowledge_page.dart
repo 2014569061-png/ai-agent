@@ -226,7 +226,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                       doc.name,
                       style: const TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -236,7 +236,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                     icon: const Icon(Icons.delete_outline, size: 18),
                     tooltip: '删除文档',
                     constraints:
-                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
                     onPressed: () => _delete(doc),
                   ),
                 ],
@@ -246,7 +246,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 children: [
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: isDark
                           ? AppPalette.darkSurface
@@ -272,7 +272,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   const SizedBox(width: 8),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppPalette.brand.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppTokens.radiusPill),
@@ -281,7 +281,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                       '${doc.chunkCount} 分块',
                       style: const TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: AppPalette.brand,
                       ),
                     ),
@@ -289,7 +289,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   const SizedBox(width: 8),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: AppPalette.success.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(AppTokens.radiusPill),

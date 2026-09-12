@@ -197,7 +197,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       padding: const EdgeInsets.only(bottom: 10),
       child: SectionCard(
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -205,7 +205,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                 children: [
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: isPreference
                           ? AppPalette.brand.withValues(alpha: 0.12)
@@ -229,7 +229,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                       typeLabel,
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: isPreference
                             ? AppPalette.brand
                             : (isFact
@@ -243,9 +243,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                   const SizedBox(width: 8),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.amber.withValues(alpha: 0.12),
+                      color: AppPalette.warning.withValues(alpha: 0.12),
                       borderRadius:
                           BorderRadius.circular(AppTokens.radiusControl),
                     ),
@@ -253,14 +253,22 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const Icon(Icons.star_rounded,
-                            size: 13, color: Colors.amber),
-                        const SizedBox(width: 2),
-                        Text(
-                          '重要度 ${memory.importance}/5',
+                            size: 13, color: AppPalette.warning),
+                        const SizedBox(width: 4),
+                        const Text(
+                          '重要度 ',
                           style: TextStyle(
                             fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.amber.shade800,
+                            fontWeight: FontWeight.w500,
+                            color: AppPalette.warning,
+                          ),
+                        ),
+                        Text(
+                          '${memory.importance}/5',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: AppPalette.warning,
                           ),
                         ),
                       ],
@@ -281,14 +289,14 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                     icon: const Icon(Icons.edit_outlined, size: 18),
                     tooltip: '编辑',
                     constraints:
-                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
                     onPressed: () => _addOrEdit(memory),
                   ),
                   IconButton(
                     icon: const Icon(Icons.delete_outline, size: 18),
                     tooltip: '删除',
                     constraints:
-                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
                     onPressed: () => _delete(memory),
                   ),
                 ],

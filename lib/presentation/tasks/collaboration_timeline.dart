@@ -526,7 +526,7 @@ class _CollaborationTimelinePageState
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
             ...result.findings.map((f) => Padding(
-                  padding: const EdgeInsets.only(left: 8, bottom: 3),
+                  padding: const EdgeInsets.only(left: 8, bottom: 4),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -551,7 +551,7 @@ class _CollaborationTimelinePageState
                     color: AppPalette.warning)),
             const SizedBox(height: 4),
             ...result.disagreements.map((d) => Padding(
-                  padding: const EdgeInsets.only(left: 8, bottom: 3),
+                  padding: const EdgeInsets.only(left: 8, bottom: 4),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -573,7 +573,7 @@ class _CollaborationTimelinePageState
                     color: AppPalette.warning)),
             const SizedBox(height: 4),
             ...result.risks.map((risk) => Padding(
-                  padding: const EdgeInsets.only(left: 8, bottom: 3),
+                  padding: const EdgeInsets.only(left: 8, bottom: 4),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

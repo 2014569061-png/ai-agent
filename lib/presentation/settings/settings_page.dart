@@ -1081,7 +1081,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               trailingBadge: Container(
                 margin: const EdgeInsets.only(right: 4),
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: batteryColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(AppTokens.radiusControl),
