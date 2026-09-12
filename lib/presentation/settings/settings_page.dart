@@ -12,12 +12,15 @@ import '../../infrastructure/providers/provider_config.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
 import '../../infrastructure/system/battery_optimization.dart';
 import '../../infrastructure/update/update_service.dart';
+import '../audit/audit_log_page.dart';
 import '../feedback/feedback_page.dart';
+import '../knowledge/knowledge_page.dart';
 import '../l10n/app_strings.dart';
 import '../mcp/mcp_servers_page.dart';
 import '../memory/memory_page.dart';
 import '../onboarding/onboarding_page.dart';
 import '../plugins/plugins_page.dart';
+import '../scheduled/scheduled_tasks_page.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme_controller.dart';
@@ -56,7 +59,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
 
   // Context & Extensions
   int _memoryCount = 0;
+  int _knowledgeCount = 0;
   int _skillCount = 0;
+  int _scheduledCount = 0;
   List<McpServerConfig> _mcpServers = [];
 
   // Tools
@@ -115,8 +120,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               .timeout(const Duration(milliseconds: 300));
           final memories = await db.allMemories();
           _memoryCount = memories.length;
+          final knowledgeDocs = await db.allKnowledgeDocs();
+          _knowledgeCount = knowledgeDocs.length;
           final skills = await db.allSkillPacks();
           _skillCount = skills.length;
+          final scheduledTasks = await db.allScheduledTasks();
+          _scheduledCount = scheduledTasks.length;
         } catch (_) {}
 
         try {
@@ -824,6 +833,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
             _buildDivider(context),
             _buildSettingsRow(
               context: context,
+              icon: Icons.auto_stories_rounded,
+              iconColor: settingsMutedColor(context),
+              title: AppStrings.knowledgeSectionTitle,
+              trailingText: AppStrings.knowledgeDocsSummary(_knowledgeCount),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const KnowledgePage()),
+                );
+                unawaited(_loadAll());
+              },
+            ),
+            _buildDivider(context),
+            _buildSettingsRow(
+              context: context,
               icon: Icons.extension_rounded,
               iconColor: AppPalette.warning,
               title: AppStrings.skillsSectionTitle,
@@ -958,6 +982,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
               trailingText: '查看说明',
               onTap: _showPrivacyNotice,
             ),
+            _buildDivider(context),
+            _buildSettingsRow(
+              context: context,
+              icon: Icons.fact_check_rounded,
+              iconColor: settingsMutedColor(context),
+              title: AppStrings.auditLogEntry,
+              trailingText: AppStrings.auditLogSubtitle,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AuditLogPage()),
+                );
+              },
+            ),
           ],
         ),
       ],
@@ -1047,6 +1085,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
                     builder: (_) => const DataBackupPage(),
                   ),
                 );
+              },
+            ),
+            _buildDivider(context),
+            _buildSettingsRow(
+              context: context,
+              icon: Icons.schedule_rounded,
+              iconColor: settingsMutedColor(context),
+              title: AppStrings.scheduledTasksEntry,
+              trailingText: AppStrings.scheduledTasksSummary(_scheduledCount),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ScheduledTasksPage()),
+                );
+                unawaited(_loadAll());
               },
             ),
           ],
@@ -1276,6 +1329,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       iconColor: AppPalette.success,
       onTap: () => Navigator.push(
           context, MaterialPageRoute(builder: (_) => const DataBackupPage())),
+    );
+    checkItem(
+      title: AppStrings.knowledgeSectionTitle,
+      subtitle: AppStrings.knowledgeSearchHint,
+      icon: Icons.auto_stories_rounded,
+      iconColor: settingsMutedColor(context),
+      onTap: () => Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const KnowledgePage())),
+    );
+    checkItem(
+      title: AppStrings.scheduledTasksEntry,
+      subtitle: AppStrings.scheduledTasksSearchHint,
+      icon: Icons.schedule_rounded,
+      iconColor: settingsMutedColor(context),
+      onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const ScheduledTasksPage())),
+    );
+    checkItem(
+      title: AppStrings.auditLogEntry,
+      subtitle: AppStrings.auditLogSearchHint,
+      icon: Icons.fact_check_rounded,
+      iconColor: settingsMutedColor(context),
+      onTap: () => Navigator.push(
+          context, MaterialPageRoute(builder: (_) => const AuditLogPage())),
     );
 
     if (results.isEmpty) {

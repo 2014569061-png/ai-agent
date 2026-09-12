@@ -83,6 +83,13 @@ abstract final class AppStrings {
   static const memorySectionTitle = '记忆';
   static const skillsSectionTitle = 'Skills 技能';
   static const mcpServersSectionTitle = 'MCP 服务器';
+  static const knowledgeSectionTitle = '知识库';
+  static const knowledgeSearchHint = '录入与检索文档，Agent 自动注入相关内容';
+  static const scheduledTasksEntry = '定时任务';
+  static const scheduledTasksSearchHint = '定时执行指定提示词的 Agent 任务';
+  static const auditLogEntry = '审计日志';
+  static const auditLogSubtitle = '审批追踪';
+  static const auditLogSearchHint = '工具调用与审批追踪记录';
   static const toolsSectionTitle = '工具';
   static const toolListEntry = '工具列表';
   static const enableWebBrowsingTool = '启用网页浏览工具';
@@ -143,6 +150,10 @@ abstract final class AppStrings {
   static const mcpServers = 'MCP 服务器';
   static const mcpNotConnected = '未连接';
   static String mcpConnectedCount(int count) => '$count 个已连接';
+  static String knowledgeDocsSummary(int count) =>
+      count > 0 ? '$count 个文档' : '未建立';
+  static String scheduledTasksSummary(int count) =>
+      count > 0 ? '$count 个任务' : '未创建';
   static const mcpServersSearchHint = '管理 Model Context Protocol 扩展端点';
   static const mcpServersHint = 'MCP 工具会在 Agent 执行时自动合并进工具集，风险默认需要确认。';
   static const noMcpServers = '尚未配置 MCP 服务器。';
