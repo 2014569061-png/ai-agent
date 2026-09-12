@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | 静态分析 | push feature/**、PR | `flutter analyze --no-pub` 必须零告警 | `.github/workflows/ci.yml` |
 | 测试 | 同上 | `flutter test`（CI 上直跑；本机见 §2） | 同上 |
-| 内联中文不上升 | 同上 | `bash tool/check_inline_zh.sh`（仅中文决策，见 §3） | 同上 |
+| 内联中文不上升 | 同上 | `bash tool/check_inline_zh.sh`（仅中文决策，见 §3；**口径已排除 `lib/presentation/l10n/`**，即文案表本身不计入） | 同上 |
 | lint 规则 | analyze 内含 | `prefer_const_constructors` / `prefer_const_literals_to_create_immutables` / `unawaited_futures` / `avoid_print` / `use_key_in_widget_constructors` | `analysis_options.yaml` |
 | 发布归档符号 | tag v* | release 产物附带 `build/symbols/**`（混淆堆栈可反解） | `.github/workflows/release.yml` |
 
@@ -24,7 +24,7 @@
 
 | 决策 | 内容 | 落点 |
 | --- | --- | --- |
-| 仅中文，不做 i18n | 不做 ARB/gen-l10n；内联中文行数不得上升 | `tool/check_inline_zh.sh` + `tool/inline_zh_baseline.txt` + CI 门禁 |
+| 仅中文，不做 i18n | 不做 ARB/gen-l10n；`lib/presentation` 内联中文行数不得上升，**但 `lib/presentation/l10n/`（文案表）不计入** —— 否则「把文案搬进 AppStrings」本身就会顶到基线 | `tool/check_inline_zh.sh` + `tool/inline_zh_baseline.txt`（当前 1570）+ CI 门禁 |
 | 字体 | **Inter 已随包分发**（2026-09-12，`assets/fonts/Inter-{Regular,Medium}.ttf` 400/500 两档，仅 Latin）；pubspec fonts 段与 `app_theme.dart` 的 fontFamily/_fontFallback 必须同时改，勿只声明不打包 | `lib/presentation/theme/app_theme.dart`、`pubspec.yaml` |
 | 多设备云同步 | 已移除，仅保留本地加解密（保险箱/备份）。`sync.salt`/`sync.secret` 旧 Secure Storage 键名**不可改名**（老数据解密依赖） | `lib/infrastructure/files/local_crypto_service.dart` |
 | `MANAGE_EXTERNAL_STORAGE` | **保留**：终端/Termux 桥（`/sdcard/pocketforge-bridge`）依赖，删除即功能失效 | `AndroidManifest.xml` |
@@ -92,3 +92,4 @@ git rev-parse HEAD   # 复验
 - `ChatController` 拆分（A-1）：第 1 步 `RunCoordinator` + `chat_run_execution.dart` 已完成（2825 → 2063 行），断点恢复/预算续跑已有护栏测试（`test/chat_resume_test.dart`）。**最终处置（2026-09-12）：第 2/4 步与第 3 步的胶水层明确不再做** —— 计划状态机的可测核心（`normalizePlanStepsForTerminal` / `resolvePlanTerminalStatus`）已是 static 纯函数并有 `test/plan_status_fix_test.dart` 守护，剩余只是必须住在 Notifier 上的 15–30 行受保护状态胶水，机械搬迁零行为收益（`Notifier.state` 是 protected 成员，见下）。
 - `Notifier.state` 是 protected 成员：搬方法出 `Notifier` 子类会撞 40+ 条 `invalid_use_of_protected_member`。可行路子是 part 文件 + 库内转发访问器（参考 `_currentState`）。
 - 跨层反向依赖（`infrastructure → application`）应清零；新增依赖前先看 `lib/domain/ports/` 有没有缝可用。
+- **性能验收（G4）本轮未做**：`select` 收窄订阅（页面级重建 20→0）与 `scrollCacheExtent 400 + 关 KeepAlive` 的真机闭环需要 OPPO PKX110 在线，本轮设备不在线。结构正解已由 `test/chat_rebuild_scope_test.dart` 守护；**不许为了帧率数字回退 `select` 收窄或窗口机制**（那是结构正解），真机对比待设备到位补做。

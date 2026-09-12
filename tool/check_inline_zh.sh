@@ -6,8 +6,12 @@
 # 任何上升都会被本门禁拦下，意味着有人绕过了 AppStrings 或组件默认文案，
 # 需先评审再有意更新基线。
 #
-# 只统计"内容行"：纯注释行（// 开头）与空行不计 —— 门禁拦的是用户可见文案，
-# 不是代码注释（2026-09-12 实测：注释里的中文说明会把门禁误伤成红）。
+# 统计口径（2026-09-12 修正）：
+#   · **排除 `lib/presentation/l10n/`**：那是文案表的合法落点，`app_strings.dart`
+#     本身就是「内联中文」的收纳处。原口径把它也计入，结果是「把文案搬进
+#     AppStrings」与「新增文案」都会顶到基线，反而逼人去改基线数字。
+#   · 只统计"内容行"：纯注释行（// 开头）与空行不计 —— 门禁拦的是用户可见文案，
+#     不是代码注释（2026-09-12 实测：注释里的中文说明会把门禁误伤成红）。
 set -euo pipefail
 export LC_ALL=C.UTF-8
 cd "$(dirname "$0")/.."
@@ -15,8 +19,10 @@ cd "$(dirname "$0")/.."
 BASELINE_FILE="tool/inline_zh_baseline.txt"
 BASELINE=$(cat "$BASELINE_FILE")
 
+# -H 强制带上文件名：单文件命中时 grep -c 只打印计数，会让下面的求和静默变 0。
 COUNT=$(grep -rlP '[\x{4E00}-\x{9FFF}]' lib/presentation --include='*.dart' \
-  | xargs grep -cP '^(?!\s*//).*[\x{4E00}-\x{9FFF}]' \
+  | grep -v '/l10n/' \
+  | xargs grep -cHP '^(?!\s*//).*[\x{4E00}-\x{9FFF}]' \
   | awk -F: '{s+=$2} END {print s+0}')
 
 echo "inline CJK content lines: $COUNT (baseline: $BASELINE)"
