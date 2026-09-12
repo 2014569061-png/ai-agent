@@ -18,6 +18,8 @@ class ChatMessageList extends StatefulWidget {
     this.onSwitchModel,
     this.onSpeak,
     this.speakingListenable,
+    this.selectionIndex,
+    this.onExitSelection,
     this.trailingWidgets = const [],
     this.sessionKey,
     this.liveReply,
@@ -35,6 +37,10 @@ class ChatMessageList extends StatefulWidget {
   /// 长按朗读（G1）：仅助手消息、且平台支持 TTS 时非空。
   final ValueChanged<int>? onSpeak;
   final ValueListenable<bool>? speakingListenable;
+
+  /// 处于「文本选择模式」的消息索引（null = 无）。见 MessageBubble.selecting。
+  final int? selectionIndex;
+  final VoidCallback? onExitSelection;
   final List<Widget> trailingWidgets;
   final String? sessionKey;
   final LiveReply? liveReply;
@@ -204,6 +210,8 @@ class _ChatMessageListState extends State<ChatMessageList> {
               ? () => widget.onSpeak!(index)
               : null,
           speakingListenable: widget.speakingListenable,
+          selecting: widget.selectionIndex == index,
+          onExitSelection: widget.onExitSelection,
         );
       },
     );

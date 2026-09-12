@@ -36,6 +36,8 @@ class MessageBubble extends StatelessWidget {
     this.onSwitchModel,
     this.onSpeak,
     this.speakingListenable,
+    this.selecting = false,
+    this.onExitSelection,
   });
 
   final ChatMessage message;
@@ -51,6 +53,13 @@ class MessageBubble extends StatelessWidget {
 
   /// 朗读状态监听：存在时读屏动作标签在「朗读 / 停止朗读」之间切换。
   final ValueListenable<bool>? speakingListenable;
+
+  /// 文本选择模式。**默认必须为 false**：正文一旦可选择（SelectableText），
+  /// 长按会被文本选择器截走，气泡外层 `onLongPress`（消息菜单的唯一入口）就永远
+  /// 收不到手势 —— 这是实测确认过的缺陷。需要局部选词时由菜单里的「选择文本」
+  /// 临时打开，并用 [onExitSelection] 退出。
+  final bool selecting;
+  final VoidCallback? onExitSelection;
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +109,20 @@ class MessageBubble extends StatelessWidget {
         const CustomSemanticsAction(label: '重新生成'): onRegenerate,
     };
 
+    // 正文统一用普通 Text；只有「选择文本」模式才切换为 SelectableText。
+    //
+    // 为什么不靠 Markdown 自带的可选性：`MarkdownBody(selectable: true)` 在
+    // flutter_markdown 0.7.7+1 下实测**并不产出 SelectableText**（selectable 真假
+    // 渲染结果一致），可选性不可控也不可测；而 SelectableText 提供原生拖选 +
+    // 系统复制工具条，行为确定、可断言。代价是选择模式下看不到 Markdown 排版，
+    // 这对"挑一段话复制"的场景可以接受。
+    final plainStyle = TextStyle(
+      color: textColor,
+      height: 1.6,
+      fontSize: 15,
+      fontWeight: FontWeight.w400,
+    );
+
     final body = isUser
         ? Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -112,40 +135,23 @@ class MessageBubble extends StatelessWidget {
                 bottomRight: Radius.circular(8),
               ),
             ),
-            child: SelectableText(
-              message.text,
-              style: TextStyle(
-                color: textColor,
-                height: 1.6,
-                fontSize: 15,
-                fontWeight: FontWeight.w400,
-              ),
-            ),
+            child: selecting
+                ? SelectableText(message.text, style: plainStyle)
+                : Text(message.text, style: plainStyle),
           )
-        : lightweight
-            ? SelectableText(
-                errorSplit.main,
-                style: TextStyle(
-                  color: textColor,
-                  height: 1.6,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w400,
-                ),
-              )
-            : _DeferredMarkdown(
-                data: errorSplit.main,
-                selectable: true,
-                builders: {'pre': CodeBlockBuilder()},
-                textColor: textColor,
-                styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                  p: TextStyle(
-                    color: textColor,
-                    height: 1.6,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  blockSpacing: 12,
-                  listIndent: 20,
+        : selecting
+            ? SelectableText(message.text, style: plainStyle)
+            : lightweight
+                ? Text(errorSplit.main, style: plainStyle)
+                : _DeferredMarkdown(
+                    data: errorSplit.main,
+                    selectable: false,
+                    builders: {'pre': CodeBlockBuilder()},
+                    textColor: textColor,
+                    styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                      p: plainStyle,
+                      blockSpacing: 12,
+                      listIndent: 20,
                   h1: TextStyle(
                     color: textColor,
                     fontSize: 17,
@@ -234,6 +240,20 @@ class MessageBubble extends StatelessWidget {
       children: [
         AttachmentStrip(parts: [...imageParts, ...audioParts, ...videoParts]),
         if (hasText) body,
+        // 选择模式的退出入口：必须留在气泡内、且始终可达 —— 进入选择模式后
+        // 长按会被文本选择器占用，菜单打不开，所以不能依赖菜单来退出。
+        if (selecting && onExitSelection != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onExitSelection,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 48),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+              ),
+              child: const Text(AppStrings.finishSelecting),
+            ),
+          ),
         if (errorDetail != null) ...[
           const SizedBox(height: 6),
           _ErrorDetailBlock(detail: errorDetail),
@@ -284,7 +304,10 @@ class MessageBubble extends StatelessWidget {
               onLongPress: isTool ? null : onLongPress,
               child: Tooltip(
                 message: isUser ? '长按可编辑 / 复制' : '长按可朗读 / 复制',
-                triggerMode: TooltipTriggerMode.longPress,
+                // 触发方式必须是 tap：`longPress` 会把长按从外层 GestureDetector
+                // 手里抢走（实测对照：Tooltip(longPress)+Text 时父层收不到长按，
+                // 改成 tap 就能收到），那样消息菜单就永远弹不出来。
+                triggerMode: TooltipTriggerMode.tap,
                 showDuration: const Duration(milliseconds: 1800),
                 child: _SpeakSemantics(
                   speakingListenable: speakingListenable,
@@ -525,15 +548,17 @@ class _DeferredMarkdownState extends State<_DeferredMarkdown> {
   Widget build(BuildContext context) {
     final shouldDefer = _shouldDefer(context);
     if (shouldDefer && !_ready) {
-      return SelectableText(
-        widget.data,
-        style: TextStyle(
-          color: widget.textColor,
-          height: 1.6,
-          fontSize: 15,
-          fontWeight: FontWeight.w400,
-        ),
+      // 占位渲染也必须跟随 selectable：占位阶段若用 SelectableText，长按依旧会被
+      // 文本选择器截走 —— 那会让"长消息"这一整类气泡的菜单时灵时不灵。
+      final placeholderStyle = TextStyle(
+        color: widget.textColor,
+        height: 1.6,
+        fontSize: 15,
+        fontWeight: FontWeight.w400,
       );
+      return widget.selectable
+          ? SelectableText(widget.data, style: placeholderStyle)
+          : Text(widget.data, style: placeholderStyle);
     }
     if (!_markdownMetricRecorded) {
       _markdownMetricRecorded = true;

@@ -233,6 +233,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   bool _deepThinking = true;
   bool _webSearch = true;
 
+  /// 处于「文本选择模式」的消息索引（null = 无）。
+  /// 正文默认不可选，否则长按会被文本选择器截走、消息菜单永远打不开。
+  int? _selectingMessageIndex;
+
   ChatController get _chat => ref.read(chatControllerProvider.notifier);
 
   final BackgroundService _backgroundService = BackgroundService();
@@ -263,6 +267,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       text: draft,
       selection: TextSelection.collapsed(offset: draft.length),
     );
+    // 文本选择模式是"当前这条消息"的临时态，切换会话就该退出，
+    // 否则会在另一个会话里意外留下一个可选气泡。
+    if (_selectingMessageIndex != null) {
+      setState(() => _selectingMessageIndex = null);
+    }
   }
 
   Future<void> _startNewConversation({String? initialText}) async {
@@ -1438,9 +1447,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // 朗读只对助手正文开放（不含工具气泡）；平台不支持时不展示入口。
     final canSpeak = message.role == MessageRole.assistant && tts.isAvailable;
     final speaking = canSpeak && tts.isSpeaking;
+    // 打开菜单即退出上一条消息的选择模式，避免两个状态并存。
+    if (_selectingMessageIndex != null) {
+      setState(() => _selectingMessageIndex = null);
+    }
     final action = await showImmersiveActionSheet<String>(
       context: context,
-      title: '消息操作',
+      title: AppStrings.messageActions,
       items: [
         if (canSpeak)
           ActionSheetItem(
@@ -1457,9 +1470,16 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         const ActionSheetItem(
           icon: Icons.copy_outlined,
-          title: '复制全文',
+          title: AppStrings.copyFullText,
           value: 'copy',
         ),
+        if (message.role != MessageRole.tool)
+          const ActionSheetItem(
+            icon: Icons.text_fields_rounded,
+            title: AppStrings.selectText,
+            subtitle: '进入后可拖动选择局部文本',
+            value: 'select',
+          ),
       ],
     );
     if (!mounted || action == null) return;
@@ -1467,6 +1487,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       await _editAndResend(messageIndex, message);
     } else if (action == 'speak') {
       await _toggleSpeak(message.text);
+    } else if (action == 'select') {
+      setState(() => _selectingMessageIndex = messageIndex);
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: message.text));
       if (mounted) {
@@ -2071,6 +2093,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             : null,
                                         speakingListenable: TtsService
                                             .instance.speakingListenable,
+                                        selectionIndex: _selectingMessageIndex,
+                                        onExitSelection: () => setState(
+                                            () => _selectingMessageIndex = null),
                                         trailingWidgets: [
                                           if (planState != null &&
                                               planState.status != 'cancelled')

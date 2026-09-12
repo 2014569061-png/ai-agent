@@ -121,7 +121,10 @@ void main() {
       ),
     ));
 
-    expect(find.byType(SelectableText), findsOneWidget);
+    // 延迟帧的占位必须是**普通 Text**：占位若用 SelectableText，长按会被文本选择器
+    // 截走，长消息这一类气泡的消息菜单就会时灵时不灵（见 message_longpress_test.dart）。
+    expect(find.byType(Text), findsWidgets);
+    expect(find.byType(SelectableText), findsNothing);
     expect(find.byType(MarkdownBody), findsNothing);
 
     await tester.pump();

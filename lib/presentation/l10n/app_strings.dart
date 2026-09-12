@@ -33,6 +33,11 @@ abstract final class AppStrings {
   static const stopSpeaking = '停止朗读';
   static const noSpeakableContent = '没有可朗读的内容';
   static const ttsUnsupported = '当前设备不支持语音朗读';
+  // --- 消息长按菜单 ---
+  static const messageActions = '消息操作';
+  static const selectText = '选择文本';
+  static const finishSelecting = '完成选择';
+  static const copyFullText = '复制全文';
   static String exportedTo(String path) => '已导出到 $path';
   static const switchProvider = '切换模型服务商';
   static const noProviderConfigured = '尚未配置 Provider，请前往「设置」添加。';

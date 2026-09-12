@@ -221,7 +221,14 @@ Future<T?> showImmersiveActionSheet<T>({
       return SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
-          child: content,
+          // ListTile 的水波纹只能画在最近的 Material 上。本弹层外层是带底色+阴影的
+          // DecoratedBox，中间不补一层 Material 会触发框架断言
+          // "ListTile background color or ink splashes may be invisible"，
+          // 真机表现为点击菜单项没有任何按压反馈。透明 Material 只提供绘制面，不改视觉。
+          child: Material(
+            type: MaterialType.transparency,
+            child: content,
+          ),
         ),
       );
     },
