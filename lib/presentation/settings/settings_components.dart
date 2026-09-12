@@ -112,6 +112,11 @@ class SettingsGroupCard extends StatelessWidget {
   }
 }
 
+/// 设置分组内部的分隔线。
+///
+/// 默认 [indent] 为 48，精确对齐 [SettingsTile] 文本起始位置：
+/// 16 (左侧内边距) + 20 (图标宽度) + 12 (图标与文本间距) = 48。
+/// 使用 [ExcludeSemantics] 剔除无意义的视觉装饰线条，避免干扰读屏无障碍焦点序列。
 class SettingsDivider extends StatelessWidget {
   const SettingsDivider({super.key, this.indent = 48, this.endIndent = 0});
   final double indent;
@@ -119,12 +124,14 @@ class SettingsDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Divider(
-      height: 1,
-      thickness: 1,
-      indent: indent,
-      endIndent: endIndent,
-      color: settingsDividerColor(context),
+    return ExcludeSemantics(
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        indent: indent,
+        endIndent: endIndent,
+        color: settingsDividerColor(context),
+      ),
     );
   }
 }

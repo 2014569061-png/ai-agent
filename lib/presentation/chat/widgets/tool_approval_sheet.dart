@@ -59,11 +59,14 @@ class ToolApprovalSheet extends StatelessWidget {
                       decoration: BoxDecoration(
                           color: riskColor.withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(12)),
-                      child: Icon(
-                          danger
-                              ? Icons.warning_amber_rounded
-                              : Icons.shield_outlined,
-                          color: riskColor),
+                      child: Semantics(
+                        label: riskLabel,
+                        child: Icon(
+                            danger
+                                ? Icons.warning_amber_rounded
+                                : Icons.shield_outlined,
+                            color: riskColor),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -91,8 +94,10 @@ class ToolApprovalSheet extends StatelessWidget {
                         border: Border.all(
                             color: riskColor.withValues(alpha: 0.4))),
                     child: Row(children: [
-                      Icon(Icons.build_circle_outlined,
-                          size: 16, color: riskColor),
+                      ExcludeSemantics(
+                        child: Icon(Icons.build_circle_outlined,
+                            size: 16, color: riskColor),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                           child: Text(call.name,
@@ -256,7 +261,10 @@ class ToolApprovalSheet extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.terminal_rounded, size: 14, color: Color(0xFF89B4FA)),
+              ExcludeSemantics(
+                child:
+                    Icon(Icons.terminal_rounded, size: 14, color: Color(0xFF89B4FA)),
+              ),
               SizedBox(width: 6),
               Text('将要执行的指令',
                   style: TextStyle(
@@ -301,8 +309,10 @@ class ToolApprovalSheet extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.description_outlined,
-                      size: 13, color: Color(0xFFBAC2DE)),
+                  const ExcludeSemantics(
+                    child: Icon(Icons.description_outlined,
+                        size: 13, color: Color(0xFFBAC2DE)),
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -369,8 +379,10 @@ class ToolApprovalSheet extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.edit_note_rounded,
-                    size: 14, color: Color(0xFF89B4FA)),
+                const ExcludeSemantics(
+                  child: Icon(Icons.edit_note_rounded,
+                      size: 14, color: Color(0xFF89B4FA)),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
