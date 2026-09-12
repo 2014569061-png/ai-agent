@@ -21,12 +21,14 @@ import '../../application/chat_controller.dart';
 import '../../application/app_lock_service.dart';
 import '../../application/providers.dart';
 import '../../application/skill_intent_matcher.dart';
+import '../../application/tts_text.dart';
 import '../../domain/sensitive_tool_policy.dart';
 import '../../domain/models.dart';
 import '../../domain/session_metrics.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/skills/skill_parser.dart';
 import '../../infrastructure/skills/skill_store.dart';
+import '../../infrastructure/tts/tts_service.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
 import '../../infrastructure/share/deep_link_service.dart';
 import '../../infrastructure/share/sharing_service.dart';
@@ -1440,10 +1442,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _showMessageActions(int messageIndex) async {
     final message = ref.read(chatControllerProvider).messages[messageIndex];
     final isUser = message.role == MessageRole.user;
+    final tts = TtsService.instance;
+    // 朗读只对助手正文开放（不含工具气泡）；平台不支持时不展示入口。
+    final canSpeak = message.role == MessageRole.assistant && tts.isAvailable;
+    final speaking = canSpeak && tts.isSpeaking;
     final action = await showImmersiveActionSheet<String>(
       context: context,
       title: '消息操作',
       items: [
+        if (canSpeak)
+          ActionSheetItem(
+            icon: speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+            title: speaking ? AppStrings.stopSpeaking : AppStrings.speakAloud,
+            value: 'speak',
+          ),
         if (isUser)
           const ActionSheetItem(
             icon: Icons.edit_outlined,
@@ -1461,6 +1473,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (!mounted || action == null) return;
     if (action == 'edit') {
       await _editAndResend(messageIndex, message);
+    } else if (action == 'speak') {
+      await _toggleSpeak(message.text);
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: message.text));
       if (mounted) {
@@ -1473,6 +1487,33 @@ class _ChatPageState extends ConsumerState<ChatPage>
           ),
         );
       }
+    }
+  }
+
+  /// G1：按索引朗读消息（长按菜单与读屏动作共用的入口）。
+  void _speakMessageAt(int index) {
+    final messages = ref.read(chatControllerProvider).messages;
+    if (index < 0 || index >= messages.length) return;
+    unawaited(_toggleSpeak(messages[index].text));
+  }
+
+  /// G1：朗读 / 停止朗读助手消息正文。内容为空或设备不可用时给出提示。
+  Future<void> _toggleSpeak(String markdown) async {
+    final tts = TtsService.instance;
+    if (tts.isSpeaking) {
+      await tts.stop();
+      return;
+    }
+    final content = speakableText(markdown);
+    if (content.isEmpty) {
+      if (mounted) {
+        FloatingToast.show(context, AppStrings.noSpeakableContent);
+      }
+      return;
+    }
+    final started = await tts.speak(content);
+    if (!started && mounted) {
+      FloatingToast.show(context, AppStrings.ttsUnsupported);
     }
   }
 
@@ -2033,6 +2074,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                         onRegenerate: _regenerate,
                                         onEditPrompt: _editLatestQuestion,
                                         onSwitchModel: _switchProvider,
+                                        onSpeak: TtsService.instance.isAvailable
+                                            ? _speakMessageAt
+                                            : null,
+                                        speakingListenable: TtsService
+                                            .instance.speakingListenable,
                                         trailingWidgets: [
                                           if (planState != null &&
                                               planState.status != 'cancelled')

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 
 import '../../../application/error_humanizer.dart';
 import '../../../domain/models.dart';
+import '../../l10n/app_strings.dart';
 import '../chat_layout_controller.dart';
 import '../../markdown/code_block.dart';
 import '../../markdown/math_block.dart';
@@ -32,6 +34,8 @@ class MessageBubble extends StatelessWidget {
     required this.onRegenerate,
     this.onEditPrompt,
     this.onSwitchModel,
+    this.onSpeak,
+    this.speakingListenable,
   });
 
   final ChatMessage message;
@@ -41,6 +45,12 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback onRegenerate;
   final VoidCallback? onEditPrompt;
   final VoidCallback? onSwitchModel;
+
+  /// 朗读回调（仅助手消息且平台支持时非空）；null 表示不暴露该读屏动作。
+  final VoidCallback? onSpeak;
+
+  /// 朗读状态监听：存在时读屏动作标签在「朗读 / 停止朗读」之间切换。
+  final ValueListenable<bool>? speakingListenable;
 
   @override
   Widget build(BuildContext context) {
@@ -276,9 +286,11 @@ class MessageBubble extends StatelessWidget {
                 message: isUser ? '长按可编辑 / 复制' : '长按可朗读 / 复制',
                 triggerMode: TooltipTriggerMode.longPress,
                 showDuration: const Duration(milliseconds: 1800),
-                child: Semantics(
+                child: _SpeakSemantics(
+                  speakingListenable: speakingListenable,
+                  onSpeak: onSpeak,
                   onLongPressHint: isUser ? '编辑或复制' : '朗读或复制',
-                  customSemanticsActions: customActions,
+                  baseActions: customActions,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: maxWidth),
                     child: isUser
@@ -406,6 +418,54 @@ class MessageBubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10),
         ),
       );
+}
+
+/// 消息气泡的读屏语义外壳。
+///
+/// 存在的唯一理由：朗读动作的标签要随朗读状态在「朗读 / 停止朗读」之间切换，
+/// 而朗读状态来自一个 [ValueListenable]。把这一层单独拆出来，状态变化就只重建
+/// 语义节点，不会顺带重建气泡正文（Markdown 解析成本高，且这是高频路径）。
+class _SpeakSemantics extends StatelessWidget {
+  const _SpeakSemantics({
+    required this.onLongPressHint,
+    required this.baseActions,
+    required this.onSpeak,
+    required this.speakingListenable,
+    required this.child,
+  });
+
+  final String onLongPressHint;
+  final Map<CustomSemanticsAction, VoidCallback> baseActions;
+  final VoidCallback? onSpeak;
+  final ValueListenable<bool>? speakingListenable;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final listenable = speakingListenable;
+    final speak = onSpeak;
+    if (listenable == null || speak == null) {
+      return Semantics(
+        onLongPressHint: onLongPressHint,
+        customSemanticsActions: baseActions,
+        child: child,
+      );
+    }
+    return ValueListenableBuilder<bool>(
+      valueListenable: listenable,
+      builder: (context, speaking, child) => Semantics(
+        onLongPressHint: onLongPressHint,
+        customSemanticsActions: {
+          ...baseActions,
+          CustomSemanticsAction(
+            label: speaking ? AppStrings.stopSpeaking : AppStrings.speakAloud,
+          ): speak,
+        },
+        child: child,
+      ),
+      child: child,
+    );
+  }
 }
 
 /// Delays expensive Markdown and math parsing for long completed replies.

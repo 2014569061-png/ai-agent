@@ -44,6 +44,8 @@ dependencies:
   permission_handler: ^13.0.1
   archive: ^4.2.0
   crypto: ^3.0.7
+  # G1 长按朗读：系统 TTS 引擎（纯平台通道插件，无需额外清单权限）。
+  flutter_tts: ^4.2.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
@@ -15,6 +16,8 @@ class ChatMessageList extends StatefulWidget {
     required this.onRegenerate,
     this.onEditPrompt,
     this.onSwitchModel,
+    this.onSpeak,
+    this.speakingListenable,
     this.trailingWidgets = const [],
     this.sessionKey,
     this.liveReply,
@@ -28,6 +31,10 @@ class ChatMessageList extends StatefulWidget {
   final VoidCallback onRegenerate;
   final VoidCallback? onEditPrompt;
   final VoidCallback? onSwitchModel;
+
+  /// 长按朗读（G1）：仅助手消息、且平台支持 TTS 时非空。
+  final ValueChanged<int>? onSpeak;
+  final ValueListenable<bool>? speakingListenable;
   final List<Widget> trailingWidgets;
   final String? sessionKey;
   final LiveReply? liveReply;
@@ -192,6 +199,11 @@ class _ChatMessageListState extends State<ChatMessageList> {
           onRegenerate: widget.onRegenerate,
           onEditPrompt: widget.onEditPrompt,
           onSwitchModel: widget.onSwitchModel,
+          // 朗读只对助手正文开放（工具气泡与用户消息不提供该读屏动作）。
+          onSpeak: message.role == MessageRole.assistant && widget.onSpeak != null
+              ? () => widget.onSpeak!(index)
+              : null,
+          speakingListenable: widget.speakingListenable,
         );
       },
     );

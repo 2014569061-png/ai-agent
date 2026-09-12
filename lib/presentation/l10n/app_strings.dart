@@ -28,6 +28,11 @@ abstract final class AppStrings {
   static const switchModel = '切换模型';
   static const conversationCopied = '当前会话已复制到剪贴板';
   static const copiedToClipboard = '已复制 Markdown 到剪贴板';
+  // --- 长按朗读（G1）---
+  static const speakAloud = '朗读';
+  static const stopSpeaking = '停止朗读';
+  static const noSpeakableContent = '没有可朗读的内容';
+  static const ttsUnsupported = '当前设备不支持语音朗读';
   static String exportedTo(String path) => '已导出到 $path';
   static const switchProvider = '切换模型服务商';
   static const noProviderConfigured = '尚未配置 Provider，请前往「设置」添加。';
