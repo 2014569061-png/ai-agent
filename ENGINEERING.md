@@ -24,7 +24,7 @@
 
 | 决策 | 内容 | 落点 |
 | --- | --- | --- |
-| 仅中文，不做 i18n | 不做 ARB/gen-l10n；`lib/presentation` 内联中文行数不得上升，**但 `lib/presentation/l10n/`（文案表）不计入** —— 否则「把文案搬进 AppStrings」本身就会顶到基线 | `tool/check_inline_zh.sh` + `tool/inline_zh_baseline.txt`（当前 1570）+ CI 门禁 |
+| 仅中文，不做 i18n | 不做 ARB/gen-l10n；`lib/presentation` 内联中文行数不得上升，**但 `lib/presentation/l10n/`（文案表）不计入** —— 否则「把文案搬进 AppStrings」本身就会顶到基线 | `tool/check_inline_zh.sh` + `tool/inline_zh_baseline.txt`（当前 1521）+ CI 门禁 |
 | 字体 | **Inter 已随包分发**（2026-09-12，`assets/fonts/Inter-{Regular,Medium}.ttf` 400/500 两档，仅 Latin）；pubspec fonts 段与 `app_theme.dart` 的 fontFamily/_fontFallback 必须同时改，勿只声明不打包 | `lib/presentation/theme/app_theme.dart`、`pubspec.yaml` |
 | 多设备云同步 | 已移除，仅保留本地加解密（保险箱/备份）。`sync.salt`/`sync.secret` 旧 Secure Storage 键名**不可改名**（老数据解密依赖） | `lib/infrastructure/files/local_crypto_service.dart` |
 | `MANAGE_EXTERNAL_STORAGE` | **保留**：终端/Termux 桥（`/sdcard/pocketforge-bridge`）依赖，删除即功能失效 | `AndroidManifest.xml` |
@@ -40,7 +40,8 @@
 - **body 内读键盘高度一律用 `lib/presentation/utils/keyboard_insets.dart`**（`keyboardInset`/`isKeyboardVisible`），不要写 `MediaQuery.viewInsetsOf` —— builder 闭包参数的 context 在 Scaffold body 内取值恒为 0（`paddingOf` 行为不同，未被消费）。守护测试：`test/keyboard_insets_test.dart`。
 
 ### 4.3 色值
-- 硬编码色值仅允许以下有意保留区（其余一律走 `AppPalette` Token）：`app_palette.dart`（Token 本体）、`code_block.dart`（语法高亮色板，**不要**换成业务 Token）、`tool_approval_sheet.dart`（终端 Catppuccin）、`terminal_sheet.dart` / `web_preview_dialog.dart` / `environment_sheet.dart`（深色终端表面）、`settings_components.dart`（iOS 色值识别常量）。基线 33 处，新增即评审。
+- 硬编码色值仅允许以下有意保留区（其余一律走 `AppPalette` Token）：`app_palette.dart`（Token 本体）、`app_theme.dart`（仅 1 处深色遮罩 `0xEB1A1A1A`）、`code_block.dart`（语法高亮色板，**不要**换成业务 Token）、`tool_approval_sheet.dart`（终端 Catppuccin）、`terminal_sheet.dart` / `environment_sheet.dart`（深色终端表面）、`settings_components.dart`（iOS 色值识别常量）。新增即评审。
+- 2026-09-12 清理：`web_preview_dialog.dart`（连 `phone_preview_view*` 三件套）已删除，其色值保留区资格一并撤销。
 
 ### 4.4 数据库
 - `schemaVersion` 当前 **16**；schema 变更必须升版本 + 写 `onUpgrade` 迁移 + 迁移测试。
@@ -88,6 +89,9 @@ git rev-parse HEAD   # 复验
 **共性教训**：涉及第三方组件内部语义（Scaffold inset 消费、flutter_markdown 缓存、isScrollingNotifier 状态）必须探针实测，不要靠读源码推断。报 P0 前必须走完"从入口到热点"的完整调用链。
 
 ## 7. 架构现状备忘（2026-09-12）
+
+- **功能入口守则**：定时任务（C5）、知识库、审计日志三页都曾有"页面/服务在、入口断线"的前科（引擎照跑、表照建，用户却永远到不了）。入口现在收敛在设置页（知识库→上下文与扩展、定时任务→通用、审计日志→工具区隐私行之后），重构装配层时必须保住这三个入口。
+- 被取代后已删除的死代码：`runtime_tool_banner.dart`、`tool_call_card.dart`（均由 `tool_activity_section.dart` 取代）、`web_preview_dialog.dart` + `phone_preview_view*`（Web 端预览遗产，无宿主入口）。
 
 - `ChatController` 拆分（A-1）：第 1 步 `RunCoordinator` + `chat_run_execution.dart` 已完成（2825 → 2063 行），断点恢复/预算续跑已有护栏测试（`test/chat_resume_test.dart`）。**最终处置（2026-09-12）：第 2/4 步与第 3 步的胶水层明确不再做** —— 计划状态机的可测核心（`normalizePlanStepsForTerminal` / `resolvePlanTerminalStatus`）已是 static 纯函数并有 `test/plan_status_fix_test.dart` 守护，剩余只是必须住在 Notifier 上的 15–30 行受保护状态胶水，机械搬迁零行为收益（`Notifier.state` 是 protected 成员，见下）。
 - `Notifier.state` 是 protected 成员：搬方法出 `Notifier` 子类会撞 40+ 条 `invalid_use_of_protected_member`。可行路子是 part 文件 + 库内转发访问器（参考 `_currentState`）。

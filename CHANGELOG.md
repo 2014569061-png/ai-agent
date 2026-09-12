@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+- 修复三个"功能在、入口断线"的孤儿页面：定时任务页（后台 Workmanager 调度引擎一直在跑，
+  但没有任何 UI 能创建/查看任务）、知识库页（聊天注入链路在线，却无法录入文档）、
+  审计日志页（审批授予一直在写入，却无处查看）。入口统一接进设置页：
+  知识库→「上下文与扩展」、定时任务→「通用」、审计日志→「工具」区数据与隐私边界之后，
+  三页均可在设置搜索中检索到。
+- 删除被取代的死代码：`runtime_tool_banner.dart`、`tool_call_card.dart`
+  （均由 `tool_activity_section.dart` 取代）、`web_preview_dialog.dart` 与
+  `phone_preview_view*` 三件套（Web 端网页预览遗产，自 0.8.7 起无任何宿主入口），
+  共 6 文件；内联中文基线随之 1568 → 1521。
+- 依赖清理：移除零引用的 `cupertino_icons`、`cross_file`、`intl`（后两者由
+  share_plus / flutter_localizations 传递提供，功能不受影响）。
 - 新增「长按助手消息 → 朗读」（G1）：调用系统 TTS 朗读正文，朗读中同位置变「停止朗读」；
   朗读前做 Markdown 净化（代码块折叠为占位词、链接取文字、图片取 alt、去标记符号）；
   仅 Android 真机提供入口，其余平台隐藏；文本净化纯函数与读屏动作均有单测守护。
