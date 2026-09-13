@@ -10,11 +10,11 @@ import 'tool_result.dart';
 /// ⚠️ 本类只负责「持久化脱敏」，与「强制人工审批」是两条**互相独立**的线，
 /// 严禁互相驱动，否则会造成严重 UX 回归：
 ///
-///   1. `UnifiedTool.sensitive`（domain/models.dart）—— 驱动**强制人工审批**。
-///      它经 ToolSpec.sensitive → AgentExecutor → ApprovalPolicy.decide(sensitive:)，
-///      只要为 true 就**无条件**要求用户确认。给 read_file / terminal /
-///      write_file 等工具误加这个标记，会导致每次读写文件都弹审批，直接毁掉
-///      Agent 体验。**本类名单里的工具不得据此改成 UnifiedTool.sensitive。**
+///   1. `UnifiedTool.sensitive`（domain/models.dart）—— 驱动**审批升级**：
+///      safe 工具被抬高到确认级（ask/autoSafe 下逐次确认），但 dangerous 的
+///      永远确认与 fullAccess 的自动放行都不被它改写。给 read_file / terminal /
+///      write_file 等工具误加这个标记，会在非完全访问模式下每次读写文件都弹审批，
+///      直接毁掉 Agent 体验。**本类名单里的工具不得据此改成 UnifiedTool.sensitive。**
 ///
 ///   2. `SensitiveToolPolicy`（本类）—— 驱动**持久化脱敏**，只影响写入
 ///      SQLite、会话/保险箱导出、run 事件与日志的内容，不影响审批，也不影响

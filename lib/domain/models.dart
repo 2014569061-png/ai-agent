@@ -235,8 +235,9 @@ class UnifiedTool {
   final Map<String, dynamic> parametersSchema;
   final ToolRisk risk;
 
-  /// 敏感操作标记：无论审批模式或信任状态如何，都强制要求用户显式审批，
-  /// 不允许通过 fullAccess / 全局信任等渠道自动放行。
+  /// 敏感操作标记：把 safe 工具的审批要求抬高到确认级（ask/autoSafe 模式下
+  /// 逐次确认），但**不覆盖** dangerous 的永远确认，也不覆盖用户显式选择的
+  /// fullAccess——否则会造成“选了完全访问仍每次弹审批”的体验回归。
   ///
   /// 注意：它与「持久化脱敏」（`SensitiveToolPolicy`）是两条独立的线，
   /// 判定口径不同，切勿互相驱动。

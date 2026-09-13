@@ -67,7 +67,7 @@ void main() {
     expect(rejected?.ok, isFalse);
   });
 
-  test('sensitive tool always requires approval even in full access + trusted',
+  test('dangerous sensitive tool always requires approval even in full access',
       () async {
     final registry = ToolRegistry()..register(_SensitiveTool());
     final executor =
@@ -91,8 +91,34 @@ void main() {
         expect(event.risk, ToolRisk.dangerous);
       }
     }
-    // fullAccess + 全局信任都不应绕过敏感工具的逐次审批。
+    // 危险级工具任何模式下都保持逐次审批，fullAccess + 全局信任也不例外。
     expect(asked, isTrue);
+  });
+
+  test('sensitive confirmation-level tool auto-runs in full access', () async {
+    final registry = ToolRegistry()..register(_SensitiveConfirmationTool());
+    final executor = AgentExecutor(
+        provider: _SensitiveConfirmationToolProvider(), tools: registry);
+    var asked = false;
+    var executed = false;
+    await for (final event in executor.run(
+      history: [
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')])
+      ],
+      model: 'test',
+      approvalMode: ApprovalMode.fullAccess,
+      approveTool: (call, risk, sensitive) async {
+        asked = true;
+        return ToolApproval.reject;
+      },
+    )) {
+      if (event is ApprovalRequiredEvent) asked = true;
+      if (event is ToolResultEvent) executed = event.result.ok;
+    }
+    // 完全访问模式下用户已显式接受自动执行，敏感确认级工具不再逐次弹窗。
+    expect(asked, isFalse);
+    expect(executed, isTrue);
   });
 
   test('continues execution after an approved plan', () async {
@@ -851,6 +877,31 @@ class _SensitiveTool implements AgentTool {
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async =>
       ToolResult.text('executed');
+}
+
+class _SensitiveConfirmationTool implements AgentTool {
+  @override
+  final manifest = const UnifiedTool(
+    name: 'sensitive_confirmation_fixture',
+    description: 'test sensitive confirmation-level tool',
+    parametersSchema: {'type': 'object'},
+    risk: ToolRisk.requiresConfirmation,
+    sensitive: true,
+  );
+
+  @override
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async =>
+      ToolResult.text('executed');
+}
+
+class _SensitiveConfirmationToolProvider implements LlmProvider {
+  @override
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
+    yield const ToolCallEvent(ToolCall(
+        id: '1', name: 'sensitive_confirmation_fixture', arguments: {}));
+    yield const CompletedEvent(stopReason: StopReason.toolUse);
+  }
 }
 
 class _SensitiveToolProvider implements LlmProvider {

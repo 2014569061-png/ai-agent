@@ -263,7 +263,6 @@ class MemoryGetTool implements AgentTool {
       },
     },
     risk: ToolRisk.safe,
-    sensitive: true,
   );
 
   @override
@@ -312,7 +311,6 @@ class MemoryWriteTool implements AgentTool {
       'required': ['content'],
     },
     risk: ToolRisk.safe,
-    sensitive: true,
   );
 
   @override

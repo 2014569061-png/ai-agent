@@ -120,11 +120,12 @@ void main() {
         .where((m) => m.sensitive)
         .map((m) => m.name)
         .toList(growable: false);
-    expect(sensitiveManifests, isNotEmpty, reason: '当前存在 sensitive 工具，覆盖断言应非空');
-
+    // 内置目录当前可以没有 sensitive 工具（memory 系已改为仅持久化脱敏；
+    // MCP 工具运行时注入，由 SensitiveToolPolicy._isRemoteLike 按命名覆盖）。
+    // 该守护测试只约束方向：一旦未来标记 sensitive，结果脱敏必须跟上。
     for (final name in sensitiveManifests) {
       expect(SensitiveToolPolicy.isResultSensitive(name), isTrue,
-          reason: '强制审批的敏感工具 $name 未纳入结果脱敏名单');
+          reason: '审批升级的敏感工具 $name 未纳入结果脱敏名单');
     }
   });
 
