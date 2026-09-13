@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: '发布 tag（如 v0.8.8）'
+        description: '发布 tag（如 v0.8.9）'
         required: true
-        default: 'v0.8.8'
+        default: 'v0.8.9'
 
 permissions:
   contents: write

@@ -127,7 +127,7 @@ abstract final class AppStrings {
   static const permUnsupported = '系统不支持';
   static const aboutSection = '关于';
   static const currentVersionLabel = '当前版本';
-  static const appVersionName = 'v0.8.8';
+  static const appVersionName = 'v0.8.9';
   static const sourceCode = '源代码';
   static const openSourceLicenses = '开源许可';
   static const privacyAndCompliance = '隐私与合规';

@@ -1,8 +1,8 @@
 # Changelog
 
-## [0.8.8] - 2026-09-13（发布基线与 Android 侧载验证版）
+## [0.8.9] - 2026-09-13（Android 侧载验证版）
 
-- 版本统一为 `0.8.8+90`，应用内版本从 `package_info_plus` 读取真实版本；发布 tag 规则为 `v0.8.8`。
+- 版本统一为 `0.8.9+91`，应用内版本从 `package_info_plus` 读取真实版本；发布 tag 规则为 `v0.8.9`。
 - Android release 缺少正式密钥时默认失败，仅显式 `-PallowDebugSigning=true` 允许本地 debug 签名。
 - Release 工作流增加版本、包名、ARM64 ABI、非 debug 签名、中文门禁和签名 secrets 校验，并上传 APK SHA-256 sidecar。
 - 明确 Android-only ARM64 中文侧载验证边界、权限用途、后台定时尽力而为和终端边界。

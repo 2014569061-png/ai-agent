@@ -2,7 +2,7 @@
 
 ## 当前版本
 
-- 验证版本：`v0.8.8`（Android `versionCode 90`）。
+- 验证版本：`v0.8.9`（Android `versionCode 91`）。
 - 发布形态：Android-only，ARM64（`arm64-v8a`）APK，通过 GitHub Releases 侧载。
 - 主要业务文案：中文；BYOK（用户自行配置模型服务商与 API Key）。
 
@@ -55,7 +55,7 @@
 ## 验证重点
 
 - 版本、包名、ARM64 ABI 和正式签名可从发布 APK 独立核验；
-- 发布 tag 遵循 `v<versionName>`，本版本为 `v0.8.8`，build number 不进入 tag；
+- 发布 tag 遵循 `v<versionName>`，本版本为 `v0.8.9`，build number 不进入 tag；
 - APK 同时提供 SHA-256 sidecar，便于侧载前校验；
 - 真实设备上人工确认安装未知来源、后台任务、恢复流程、审批边界和终端提示。
 - 真实设备上完成一次工作区内的简易 APK 构建任务，确认 Alpine PRoot 的 DNS、`apk add`、静态 Android 构建工具链与失败输出均可用、可审阅。
