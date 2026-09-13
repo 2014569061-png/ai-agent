@@ -145,24 +145,30 @@ extension ChatRunExecution on ChatController {
       final now = DateTime.now();
       lastFlush = now;
       lastFlushedUnits = answer.length + reasoning.length;
-      final message = ChatMessage(
-        role: MessageRole.assistant,
-        parts: [MessagePart.text(answer.toString())],
-        reasoning: reasoning.isEmpty ? null : reasoning.toString(),
-        reasoningDuration: reasoningDuration,
-      );
-      final liveReply = LiveReply(
-        messageIndex: assistantIndex,
-        text: answer.toString(),
-        reasoning: reasoning.isEmpty ? null : reasoning.toString(),
-      );
+      // StringBuffer.toString() copies the accumulated text. Keep one snapshot
+      // per buffer and only build ChatMessage when the context estimate is due.
+      final answerText = answer.toString();
+      final reasoningText = reasoning.isEmpty ? '' : reasoning.toString();
       final estimateContext = force ||
           now.difference(lastContextEstimate) >= contextEstimateInterval;
       if (estimateContext) lastContextEstimate = now;
+      final message = estimateContext
+          ? ChatMessage(
+              role: MessageRole.assistant,
+              parts: [MessagePart.text(answerText)],
+              reasoning: reasoningText.isEmpty ? null : reasoningText,
+              reasoningDuration: reasoningDuration,
+            )
+          : null;
+      final liveReply = LiveReply(
+        messageIndex: assistantIndex,
+        text: answerText,
+        reasoning: reasoningText.isEmpty ? null : reasoningText,
+      );
       _currentState = _currentState.copyWith(
         liveReply: liveReply,
         liveContextTokens: estimateContext
-            ? _estimateLiveContextTokens(assistantIndex, message)
+            ? _estimateLiveContextTokens(assistantIndex, message!)
             : _currentState.liveContextTokens,
       );
     }
@@ -192,46 +198,51 @@ extension ChatRunExecution on ChatController {
 
     // 注入长期记忆与知识库片段，让交互式聊天也能享受记忆/RAG 能力（与
     // HeadlessExecutor 的后台路径保持一致）。注入失败不阻断执行。
-    String baseSystemPrompt = runSystemPrompt;
+    // 拼装顺序由 assembleAgentSystemPrompt 固定为“稳定前缀在前、动态内容
+    // 垫底”：知识库片段按当前问题检索、记忆带 revision，若排在人格/技能
+    // 规则之前，每轮请求的前缀都会变化，Provider 的前缀缓存会全部失效。
+    var skillIndexBlock = '';
+    final sessionSkillTexts = <String>[];
+    var memoryBlock = '';
+    var knowledgeBlock = '';
     try {
       final database = await ref.read(databaseProvider.future);
-      final memoryBlock = await MemoryService()
+      skillIndexBlock = await SkillStore().buildInjectionBlock(database);
+      for (final instruction in sessionSkillInstructions) {
+        final content = instruction.content.trim();
+        if (content.isNotEmpty) sessionSkillTexts.add(content);
+      }
+      memoryBlock = await MemoryService()
           .buildInjectionBlock(database, contextTokens: config.contextTokens);
-      if (memoryBlock.isNotEmpty) {
-        baseSystemPrompt = '$memoryBlock\n$baseSystemPrompt';
-      }
-      final userQuery = _lastUserText(assistantIndex);
-      final knowledgeBlock =
-          await KnowledgeService().buildInjectionBlock(database, userQuery);
-      if (knowledgeBlock.isNotEmpty) {
-        baseSystemPrompt = '$knowledgeBlock\n$baseSystemPrompt';
-      }
-      final skillBlock = await SkillStore().buildInjectionBlock(database);
-      if (skillBlock.isNotEmpty) {
-        baseSystemPrompt = '$skillBlock\n$baseSystemPrompt';
-      }
-      if (sessionSkillInstructions.isNotEmpty) {
-        baseSystemPrompt =
-            '${sessionSkillInstructions.map((item) => item.content).join('\n\n')}\n$baseSystemPrompt';
-      }
+      knowledgeBlock = await KnowledgeService()
+          .buildInjectionBlock(database, _lastUserText(assistantIndex));
     } catch (_) {}
 
     // 委派规则：向主 Agent 注入使用 sub_agent 的边界与预算约束。
+    var delegationRules = '';
     try {
       final autonomousDelegation =
           await AutonomousDelegationService().isEnabled();
-      baseSystemPrompt =
-          '$baseSystemPrompt\n\n${ChatController._delegationRules(autonomousDelegation)}';
+      delegationRules = ChatController._delegationRules(autonomousDelegation);
     } catch (_) {}
 
     // 工作区与工具可用性：注册表是按工作区绑定动态装配的，模型必须知道自己
     // 有没有文件/终端能力；缺失时引导用户开启，而不是声称设备无法完成。
-    baseSystemPrompt = '$baseSystemPrompt\n\n'
-        '${ChatController.workspaceToolRules(
+    final workspaceRules = ChatController.workspaceToolRules(
       workspacePath: _currentState.currentWorkspacePath,
       fileToolsAvailable: registry.findRegistration('write_file') != null,
       terminalAvailable: registry.findRegistration('terminal') != null,
-    )}';
+    );
+
+    final baseSystemPrompt = assembleAgentSystemPrompt(
+      personaPrompt: runSystemPrompt,
+      skillIndexBlock: skillIndexBlock,
+      sessionSkillBlocks: sessionSkillTexts,
+      delegationRules: delegationRules,
+      workspaceRules: workspaceRules,
+      memoryBlock: memoryBlock,
+      knowledgeBlock: knowledgeBlock,
+    );
 
     try {
       final trustStore = await ref.read(toolTrustStoreProvider.future);
@@ -318,7 +329,11 @@ extension ChatRunExecution on ChatController {
           usage = Usage(
               promptTokens: event.promptTokens,
               completionTokens: event.completionTokens,
-              cachedTokens: event.cachedTokens);
+              cachedTokens: event.cachedTokens,
+              cacheWriteTokens: event.cacheWriteTokens,
+              reasoningTokens: event.reasoningTokens,
+              usageReported: event.usageReported,
+              cacheStatsReported: event.cacheStatsReported);
           if (ownsRun() && assistantIndex < _currentState.messages.length) {
             final current = _currentState.messages[assistantIndex];
             _currentState = _withMessageAt(
@@ -575,7 +590,19 @@ extension ChatRunExecution on ChatController {
               'promptTokens': usage.promptTokens,
               'completionTokens': usage.completionTokens,
               'cachedTokens': usage.cachedTokens,
+              'cacheWriteTokens': usage.cacheWriteTokens,
+              'reasoningTokens': usage.reasoningTokens,
               'cacheHit': usage.cachedTokens > 0,
+              // hit=命中；miss=未命中；no-cache-stats=usage 里没有缓存字段；
+              // no-usage=整轮没收到 usage。区分后两类，避免把“统计缺失”
+              // 当成“未命中”展示。
+              'cacheStatus': usage.cachedTokens > 0
+                  ? 'hit'
+                  : usage.cacheStatsReported
+                      ? 'miss'
+                      : usage.usageReported
+                          ? 'no-cache-stats'
+                          : 'no-usage',
               'cacheSource': usage.cachedTokens > 0 ? 'provider-usage' : null,
               'savedTokens': usage.cachedTokens,
               'savedCostCents': savedCostCents,
@@ -692,10 +719,12 @@ extension ChatRunExecution on ChatController {
         } catch (_) {}
       } catch (_) {}
     }
+    final finalAnswerText = answer.toString();
+    final finalReasoningText = reasoning.isEmpty ? '' : reasoning.toString();
     final assistantMessage = ChatMessage(
       role: MessageRole.assistant,
-      parts: [MessagePart.text(answer.toString())],
-      reasoning: reasoning.isEmpty ? null : reasoning.toString(),
+      parts: [MessagePart.text(finalAnswerText)],
+      reasoning: finalReasoningText.isEmpty ? null : finalReasoningText,
       modelName: config.isConfigured ? config.model : '演示模型',
       usage: usage.totalTokens > 0 ? usage : null,
       elapsed: stopwatch.elapsed,

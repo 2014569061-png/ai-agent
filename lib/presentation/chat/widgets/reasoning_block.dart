@@ -48,6 +48,46 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
     return '已思考（用时 ${seconds ~/ 60} 分 ${seconds % 60} 秒）';
   }
 
+  Widget _buildReasoningPanel(BuildContext context, ThemeData theme,
+      Color textMuted, Color surface, Color hairline) {
+    final textStyle = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w400,
+      color: textMuted,
+      height: 1.55,
+    );
+    final content = widget.streaming
+        ? SelectableText(widget.reasoning, style: textStyle)
+        : MathMarkdown(
+            data: widget.reasoning,
+            selectable: true,
+            textColor: textMuted,
+            styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+              p: textStyle,
+              blockSpacing: 8,
+              code: TextStyle(
+                fontSize: 12,
+                fontFamily: 'JetBrains Mono',
+                color: textMuted,
+              ),
+            ),
+          );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 4),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: surface,
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          border: Border.all(color: hairline, width: 1.0),
+        ),
+        child: Align(alignment: Alignment.centerLeft, child: content),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -111,49 +151,14 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
           ),
         ),
         if (hasReasoning)
-          AnimatedCrossFade(
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 4),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: surface,
-                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-                  border: Border.all(color: hairline, width: 1.0),
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: MathMarkdown(
-                    data: widget.reasoning,
-                    selectable: true,
-                    textColor: textMuted,
-                    styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
-                      p: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w400,
-                        color: textMuted,
-                        height: 1.55,
-                      ),
-                      blockSpacing: 8,
-                      code: TextStyle(
-                        fontSize: 12,
-                        fontFamily: 'JetBrains Mono',
-                        color: textMuted,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            crossFadeState: _expanded
-                ? CrossFadeState.showSecond
-                : CrossFadeState.showFirst,
+          AnimatedSize(
             duration: AppTokens.durationBase,
-            firstCurve: AppTokens.curveStandard,
-            secondCurve: AppTokens.curveStandard,
-            sizeCurve: AppTokens.curveStandard,
+            curve: AppTokens.curveStandard,
+            alignment: Alignment.topLeft,
+            child: _expanded
+                ? _buildReasoningPanel(
+                    context, theme, textMuted, surface, hairline)
+                : const SizedBox.shrink(),
           ),
       ],
     );

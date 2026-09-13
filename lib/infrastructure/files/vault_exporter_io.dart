@@ -243,7 +243,7 @@ List<ProviderConfig> _providerConfigsFromJson(Object? raw) {
                 orElse: () => ProviderType.openaiCompatible),
             reasoningEffort: ReasoningEffort.values.firstWhere(
                 (e) => e.name == item['reasoningEffort'],
-                orElse: () => ReasoningEffort.medium),
+                orElse: () => ReasoningEffort.auto),
             contextTokens: (item['contextTokens'] as num?)?.toInt() ??
                 ProviderConfig.defaultContextTokens,
             inputPricePerMillionCents:

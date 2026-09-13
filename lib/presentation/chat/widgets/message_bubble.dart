@@ -338,10 +338,10 @@ class MessageBubble extends StatelessWidget {
                                 if (!isTool &&
                                     ((reasoningText?.trim().isNotEmpty ??
                                             false) ||
-                                        (running && !isUser)))
+                                        (running && !isUser && !hasText)))
                                   ReasoningCompactBlock(
                                     reasoning: reasoningText ?? '',
-                                    streaming: running && !hasText,
+                                    streaming: running,
                                     duration: message.reasoningDuration,
                                   ),
                                 Align(

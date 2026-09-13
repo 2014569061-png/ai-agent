@@ -1788,6 +1788,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   String _effortLabel(ReasoningEffort effort) {
     switch (effort) {
+      case ReasoningEffort.auto:
+        return '自动';
       case ReasoningEffort.off:
         return '关';
       case ReasoningEffort.low:

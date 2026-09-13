@@ -392,6 +392,10 @@ Map<String, dynamic> chatMessageToJson(ChatMessage message) => {
           'promptTokens': message.usage!.promptTokens,
           'completionTokens': message.usage!.completionTokens,
           'cachedTokens': message.usage!.cachedTokens,
+          'cacheWriteTokens': message.usage!.cacheWriteTokens,
+          'reasoningTokens': message.usage!.reasoningTokens,
+          'usageReported': message.usage!.usageReported,
+          'cacheStatsReported': message.usage!.cacheStatsReported,
         },
     };
 
@@ -438,6 +442,14 @@ ChatMessage? chatMessageFromJson(dynamic value) {
           completionTokens:
               (usageMap['completionTokens'] as num?)?.toInt() ?? 0,
           cachedTokens: (usageMap['cachedTokens'] as num?)?.toInt() ?? 0,
+          // 旧数据没有这几个键，反序列化走默认值即可。
+          cacheWriteTokens:
+              (usageMap['cacheWriteTokens'] as num?)?.toInt() ?? 0,
+          reasoningTokens:
+              (usageMap['reasoningTokens'] as num?)?.toInt() ?? 0,
+          usageReported: usageMap['usageReported'] as bool? ?? false,
+          cacheStatsReported:
+              usageMap['cacheStatsReported'] as bool? ?? false,
         )
       : null;
   return ChatMessage(

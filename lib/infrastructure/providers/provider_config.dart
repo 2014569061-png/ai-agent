@@ -13,7 +13,7 @@ class ProviderConfig {
     required this.model,
     required this.apiKey,
     this.type = ProviderType.openaiCompatible,
-    this.reasoningEffort = ReasoningEffort.medium,
+    this.reasoningEffort = ReasoningEffort.auto,
     this.contextTokens = defaultContextTokens,
     this.inputPricePerMillionCents,
     this.outputPricePerMillionCents,

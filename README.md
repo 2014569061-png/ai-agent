@@ -1,6 +1,6 @@
 # NEXUS Agent
 
-面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.8.9**（Android versionCode `91`）。
+面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.8.9.1**（Android versionCode `92`）。
 
 ## 核心能力
 
@@ -60,7 +60,7 @@ flutter build apk --release
 cd android && ./gradlew app:assembleRelease -PallowDebugSigning=true
 ```
 
-正式发布 tag 使用 `v<versionName>`，本版本为 `v0.8.9`；`+91` 仅作为 Android versionCode。
+正式发布 tag 使用 `v<versionName>`，本版本为 `v0.8.9.1`；`+92` 仅作为 Android versionCode。
 
 ## 构建 APK
 

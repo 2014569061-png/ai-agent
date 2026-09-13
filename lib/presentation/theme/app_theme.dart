@@ -71,7 +71,7 @@ abstract final class AppTheme {
 
   // 字体族串联：Latin 用随包分发的 Inter（400/500 已在 pubspec 声明），中文走
   // PingFang SC, Microsoft YaHei, Noto Sans SC。勿只声明不打包 —— 那会让字重合成
-  // 不稳定（详见 ENGINEERING.md 字体决策）。
+  // 中文使用系统字体栈，避免依赖额外字体资源。
   static List<String> get _fontFallback => const [
         'Inter',
         'PingFang SC',

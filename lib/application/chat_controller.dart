@@ -38,6 +38,8 @@ import 'agent_executor.dart';
 import 'run_coordinator.dart';
 import 'context_window.dart';
 import 'error_humanizer.dart';
+import 'reasoning_policy.dart';
+import 'system_prompt_assembly.dart';
 import 'headless_executor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
@@ -183,7 +185,7 @@ class ChatState {
     this.liveContextTokens = 0,
     this.liveReply,
     this.totalSteps = 0,
-    this.activeReasoningEffort = ReasoningEffort.medium,
+    this.activeReasoningEffort = ReasoningEffort.auto,
     this.providerConfigured = false,
     this.planMode = false,
     this.approvalMode = ApprovalMode.ask,
@@ -720,27 +722,34 @@ class ChatController extends Notifier<ChatState> {
 
   /// 加载 Provider/Agent 配置并构建工具注册表（发送 / 重新生成 / 编辑重发共用）。
   Future<
-      ({
-        ProviderConfig config,
-        ToolRegistry registry,
-        String model,
-        int maxSteps,
-        double temperature,
-        int maxTokens,
-        double topP
-      })> _prepareRun(AppDatabase database) async {
+          ({
+            ProviderConfig config,
+            ToolRegistry registry,
+            String model,
+            int maxSteps,
+            double temperature,
+            int maxTokens,
+            double topP
+          })>
+      _prepareRun(AppDatabase database, {String taskType = 'general'}) async {
     final store = ref.read(providerConfigStoreProvider);
     var config = await store.load();
+    var deepReasoning = true;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final deepReasoning =
-          prefs.getBool('settings.llm.deep_reasoning') ?? true;
-      if (!deepReasoning) {
-        config = config.copyWith(reasoningEffort: ReasoningEffort.off);
-      }
+      deepReasoning = prefs.getBool('settings.llm.deep_reasoning') ?? true;
     } catch (_) {
-      // Keep the provider's configured reasoning level if preferences fail.
+      // Keep the fast, automatic default if preferences are unavailable.
     }
+    config = config.copyWith(
+      reasoningEffort: deepReasoning
+          ? ReasoningPolicy.resolve(
+              taskType: taskType,
+              configured: config.reasoningEffort,
+              planMode: state.planMode,
+            )
+          : ReasoningEffort.off,
+    );
     final tavilyKey = await store.readToolKey('tavily');
     var enabledTools = <String>{'calculator', 'get_time', 'json_query'};
     // 前台单次预算默认提高到 16，预算耗尽现在是可恢复的暂停而非失败。
@@ -921,7 +930,7 @@ class ChatController extends Notifier<ChatState> {
         }
       } catch (_) {}
 
-      final prep = await _prepareRun(database);
+      final prep = await _prepareRun(database, taskType: taskType);
       if (!_runs.ownsRun(runGeneration, conversationId)) return;
       // C2 断点恢复：注册一个"运行中"任务，App 被杀后可在启动时提示继续执行。
       String? runningTaskId;

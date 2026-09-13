@@ -137,7 +137,7 @@ class ProviderConfigStore {
           orElse: () => ProviderType.openaiCompatible);
 
   ReasoningEffort _parseEffort(String? name) => ReasoningEffort.values
-      .firstWhere((e) => e.name == name, orElse: () => ReasoningEffort.medium);
+      .firstWhere((e) => e.name == name, orElse: () => ReasoningEffort.auto);
 
   Future<void> save(ProviderConfig config) async {
     final preferences = await SharedPreferences.getInstance();

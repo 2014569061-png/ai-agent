@@ -1,7 +1,7 @@
 name: mobile_agent
 description: A mobile-first multi-provider AI Agent client.
 publish_to: "none"
-version: 0.8.9+91
+version: 0.8.9+92
 
 environment:
   sdk: ^3.5.0
@@ -56,7 +56,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # Inter 仅 Latin 字形（中文走系统字体栈）；400/500 两档与 DESIGN.md 字重规范对应。
+  # Inter 仅 Latin 字形（中文走系统字体栈）；仅保留 400/500 两档。
   fonts:
     - family: Inter
       fonts:

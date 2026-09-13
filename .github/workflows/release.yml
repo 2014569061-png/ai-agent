@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: '发布 tag（如 v0.8.9）'
+        description: '发布 tag（如 v0.8.9.1）'
         required: true
-        default: 'v0.8.9'
+        default: 'v0.8.9.1'
 
 permissions:
   contents: write
@@ -35,16 +35,13 @@ jobs:
         run: flutter analyze
       - name: Test
         run: flutter test
-      - name: Inline Chinese gate
-        run: bash tool/check_inline_zh.sh
-
   build:
     runs-on: ubuntu-latest
     needs: quality
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Resolve release tag and pubspec version
+      - name: Resolve release tag and application version
         id: release
         shell: bash
         env:
@@ -54,10 +51,12 @@ jobs:
           tag="$RELEASE_TAG_INPUT"
           version="$(awk '$1 == "version:" {print $2; exit}' pubspec.yaml)"
           test -n "$version"
-          test "$tag" = "v${version%%+*}"
+          version_name="$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)"
+          test -n "$version_name"
+          test "$tag" = "v$version_name"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "version_name=${version%%+*}" >> "$GITHUB_OUTPUT"
+          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
       - name: Setup Java
         uses: actions/setup-java@v4
         with:

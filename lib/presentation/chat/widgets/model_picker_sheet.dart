@@ -267,6 +267,7 @@ class _OptionBar extends StatelessWidget {
   }
 
   static String _effortLabel(ReasoningEffort effort) => switch (effort) {
+        ReasoningEffort.auto => '自动',
         ReasoningEffort.off => '关',
         ReasoningEffort.low => '低',
         ReasoningEffort.medium => '中',

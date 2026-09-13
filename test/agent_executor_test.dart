@@ -40,6 +40,33 @@ void main() {
     expect(output.toString(), contains('演示响应'));
   });
 
+  test('tool definitions are sent in stable name order', () async {
+    // 工具定义数组参与 Provider 前缀缓存；目录装配顺序受运行环境影响，
+    // 请求里必须按名称稳定排序，保证同一目录每步请求字节级一致。
+    final registry = ToolRegistry()
+      ..register(_NamedTool('terminal'))
+      ..register(_NamedTool('calculator'))
+      ..register(_NamedTool('read_file'));
+    final executor =
+        AgentExecutor(provider: _RequestRecorderProvider(), tools: registry);
+    final provider = executor.provider as _RequestRecorderProvider;
+
+    await for (final _ in executor.run(
+      history: [
+        ChatMessage(
+            role: MessageRole.user, parts: [const MessagePart.text('run')]),
+      ],
+      model: 'test',
+      capabilities: const ModelCapabilities(tools: true),
+    )) {}
+
+    expect(provider.requests, hasLength(1));
+    expect(
+      provider.requests.single.tools.map((tool) => tool.name),
+      ['calculator', 'read_file', 'terminal'],
+    );
+  });
+
   test('requires approval before a risky tool executes', () async {
     final registry = ToolRegistry()..register(_RiskyTool());
     final executor =
@@ -382,8 +409,7 @@ void main() {
   test('accumulates token usage reported by the provider', () async {
     final registry = ToolRegistry()..register(CalculatorTool());
     final executor = AgentExecutor(provider: _UsageProvider(), tools: registry);
-    var promptTokens = 0;
-    var completionTokens = 0;
+    AgentUsageEvent? usage;
     await for (final event in executor.run(
       history: [
         ChatMessage(
@@ -391,13 +417,16 @@ void main() {
       ],
       model: 'test',
     )) {
-      if (event is AgentUsageEvent) {
-        promptTokens = event.promptTokens;
-        completionTokens = event.completionTokens;
-      }
+      if (event is AgentUsageEvent) usage = event;
     }
-    expect(promptTokens, 100);
-    expect(completionTokens, 50);
+    expect(usage, isNotNull);
+    expect(usage!.promptTokens, 100);
+    expect(usage.completionTokens, 50);
+    expect(usage.cacheWriteTokens, 20);
+    expect(usage.reasoningTokens, 12);
+    // Provider 返回了 usage 但没有缓存字段：这不算“未命中”。
+    expect(usage.usageReported, isTrue);
+    expect(usage.cacheStatsReported, isFalse);
   });
 
   test('drops older turns once the context budget is exceeded', () async {
@@ -968,6 +997,36 @@ class _RiskyTool implements AgentTool {
       ToolResult.text('executed');
 }
 
+class _NamedTool implements AgentTool {
+  _NamedTool(this.name);
+
+  final String name;
+
+  @override
+  UnifiedTool get manifest => UnifiedTool(
+        name: name,
+        description: 'test',
+        parametersSchema: {'type': 'object'},
+        risk: ToolRisk.safe,
+      );
+
+  @override
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async =>
+      ToolResult.text('executed');
+}
+
+class _RequestRecorderProvider implements LlmProvider {
+  final requests = <UnifiedRequest>[];
+
+  @override
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
+    requests.add(request);
+    yield const TextDeltaEvent('done');
+    yield const CompletedEvent(stopReason: StopReason.endOfTurn);
+  }
+}
+
 class _ExplodingTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
@@ -1016,7 +1075,12 @@ class _UsageProvider implements LlmProvider {
   Stream<UnifiedEvent> stream(UnifiedRequest request,
       {CancelToken? cancelToken}) async* {
     yield const TextDeltaEvent('hello');
-    yield const UsageEvent(promptTokens: 100, completionTokens: 50);
+    yield const UsageEvent(
+      promptTokens: 100,
+      completionTokens: 50,
+      cacheWriteTokens: 20,
+      reasoningTokens: 12,
+    );
     yield const CompletedEvent(stopReason: StopReason.endOfTurn);
   }
 }

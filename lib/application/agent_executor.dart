@@ -100,9 +100,21 @@ class AgentExecutor {
     // 上下文预算：每步请求前裁剪一次，同时约束初始历史与多步工具循环
     // 中持续追加的工具结果。
     final contextWindow = ContextWindow(maxTokens: contextBudgetTokens);
+    // 工具定义数组是 Provider 前缀缓存的一部分（Anthropic 还显式在 tools
+    // 段打缓存断点）。目录按装配顺序生成（内置/MCP/插件/工作区），装配顺序
+    // 受运行环境影响；这里按名称稳定排序，保证同一份工具目录在整个运行期
+    // 的每一步请求中字节级一致，不因装配差异打爆前缀缓存。
+    final requestTools = capabilities.tools
+        ? (tools.manifests.toList()
+          ..sort((a, b) => a.name.compareTo(b.name)))
+        : const <UnifiedTool>[];
     var totalPromptTokens = 0;
     var totalCompletionTokens = 0;
     var totalCachedTokens = 0;
+    var totalCacheWriteTokens = 0;
+    var totalReasoningTokens = 0;
+    var sawUsageStats = false;
+    var sawCacheStats = false;
     bool isCancelled() =>
         (cancellationToken?.isCancelled ?? false) ||
         (runController?.isCancelled ?? false);
@@ -138,7 +150,7 @@ class AgentExecutor {
       final request = UnifiedRequest(
         model: model,
         messages: messages,
-        tools: capabilities.tools ? tools.manifests : const [],
+        tools: requestTools,
         temperature: temperature,
         maxTokens: maxTokens,
         topP: topP,
@@ -178,6 +190,10 @@ class AgentExecutor {
               totalPromptTokens += event.promptTokens;
               totalCompletionTokens += event.completionTokens;
               totalCachedTokens += event.cachedTokens;
+              totalCacheWriteTokens += event.cacheWriteTokens;
+              totalReasoningTokens += event.reasoningTokens;
+              sawUsageStats = true;
+              if (event.cacheStatsReported) sawCacheStats = true;
             } else if (event is ProviderErrorEvent) {
               failure = event;
               break;
@@ -263,7 +279,11 @@ class AgentExecutor {
         yield AgentUsageEvent(
             promptTokens: totalPromptTokens,
             completionTokens: totalCompletionTokens,
-            cachedTokens: totalCachedTokens);
+            cachedTokens: totalCachedTokens,
+            cacheWriteTokens: totalCacheWriteTokens,
+            reasoningTokens: totalReasoningTokens,
+            usageReported: sawUsageStats,
+            cacheStatsReported: sawCacheStats);
         yield const AgentStatusEvent(RunStatus.completed);
         return;
       }
@@ -537,13 +557,30 @@ class AgentRetryEvent extends AgentEvent {
 }
 
 class AgentUsageEvent extends AgentEvent {
-  const AgentUsageEvent(
-      {required this.promptTokens,
-      required this.completionTokens,
-      this.cachedTokens = 0});
+  const AgentUsageEvent({
+    required this.promptTokens,
+    required this.completionTokens,
+    this.cachedTokens = 0,
+    this.cacheWriteTokens = 0,
+    this.reasoningTokens = 0,
+    this.usageReported = false,
+    this.cacheStatsReported = false,
+  });
   final int promptTokens;
   final int completionTokens;
   final int cachedTokens;
+
+  /// 缓存写入 token（Anthropic cache_creation_input_tokens）。
+  final int cacheWriteTokens;
+
+  /// 推理 token（已包含在 completionTokens 内）。
+  final int reasoningTokens;
+
+  /// 本轮是否收到过任何 provider usage 统计。
+  final bool usageReported;
+
+  /// usage 中是否出现过缓存统计字段（区别于“返回了 0 命中”）。
+  final bool cacheStatsReported;
 }
 
 class ToolResultEvent extends AgentEvent {

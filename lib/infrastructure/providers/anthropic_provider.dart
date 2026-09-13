@@ -139,20 +139,28 @@ class AnthropicProvider extends StreamingProviderBase {
       events.add(UsageEvent(
           promptTokens: inputTokens + cacheCreationTokens + cacheReadTokens,
           completionTokens: outputTokens,
-          cachedTokens: cacheReadTokens));
+          cachedTokens: cacheReadTokens,
+          cacheWriteTokens: cacheCreationTokens,
+          // Anthropic 的 usage 总是携带 cache_read/cache_creation 字段
+          //（未命中时为 0），因此 0 命中可以如实解读为“未命中”。
+          cacheStatsReported: true));
       events.add(CompletedEvent(stopReason: stopReason));
       return events;
     }
 
     try {
-      yield* runStreaming(
+      // await for 而非 yield*：yield* 会把内层错误直接转发给消费者，
+      // 外层 catch 拦不到，DioException 就无法转换成 ProviderErrorEvent。
+      await for (final event in runStreaming(
         url: _endpoint,
         payload: payload,
         headers: _headers,
         cancelToken: cancelToken,
         onFrame: onFrame,
         finalize: finalize,
-      );
+      )) {
+        yield event;
+      }
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;
@@ -171,10 +179,14 @@ class AnthropicProvider extends StreamingProviderBase {
     }
   }
 
-  /// 构建 Anthropic 请求体并给稳定的 system 提示词打上缓存边界。
+  /// 构建 Anthropic 请求体并布置前缀缓存断点。
   ///
-  /// system 使用 content block 而不是裸字符串，既兼容普通请求，也让
-  /// Anthropic 能复用长会话前缀；模型消息本身仍按原顺序逐条发送。
+  /// Anthropic 按 `tools → system → messages` 的层级做前缀缓存，缓存只覆盖
+  /// 到最后一个 `cache_control` 断点为止。只给 system 打断点时，多步 Agent
+  /// 循环里不断增长的消息历史永远无法复用，这是 Claude 通道成本偏高的主要
+  /// 原因。这里布置 3 个断点（上限 4）：工具定义末尾、system 末尾、最后一条
+  /// 消息的末尾，实现会话增量缓存——消息只追加不修改，下一轮请求即可整体
+  /// 复用本轮写入的前缀。
   Map<String, dynamic> buildRequestPayload(UnifiedRequest request,
       {bool stream = true}) {
     String? system;
@@ -190,8 +202,17 @@ class AnthropicProvider extends StreamingProviderBase {
       }
     }
 
-    // 思考档位 → Anthropic thinking.budget_tokens。低=2048, 中=8192, 高=16384。
-    final thinking = _buildThinking(request.reasoningEffort);
+    final toolSchemas = request.tools.map(toAnthropicTool).toList();
+    if (toolSchemas.isNotEmpty) {
+      toolSchemas.last['cache_control'] = const {'type': 'ephemeral'};
+    }
+    _markTrailingCacheBreakpoint(messages);
+
+    // Anthropic requires budget_tokens < max_tokens. Clamp the thinking budget
+    // at the provider boundary so the default 2048 output limit cannot turn a
+    // medium/high reasoning request into a guaranteed 400 response.
+    final thinking =
+        _buildThinking(request.reasoningEffort, maxTokens: request.maxTokens);
     return {
       'model': request.model,
       'max_tokens': request.maxTokens,
@@ -211,18 +232,37 @@ class AnthropicProvider extends StreamingProviderBase {
           },
         ],
       'messages': messages,
-      if (request.tools.isNotEmpty)
-        'tools': request.tools.map(toAnthropicTool).toList(),
+      if (toolSchemas.isNotEmpty) 'tools': toolSchemas,
     };
   }
 
+  /// 给最后一条消息的最后一个 content block 打缓存断点。工具结果块
+  /// （tool_result/tool_use）与普通文本块都支持 `cache_control`。
+  static void _markTrailingCacheBreakpoint(
+      List<Map<String, dynamic>> messages) {
+    for (final message in messages.reversed) {
+      final content = message['content'];
+      if (content is List && content.isNotEmpty) {
+        final block = content.last;
+        if (block is Map<String, dynamic>) {
+          block['cache_control'] = const {'type': 'ephemeral'};
+          return;
+        }
+      }
+    }
+  }
+
   /// 将统一消息转换为 Anthropic Messages API 的 message 结构。
+  ///
+  /// content block 必须显式声明为 `Map<String, dynamic>`：纯文本块会被推断
+  /// 成 `Map<String, String>`，尾部分级缓存断点需要往块里写 `cache_control`
+  /// （Map 值），`Map<String, String>` 会直接抛类型错误。
   Map<String, dynamic> toAnthropicMessage(ChatMessage message) {
     if (message.role == MessageRole.tool) {
       return {
         'role': 'user',
         'content': [
-          {
+          <String, dynamic>{
             'type': 'tool_result',
             'tool_use_id': message.toolCallId,
             'content': message.text
@@ -233,10 +273,10 @@ class AnthropicProvider extends StreamingProviderBase {
     if (message.role == MessageRole.assistant) {
       final blocks = <Map<String, dynamic>>[];
       if (message.text.isNotEmpty) {
-        blocks.add({'type': 'text', 'text': message.text});
+        blocks.add(<String, dynamic>{'type': 'text', 'text': message.text});
       }
       for (final call in message.toolCalls) {
-        blocks.add({
+        blocks.add(<String, dynamic>{
           'type': 'tool_use',
           'id': call.id,
           'name': call.name,
@@ -247,7 +287,7 @@ class AnthropicProvider extends StreamingProviderBase {
         'role': 'assistant',
         'content': blocks.isEmpty
             ? [
-                const {'type': 'text', 'text': ''}
+                <String, dynamic>{'type': 'text', 'text': ''}
               ]
             : blocks,
       };
@@ -255,23 +295,23 @@ class AnthropicProvider extends StreamingProviderBase {
     final content = <Map<String, dynamic>>[];
     for (final part in message.parts) {
       if (part.type == 'image') {
-        content.add({
+        content.add(<String, dynamic>{
           'type': 'image',
-          'source': {
+          'source': <String, dynamic>{
             'type': 'base64',
             'media_type': part.mimeType ?? 'image/png',
             'data': _stripDataUrl(part.value),
           },
         });
       } else {
-        content.add({'type': 'text', 'text': part.value});
+        content.add(<String, dynamic>{'type': 'text', 'text': part.value});
       }
     }
     return {
       'role': 'user',
       'content': content.isEmpty
           ? [
-              const {'type': 'text', 'text': ''}
+              <String, dynamic>{'type': 'text', 'text': ''}
             ]
           : content,
     };
@@ -304,19 +344,33 @@ class AnthropicProvider extends StreamingProviderBase {
   static int? _asInt(dynamic value) =>
       value is num ? value.toInt() : int.tryParse('$value');
 
-  /// 把 ReasoningEffort 映射为 Anthropic Messages API 的 `thinking` 块。
-  /// off 时返回 null（调用方不传该字段，保持默认行为）。
-  static Map<String, dynamic>? _buildThinking(ReasoningEffort effort) {
+  /// Maps a reasoning preference to Anthropic's `thinking` block.
+  ///
+  /// The budget is capped below [maxTokens] because Anthropic rejects a
+  /// request when the two values are equal or the budget is larger.
+  static Map<String, dynamic>? _buildThinking(ReasoningEffort effort,
+      {required int maxTokens}) {
+    if (effort == ReasoningEffort.auto || maxTokens <= 1) return null;
+    int budget;
     switch (effort) {
       case ReasoningEffort.off:
         return null;
       case ReasoningEffort.low:
-        return {'type': 'enabled', 'budget_tokens': 2048};
+        budget = 2048;
+        break;
       case ReasoningEffort.medium:
-        return {'type': 'enabled', 'budget_tokens': 8192};
+        budget = 8192;
+        break;
       case ReasoningEffort.high:
-        return {'type': 'enabled', 'budget_tokens': 16384};
+        budget = 16384;
+        break;
+      case ReasoningEffort.auto:
+        return null;
     }
+    return {
+      'type': 'enabled',
+      'budget_tokens': budget < maxTokens ? budget : maxTokens - 1,
+    };
   }
 }
 

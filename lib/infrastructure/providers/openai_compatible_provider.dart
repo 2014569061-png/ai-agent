@@ -14,11 +14,19 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
 
   final ProviderConfig config;
 
+  /// 是否发送 `stream_options.include_usage`。流式请求不显式要求时，多数
+  /// OpenAI 兼容服务不会返回收尾 usage chunk，缓存命中统计就永远拿不到。
+  /// 个别严格按旧规范实现的服务会对未知字段返回 400，此时置为 false 并
+  /// 在本次请求内降级重试（实例按运行期创建，同一 Provider 后续步骤不再
+  /// 重复踩坑）。
+  bool _streamOptionsSupported = true;
+
   bool _supportsReasoning(String model) {
     final lower = model.toLowerCase();
     return lower.startsWith('o1') ||
         lower.startsWith('o3') ||
         lower.startsWith('o4') ||
+        lower.startsWith('gpt-5') ||
         lower.contains('reasoning') ||
         lower.contains('deepseek-r1');
   }
@@ -93,20 +101,25 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
   @override
   Stream<UnifiedEvent> stream(UnifiedRequest request,
       {CancelToken? cancelToken}) async* {
-    final payload = {
-      'model': request.model,
-      'messages': request.messages.map(toProviderMessage).toList(),
-      'temperature': request.temperature,
-      'max_tokens': request.maxTokens,
-      'top_p': request.topP,
-      'stream': true,
-      if (request.tools.isNotEmpty)
-        'tools': request.tools.map((tool) => tool.toOpenAiSchema()).toList(),
-      // 思考程度：仅 o1/o3/GPT-5 等推理模型支持；其他模型会忽略或 400。
-      if (_supportsReasoning(request.model) &&
-          request.reasoningEffort != ReasoningEffort.off)
-        'reasoning_effort': request.reasoningEffort.name,
-    };
+    var includeUsage = _streamOptionsSupported;
+
+    Map<String, dynamic> buildPayload() => {
+          'model': request.model,
+          'messages': request.messages.map(toProviderMessage).toList(),
+          'temperature': request.temperature,
+          'max_tokens': request.maxTokens,
+          'top_p': request.topP,
+          'stream': true,
+          if (includeUsage) 'stream_options': {'include_usage': true},
+          if (request.tools.isNotEmpty)
+            'tools':
+                request.tools.map((tool) => tool.toOpenAiSchema()).toList(),
+          // 思考程度：仅 o1/o3/GPT-5 等推理模型支持；其他模型会忽略或 400。
+          if (_supportsReasoning(request.model) &&
+              request.reasoningEffort != ReasoningEffort.off &&
+              request.reasoningEffort != ReasoningEffort.auto)
+            'reasoning_effort': request.reasoningEffort.name,
+        };
 
     final toolAccumulators = <int, _ToolAccumulator>{};
     var nextToolIndex = 0;
@@ -181,39 +194,71 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
       return events;
     }
 
-    try {
-      yield* runStreaming(
-        url: '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/chat/completions',
-        payload: payload,
-        headers: {
-          'Authorization': 'Bearer ${config.apiKey}',
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-        },
-        cancelToken: cancelToken,
-        onFrame: onFrame,
-        finalize: finalize,
-      );
-    } on DioException catch (error) {
-      // 主动取消时静默结束，避免把"已取消"渲染成错误提示。
-      if (error.type == DioExceptionType.cancel) return;
-      final status = error.response?.statusCode;
-      final detail = await _readResponseDetail(error.response?.data);
-      final message = [
-        if (status != null) 'HTTP $status',
-        if (detail.isNotEmpty) detail else error.message ?? '网络请求失败',
-      ].join(': ');
-      yield ProviderErrorEvent(
-        message,
-        statusCode: status,
-        failureKind: error.type.name,
-      );
-    } catch (error) {
-      yield ProviderErrorEvent(
-        error.toString(),
-        failureKind: error.runtimeType.toString(),
-      );
+    var attempt = 0;
+    while (true) {
+      attempt++;
+      try {
+        // 必须用 await for 驱动内层流：async* 里 `yield*` 会把内层错误
+        // 直接转发给消费者，外层 try/catch 拦不到（探针验证过的 Dart
+        // 语义），下面的 stream_options 降级重试和 ProviderErrorEvent
+        // 转换就都不会发生。
+        await for (final event in runStreaming(
+          url:
+              '${config.baseUrl.replaceAll(RegExp(r'/$'), '')}/chat/completions',
+          payload: buildPayload(),
+          headers: {
+            'Authorization': 'Bearer ${config.apiKey}',
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          },
+          cancelToken: cancelToken,
+          onFrame: onFrame,
+          finalize: finalize,
+        )) {
+          yield event;
+        }
+        return;
+      } on DioException catch (error) {
+        // 主动取消时静默结束，避免把"已取消"渲染成错误提示。
+        if (error.type == DioExceptionType.cancel) return;
+        final detail = await _readResponseDetail(error.response?.data);
+        // 400 拒绝发生在建连阶段（尚未产出任何事件），去掉 stream_options
+        // 重试一次不会造成已流出的内容重复。仅识别明确点名该字段的错误，
+        // 避免把其他 400 也归因于此。
+        if (attempt == 1 && _isStreamOptionsRejection(error, detail)) {
+          _streamOptionsSupported = false;
+          includeUsage = false;
+          continue;
+        }
+        final status = error.response?.statusCode;
+        final message = [
+          if (status != null) 'HTTP $status',
+          if (detail.isNotEmpty) detail else error.message ?? '网络请求失败',
+        ].join(': ');
+        yield ProviderErrorEvent(
+          message,
+          statusCode: status,
+          failureKind: error.type.name,
+        );
+        return;
+      } catch (error) {
+        yield ProviderErrorEvent(
+          error.toString(),
+          failureKind: error.runtimeType.toString(),
+        );
+        return;
+      }
     }
+  }
+
+  /// 识别“服务端不认识 stream_options/include_usage”类错误。严格按旧
+  /// 规范实现的中转服务会以 400（部分用 422）拒绝未知字段。
+  static bool _isStreamOptionsRejection(DioException error, String detail) {
+    if (error.type != DioExceptionType.badResponse) return false;
+    final status = error.response?.statusCode;
+    if (status != null && status != 400 && status != 422) return false;
+    final lower = detail.toLowerCase();
+    return lower.contains('stream_options') || lower.contains('include_usage');
   }
 
   Future<String> _readResponseDetail(dynamic data) async {
@@ -331,6 +376,53 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
     return 'mp3';
   }
 
+  /// 统一解析 OpenAI 兼容生态的各种缓存/推理统计字段：
+  /// - OpenAI: `prompt_tokens_details.cached_tokens`
+  /// - DeepSeek: `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`
+  /// - Azure: `input_tokens_details.cached_tokens`
+  /// - Anthropic 中转: `cache_read_input_tokens` / `cache_creation_input_tokens`
+  /// - 部分中转: `cached_tokens`
+  ///
+  /// 字段缺失时 cachedTokens 记 0 且 [UsageEvent.cacheStatsReported] 为
+  /// false，上层据此区分“Provider 没给缓存统计”与“真的未命中”，不能把
+  /// 前者当命中率展示。
+  static UsageEvent parseUsage(Map<String, dynamic> usage) {
+    int? field(String key) {
+      final value = usage[key];
+      if (value is num) return value.toInt();
+      return int.tryParse('$value');
+    }
+
+    int? nested(String mapKey, String valueKey) {
+      final nestedMap = usage[mapKey];
+      if (nestedMap is! Map) return null;
+      final value = nestedMap[valueKey];
+      if (value is num) return value.toInt();
+      return int.tryParse('$value');
+    }
+
+    final hit = field('prompt_cache_hit_tokens');
+    final miss = field('prompt_cache_miss_tokens');
+    final cached = nested('prompt_tokens_details', 'cached_tokens') ??
+        hit ??
+        nested('input_tokens_details', 'cached_tokens') ??
+        field('cache_read_input_tokens') ??
+        field('cached_tokens');
+    final cacheWrite = field('cache_creation_input_tokens');
+    final reasoning = nested('completion_tokens_details', 'reasoning_tokens') ??
+        field('reasoning_tokens');
+    return UsageEvent(
+      // DeepSeek 部分模型只回 hit/miss 对，不回 prompt_tokens 总数。
+      promptTokens: field('prompt_tokens') ??
+          ((hit != null && miss != null) ? hit + miss : 0),
+      completionTokens: field('completion_tokens') ?? 0,
+      cachedTokens: cached ?? 0,
+      cacheWriteTokens: cacheWrite ?? 0,
+      reasoningTokens: reasoning ?? 0,
+      cacheStatsReported: cached != null || cacheWrite != null,
+    );
+  }
+
   _SseChunk? _parseSseData(String data) {
     data = data.trim();
     if (data == '[DONE]' || data.isEmpty) return null;
@@ -345,16 +437,7 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
       if (usage is Map<String, dynamic>) {
         return _SseChunk(
           finishReason: finishReason,
-          usage: UsageEvent(
-            promptTokens: (usage['prompt_tokens'] as num?)?.toInt() ?? 0,
-            completionTokens:
-                (usage['completion_tokens'] as num?)?.toInt() ?? 0,
-            cachedTokens: ((usage['prompt_tokens_details']
-                        as Map<String, dynamic>?)?['cached_tokens'] as num?)
-                    ?.toInt() ??
-                (usage['cached_tokens'] as num?)?.toInt() ??
-                0,
-          ),
+          usage: parseUsage(usage),
         );
       }
       if (choices.isEmpty) {

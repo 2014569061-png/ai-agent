@@ -35,7 +35,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   late final TextEditingController _cachedPrice;
   final _store = ProviderConfigStore();
   late ProviderType _type;
-  ReasoningEffort _reasoning = ReasoningEffort.medium;
+  ReasoningEffort _reasoning = ReasoningEffort.auto;
   bool _obscure = true;
   bool _saving = false;
   bool _testing = false;
@@ -64,7 +64,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _cachedPrice = TextEditingController(
         text: config?.cachedPricePerMillionCents?.toString() ?? '');
     _type = config?.type ?? preset?.type ?? ProviderType.openaiCompatible;
-    _reasoning = config?.reasoningEffort ?? ReasoningEffort.medium;
+    _reasoning = config?.reasoningEffort ?? ReasoningEffort.auto;
   }
 
   @override
@@ -169,7 +169,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         widget.preset?.type ??
         ProviderType.openaiCompatible;
     final origReasoning =
-        widget.config?.reasoningEffort ?? ReasoningEffort.medium;
+        widget.config?.reasoningEffort ?? ReasoningEffort.auto;
     return _name.text != origName ||
         _baseUrl.text != origBaseUrl ||
         _model.text != origModel ||
@@ -363,6 +363,10 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                         const SizedBox(height: 8),
                         SegmentedButton<ReasoningEffort>(
                           segments: const [
+                            ButtonSegment(
+                              value: ReasoningEffort.auto,
+                              label: Text('自动'),
+                            ),
                             ButtonSegment(
                               value: ReasoningEffort.low,
                               label: Text('低'),

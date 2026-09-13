@@ -161,6 +161,7 @@ class SessionContextSheet extends StatelessWidget {
   }
 
   static String _effortLabel(ReasoningEffort e) => switch (e) {
+        ReasoningEffort.auto => '自动',
         ReasoningEffort.off => '关',
         ReasoningEffort.low => '低',
         ReasoningEffort.medium => '中',

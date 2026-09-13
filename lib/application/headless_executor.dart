@@ -19,6 +19,7 @@ import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
+import 'system_prompt_assembly.dart';
 
 import '../infrastructure/skills/skill_store.dart';
 import '../infrastructure/mcp/mcp_tool_provider.dart';
@@ -243,20 +244,28 @@ class HeadlessExecutor {
     }
     final executor = AgentExecutor(provider: provider, tools: registry);
 
-    var system = systemPrompt ?? '你是一个有帮助的 AI Agent。';
+    var persona = systemPrompt ?? '你是一个有帮助的 AI Agent。';
+    var memoryBlock = '';
+    var knowledgeBlock = '';
+    var skillBlock = '';
     try {
-      final memoryBlock = await MemoryService()
+      memoryBlock = await MemoryService()
           .buildInjectionBlock(db, contextTokens: config.contextTokens);
-      if (memoryBlock.isNotEmpty) system = '$memoryBlock\n$system';
-      final knowledgeBlock =
+      knowledgeBlock =
           await KnowledgeService().buildInjectionBlock(db, prompt);
-      if (knowledgeBlock.isNotEmpty) system = '$knowledgeBlock\n$system';
       // 与聊天路径保持一致：后台任务同样注入已启用 Skill 的指令块。
-      final skillBlock = await SkillStore().buildInjectionBlock(db);
-      if (skillBlock.isNotEmpty) system = '$skillBlock\n$system';
+      skillBlock = await SkillStore().buildInjectionBlock(db);
     } catch (_) {
       // 注入失败不阻断执行。
     }
+    // 与聊天路径共用同一拼装顺序（assembleAgentSystemPrompt）：稳定段在前、
+    // 按问题检索的动态内容垫底，否则后台任务每轮前缀都在变化，前缀缓存失效。
+    final system = assembleAgentSystemPrompt(
+      personaPrompt: persona,
+      skillIndexBlock: skillBlock,
+      memoryBlock: memoryBlock,
+      knowledgeBlock: knowledgeBlock,
+    );
 
     final history = initialHistory == null || initialHistory.isEmpty
         ? <ChatMessage>[

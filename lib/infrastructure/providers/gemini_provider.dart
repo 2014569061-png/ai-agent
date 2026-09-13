@@ -58,9 +58,10 @@ class GeminiProvider extends StreamingProviderBase {
       }
     }
 
-    // 思考档位 → Gemini thinkingConfig.thinkingBudget。低=0, 中=8192, 高=32768。
-    final thinkingBudget = _supportsThinking(request.model)
-        ? _thinkingBudgetFor(request.reasoningEffort)
+    // Gemini 3 uses the string thinkingLevel API; Gemini 2.5 keeps the
+    // numeric thinkingBudget API. Never send both forms in one request.
+    final thinkingConfig = _supportsThinking(request.model)
+        ? _thinkingConfigFor(request.model, request.reasoningEffort)
         : null;
 
     final payload = {
@@ -75,8 +76,7 @@ class GeminiProvider extends StreamingProviderBase {
         'temperature': request.temperature,
         'maxOutputTokens': request.maxTokens,
         'topP': request.topP,
-        if (thinkingBudget != null)
-          'thinkingConfig': {'thinkingBudget': thinkingBudget},
+        if (thinkingConfig != null) 'thinkingConfig': thinkingConfig,
       },
       if (request.tools.isNotEmpty)
         'tools': [
@@ -92,6 +92,8 @@ class GeminiProvider extends StreamingProviderBase {
     var promptTokens = 0;
     var completionTokens = 0;
     var cachedTokens = 0;
+    var reasoningTokens = 0;
+    var cacheStatsReported = false;
     var stopReason = StopReason.unknown;
 
     void updateUsage(Map<String, dynamic> usage) {
@@ -99,9 +101,17 @@ class GeminiProvider extends StreamingProviderBase {
       if (prompt != null) promptTokens = prompt;
       final completion = _asInt(usage['candidatesTokenCount']);
       if (completion != null) completionTokens = completion;
+      // 隐式缓存只在命中时携带该字段；字段缺失不能解读为“未命中”。
       final cached = _asInt(usage['cachedContentTokenCount']) ??
           _asInt(usage['cached_content_token_count']);
-      if (cached != null) cachedTokens = cached;
+      if (cached != null) {
+        cachedTokens = cached;
+        cacheStatsReported = true;
+      }
+      // Gemini 2.5 的思考 token 单独上报，已包含在 candidatesTokenCount 内。
+      final thoughts = _asInt(usage['thoughtsTokenCount']) ??
+          _asInt(usage['thoughts_token_count']);
+      if (thoughts != null) reasoningTokens = thoughts;
     }
 
     List<UnifiedEvent> onFrame(String data) {
@@ -162,13 +172,17 @@ class GeminiProvider extends StreamingProviderBase {
       events.add(UsageEvent(
           promptTokens: promptTokens,
           completionTokens: completionTokens,
-          cachedTokens: cachedTokens));
+          cachedTokens: cachedTokens,
+          reasoningTokens: reasoningTokens,
+          cacheStatsReported: cacheStatsReported));
       events.add(CompletedEvent(stopReason: stopReason));
       return events;
     }
 
     try {
-      yield* runStreaming(
+      // await for 而非 yield*：yield* 会把内层错误直接转发给消费者，
+      // 外层 catch 拦不到，DioException 就无法转换成 ProviderErrorEvent。
+      await for (final event in runStreaming(
         url: url,
         payload: payload,
         headers: {
@@ -178,7 +192,9 @@ class GeminiProvider extends StreamingProviderBase {
         cancelToken: cancelToken,
         onFrame: onFrame,
         finalize: finalize,
-      );
+      )) {
+        yield event;
+      }
     } on DioException catch (error) {
       // 主动取消时静默结束。
       if (error.type == DioExceptionType.cancel) return;
@@ -268,23 +284,55 @@ class GeminiProvider extends StreamingProviderBase {
   static int? _asInt(dynamic value) =>
       value is num ? value.toInt() : int.tryParse('$value');
 
-  /// 把 ReasoningEffort 映射为 Gemini thinkingBudget。
-  /// off 时返回 null（不传 thinkingConfig）。
+  /// Whether the model accepts Gemini's thinking configuration.
   static bool _supportsThinking(String model) {
     final lower = model.toLowerCase();
-    return lower.contains('2.5') || lower.contains('thinking');
+    return lower.contains('2.5') ||
+        lower.contains('gemini-3') ||
+        lower.contains('thinking');
   }
 
-  static int? _thinkingBudgetFor(ReasoningEffort effort) {
+  static bool _isGemini3(String model) =>
+      model.toLowerCase().contains('gemini-3');
+
+  static Map<String, dynamic>? _thinkingConfigFor(
+      String model, ReasoningEffort effort) {
+    if (effort == ReasoningEffort.auto) return null;
+    if (_isGemini3(model)) {
+      // Gemini 3 has no guaranteed "off" level. `low` is the lowest level
+      // supported across the current Gemini 3 model families and is the
+      // closest latency-friendly equivalent for the explicit off option.
+      final level = switch (effort) {
+        ReasoningEffort.off => 'low',
+        ReasoningEffort.low => 'low',
+        ReasoningEffort.medium => 'medium',
+        ReasoningEffort.high => 'high',
+        ReasoningEffort.auto => null,
+      };
+      return level == null ? null : {'thinkingLevel': level};
+    }
+    final budget = _thinkingBudgetFor(model, effort);
+    return budget == null ? null : {'thinkingBudget': budget};
+  }
+
+  /// Maps a reasoning preference to Gemini 2.5's numeric thinking budget.
+  static int? _thinkingBudgetFor(String model, ReasoningEffort effort) {
+    final lower = model.toLowerCase();
+    final isPro = lower.contains('pro');
+    final maximum = lower.contains('flash') ? 24576 : 32768;
     switch (effort) {
       case ReasoningEffort.off:
-        return null;
+        // Gemini 2.5 Pro cannot disable thinking; omitting the config keeps
+        // the model's supported default instead of sending an invalid zero.
+        return isPro ? null : 0;
       case ReasoningEffort.low:
-        return 0;
+        return lower.contains('flash') ? 1024 : 128;
       case ReasoningEffort.medium:
-        return 8192;
+        return 8192 < maximum ? 8192 : maximum;
       case ReasoningEffort.high:
-        return 32768;
+        return maximum;
+      case ReasoningEffort.auto:
+        return null;
     }
   }
 }

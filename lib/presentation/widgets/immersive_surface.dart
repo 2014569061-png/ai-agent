@@ -6,7 +6,7 @@ import '../theme/app_tokens.dart';
 
 /// 平面 Surface 容器：用 1px hairline 描边与极轻浮层阴影表达层级。
 ///
-/// 内部**不渲染**高斯模糊、渐变与彩色阴影（见 DESIGN.md §6 禁用清单）。
+/// 内部**不渲染**高斯模糊、渐变与彩色阴影。
 /// 注意 [level] 表达的是**表面层级**（内嵌 / 卡片 / 浮起），
 /// 不是旧实现里的「材质模糊档位」——枚举名 `ImmersiveMaterialLevel` 是历史遗留词汇。
 class ImmersiveSurface extends StatelessWidget {

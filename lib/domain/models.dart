@@ -1,6 +1,8 @@
 enum MessageRole { system, user, assistant, tool }
 
-enum ReasoningEffort { off, low, medium, high }
+/// User-facing reasoning preference. [auto] lets the application choose a
+/// sensible floor for the current task while the other values remain explicit.
+enum ReasoningEffort { auto, off, low, medium, high }
 
 enum RunStatus {
   created,
@@ -192,11 +194,32 @@ class Usage {
     this.promptTokens = 0,
     this.completionTokens = 0,
     this.cachedTokens = 0,
+    this.cacheWriteTokens = 0,
+    this.reasoningTokens = 0,
+    this.usageReported = false,
+    this.cacheStatsReported = false,
   });
 
   final int promptTokens;
   final int completionTokens;
   final int cachedTokens;
+
+  /// 写入缓存的 token（Anthropic `cache_creation_input_tokens`）。缓存写入
+  /// 按 1.25x 输入价计费、读取约 0.1x，两者分开统计才能解释“命中不少但
+  /// 成本没降”的账单。Anthropic 路径下它已计入 promptTokens。
+  final int cacheWriteTokens;
+
+  /// 推理 token（OpenAI `completion_tokens_details.reasoning_tokens`、
+  /// Gemini `thoughtsTokenCount`）。已包含在 completionTokens 内。
+  final int reasoningTokens;
+
+  /// Provider 是否返回过 usage 统计。false 时 cachedTokens 为 0 只表示
+  /// “拿不到数据”，不能解读为“缓存未命中”。
+  final bool usageReported;
+
+  /// Provider 返回的 usage 中是否携带缓存统计字段。false 表示该通道没有
+  /// 缓存数据（区别于“返回了 0 命中”）。
+  final bool cacheStatsReported;
 
   int get totalTokens => promptTokens + completionTokens;
 }
@@ -341,13 +364,27 @@ class CompletedEvent extends UnifiedEvent {
 }
 
 class UsageEvent extends UnifiedEvent {
-  const UsageEvent(
-      {required this.promptTokens,
-      required this.completionTokens,
-      this.cachedTokens = 0});
+  const UsageEvent({
+    required this.promptTokens,
+    required this.completionTokens,
+    this.cachedTokens = 0,
+    this.cacheWriteTokens = 0,
+    this.reasoningTokens = 0,
+    this.cacheStatsReported = false,
+  });
   final int promptTokens;
   final int completionTokens;
   final int cachedTokens;
+
+  /// 缓存写入 token（Anthropic `cache_creation_input_tokens`）。
+  final int cacheWriteTokens;
+
+  /// 推理 token（OpenAI reasoning_tokens / Gemini thoughtsTokenCount），
+  /// 已包含在 completionTokens 内。
+  final int reasoningTokens;
+
+  /// usage 载荷里是否出现了缓存统计字段。缺失时不代表未命中。
+  final bool cacheStatsReported;
 }
 
 class ProviderErrorEvent extends UnifiedEvent {
