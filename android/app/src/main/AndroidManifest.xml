@@ -3,6 +3,8 @@
     <!-- 网络访问：LLM API、Tavily 搜索、MCP HTTP 服务器均依赖此权限。
          必须声明在主清单（release 包不含 debug/profile 源集的权限）。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 内置 Linux 运行时读取当前网络 DNS 写入 rootfs resolv.conf（普通权限）。 -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- 本地项目工作区读写权限 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>

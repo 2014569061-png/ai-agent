@@ -1096,10 +1096,24 @@ class TerminalCommandTool implements AgentTool {
             extra: {'command': command, 'exitCode': result.exitCode})
         : ToolResult.failure(
             code: ToolCodes.toolError,
-            message: '命令以退出码 ${result.exitCode} 结束',
+            // 失败时把输出尾段带进消息：退出码本身无法定位原因（DNS 失败、
+            // 缺包、路径错误都是非 0），模型与人都需要看到真实输出。
+            message: _failedCommandMessage(result),
             data: {'command': command, 'output': result.output},
             effect: ToolEffect.applied,
           );
+  }
+
+  /// 失败摘要附带输出尾段（约 800 字符），过长时截去头部保留最后的错误行。
+  String _failedCommandMessage(CommandResult result) {
+    const tailLimit = 800;
+    var output = result.output.trim();
+    if (output.length > tailLimit) {
+      output = '[输出已截断]\n${output.substring(output.length - tailLimit)}';
+    }
+    return output.isEmpty
+        ? '命令以退出码 ${result.exitCode} 结束（无输出）'
+        : '命令以退出码 ${result.exitCode} 结束\n$output';
   }
 
   ToolResult _fromSessionExecution(TerminalSessionExecution execution,

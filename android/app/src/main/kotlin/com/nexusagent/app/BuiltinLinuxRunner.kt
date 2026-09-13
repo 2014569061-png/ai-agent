@@ -1,6 +1,7 @@
 package com.nexusagent.app
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -322,6 +323,16 @@ class BuiltinLinuxRunner(context: Context) {
         args += listOf(
             "-r",
             rootfs.canonicalPath,
+            // -r 不带任何宿主绑定。/dev 缺失会让 rootfs 内的 2>/dev/null 重定向
+            // 直接失败；/proc /sys 缺失会破坏依赖它们的工具；DNS 则由
+            // syncResolver 写入 rootfs 的 /etc/resolv.conf（Android 宿主没有
+            // 可绑定的 resolv.conf，公网 DNS 作为兜底）。
+            "-b",
+            "/dev",
+            "-b",
+            "/proc",
+            "-b",
+            "/sys",
             "-b",
             bind,
             "-w",
@@ -330,6 +341,7 @@ class BuiltinLinuxRunner(context: Context) {
             "-lc",
             command,
         )
+        syncResolver(rootfs.canonicalPath)
         return ProcessBuilder(args).apply {
             directory(appContext.filesDir)
             redirectErrorStream(true)
@@ -348,6 +360,29 @@ class BuiltinLinuxRunner(context: Context) {
                 put("TERM", "dumb")
                 if (ownerToken != null) put("NEXUS_DAEMON_OWNER", ownerToken)
             }
+        }
+    }
+
+    /** 把当前网络的 DNS 写入 rootfs 的 resolv.conf；Android 没有宿主 resolv.conf 可绑。 */
+    private fun syncResolver(rootfsPath: String) {
+        try {
+            val servers = try {
+                val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE)
+                    as? ConnectivityManager
+                cm?.getLinkProperties(cm.activeNetwork)?.dnsServers
+                    ?.mapNotNull { it.hostAddress }
+                    .orEmpty()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            val list = servers.ifEmpty {
+                listOf("223.5.5.5", "119.29.29.29", "8.8.8.8")
+            }
+            val conf = File(File(rootfsPath), "etc/resolv.conf")
+            conf.parentFile?.mkdirs()
+            conf.writeText(list.joinToString("\n") { "nameserver $it" } + "\n")
+        } catch (_: Exception) {
+            // DNS 同步失败不阻断命令执行；rootfs 内已有的 resolv.conf 仍会被使用。
         }
     }
 
