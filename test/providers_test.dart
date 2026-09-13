@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/infrastructure/providers/anthropic_provider.dart';
 import 'package:mobile_agent/infrastructure/providers/gemini_provider.dart';
+import 'package:mobile_agent/infrastructure/providers/openai_compatible_provider.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config_store.dart';
 
@@ -223,6 +224,40 @@ data: {"usageMetadata":{"promptTokenCount":200,"candidatesTokenCount":50,"cached
     expect(usage.promptTokens, 200);
     expect(usage.cachedTokens, 120);
     expect(usage.completionTokens, 50);
+  });
+
+  test(
+      'OpenAI-compatible stream assigns unique ids when relay omits tool_call ids',
+      () async {
+    // 部分中转服务流式返回不带 tool_call id。id 若兜底成同一个固定值，
+    // 执行层按 id 关联的结果与活动行会全部串线（真实事故）。
+    final dio = Dio()..httpClientAdapter = _SseAdapter(r'''
+data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"name":"terminal","arguments":"{\"command\":\"ls\"}"}},{"index":1,"function":{"name":"skills_read","arguments":"{\"skill\":\"android-build\"}"}}]}}]}
+
+data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}
+
+data: [DONE]
+
+''');
+    final provider = OpenAiCompatibleProvider(config: config, dio: dio);
+    final events = await provider
+        .stream(UnifiedRequest(
+          model: 'relay-model',
+          messages: [
+            ChatMessage(
+              role: MessageRole.user,
+              parts: const [MessagePart.text('hello')],
+            ),
+          ],
+        ))
+        .toList();
+
+    final calls = events.whereType<ToolCallEvent>().toList();
+    expect(calls, hasLength(2));
+    expect(calls[0].call.id, isNotEmpty);
+    expect(calls[1].call.id, isNotEmpty);
+    expect(calls[0].call.id, isNot(equals(calls[1].call.id)));
+    expect(calls.map((c) => c.call.name), ['terminal', 'skills_read']);
   });
 
   group('ProviderConfig.isConfigured', () {

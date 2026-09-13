@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../../domain/models.dart';
+import '../../domain/unique_id.dart';
 import 'http_client.dart';
 import 'provider_config.dart';
 import 'streaming_provider_base.dart';
@@ -152,7 +153,7 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
 
     List<UnifiedEvent> finalize() {
       final events = <UnifiedEvent>[];
-      for (final accumulator in toolAccumulators.values) {
+      toolAccumulators.forEach((index, accumulator) {
         final rawArguments = accumulator.arguments.toString();
         Map<String, dynamic> arguments;
         try {
@@ -165,11 +166,17 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
           arguments = {'_unparsed': rawArguments};
         }
         events.add(ToolCallEvent(ToolCall(
-          id: accumulator.id ?? 'streamed-tool-call',
+          // 部分中转/兼容服务流式返回不携带 tool_call id。兜底 id 必须按
+          // 调用唯一：执行层按 id 关联结果与活动行，固定值会让终端的失败
+          // 结果覆盖同回合所有工具的展示（真实事故：skills_read 行显示
+          // terminal 的“命令以退出码 1 结束”）。
+          id: (accumulator.id != null && accumulator.id!.isNotEmpty)
+              ? accumulator.id!
+              : UniqueId.generate('call'),
           name: accumulator.name ?? '',
           arguments: arguments,
         )));
-      }
+      });
       events.add(CompletedEvent(stopReason: stopReason));
       return events;
     }

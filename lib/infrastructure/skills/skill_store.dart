@@ -58,8 +58,10 @@ class SkillStore {
     final packs = await db.enabledSkillPacks();
     if (packs.isEmpty) return '';
     final effectiveBudget = budget.clamp(256, 32000).toInt();
-    final buffer =
-        StringBuffer('## 可用 Skill（这里只是索引，正文必须按需读取；本轮安装的 Skill 下一轮才可用）\n');
+    // 行首就是 skills_read 的 skill 参数值。曾经把内部 id 放在名称前面，
+    // 模型会把 “<id> | <name>” 整串当参数传回来导致 notFound。
+    final buffer = StringBuffer(
+        '## 可用 Skill（行格式：名称 | 能力 | 描述；用 skills_read 的 skill 参数传名称读取正文；本轮安装的 Skill 下一轮才可用）\n');
     var used = buffer.length;
     var omitted = false;
     for (final pack in packs) {
@@ -70,8 +72,7 @@ class SkillStore {
           ? '${description.substring(0, _maxDescriptionChars)}…'
           : description;
       final capabilities = _capabilities(pack);
-      final line = '- ${pack.id} | ${pack.name} | ${pack.installRoot} | '
-          '$capabilities | $shortDescription\n';
+      final line = '- ${pack.name} | $capabilities | $shortDescription\n';
       if (used + line.length > effectiveBudget) {
         omitted = true;
         break;

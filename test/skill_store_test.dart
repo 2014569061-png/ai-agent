@@ -75,7 +75,9 @@ ${'body line\n' * 40}''';
 
     final block = await store.buildInjectionBlock(db, budget: 2000);
     final longLine =
-        block.split('\n').firstWhere((line) => line.contains('- long |'));
+        block.split('\n').firstWhere((line) => line.contains('- demo-skill |'));
+    // 索引行不再暴露内部 id：行首就是 skills_read 要传的名称。
+    expect(longLine, isNot(contains('long |')));
     final description = longLine.split(' | ').last;
     expect(description.length, lessThanOrEqualTo(80));
     expect(block, contains('skills_read, resources:guide.txt'));
@@ -86,9 +88,11 @@ ${'body line\n' * 40}''';
   test('respects the index budget and reports omitted skills', () async {
     await installPack(id: 'one', name: 'one-skill');
     await installPack(id: 'two', name: 'two-skill');
+    await installPack(id: 'three', name: 'three-skill', description: 'x' * 200);
 
     final block = await store.buildInjectionBlock(db, budget: 256);
     expect(block, contains('其余 Skill'));
+    expect(block, isNot(contains('three-skill')));
     expect(block.length, lessThanOrEqualTo(32000));
   });
 
