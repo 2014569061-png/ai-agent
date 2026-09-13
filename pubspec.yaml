@@ -50,6 +50,7 @@ dev_dependencies:
   drift_dev: ^2.22.1
   build_runner: ^2.4.14
   flutter_secure_storage_platform_interface: ^1.1.0
+  path_provider_platform_interface: ^2.1.2
   sqlite3: ^3.5.2
 
 flutter:
@@ -66,5 +67,7 @@ flutter:
   assets:
     - assets/branding/nexus_mark.png
     - assets/images/bg_default.jpg
+    - assets/skills/mobile-dev-basics/SKILL.md
+    - assets/skills/android-build/SKILL.md
     - assets/linux/alpine-minirootfs-3.22.5-aarch64.tar.gz
     - assets/linux/libtalloc.so.2

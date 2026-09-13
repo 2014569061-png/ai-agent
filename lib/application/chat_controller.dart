@@ -19,6 +19,7 @@ import '../domain/tool_result.dart';
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/files/document_extractor.dart';
+import '../infrastructure/skills/builtin_skills.dart';
 import '../infrastructure/providers/anthropic_provider.dart';
 import '../infrastructure/providers/gemini_provider.dart';
 import '../infrastructure/providers/llm_provider.dart';
@@ -349,6 +350,9 @@ class ChatController extends Notifier<ChatState> {
       // 历史脏数据修复：统一修复早期版本遗留的乱码文本。
       // F-5：版本位短路 —— 完整跑过一次后不再每次启动全表扫描。
       await _healMojibakeAgents(database);
+      // 内置技能（手机开发配方等）幂等种子安装：同版本跳过，失败不阻断启动。
+      // 不 await：安装最多毫秒级（两个 Markdown），但不阻塞首屏数据装配。
+      unawaited(BuiltinSkillSeeder().ensureInstalled(database));
       final conversation = conversations.isNotEmpty
           ? conversations.first
           : await _createConversation(database);
