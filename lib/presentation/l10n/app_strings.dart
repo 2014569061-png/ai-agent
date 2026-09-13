@@ -290,6 +290,7 @@ abstract final class AppStrings {
   static const runningTasks = '进行中任务';
   static const taskSuccessRate = '任务成功率';
   static const taskFeedbackRate = '用户好评率';
+  static const weeklyHelpfulTasks = '本周有帮助任务';
   static String taskFeedbackSamples(int count) => '$count 个样本';
   static const taskFeedbackTitle = '任务反馈';
   static const taskFeedbackPrompt = '这个结果对你有帮助吗？';

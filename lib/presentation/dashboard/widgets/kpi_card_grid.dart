@@ -94,7 +94,25 @@ class KpiCardGrid extends StatelessWidget {
             ),
           ),
 
-          // 5. 任务成功率（无已完成/失败任务时展示 --）
+          // 5. 北极星指标：近 7 天被标记“有帮助”的开发任务数
+          SizedBox(
+            width: itemWidth,
+            child: NexusMetricTile(
+              label: AppStrings.weeklyHelpfulTasks,
+              value: '${kpis.weeklyHelpfulTasks}',
+              unit: '项',
+              icon: Icons.thumb_up_alt_outlined,
+              color: kpis.weeklyHelpfulTasks > 0 ? AppPalette.success : null,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                      builder: (_) => const DevelopmentTasksPage()),
+                );
+              },
+            ),
+          ),
+
+          // 6. 任务成功率（无已完成/失败任务时展示 --）
           SizedBox(
             width: itemWidth,
             child: NexusMetricTile(

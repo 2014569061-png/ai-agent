@@ -16,7 +16,7 @@ tags: [android, apk, build]
 
 ```sh
 TC=/root/toolchain
-apk add --no-cache openjdk17 zip
+apk add --no-cache curl openjdk17 unzip zip
 mkdir -p $TC && cd $TC
 # 静态构建工具（aapt2/zipalign，静态链接，Alpine PRoot 内直接运行）
 curl -L --retry 3 -o sdk-tools.zip \

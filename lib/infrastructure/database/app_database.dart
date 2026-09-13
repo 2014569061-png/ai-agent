@@ -970,16 +970,55 @@ class AppDatabase extends _$AppDatabase {
     ));
   }
 
-  Future<int> taskFeedbackCount() async =>
-      (selectOnly(taskFeedback)..addColumns([taskFeedback.taskId.count()]))
-          .getSingle()
-          .then((row) => row.read(taskFeedback.taskId.count()) ?? 0);
+  Future<int> taskFeedbackCount({DateTime? since}) async {
+    final query = selectOnly(taskFeedback)
+      ..addColumns([taskFeedback.taskId.count()]);
+    if (since != null) {
+      query.where(taskFeedback.updatedAt.isBiggerOrEqualValue(since));
+    }
+    return query
+        .getSingle()
+        .then((row) => row.read(taskFeedback.taskId.count()) ?? 0);
+  }
 
-  Future<int> helpfulTaskFeedbackCount() async => (selectOnly(taskFeedback)
-        ..addColumns([taskFeedback.taskId.count()])
-        ..where(taskFeedback.helpful.equals(true)))
-      .getSingle()
-      .then((row) => row.read(taskFeedback.taskId.count()) ?? 0);
+  Future<int> helpfulTaskFeedbackCount({DateTime? since}) async {
+    final query = selectOnly(taskFeedback)
+      ..addColumns([taskFeedback.taskId.count()])
+      ..where(taskFeedback.helpful.equals(true));
+    if (since != null) {
+      query.where(taskFeedback.updatedAt.isBiggerOrEqualValue(since));
+    }
+    return query
+        .getSingle()
+        .then((row) => row.read(taskFeedback.taskId.count()) ?? 0);
+  }
+
+  Future<int> developmentTaskFeedbackCount({DateTime? since}) =>
+      _developmentTaskFeedbackCount(since: since);
+
+  Future<int> helpfulDevelopmentTaskFeedbackCount({DateTime? since}) =>
+      _developmentTaskFeedbackCount(since: since, helpfulOnly: true);
+
+  Future<int> _developmentTaskFeedbackCount({
+    DateTime? since,
+    bool helpfulOnly = false,
+  }) async {
+    final variables = <Variable>[];
+    var where = "(t.type LIKE 'development:%' OR t.type IN "
+        "('project_analysis', 'bug_fix', 'code_review', 'release_check'))";
+    if (helpfulOnly) where += ' AND f.helpful = 1';
+    if (since != null) {
+      where += ' AND f.updated_at >= ?';
+      variables.add(Variable<DateTime>(since));
+    }
+    final row = await customSelect(
+      'SELECT COUNT(*) AS count FROM task_feedback f '
+      'INNER JOIN tasks t ON t.id = f.task_id WHERE $where',
+      variables: variables,
+      readsFrom: {taskFeedback, tasks},
+    ).getSingle();
+    return row.read<int>('count');
+  }
 
   Future<void> deleteTaskFeedback(String taskId) =>
       (delete(taskFeedback)..where((row) => row.taskId.equals(taskId))).go();

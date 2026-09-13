@@ -36,6 +36,7 @@ class DashboardKpis {
     required this.todayCachedTokens,
     required this.runningTasks,
     required this.taskSuccessRate,
+    required this.weeklyHelpfulTasks,
     required this.taskFeedbackRate,
     required this.taskFeedbackSamples,
   });
@@ -47,6 +48,7 @@ class DashboardKpis {
 
   /// 近 7 天任务成功率（0-100）。无已完成/失败样本时为 null，UI 展示 `--`。
   final double? taskSuccessRate;
+  final int weeklyHelpfulTasks;
   final double? taskFeedbackRate;
   final int taskFeedbackSamples;
 
@@ -135,7 +137,8 @@ class DashboardService {
     final runsF = db.runsSince(sevenDaysAgo);
     final weekTasksF = db.tasksSince(sevenDaysAgo);
     final runningTasksF = db.runningTasks();
-    final feedbackMetricsF = const TaskFeedbackService().metrics(db);
+    final feedbackMetricsF =
+        const TaskFeedbackService().metrics(db, since: sevenDaysAgo);
 
     final todayConvs = await conversationsF;
     final weekConvs = await weekConversationsF;
@@ -278,6 +281,7 @@ class DashboardService {
         todayCachedTokens: todayCachedTokens,
         runningTasks: runningCount,
         taskSuccessRate: successRate,
+        weeklyHelpfulTasks: feedbackMetrics.helpfulCount,
         taskFeedbackRate: feedbackMetrics.helpfulRate,
         taskFeedbackSamples: feedbackMetrics.samples,
       ),

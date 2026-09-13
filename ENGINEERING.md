@@ -32,9 +32,9 @@
 ## 4. 代码红线（改前必读）
 
 ### 4.1 两个「敏感」概念绝不可混用
-- `UnifiedTool.sensitive`（`domain/models.dart`）→ **强制人工审批**（`ApprovalPolicy` 对它无条件弹窗）。
+- `UnifiedTool.sensitive`（`domain/models.dart`）→ **审批升级**：safe 工具在 ask/autoSafe 模式下提升为逐次确认；dangerous 工具始终确认；用户显式选择 fullAccess 后可自动执行。
 - `SensitiveToolPolicy`（`domain/sensitive_tool_policy.dart`）→ **持久化脱敏**（SQLite/导出/日志出口），不影响审批。
-- **绝不要**为脱敏给 `read_file`/`terminal`/`write_file` 加 `sensitive: true`（会让每次读文件都弹审批）。`read_file` 的结果**保持不脱敏**（用户需回看）。守护测试：`test/sensitive_tool_policy_test.dart`。
+- **绝不要**为脱敏给 `read_file`/`terminal`/`write_file` 加 `sensitive: true`（会在非完全访问模式下把读写升级为逐次确认）。`read_file` 的结果**保持不脱敏**（用户需回看）。守护测试：`test/sensitive_tool_policy_test.dart`。
 
 ### 4.2 键盘 inset
 - **body 内读键盘高度一律用 `lib/presentation/utils/keyboard_insets.dart`**（`keyboardInset`/`isKeyboardVisible`），不要写 `MediaQuery.viewInsetsOf` —— builder 闭包参数的 context 在 Scaffold body 内取值恒为 0（`paddingOf` 行为不同，未被消费）。守护测试：`test/keyboard_insets_test.dart`。

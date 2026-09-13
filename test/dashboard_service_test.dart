@@ -29,6 +29,7 @@ void main() {
     expect(summary.kpis.todayCachedTokens, 0);
     expect(summary.kpis.runningTasks, 0);
     expect(summary.kpis.taskSuccessRate, isNull);
+    expect(summary.kpis.weeklyHelpfulTasks, 0);
     expect(summary.weeklyUsage.length, 7);
     expect(summary.recentRuns, isEmpty);
     expect(summary.todos, isEmpty);
@@ -62,11 +63,11 @@ void main() {
       updatedAt: yesterday,
     ));
 
-    // 2. 任务：1完成，1失败，1运行中
+    // 2. 开发任务：1完成，1失败，1运行中
     await db.into(db.tasks).insert(Task(
           id: 'task-1',
           conversationId: 'conv-today',
-          type: 'agent',
+          type: 'development:bug_fix',
           status: 'completed',
           requestJson: jsonEncode({'title': '任务1'}),
           progressJson: '{}',
@@ -77,7 +78,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-2',
           conversationId: 'conv-today',
-          type: 'agent',
+          type: 'development:code_review',
           status: 'failed',
           requestJson: jsonEncode({'title': '任务2'}),
           progressJson: '{}',
@@ -88,7 +89,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-3',
           conversationId: 'conv-today',
-          type: 'agent',
+          type: 'development:project_analysis',
           status: 'running',
           requestJson: jsonEncode({'title': '任务3'}),
           progressJson: '{}',
@@ -111,6 +112,40 @@ void main() {
           retryCount: 0,
         ));
 
+    // 4. 近 7 天开发任务反馈；窗口外、非开发任务和孤儿反馈均不计入。
+    await db.saveTaskFeedback(taskId: 'task-1', helpful: true, now: now);
+    await db.saveTaskFeedback(taskId: 'task-2', helpful: false, now: now);
+    final old = todayStart.subtract(const Duration(days: 7));
+    await db.into(db.tasks).insert(Task(
+          id: 'task-old',
+          conversationId: 'conv-today',
+          type: 'development:bug_fix',
+          status: 'completed',
+          requestJson: '{}',
+          progressJson: '{}',
+          resumeCount: 0,
+          createdAt: old,
+          updatedAt: old,
+        ));
+    await db.saveTaskFeedback(
+      taskId: 'task-old',
+      helpful: true,
+      now: old,
+    );
+    await db.into(db.tasks).insert(Task(
+          id: 'task-non-dev',
+          conversationId: 'conv-today',
+          type: 'agent',
+          status: 'created',
+          requestJson: '{}',
+          progressJson: '{}',
+          resumeCount: 0,
+          createdAt: now,
+          updatedAt: now,
+        ));
+    await db.saveTaskFeedback(taskId: 'task-non-dev', helpful: true, now: now);
+    await db.saveTaskFeedback(taskId: 'task-orphan', helpful: true, now: now);
+
     final summary = await service.loadSummary(db: db);
 
     expect(summary.kpis.todayConversations, 1);
@@ -119,7 +154,10 @@ void main() {
     expect(summary.kpis.runningTasks, 1);
     // 1 completed + 1 failed = 50%
     expect(summary.kpis.taskSuccessRate, 50.0);
-    expect(summary.recentRuns.length, 3);
+    expect(summary.kpis.weeklyHelpfulTasks, 1);
+    expect(summary.kpis.taskFeedbackRate, 50.0);
+    expect(summary.kpis.taskFeedbackSamples, 2);
+    expect(summary.recentRuns.length, 4);
     expect(summary.recentConversations.length, 2);
     expect(summary.weeklyUsage.last.isToday, isTrue);
   });

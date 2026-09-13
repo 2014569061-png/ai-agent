@@ -58,3 +58,4 @@
 - 发布 tag 遵循 `v<versionName>`，本版本为 `v0.8.8`，build number 不进入 tag；
 - APK 同时提供 SHA-256 sidecar，便于侧载前校验；
 - 真实设备上人工确认安装未知来源、后台任务、恢复流程、审批边界和终端提示。
+- 真实设备上完成一次工作区内的简易 APK 构建任务，确认 Alpine PRoot 的 DNS、`apk add`、静态 Android 构建工具链与失败输出均可用、可审阅。

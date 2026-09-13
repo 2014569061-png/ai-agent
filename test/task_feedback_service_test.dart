@@ -11,6 +11,20 @@ void main() {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final service = const TaskFeedbackService();
+    final now = DateTime.now();
+    for (final id in ['task-1', 'task-2']) {
+      await db.into(db.tasks).insert(Task(
+            id: id,
+            conversationId: 'conversation-1',
+            type: 'development:bug_fix',
+            status: 'completed',
+            requestJson: '{}',
+            progressJson: '{}',
+            resumeCount: 0,
+            createdAt: now,
+            updatedAt: now,
+          ));
+    }
 
     await service.save(db: db, taskId: 'task-1', runId: 'run-1', helpful: true);
     await service.save(db: db, taskId: 'task-2', helpful: false);

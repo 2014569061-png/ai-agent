@@ -19,19 +19,25 @@ class TaskFeedbackService {
         helpful: helpful,
       );
 
-  Future<TaskFeedbackMetrics> metrics(AppDatabase db) async {
-    final samples = await db.taskFeedbackCount();
-    final helpful = await db.helpfulTaskFeedbackCount();
+  Future<TaskFeedbackMetrics> metrics(AppDatabase db, {DateTime? since}) async {
+    final samples = await db.developmentTaskFeedbackCount(since: since);
+    final helpful = await db.helpfulDevelopmentTaskFeedbackCount(since: since);
     return TaskFeedbackMetrics(
       samples: samples,
+      helpfulCount: helpful,
       helpfulRate: samples == 0 ? null : helpful / samples * 100,
     );
   }
 }
 
 class TaskFeedbackMetrics {
-  const TaskFeedbackMetrics({required this.samples, required this.helpfulRate});
+  const TaskFeedbackMetrics({
+    required this.samples,
+    required this.helpfulCount,
+    required this.helpfulRate,
+  });
 
   final int samples;
+  final int helpfulCount;
   final double? helpfulRate;
 }
