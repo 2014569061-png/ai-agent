@@ -7,7 +7,6 @@ import 'package:mobile_agent/application/chat_controller.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/chat/chat_page.dart';
 import 'package:mobile_agent/presentation/chat/composer_skill_slot.dart';
-import 'package:mobile_agent/presentation/chat/widgets/run_status_card.dart';
 import 'package:mobile_agent/presentation/chat/widgets/session_metrics_bar.dart';
 import 'package:mobile_agent/presentation/chat/widgets/skill_suggestion_bar.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
@@ -160,7 +159,7 @@ void main() {
       expect(find.text('build'), findsOneWidget);
     });
 
-    testWidgets('运行中不渲染技能条，只保留运行状态条', (tester) async {
+    testWidgets('运行中不渲染技能条与独立运行状态卡', (tester) async {
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -168,7 +167,6 @@ void main() {
       await _pumpChatPage(tester, _RunningWithLoadedSkill.new);
 
       expect(_skillBarCount(tester), 0);
-      expect(find.byType(RunStatusCard), findsOneWidget);
     });
 
     testWidgets('运行中指标条收窄为 2 组，让出输入区上方空间', (tester) async {
@@ -183,7 +181,7 @@ void main() {
             .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
             .maxGroups,
         2,
-        reason: '运行中已有运行状态条，指标条应收窄避免叠加占高',
+        reason: '运行中输入区自带状态行，指标条应收窄避免叠加占高',
       );
     });
 

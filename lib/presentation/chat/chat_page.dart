@@ -60,7 +60,6 @@ import 'widgets/chat_empty_state.dart';
 import 'widgets/chat_message_list.dart';
 import 'widgets/model_picker_sheet.dart';
 import 'widgets/tool_activity_section.dart';
-import 'widgets/run_status_card.dart';
 import 'widgets/skill_suggestion_bar.dart';
 import 'widgets/chat_catalog_drawer.dart';
 import '../widgets/immersive_sheet.dart';
@@ -2299,21 +2298,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       contextTokens: contextTokens,
                       running: running,
                     ),
-                    if (running)
-                      RunStatusCard(
-                        stage: _currentRunningStage(
-                              toolActivities: toolActivities,
-                              running: running,
-                              paused: paused,
-                              planState: planState,
-                            ) ??
-                            '正在执行',
-                        toolCount: toolActivities.length,
-                        paused: paused,
-                        awaitingApproval:
-                            toolActivities.lastOrNull?.status == '等待确认',
-                        onStop: _stop,
-                      ),
                     _buildContextCompressionHint(
                       liveContextTokens: liveContextTokens,
                       contextTokens: contextTokens,
