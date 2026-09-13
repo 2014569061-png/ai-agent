@@ -60,6 +60,9 @@ pwsh.cmd
 .playwright-cli/
 .workbuddy/
 
+# ZCode 客户端本地会话状态（计划文件等），不入库
+.zcode/
+
 # 桌面端生成产物
 macos/Flutter/ephemeral/
 windows/flutter/ephemeral/
