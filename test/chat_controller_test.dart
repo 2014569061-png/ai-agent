@@ -419,6 +419,51 @@ void main() {
     expect(remaining.map((m) => m.id), ['m1', 'm2', 'm3', 'm4']);
     expect(remaining.map((m) => m.role), ['user', 'assistant', 'tool', 'user']);
   });
+
+  group('workspaceToolRules 系统提示注入', () {
+    test('未选工作区时引导用户选择，而不是声称设备无能力', () {
+      final rules = ChatController.workspaceToolRules(
+        workspacePath: null,
+        fileToolsAvailable: false,
+        terminalAvailable: false,
+      );
+      expect(rules, contains('未选择工作区'));
+      expect(rules, contains('不是设备能力缺失'));
+      expect(rules, contains('工作区入口'));
+    });
+
+    test('工具被开关关闭时提示设置入口', () {
+      final rules = ChatController.workspaceToolRules(
+        workspacePath: '/data/project',
+        fileToolsAvailable: false,
+        terminalAvailable: false,
+      );
+      expect(rules, contains('/data/project'));
+      expect(rules, contains('设置 → 工具'));
+    });
+
+    test('工具可用时列出工具与运行时边界', () {
+      final rules = ChatController.workspaceToolRules(
+        workspacePath: '/data/project',
+        fileToolsAvailable: true,
+        terminalAvailable: true,
+      );
+      expect(rules, contains('terminal'));
+      expect(rules, contains('write_file'));
+      expect(rules, contains('Alpine PRoot'));
+      expect(rules, contains('不是完整文件系统沙箱'));
+      expect(rules, contains('禁止伪造成功'));
+    });
+
+    test('空白路径视为未选择工作区', () {
+      final rules = ChatController.workspaceToolRules(
+        workspacePath: '  ',
+        fileToolsAvailable: false,
+        terminalAvailable: false,
+      );
+      expect(rules, contains('未选择工作区'));
+    });
+  });
 }
 
 class _FailingConfigStore extends _FakeConfigStore {

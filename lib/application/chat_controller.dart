@@ -1599,7 +1599,39 @@ class ChatController extends Notifier<ChatState> {
     return '[委派规则]\n'
         '- 委派子任务前必须先获得用户确认（sub_agent 调用需审批）。\n'
         '- 仅可委派只读、安全的子任务；危险操作由你亲自处理并走审批。\n'
-        '- 通过 maxTokens 为子任务分配受限预算（上限 ${SubAgentTool.maxBudget}），不要超预算；委派后应核实并汇总结果。';
+        '- 通过 maxTokens 为每个子任务分配受限预算（上限 ${SubAgentTool.maxBudget}），不要超预算；委派后应核实并汇总结果。';
+  }
+
+  /// 工作区与工具可用性注入：注册表里文件/终端工具是否存在由工作区绑定和
+  /// 「设置 → 工具」开关共同决定。没有这些工具时模型倾向于回答“设备没有
+  /// 终端/无法编译”——必须显式告知真实原因并引导用户开启，而不是让模型
+  /// 替设备下“无能力”的结论（真实案例：模型因未选工作区而拒做手机开发任务）。
+  static String workspaceToolRules({
+    String? workspacePath,
+    required bool fileToolsAvailable,
+    required bool terminalAvailable,
+  }) {
+    final ws = workspacePath?.trim() ?? '';
+    if (ws.isEmpty) {
+      return '[工作区环境]\n'
+          '- 当前未选择工作区，文件读写与终端工具未启用。这是应用内配置，不是设备能力缺失。\n'
+          '- 若任务需要读写文件或执行命令（编译、脚本、构建等），请先简短告诉用户：'
+          '点击聊天页顶栏的工作区入口选择一个项目目录，然后重发任务。\n'
+          '- 不要声称设备无法完成，也不要在无工具时编造执行结果。';
+    }
+    if (!fileToolsAvailable || !terminalAvailable) {
+      return '[工作区环境]\n'
+          '- 工作区：$ws，但「设置 → 工具」中的终端与文件开关已关闭，相关工具未注册。\n'
+          '- 若任务需要读写文件或执行命令，请提示用户到设置里重新开启后再试。';
+    }
+    return '[工作区环境]\n'
+        '- 工作区目录：$ws（文件工具与终端的默认工作目录；仅默认目录，不是完整文件系统沙箱）。\n'
+        '- 可用工具：read_file / write_file / edit_file / list_directory / search_files / '
+        'move_file / delete_file / terminal。\n'
+        '- 终端命令运行在 Android Linux 运行时中（优先内置 Alpine PRoot 环境，回落 Termux 或系统 '
+        'shell），可在环境内用 apk 等包管理器安装工具链（需网络）；单条命令默认 120s 超时，'
+        '可用 timeoutSeconds 参数放宽。\n'
+        '- 手机开发任务（编译、构建、运行脚本）必须基于真实命令输出汇报结果，禁止伪造成功。';
   }
 
   void _updatePlanStepStatus(String status) {

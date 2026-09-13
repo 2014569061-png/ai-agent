@@ -224,6 +224,15 @@ extension ChatRunExecution on ChatController {
           '$baseSystemPrompt\n\n${ChatController._delegationRules(autonomousDelegation)}';
     } catch (_) {}
 
+    // 工作区与工具可用性：注册表是按工作区绑定动态装配的，模型必须知道自己
+    // 有没有文件/终端能力；缺失时引导用户开启，而不是声称设备无法完成。
+    baseSystemPrompt = '$baseSystemPrompt\n\n'
+        '${ChatController.workspaceToolRules(
+      workspacePath: _currentState.currentWorkspacePath,
+      fileToolsAvailable: registry.findRegistration('write_file') != null,
+      terminalAvailable: registry.findRegistration('terminal') != null,
+    )}';
+
     try {
       final trustStore = await ref.read(toolTrustStoreProvider.future);
       await for (final event in executor.run(
