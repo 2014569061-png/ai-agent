@@ -8,7 +8,7 @@ import 'package:mobile_agent/presentation/chat/widgets/tool_activity_section.dar
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 
 void main() {
-  testWidgets('shows the verification warning for unknown effects',
+  testWidgets('shows every tool step inline without requiring a tap',
       (tester) async {
     final previousErrorHandler = FlutterError.onError;
     FlutterError.onError = (details) {
@@ -38,12 +38,12 @@ void main() {
       ],
     ));
 
-    expect(find.text('有 1 项结果待核验'), findsOneWidget);
-    await tester.tap(find.text('有 1 项结果待核验'));
-    await tester.pumpAndSettle();
+    // 内联时间线：行标题直接可见，不需要先点开胶囊。
+    expect(find.text('需要核验：执行命令 flutter test'), findsOneWidget);
+    expect(find.text('待核验'), findsOneWidget);
+
     await tester.tap(find.text('需要核验：执行命令 flutter test'));
     await tester.pumpAndSettle();
-    expect(find.text('待核验'), findsOneWidget);
     expect(find.text('结果无法确认，请先检查目标状态再重试。'), findsOneWidget);
   });
 
@@ -90,9 +90,6 @@ void main() {
       ],
     ));
 
-    await tester.tap(find.text('1 项操作已执行'));
-    await tester.pumpAndSettle();
-
     expect(find.text('已完成：写入文件 lib/main.dart'), findsOneWidget);
     expect(find.text('操作结果已记录。'), findsOneWidget);
     expect(find.text('write_file'), findsNothing);
@@ -103,18 +100,65 @@ void main() {
     expect(find.text('技术详情'), findsOneWidget);
     expect(find.textContaining('工具: write_file'), findsOneWidget);
   });
+
+  testWidgets('collapses a long finished trajectory behind a toggle',
+      (tester) async {
+    await tester.pumpWidget(_Harness(
+      activities: _longTrajectory(),
+    ));
+
+    // 超过阈值的已完成轨迹默认只显示摘要行，展开后才出现明细行。
+    expect(find.text('10 项工具已完成（点击展开）'), findsOneWidget);
+    expect(find.text('已完成：读取文件 a0.txt'), findsNothing);
+
+    await tester.tap(find.text('10 项工具已完成（点击展开）'));
+    await tester.pumpAndSettle();
+    expect(find.text('已完成：读取文件 a0.txt'), findsOneWidget);
+  });
+
+  testWidgets('keeps a long running trajectory fully visible', (tester) async {
+    await tester.pumpWidget(_Harness(
+      running: true,
+      activities: _longTrajectory(),
+    ));
+
+    // 运行中不折叠：用户能实时看到每一步。
+    expect(find.text('已完成：读取文件 a0.txt'), findsOneWidget);
+    expect(find.text('已完成：读取文件 a9.txt'), findsOneWidget);
+  });
 }
 
+List<ToolActivity> _longTrajectory() => [
+      for (var i = 0; i < 10; i++)
+        ToolActivity(
+          call: ToolCall(
+            id: 'tool-$i',
+            name: 'read_file',
+            arguments: {'path': 'a$i.txt'},
+          ),
+          risk: ToolRisk.safe,
+          status: '已完成',
+          ok: true,
+          code: 'OK',
+          effect: ToolEffect.none,
+          result: 'ok',
+        ),
+    ];
+
 class _Harness extends StatelessWidget {
-  const _Harness({required this.activities});
+  const _Harness({required this.activities, this.running = false});
 
   final List<ToolActivity> activities;
+  final bool running;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
         theme: AppTheme.light(),
         home: Scaffold(
-          body: ToolActivityCapsule(activities: activities, running: false),
+          body: ToolActivityTimeline(
+            activities: activities,
+            running: running,
+          ),
         ),
       );
 }

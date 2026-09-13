@@ -2126,7 +2126,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                             Padding(
                                               padding: const EdgeInsets.only(
                                                   bottom: 12),
-                                              child: ToolActivityCapsule(
+                                              child: ToolActivityTimeline(
                                                 activities: toolActivities,
                                                 running: running,
                                               ),

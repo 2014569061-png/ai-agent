@@ -8,11 +8,12 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/immersive_surface.dart';
 
-/// G1 工具执行明细悬浮胶囊:收起为底部居中小胶囊,展开为固定高度、内部可滚动
-/// 的毛玻璃浮动面板。列表为 ZCode 进程面板式细行(状态图标 + 工具名),点击行
-/// 展开参数与输出详情。悬浮于聊天 Stack 顶层,不内联挤压消息流。
-class ToolActivityCapsule extends StatefulWidget {
-  const ToolActivityCapsule({
+/// 工具执行内联时间线：直接出现在消息流尾部（Agent 正在工作的位置），
+/// 无需点击即可看到每一步工具调用的状态与结果；行内可展开技术详情。
+///
+/// 取代旧的悬浮胶囊——胶囊把执行过程藏在一层点击之后，透明度不足。
+class ToolActivityTimeline extends StatefulWidget {
+  const ToolActivityTimeline({
     super.key,
     required this.activities,
     required this.running,
@@ -22,127 +23,121 @@ class ToolActivityCapsule extends StatefulWidget {
   final bool running;
 
   @override
-  State<ToolActivityCapsule> createState() => _ToolActivityCapsuleState();
+  State<ToolActivityTimeline> createState() => _ToolActivityTimelineState();
 }
 
-class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
-  bool _open = false;
+class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
+  /// 完成后条目较多时默认收起明细，避免长轨迹在消息流里占满一屏；
+  /// 运行中始终完整展示，用户能实时看到最新一步。
+  static const int _collapsedThreshold = 8;
+
+  /// 展开时的最大高度：内联位置不能无限增高，超出部分内部滚动。
+  static const double _expandedMaxHeight = 280;
+
+  /// null = 跟随默认（运行中或短轨迹展开、长轨迹完成后收起）；
+  /// 用户手动切换后锁定，新一轮运行开始时重置。
+  bool? _expandedOverride;
+
+  @override
+  void didUpdateWidget(covariant ToolActivityTimeline oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.running && !oldWidget.running) _expandedOverride = null;
+  }
+
+  bool get _collapsible => widget.activities.length > _collapsedThreshold;
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.topRight,
+    final collapsible = _collapsible;
+    final expanded = _expandedOverride ?? (!collapsible || widget.running);
+    return ImmersiveSurface(
+      level: ImmersiveMaterialLevel.thin,
+      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
       child: Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 8),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: _open ? _panel(context) : _capsule(context),
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _header(context, collapsible: collapsible, expanded: expanded),
+            if (expanded)
+              ConstrainedBox(
+                constraints:
+                    const BoxConstraints(maxHeight: _expandedMaxHeight),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final activity in widget.activities)
+                        _row(context, activity),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _capsule(BuildContext context) {
+  Widget _header(
+    BuildContext context, {
+    required bool collapsible,
+    required bool expanded,
+  }) {
     final theme = Theme.of(context);
     final semantic = AppTheme.semanticOf(context);
-    final summary = _summary;
-    return ImmersiveSurface(
-      level: ImmersiveMaterialLevel.thin,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          setState(() => _open = true);
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            if (widget.running)
-              const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-            else
-              Icon(
-                summary.unknown > 0
-                    ? Icons.help_outline_rounded
-                    : summary.failed > 0
-                        ? Icons.error_outline_rounded
-                        : Icons.verified_outlined,
-                size: 15,
-                color: summary.unknown > 0
-                    ? semantic.warning
-                    : summary.failed > 0
-                        ? theme.colorScheme.error
-                        : semantic.success,
-              ),
-            const SizedBox(width: 4),
-            Text(
-              widget.running ? _liveSummary : _completedSummary(summary),
+    final summary = _ToolSummary.from(widget.activities);
+    final text = widget.running ? _liveSummary : _completedSummary(summary);
+    return InkWell(
+      onTap: collapsible
+          ? () {
+              HapticFeedback.selectionClick();
+              setState(() => _expandedOverride = !expanded);
+            }
+          : null,
+      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        child: Row(children: [
+          if (widget.running)
+            const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            Icon(
+              summary.unknown > 0
+                  ? Icons.help_outline_rounded
+                  : summary.failed > 0
+                      ? Icons.error_outline_rounded
+                      : Icons.verified_outlined,
+              size: 15,
+              color: summary.unknown > 0
+                  ? semantic.warning
+                  : summary.failed > 0
+                      ? theme.colorScheme.error
+                      : semantic.success,
+            ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              collapsible && !expanded ? '$text（点击展开）' : text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall
                   ?.copyWith(color: theme.colorScheme.onSurface),
             ),
-          ]),
-        ),
-      ),
-    );
-  }
-
-  Widget _panel(BuildContext context) {
-    final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
-    final height = (size.height * 0.30).clamp(180.0, 320.0).toDouble();
-    return ImmersiveSurface(
-      level: ImmersiveMaterialLevel.thin,
-      borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
-      child: SizedBox(
-        width: double.infinity,
-        height: height,
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
-            child: Row(children: [
-              Expanded(
-                child: Text(
-                  '工具执行明细 (${widget.activities.length})',
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w500),
-                ),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                icon: const Icon(Icons.close_rounded, size: 20),
-                onPressed: () {
-                  HapticFeedback.selectionClick();
-                  setState(() => _open = false);
-                },
-              ),
-            ]),
           ),
-          Divider(height: 1, color: theme.dividerColor.withValues(alpha: .5)),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              itemCount: widget.activities.length,
-              itemBuilder: (context, i) => _row(context, widget.activities[i]),
+          if (collapsible)
+            Icon(
+              expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: semantic.textMuted,
             ),
-          ),
-          Divider(height: 1, color: theme.dividerColor.withValues(alpha: .5)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '共 ${widget.activities.length}'
-                ' · 完成 ${widget.activities.where((a) => a.status == '已完成').length}'
-                '${runningCount > 0 ? ' · 执行中 $runningCount' : ''}'
-                '${pendingCount > 0 ? ' · 待确认 $pendingCount' : ''}',
-                style:
-                    theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-              ),
-            ),
-          ),
         ]),
       ),
     );
@@ -152,8 +147,6 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
       widget.activities.where((a) => a.status == '执行中').length;
   int get pendingCount =>
       widget.activities.where((a) => a.status == '等待确认').length;
-
-  _ToolSummary get _summary => _ToolSummary.from(widget.activities);
 
   String get _liveSummary {
     final current = widget.activities.lastOrNull;
@@ -231,7 +224,7 @@ class _ToolActivityCapsuleState extends State<ToolActivityCapsule> {
         type: MaterialType.transparency,
         child: ExpansionTile(
           tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
           minTileHeight: 40,
           leading: running
               ? const SizedBox(
