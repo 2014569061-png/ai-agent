@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 小组件外表面：实心填充而非描边——壁纸颜色不可控，细描边在浅色壁纸上会消失。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/nexus_widget_surface"/>
+    <corners android:radius="16dp"/>
+</shape>

@@ -13,6 +13,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/nexus_execution_status.dart';
 import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
@@ -229,18 +230,10 @@ class _CollaborationTimelinePageState
                           child: _agents.isEmpty
                               ? const SectionCard(
                                   padding: EdgeInsets.all(16),
-                                  child: Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2),
-                                      ),
-                                      SizedBox(width: 12),
-                                      Text('正在初始化子 Agent 角色…',
-                                          style: TextStyle(fontSize: 13)),
-                                    ],
+                                  child: NexusExecutionStatus(
+                                    state: NexusExecutionState.preparing,
+                                    label: '正在初始化子 Agent 角色…',
+                                    compact: true,
                                   ),
                                 )
                               : Column(

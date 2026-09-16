@@ -6,6 +6,7 @@ import '../../../application/providers.dart';
 import '../../../application/task_service.dart';
 import '../../../infrastructure/database/app_database.dart';
 import '../../l10n/app_strings.dart';
+import '../../motion/nexus_page_route_factory.dart';
 import '../../tasks/development_tasks_page.dart';
 import '../../tasks/task_details_page.dart';
 import '../../theme/app_palette.dart';
@@ -47,7 +48,7 @@ class RunStatusList extends ConsumerWidget {
         ),
         onPressed: () {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const DevelopmentTasksPage()),
+            NexusPageRoute.detail(builder: (_) => const DevelopmentTasksPage()),
           );
         },
         child: Row(
@@ -138,7 +139,7 @@ class RunStatusList extends ConsumerWidget {
                       if (task != null && context.mounted) {
                         final info = DevelopmentTaskInfo.fromTask(task);
                         Navigator.of(context).push(
-                          MaterialPageRoute(
+                          NexusPageRoute.detail(
                             builder: (_) => TaskDetailsPage(
                               task: info,
                               onConversationSelected: onConversationSelected,
@@ -147,7 +148,7 @@ class RunStatusList extends ConsumerWidget {
                         );
                       } else if (context.mounted) {
                         Navigator.of(context).push(
-                          MaterialPageRoute(
+                          NexusPageRoute.detail(
                               builder: (_) => const DevelopmentTasksPage()),
                         );
                       }

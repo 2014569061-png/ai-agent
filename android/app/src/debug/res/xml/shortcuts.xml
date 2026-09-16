@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  debug 源集对 src/main/res/xml/shortcuts.xml 的覆盖，唯一差别是 targetPackage。
+
+  原因：debug 构建的 applicationId 带 ".debug" 后缀（见 app/build.gradle.kts 的
+  applicationIdSuffix），而 android:targetPackage 必须写死、无法用 ${applicationId}
+  占位符。若不覆盖，调试包上的快捷方式因目标包不存在而毫无反应。
+
+  ⚠️ 改动 main 里的快捷方式时，务必同步本文件（包括新增/删除 shortcut 条目）。
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="describe_agent"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_describe_agent_short"
+        android:shortcutLongLabel="@string/shortcut_describe_agent_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nexusagent.app.debug"
+            android:targetClass="com.nexusagent.app.MainActivity"
+            android:data="nexus://new-agent"/>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="new_chat"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_new_chat_short"
+        android:shortcutLongLabel="@string/shortcut_new_chat_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nexusagent.app.debug"
+            android:targetClass="com.nexusagent.app.MainActivity"
+            android:data="nexus://new-chat"/>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="memory"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_memory_short"
+        android:shortcutLongLabel="@string/shortcut_memory_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nexusagent.app.debug"
+            android:targetClass="com.nexusagent.app.MainActivity"
+            android:data="nexus://memory"/>
+    </shortcut>
+
+</shortcuts>

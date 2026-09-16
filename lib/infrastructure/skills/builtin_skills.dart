@@ -17,14 +17,36 @@ const List<BuiltinSkill> kBuiltinSkills = [
   BuiltinSkill(
     name: 'android-build',
     assetPath: 'assets/skills/android-build/SKILL.md',
+    resourceAssets: {
+      'references/build.md': 'assets/skills/android-build/references/build.md',
+      'references/toolchain.md':
+          'assets/skills/android-build/references/toolchain.md',
+    },
   ),
 ];
 
 class BuiltinSkill {
-  const BuiltinSkill({required this.name, required this.assetPath});
+  const BuiltinSkill({
+    required this.name,
+    required this.assetPath,
+    this.resourceAssets = const <String, String>{},
+  });
 
   final String name;
   final String assetPath;
+
+  /// Installed relative path -> bundled Flutter asset path.
+  final Map<String, String> resourceAssets;
+}
+
+String _hashFiles(Map<String, Uint8List> files) {
+  final hashInput = <int>[];
+  final paths = files.keys.toList()..sort();
+  for (final path in paths) {
+    hashInput.addAll(utf8.encode(path));
+    hashInput.addAll(files[path]!);
+  }
+  return sha256.convert(hashInput).toString();
 }
 
 /// 内置技能种子安装：幂等，同版本同内容跳过，版本或内容变化更新。
@@ -43,7 +65,14 @@ class BuiltinSkillSeeder {
         final text = await _bundle.loadString(skill.assetPath);
         final parsed = parseSkillMarkdown(text);
         final bytes = Uint8List.fromList(utf8.encode(text));
-        final sha256Hex = sha256.convert(bytes).toString();
+        final fileContents = <String, Uint8List>{'SKILL.md': bytes};
+        for (final entry in skill.resourceAssets.entries) {
+          final data = await _bundle.load(entry.value);
+          fileContents[entry.key] = Uint8List.fromList(
+            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+          );
+        }
+        final sha256Hex = _hashFiles(fileContents);
 
         final existing = await db.findSkillPackByName(skill.name);
         if (existing != null &&
@@ -63,8 +92,11 @@ class BuiltinSkillSeeder {
               subPath: null,
             ),
             metadata: parsed.metadata,
-            fileContents: {'SKILL.md': bytes},
-            totalBytes: bytes.length,
+            fileContents: fileContents,
+            totalBytes: fileContents.values.fold<int>(
+              0,
+              (sum, value) => sum + value.length,
+            ),
             sha256Hex: sha256Hex,
           ),
         );

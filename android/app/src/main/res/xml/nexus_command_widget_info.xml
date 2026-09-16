@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「NEXUS 指挥台」小组件的元数据。
+
+  updatePeriodMillis="0"：内容全是静态按钮，不需要系统按周期唤醒更新，
+  设 0 可以避免每 30 分钟一次的无意义唤醒（省电）。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/nexus_command_widget"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/nexus_widget_desc"/>

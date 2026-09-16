@@ -27,10 +27,11 @@
     <!-- E3 本地通知（Android 13+ 需运行时申请 POST_NOTIFICATIONS）。 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="NEXUS Agent"
-        android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher"
-        android:extractNativeLibs="true">
+            android:label="NEXUS Agent"
+            android:name="${applicationName}"
+            android:icon="@mipmap/ic_launcher"
+            android:networkSecurityConfig="@xml/network_security_config"
+            android:extractNativeLibs="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -64,14 +65,35 @@
                 <category android:name="android.intent.category.DEFAULT"/>
                 <data android:mimeType="image/*"/>
             </intent-filter>
-            <!-- E4 深度链接：nexus://new-chat / nexus://memory。 -->
+            <!-- E4 深度链接：nexus://new-chat / nexus://new-agent / nexus://memory。 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="nexus"/>
             </intent-filter>
+            <!-- 长按图标的静态快捷方式；条目见 res/xml/shortcuts.xml。
+                 debug 源集另有一份覆盖文件（applicationId 带 .debug 后缀）。 -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts"/>
         </activity>
+        <!-- 桌面小组件「NEXUS 指挥台」：三个 nexus:// 深链入口。
+             exported=false 与官方 AppWidget 模板一致——APPWIDGET_UPDATE 由系统发出，
+             系统可以投递到未导出的组件；改成 true 反而让任意应用都能触发刷新。
+             ⚠️ 小组件内容只依赖静态深链，与 Dart 侧无数据交换；若将来要展示任务进度，
+             需要另建跨进程数据通道（文件或 ContentProvider）。 -->
+        <receiver
+            android:name=".NexusCommandWidgetProvider"
+            android:exported="false"
+            android:label="@string/nexus_command_widget_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/nexus_command_widget_info"/>
+        </receiver>
         <!-- 应用内更新安装 APK 用 FileProvider。 -->
         <provider
             android:name="androidx.core.content.FileProvider"

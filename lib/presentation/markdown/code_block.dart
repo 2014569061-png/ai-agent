@@ -291,31 +291,38 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
     // 复用 const 高亮器，避免每次 rebuild 重新构造。
     final highlighter = dark ? _darkHighlighter : _lightHighlighter;
 
+    final isDiff = (widget.language?.toLowerCase().contains('diff') ?? false) ||
+        (trimmed.startsWith('@@') || (trimmed.contains('\n+') && trimmed.contains('\n-')));
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: border),
+        border: Border.all(color: border, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             color: headerBackground,
             child: Row(
               children: [
-                Icon(Icons.code, size: 14, color: headerText),
+                Icon(
+                  isDiff ? Icons.compare_arrows_rounded : Icons.code_rounded,
+                  size: 14,
+                  color: isDiff ? AppPalette.brand : headerText,
+                ),
                 const SizedBox(width: 6),
                 Text(
-                  widget.language ?? '代码',
+                  _formatHeaderTitle(widget.language, isDiff),
                   style: TextStyle(
                     fontSize: 12,
-                    color: headerText,
-                    fontWeight: FontWeight.w500,
+                    color: isDiff ? (dark ? Colors.white : AppPalette.lightText) : headerText,
+                    fontWeight: FontWeight.w600,
                     fontFamily: 'monospace',
                   ),
                 ),
@@ -336,11 +343,11 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.copy, size: 14, color: headerText),
+                          Icon(Icons.copy_rounded, size: 13, color: headerText),
                           const SizedBox(width: 4),
                           Text('复制',
                               style:
-                                  TextStyle(fontSize: 12, color: headerText)),
+                                  TextStyle(fontSize: 11.5, color: headerText)),
                         ],
                       ),
                     ),
@@ -349,18 +356,93 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
               ],
             ),
           ),
-          Scrollbar(
-            thumbVisibility: false,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(12),
-              child: _highlighted
-                  ? _buildHighlighted(
-                      highlighter, trimmed, codeColor, longFallback)
-                  : _buildPlain(trimmed, codeColor),
-            ),
-          ),
+          isDiff
+              ? _buildDiffView(trimmed, codeColor, dark)
+              : Scrollbar(
+                  thumbVisibility: false,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.all(12),
+                    child: _highlighted
+                        ? _buildHighlighted(
+                            highlighter, trimmed, codeColor, longFallback)
+                        : _buildPlain(trimmed, codeColor),
+                  ),
+                ),
         ],
+      ),
+    );
+  }
+
+  String _formatHeaderTitle(String? lang, bool isDiff) {
+    if (isDiff) {
+      if (lang != null && lang.isNotEmpty && lang.toLowerCase() != 'diff') {
+        return '$lang [Diff]';
+      }
+      return 'Diff 变更对比';
+    }
+    return lang ?? '代码';
+  }
+
+  Widget _buildDiffView(String code, Color codeColor, bool isDark) {
+    final lines = code.split('\n');
+    return Container(
+      color: isDark ? const Color(0xFF090D14) : const Color(0xFFF8FAFC),
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: List.generate(lines.length, (index) {
+          final line = lines[index];
+          final isAdd = line.startsWith('+') && !line.startsWith('+++');
+          final isRemove = line.startsWith('-') && !line.startsWith('---');
+          final isHeader = line.startsWith('@@');
+
+          final bg = isAdd
+              ? AppPalette.diffAddedBg
+              : isRemove
+                  ? AppPalette.diffRemovedBg
+                  : Colors.transparent;
+
+          final textColor = isAdd
+              ? AppPalette.diffAddedText
+              : isRemove
+                  ? AppPalette.diffRemovedText
+                  : isHeader
+                      ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
+                      : codeColor;
+
+          return Container(
+            color: bg,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '${index + 1}',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: SelectableText(
+                    line,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: textColor,
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
       ),
     );
   }

@@ -5,7 +5,9 @@ import '../../application/orchestration_module.dart';
 import '../../domain/collaboration_models.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/section_card.dart';
 import 'collaboration_timeline.dart';
 
@@ -81,7 +83,7 @@ class _CollaborationPlanSheetState
       if (!mounted) return;
       Navigator.pop(context);
       await Navigator.of(context).push(
-        MaterialPageRoute(
+        NexusPageRoute.detail(
           builder: (_) => CollaborationTimelinePage(
             runId: run.id,
             initialRun: run,
@@ -112,9 +114,9 @@ class _CollaborationPlanSheetState
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
         child: _loading
-            ? const SizedBox(
-                height: 260,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: NexusListSkeleton(itemCount: 3),
               )
             : _error != null
                 ? _errorView()
@@ -326,12 +328,7 @@ class _CollaborationPlanSheetState
                                   ),
                                   onPressed: _starting ? null : _start,
                                   icon: _starting
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2),
-                                        )
+                                      ? const Icon(Icons.sync_rounded, size: 18)
                                       : const Icon(Icons.play_arrow_rounded),
                                   label:
                                       Text(_starting ? '正在启动协同…' : '确认方案并开始分析'),

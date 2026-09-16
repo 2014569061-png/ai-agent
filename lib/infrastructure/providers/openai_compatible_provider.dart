@@ -50,7 +50,7 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
             {'role': 'user', 'content': 'ping'},
           ],
           'stream': false,
-          'max_tokens': 1,
+          _maxOutputTokenField(config.model): 1,
         },
         options: Options(headers: {
           'Authorization': 'Bearer ${config.apiKey}',
@@ -103,19 +103,25 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
       {CancelToken? cancelToken}) async* {
     var includeUsage = _streamOptionsSupported;
 
+    final reasoningModel = _supportsReasoning(request.model);
     Map<String, dynamic> buildPayload() => {
           'model': request.model,
           'messages': request.messages.map(toProviderMessage).toList(),
-          'temperature': request.temperature,
-          'max_tokens': request.maxTokens,
-          'top_p': request.topP,
+          // o-series / GPT-5 style reasoning models use the newer output
+          // limit field and reject sampling controls such as temperature.
+          if (!reasoningModel) ...{
+            'temperature': request.temperature,
+            'top_p': request.topP,
+            'max_tokens': request.maxTokens,
+          } else
+            _maxOutputTokenField(request.model): request.maxTokens,
           'stream': true,
           if (includeUsage) 'stream_options': {'include_usage': true},
           if (request.tools.isNotEmpty)
             'tools':
                 request.tools.map((tool) => tool.toOpenAiSchema()).toList(),
           // 思考程度：仅 o1/o3/GPT-5 等推理模型支持；其他模型会忽略或 400。
-          if (_supportsReasoning(request.model) &&
+          if (reasoningModel &&
               request.reasoningEffort != ReasoningEffort.off &&
               request.reasoningEffort != ReasoningEffort.auto)
             'reasoning_effort': request.reasoningEffort.name,
@@ -250,6 +256,9 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
       }
     }
   }
+
+  String _maxOutputTokenField(String model) =>
+      _supportsReasoning(model) ? 'max_completion_tokens' : 'max_tokens';
 
   /// 识别“服务端不认识 stream_options/include_usage”类错误。严格按旧
   /// 规范实现的中转服务会以 400（部分用 422）拒绝未知字段。

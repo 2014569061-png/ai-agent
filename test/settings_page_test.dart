@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
-import 'package:mobile_agent/presentation/l10n/app_strings.dart';
 import 'package:mobile_agent/presentation/settings/settings_page.dart';
 import 'package:mobile_agent/presentation/settings/tool_list_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,7 +47,8 @@ void main() {
       'settings.tool.sensitive_read': false,
       'settings.tool.sensitive_action': false,
       'settings.tool.terminal_file': true,
-      'settings.language': 'system',
+      'settings.language': 'zh',
+      'settings.font_scale': 1.0,
     });
   });
 
@@ -60,7 +60,7 @@ void main() {
     );
   }
 
-  testWidgets('SettingsPage renders hero header, search and available sections',
+  testWidgets('SettingsPage renders minimalist DeepSeek layout and cards',
       (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -70,64 +70,29 @@ void main() {
     await tester.pumpWidget(createWidgetUnderTest(const SettingsPage()));
     await tester.pumpAndSettle();
 
-    // 1. Hero Header
-    expect(find.text(AppStrings.settings), findsOneWidget);
-    expect(find.text(AppStrings.settingsHeroSubtitle), findsOneWidget);
-    expect(find.text('返回'), findsOneWidget);
+    // 1. Top bar: back button & centered title
+    expect(find.text('设置'), findsOneWidget);
+    expect(find.byTooltip('返回'), findsOneWidget);
 
-    // 2. Search bar
-    expect(find.byType(TextField), findsOneWidget);
+    // 2. Sections: 账户, 应用, 关于
+    expect(find.text('账户'), findsOneWidget);
+    expect(find.text('应用'), findsOneWidget);
+    expect(find.text('关于'), findsOneWidget);
 
-    // 3. First sections visible on screen
-    expect(find.text(AppStrings.llmProviderSection), findsOneWidget);
-    expect(find.text(AppStrings.contextExtensionSection), findsOneWidget);
+    // 3. Main card entries
+    expect(find.text('账号管理'), findsOneWidget);
+    expect(find.text('数据管理'), findsOneWidget);
+    expect(find.text('语言'), findsOneWidget);
+    expect(find.text('外观'), findsOneWidget);
+    expect(find.text('字体大小'), findsOneWidget);
+    expect(find.text('检查更新'), findsOneWidget);
+    expect(find.text('服务协议'), findsOneWidget);
+    expect(find.text('帮助与反馈'), findsOneWidget);
+    expect(find.text('退出登录'), findsOneWidget);
 
-    // Scroll until each section is visible
-    final mainScrollable = find.byType(Scrollable).first;
-
-    await tester.scrollUntilVisible(
-      find.text(AppStrings.toolsSectionTitle),
-      200,
-      scrollable: mainScrollable,
-    );
-    expect(find.text(AppStrings.toolsSectionTitle), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text(AppStrings.generalSection),
-      200,
-      scrollable: mainScrollable,
-    );
-    expect(find.text(AppStrings.generalSection), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text(AppStrings.permissionsSection),
-      200,
-      scrollable: mainScrollable,
-    );
-    expect(find.text(AppStrings.permissionsSection), findsOneWidget);
-
-    await tester.scrollUntilVisible(
-      find.text(AppStrings.aboutSection),
-      200,
-      scrollable: mainScrollable,
-    );
-    expect(find.text(AppStrings.aboutSection), findsOneWidget);
-    expect(find.text(AppStrings.appVersionName), findsNothing);
-    expect(find.text(AppStrings.sourceCode), findsNothing);
-    expect(find.text(AppStrings.openSourceLicenses), findsNothing);
-  });
-
-  testWidgets('SettingsPage search filters items', (tester) async {
-    await tester.pumpWidget(createWidgetUnderTest(const SettingsPage()));
-    await tester.pumpAndSettle();
-
-    // Enter query
-    await tester.enterText(find.byType(TextField), 'Linux');
-    await tester.pumpAndSettle();
-
-    // Should show search result containing Linux
-    expect(find.text('Linux 工具环境'), findsOneWidget);
-    expect(find.text(AppStrings.llmProviderSection), findsNothing);
+    // 4. Footer备案与合规声明
+    expect(find.textContaining('备案号'), findsOneWidget);
+    expect(find.textContaining('内容由 AI 生成'), findsOneWidget);
   });
 
   testWidgets('ToolListPage renders filter chips and list of tools',

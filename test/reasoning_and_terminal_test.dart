@@ -61,11 +61,25 @@ void main() {
     final pathRejected = await service.run(executablePath);
     expect(pathRejected.exitCode, 126);
 
+    await File('${directory.path}/gradlew').writeAsString('#!/bin/sh\n');
+    final runtime = _CaptureRuntime();
+    final wrapperService = TerminalCommandService(
+      workspacePath: directory.path,
+      runtime: runtime,
+    );
+    final wrapper = await wrapperService.run('./gradlew test');
+    expect(wrapper.notExecuted, isFalse);
+    expect(runtime.commands, contains('./gradlew test'));
+
     final command = Platform.isWindows ? 'dir' : 'pwd';
-    final result = await service.run(command);
+    // 这条断言验证的是「允许的命令能在工作区内跑通」，不是产品的默认超时常量。
+    // 并发跑全套测试时 Windows 上出现过 cmd.exe 启动被拖慢、偶发触到默认 30s
+    // 超时（适配器用 124 表示超时）的情况，因此这里显式放宽单条命令的预算。
+    final result =
+        await service.run(command, timeout: const Duration(minutes: 1));
     expect(result.exitCode, 0);
     expect(result.output, isNotEmpty);
-  }, timeout: const Timeout(Duration(minutes: 2)));
+  }, timeout: const Timeout(Duration(minutes: 3)));
 
   test('terminal tool requires confirmation', () {
     final tool = TerminalCommandTool(
@@ -127,4 +141,41 @@ class _ReasoningProvider implements LlmProvider {
     }
     yield const CompletedEvent(stopReason: StopReason.toolUse);
   }
+}
+
+class _CaptureRuntime implements LinuxRuntimeAdapter {
+  final commands = <String>[];
+
+  @override
+  bool get supportsShellSyntax => true;
+
+  @override
+  bool get supportsInterpreterEvaluation => false;
+
+  @override
+  bool get isRunning => false;
+
+  @override
+  LinuxRuntimeKind get kind => LinuxRuntimeKind.hostProcess;
+
+  @override
+  Future<LinuxRuntimeInfo> inspect() async => const LinuxRuntimeInfo(
+        kind: LinuxRuntimeKind.hostProcess,
+        label: 'fake',
+        available: true,
+        detail: '',
+      );
+
+  @override
+  Future<CommandResult> run(
+    LinuxCommandRequest request, {
+    required String workingDirectory,
+    required Duration timeout,
+  }) async {
+    commands.add(request.commandLine);
+    return const CommandResult(output: 'ok', exitCode: 0);
+  }
+
+  @override
+  void stop() {}
 }

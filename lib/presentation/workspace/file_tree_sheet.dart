@@ -10,7 +10,8 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_loading_skeleton.dart';
+import '../widgets/nexus_sheet.dart';
 
 /// G1 工作区文件树:目录导航模式(进入子目录 / 后退 / 前进),
 /// 替代旧版"递归平铺 + 网页预览"。
@@ -19,12 +20,20 @@ class FileTreeSheet extends StatefulWidget {
     super.key,
     required this.workspacePath,
     this.onReselectWorkspace,
+    this.onCiteFile,
+    @visibleForTesting this.directoryLoader,
   });
 
   final String workspacePath;
 
   /// 可选的“重新选择工作区”回调（面板内就地切换根目录）。
   final VoidCallback? onReselectWorkspace;
+
+  /// 将当前文件引用到对话输入。
+  final void Function(String relativePath)? onCiteFile;
+
+  @visibleForTesting
+  final Future<List<FileSystemEntity>> Function(String path)? directoryLoader;
 
   @override
   State<FileTreeSheet> createState() => _FileTreeSheetState();
@@ -58,7 +67,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
       });
     }
     final dir = Directory(_currentDir);
-    if (!dir.existsSync()) {
+    if (widget.directoryLoader == null && !dir.existsSync()) {
       if (mounted) {
         setState(() {
           _loading = false;
@@ -68,7 +77,9 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
       return;
     }
     try {
-      final list = await dir.list(followLinks: false).toList();
+      final list = widget.directoryLoader == null
+          ? await dir.list(followLinks: false).toList()
+          : await widget.directoryLoader!(_currentDir);
       // 过滤隐藏项与构建目录
       final filtered = list.where((e) {
         final name = p.basename(e.path);
@@ -95,7 +106,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
   }
 
   void _openDir(String path) {
-    if (path == _currentDir) return;
+    if (path == _currentDir || !_isInsideWorkspace(path)) return;
     setState(() {
       _back.add(_currentDir);
       _forward.clear();
@@ -122,10 +133,22 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
     _loadDirectory();
   }
 
-  /// 上溯到上级目录（可越过工作区根），原目录压入后退栈以便连续返回。
+  bool get _atWorkspaceRoot =>
+      p.equals(p.normalize(_currentDir), p.normalize(widget.workspacePath));
+
+  bool _isInsideWorkspace(String path) {
+    final workspace = p.normalize(widget.workspacePath);
+    final relative = p.relative(p.normalize(path), from: workspace);
+    return relative == '.' ||
+        (!p.isAbsolute(relative) &&
+            relative != '..' &&
+            !relative.startsWith('..${p.separator}'));
+  }
+
   void _goUp() {
+    if (_atWorkspaceRoot) return;
     final parent = p.dirname(_currentDir);
-    if (parent == _currentDir) return;
+    if (!_isInsideWorkspace(parent)) return;
     setState(() {
       _back.add(_currentDir);
       _forward.clear();
@@ -138,7 +161,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
     try {
       final content = await file.readAsString();
       if (!mounted) return;
-      unawaited(showImmersiveDialog(
+      unawaited(showNexusDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(p.basename(file.path),
@@ -163,6 +186,17 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                 FloatingToast.show(context, '已复制到剪贴板');
               },
             ),
+            if (widget.onCiteFile != null)
+              TextButton.icon(
+                icon: const Icon(Icons.format_quote, size: 16),
+                label: const Text('引用到对话'),
+                onPressed: () {
+                  widget.onCiteFile!(
+                      p.relative(file.path, from: widget.workspacePath)
+                          .replaceAll('\\', '/'));
+                  Navigator.pop(ctx);
+                },
+              ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('关闭'),
@@ -181,7 +215,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
     final projectName = p.basename(widget.workspacePath);
 
     return Container(
-      // 外壳由 showImmersiveSheet 的 ImmersiveSurface 提供毛玻璃,这里不再铺不透明底色。
+      // 外壳由 showNexusSheet 的 NexusSurface 提供毛玻璃,这里不再铺不透明底色。
       padding: const EdgeInsets.only(top: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -210,9 +244,10 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                       Text(
                         projectName.isEmpty ? '项目工作区' : projectName,
                         style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w500),
+                            fontSize: 16, fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 2),
                       InkWell(
                         onTap: () {
                           Clipboard.setData(ClipboardData(text: _currentDir));
@@ -227,6 +262,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                                 _currentLabel,
                                 style: TextStyle(
                                     fontSize: 11,
+                                    fontFamily: 'JetBrains Mono',
                                     color: theme.colorScheme.onSurfaceVariant),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -244,8 +280,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                 IconButton(
                   icon: const Icon(Icons.arrow_upward_rounded, size: 18),
                   tooltip: '上级目录',
-                  onPressed:
-                      p.dirname(_currentDir) == _currentDir ? null : _goUp,
+                  onPressed: _atWorkspaceRoot ? null : _goUp,
                 ),
                 IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
@@ -276,7 +311,10 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
           // 列表
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: NexusListSkeleton(itemCount: 6),
+                  )
                 : _error != null
                     ? Center(
                         child: EmptyStateView.compact(
@@ -322,7 +360,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                                 ),
                                 trailing: isDir
                                     ? const Icon(Icons.chevron_right, size: 18)
-                                    : null,
+                                    : _buildFileTrailing(entity as File),
                                 onTap: isDir
                                     ? () => _openDir(entity.path)
                                     : () => _viewFile(entity as File),
@@ -333,6 +371,22 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
         ],
       ),
     );
+  }
+
+  Widget _buildFileTrailing(File file) {
+    try {
+      final kb = (file.statSync().size / 1024).toStringAsFixed(1);
+      return Text(
+        '$kb KB',
+        style: const TextStyle(
+          fontSize: 11,
+          fontFamily: 'JetBrains Mono',
+          color: AppPalette.darkTextMuted,
+        ),
+      );
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
   }
 
   IconData _getFileIcon(String path) {

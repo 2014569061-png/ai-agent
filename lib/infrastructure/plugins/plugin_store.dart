@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../../domain/models.dart';
+import '../../domain/network_access_policy.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import '../../domain/unique_id.dart';
@@ -15,24 +16,53 @@ import '../tools/tool_registry.dart';
 class PluginStore {
   static const _maxToolsPerPlugin = 20;
 
-  bool validateManifest(String manifestJson) {
+  String? manifestError(String manifestJson) {
     try {
       final map = jsonDecode(manifestJson);
-      if (map is! Map<String, dynamic>) return false;
-      final name = map['name'];
-      final kind = map['kind'];
-      if (name is! String || name.trim().isEmpty) return false;
+      if (map is! Map) return 'manifest 必须是 JSON 对象';
+      final data = Map<String, dynamic>.from(map);
+      final name = data['name'];
+      final kind = data['kind'];
+      if (name is! String || name.trim().isEmpty) return '缺少插件名称';
       if (kind is! String ||
           !const {'tool', 'agent', 'bundle'}.contains(kind)) {
-        return false;
+        return 'kind 必须是 tool、agent 或 bundle';
       }
-      final tools = map['tools'];
-      if (tools is List && tools.length > _maxToolsPerPlugin) return false;
-      return true;
+      final version = data['version'];
+      if (version != null && version is! String) return 'version 必须是字符串';
+      final tools = data['tools'];
+      if (tools != null && tools is! List) return 'tools 必须是数组';
+      if (tools is List && tools.length > _maxToolsPerPlugin) {
+        return '单个插件最多声明 $_maxToolsPerPlugin 个工具';
+      }
+      if (tools is List) {
+        const policy = NetworkAccessPolicy();
+        for (final raw in tools) {
+          if (raw is! Map) return '工具声明必须是对象';
+          final def = Map<String, dynamic>.from(raw);
+          final toolName = def['name'];
+          if (toolName is! String || toolName.trim().isEmpty) {
+            return '每个工具都必须有 name';
+          }
+          final request = def['request'];
+          if (request is! Map) return '工具 $toolName 缺少 request';
+          final url = request['url']?.toString() ?? '';
+          final decision = policy.inspect(url);
+          if (!decision.allowed) {
+            return '工具 $toolName 的 URL 被拒绝：${decision.reason}';
+          }
+        }
+      }
+      final agents = data['agents'];
+      if (agents != null && agents is! List) return 'agents 必须是数组';
+      return null;
     } catch (_) {
-      return false;
+      return 'manifest 不是合法 JSON';
     }
   }
+
+  bool validateManifest(String manifestJson) =>
+      manifestError(manifestJson) == null;
 
   Future<Plugin> importPlugin({
     required AppDatabase db,
@@ -42,6 +72,10 @@ class PluginStore {
   }) async {
     final now = DateTime.now();
     final normalizedName = name.trim();
+    final error = manifestError(manifestJson);
+    if (error != null) {
+      throw FormatException(error);
+    }
     final existing = (await db.allPlugins())
         .where((plugin) => plugin.name == normalizedName && plugin.kind == kind)
         .firstOrNull;
@@ -114,8 +148,11 @@ class PluginStore {
 
 /// 声明式工具：按 manifest 里的 request 模板发起 HTTP 请求（危险操作仍需审批）。
 class DeclarativeTool implements AgentTool {
-  DeclarativeTool.fromManifest(Map<String, dynamic> map)
-      : _request = (map['request'] as Map<String, dynamic>?) ?? const {},
+  DeclarativeTool.fromManifest(
+    Map<String, dynamic> map, {
+    NetworkAccessPolicy policy = const NetworkAccessPolicy(),
+  })  : _request = (map['request'] as Map<String, dynamic>?) ?? const {},
+        _policy = policy,
         manifest = UnifiedTool(
           name: (map['name'] as String? ?? 'plugin_tool').trim(),
           description: map['description'] as String? ?? '',
@@ -125,6 +162,7 @@ class DeclarativeTool implements AgentTool {
         );
 
   final Map<String, dynamic> _request;
+  final NetworkAccessPolicy _policy;
 
   @override
   final UnifiedTool manifest;
@@ -132,10 +170,11 @@ class DeclarativeTool implements AgentTool {
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     final url = (_request['url'] as String? ?? '').trim();
-    if (url.isEmpty || !url.startsWith('http')) {
+    final decision = _policy.inspect(url);
+    if (!decision.allowed) {
       return ToolResult.failure(
         code: ToolCodes.notConfigured,
-        message: '插件工具未配置有效 URL',
+        message: '插件工具未配置有效 URL：${decision.reason}',
       );
     }
     final method = (_request['method'] as String? ?? 'GET').toUpperCase();

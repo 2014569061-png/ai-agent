@@ -27,6 +27,25 @@ class $ConversationsTable extends Conversations
   late final GeneratedColumn<String> agentId = GeneratedColumn<String>(
       'agent_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _projectIdMeta =
+      const VerificationMeta('projectId');
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+      'project_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _modeMeta = const VerificationMeta('mode');
+  @override
+  late final GeneratedColumn<String> mode = GeneratedColumn<String>(
+      'mode', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('chat'));
+  static const VerificationMeta _providerProfileIdMeta =
+      const VerificationMeta('providerProfileId');
+  @override
+  late final GeneratedColumn<String> providerProfileId =
+      GeneratedColumn<String>('provider_profile_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _isPinnedMeta =
       const VerificationMeta('isPinned');
   @override
@@ -72,6 +91,9 @@ class $ConversationsTable extends Conversations
         id,
         title,
         agentId,
+        projectId,
+        mode,
+        providerProfileId,
         isPinned,
         isFavorite,
         tagsJson,
@@ -100,6 +122,20 @@ class $ConversationsTable extends Conversations
     if (data.containsKey('agent_id')) {
       context.handle(_agentIdMeta,
           agentId.isAcceptableOrUnknown(data['agent_id']!, _agentIdMeta));
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(_projectIdMeta,
+          projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta));
+    }
+    if (data.containsKey('mode')) {
+      context.handle(
+          _modeMeta, mode.isAcceptableOrUnknown(data['mode']!, _modeMeta));
+    }
+    if (data.containsKey('provider_profile_id')) {
+      context.handle(
+          _providerProfileIdMeta,
+          providerProfileId.isAcceptableOrUnknown(
+              data['provider_profile_id']!, _providerProfileIdMeta));
     }
     if (data.containsKey('is_pinned')) {
       context.handle(_isPinnedMeta,
@@ -142,6 +178,12 @@ class $ConversationsTable extends Conversations
           .read(DriftSqlType.string, data['${effectivePrefix}title'])!,
       agentId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}agent_id']),
+      projectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}project_id']),
+      mode: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}mode'])!,
+      providerProfileId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}provider_profile_id']),
       isPinned: attachedDatabase.typeMapping
           .read(DriftSqlType.bool, data['${effectivePrefix}is_pinned'])!,
       isFavorite: attachedDatabase.typeMapping
@@ -165,6 +207,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final String id;
   final String title;
   final String? agentId;
+  final String? projectId;
+  final String mode;
+  final String? providerProfileId;
   final bool isPinned;
   final bool isFavorite;
   final String tagsJson;
@@ -174,6 +219,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       {required this.id,
       required this.title,
       this.agentId,
+      this.projectId,
+      required this.mode,
+      this.providerProfileId,
       required this.isPinned,
       required this.isFavorite,
       required this.tagsJson,
@@ -186,6 +234,13 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     map['title'] = Variable<String>(title);
     if (!nullToAbsent || agentId != null) {
       map['agent_id'] = Variable<String>(agentId);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
+    map['mode'] = Variable<String>(mode);
+    if (!nullToAbsent || providerProfileId != null) {
+      map['provider_profile_id'] = Variable<String>(providerProfileId);
     }
     map['is_pinned'] = Variable<bool>(isPinned);
     map['is_favorite'] = Variable<bool>(isFavorite);
@@ -202,6 +257,13 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       agentId: agentId == null && nullToAbsent
           ? const Value.absent()
           : Value(agentId),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
+      mode: Value(mode),
+      providerProfileId: providerProfileId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(providerProfileId),
       isPinned: Value(isPinned),
       isFavorite: Value(isFavorite),
       tagsJson: Value(tagsJson),
@@ -217,6 +279,10 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       id: serializer.fromJson<String>(json['id']),
       title: serializer.fromJson<String>(json['title']),
       agentId: serializer.fromJson<String?>(json['agentId']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
+      mode: serializer.fromJson<String>(json['mode']),
+      providerProfileId:
+          serializer.fromJson<String?>(json['providerProfileId']),
       isPinned: serializer.fromJson<bool>(json['isPinned']),
       isFavorite: serializer.fromJson<bool>(json['isFavorite']),
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
@@ -231,6 +297,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'id': serializer.toJson<String>(id),
       'title': serializer.toJson<String>(title),
       'agentId': serializer.toJson<String?>(agentId),
+      'projectId': serializer.toJson<String?>(projectId),
+      'mode': serializer.toJson<String>(mode),
+      'providerProfileId': serializer.toJson<String?>(providerProfileId),
       'isPinned': serializer.toJson<bool>(isPinned),
       'isFavorite': serializer.toJson<bool>(isFavorite),
       'tagsJson': serializer.toJson<String>(tagsJson),
@@ -243,6 +312,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           {String? id,
           String? title,
           Value<String?> agentId = const Value.absent(),
+          Value<String?> projectId = const Value.absent(),
+          String? mode,
+          Value<String?> providerProfileId = const Value.absent(),
           bool? isPinned,
           bool? isFavorite,
           String? tagsJson,
@@ -252,6 +324,11 @@ class Conversation extends DataClass implements Insertable<Conversation> {
         id: id ?? this.id,
         title: title ?? this.title,
         agentId: agentId.present ? agentId.value : this.agentId,
+        projectId: projectId.present ? projectId.value : this.projectId,
+        mode: mode ?? this.mode,
+        providerProfileId: providerProfileId.present
+            ? providerProfileId.value
+            : this.providerProfileId,
         isPinned: isPinned ?? this.isPinned,
         isFavorite: isFavorite ?? this.isFavorite,
         tagsJson: tagsJson ?? this.tagsJson,
@@ -263,6 +340,11 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       id: data.id.present ? data.id.value : this.id,
       title: data.title.present ? data.title.value : this.title,
       agentId: data.agentId.present ? data.agentId.value : this.agentId,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      mode: data.mode.present ? data.mode.value : this.mode,
+      providerProfileId: data.providerProfileId.present
+          ? data.providerProfileId.value
+          : this.providerProfileId,
       isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
       isFavorite:
           data.isFavorite.present ? data.isFavorite.value : this.isFavorite,
@@ -278,6 +360,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('agentId: $agentId, ')
+          ..write('projectId: $projectId, ')
+          ..write('mode: $mode, ')
+          ..write('providerProfileId: $providerProfileId, ')
           ..write('isPinned: $isPinned, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('tagsJson: $tagsJson, ')
@@ -288,8 +373,8 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      id, title, agentId, isPinned, isFavorite, tagsJson, createdAt, updatedAt);
+  int get hashCode => Object.hash(id, title, agentId, projectId, mode,
+      providerProfileId, isPinned, isFavorite, tagsJson, createdAt, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -297,6 +382,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.id == this.id &&
           other.title == this.title &&
           other.agentId == this.agentId &&
+          other.projectId == this.projectId &&
+          other.mode == this.mode &&
+          other.providerProfileId == this.providerProfileId &&
           other.isPinned == this.isPinned &&
           other.isFavorite == this.isFavorite &&
           other.tagsJson == this.tagsJson &&
@@ -308,6 +396,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<String> id;
   final Value<String> title;
   final Value<String?> agentId;
+  final Value<String?> projectId;
+  final Value<String> mode;
+  final Value<String?> providerProfileId;
   final Value<bool> isPinned;
   final Value<bool> isFavorite;
   final Value<String> tagsJson;
@@ -318,6 +409,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.id = const Value.absent(),
     this.title = const Value.absent(),
     this.agentId = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.mode = const Value.absent(),
+    this.providerProfileId = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.tagsJson = const Value.absent(),
@@ -329,6 +423,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     required String id,
     this.title = const Value.absent(),
     this.agentId = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.mode = const Value.absent(),
+    this.providerProfileId = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.isFavorite = const Value.absent(),
     this.tagsJson = const Value.absent(),
@@ -342,6 +439,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<String>? id,
     Expression<String>? title,
     Expression<String>? agentId,
+    Expression<String>? projectId,
+    Expression<String>? mode,
+    Expression<String>? providerProfileId,
     Expression<bool>? isPinned,
     Expression<bool>? isFavorite,
     Expression<String>? tagsJson,
@@ -353,6 +453,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (id != null) 'id': id,
       if (title != null) 'title': title,
       if (agentId != null) 'agent_id': agentId,
+      if (projectId != null) 'project_id': projectId,
+      if (mode != null) 'mode': mode,
+      if (providerProfileId != null) 'provider_profile_id': providerProfileId,
       if (isPinned != null) 'is_pinned': isPinned,
       if (isFavorite != null) 'is_favorite': isFavorite,
       if (tagsJson != null) 'tags_json': tagsJson,
@@ -366,6 +469,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       {Value<String>? id,
       Value<String>? title,
       Value<String?>? agentId,
+      Value<String?>? projectId,
+      Value<String>? mode,
+      Value<String?>? providerProfileId,
       Value<bool>? isPinned,
       Value<bool>? isFavorite,
       Value<String>? tagsJson,
@@ -376,6 +482,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       id: id ?? this.id,
       title: title ?? this.title,
       agentId: agentId ?? this.agentId,
+      projectId: projectId ?? this.projectId,
+      mode: mode ?? this.mode,
+      providerProfileId: providerProfileId ?? this.providerProfileId,
       isPinned: isPinned ?? this.isPinned,
       isFavorite: isFavorite ?? this.isFavorite,
       tagsJson: tagsJson ?? this.tagsJson,
@@ -396,6 +505,15 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     }
     if (agentId.present) {
       map['agent_id'] = Variable<String>(agentId.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (mode.present) {
+      map['mode'] = Variable<String>(mode.value);
+    }
+    if (providerProfileId.present) {
+      map['provider_profile_id'] = Variable<String>(providerProfileId.value);
     }
     if (isPinned.present) {
       map['is_pinned'] = Variable<bool>(isPinned.value);
@@ -424,6 +542,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('agentId: $agentId, ')
+          ..write('projectId: $projectId, ')
+          ..write('mode: $mode, ')
+          ..write('providerProfileId: $providerProfileId, ')
           ..write('isPinned: $isPinned, ')
           ..write('isFavorite: $isFavorite, ')
           ..write('tagsJson: $tagsJson, ')
@@ -2661,6 +2782,20 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
       'conversation_id', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _projectIdMeta =
+      const VerificationMeta('projectId');
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+      'project_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _stateRevisionMeta =
+      const VerificationMeta('stateRevision');
+  @override
+  late final GeneratedColumn<int> stateRevision = GeneratedColumn<int>(
+      'state_revision', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _typeMeta = const VerificationMeta('type');
   @override
   late final GeneratedColumn<String> type = GeneratedColumn<String>(
@@ -2713,6 +2848,8 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   List<GeneratedColumn> get $columns => [
         id,
         conversationId,
+        projectId,
+        stateRevision,
         type,
         status,
         requestJson,
@@ -2743,6 +2880,16 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
               data['conversation_id']!, _conversationIdMeta));
     } else if (isInserting) {
       context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(_projectIdMeta,
+          projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta));
+    }
+    if (data.containsKey('state_revision')) {
+      context.handle(
+          _stateRevisionMeta,
+          stateRevision.isAcceptableOrUnknown(
+              data['state_revision']!, _stateRevisionMeta));
     }
     if (data.containsKey('type')) {
       context.handle(
@@ -2797,6 +2944,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
           .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
       conversationId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}conversation_id'])!,
+      projectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}project_id']),
+      stateRevision: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}state_revision'])!,
       type: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}type'])!,
       status: attachedDatabase.typeMapping
@@ -2823,6 +2974,8 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
 class Task extends DataClass implements Insertable<Task> {
   final String id;
   final String conversationId;
+  final String? projectId;
+  final int stateRevision;
   final String type;
   final String status;
   final String requestJson;
@@ -2833,6 +2986,8 @@ class Task extends DataClass implements Insertable<Task> {
   const Task(
       {required this.id,
       required this.conversationId,
+      this.projectId,
+      required this.stateRevision,
       required this.type,
       required this.status,
       required this.requestJson,
@@ -2845,6 +3000,10 @@ class Task extends DataClass implements Insertable<Task> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['conversation_id'] = Variable<String>(conversationId);
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
+    map['state_revision'] = Variable<int>(stateRevision);
     map['type'] = Variable<String>(type);
     map['status'] = Variable<String>(status);
     map['request_json'] = Variable<String>(requestJson);
@@ -2859,6 +3018,10 @@ class Task extends DataClass implements Insertable<Task> {
     return TasksCompanion(
       id: Value(id),
       conversationId: Value(conversationId),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
+      stateRevision: Value(stateRevision),
       type: Value(type),
       status: Value(status),
       requestJson: Value(requestJson),
@@ -2875,6 +3038,8 @@ class Task extends DataClass implements Insertable<Task> {
     return Task(
       id: serializer.fromJson<String>(json['id']),
       conversationId: serializer.fromJson<String>(json['conversationId']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
+      stateRevision: serializer.fromJson<int>(json['stateRevision']),
       type: serializer.fromJson<String>(json['type']),
       status: serializer.fromJson<String>(json['status']),
       requestJson: serializer.fromJson<String>(json['requestJson']),
@@ -2890,6 +3055,8 @@ class Task extends DataClass implements Insertable<Task> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'conversationId': serializer.toJson<String>(conversationId),
+      'projectId': serializer.toJson<String?>(projectId),
+      'stateRevision': serializer.toJson<int>(stateRevision),
       'type': serializer.toJson<String>(type),
       'status': serializer.toJson<String>(status),
       'requestJson': serializer.toJson<String>(requestJson),
@@ -2903,6 +3070,8 @@ class Task extends DataClass implements Insertable<Task> {
   Task copyWith(
           {String? id,
           String? conversationId,
+          Value<String?> projectId = const Value.absent(),
+          int? stateRevision,
           String? type,
           String? status,
           String? requestJson,
@@ -2913,6 +3082,8 @@ class Task extends DataClass implements Insertable<Task> {
       Task(
         id: id ?? this.id,
         conversationId: conversationId ?? this.conversationId,
+        projectId: projectId.present ? projectId.value : this.projectId,
+        stateRevision: stateRevision ?? this.stateRevision,
         type: type ?? this.type,
         status: status ?? this.status,
         requestJson: requestJson ?? this.requestJson,
@@ -2927,6 +3098,10 @@ class Task extends DataClass implements Insertable<Task> {
       conversationId: data.conversationId.present
           ? data.conversationId.value
           : this.conversationId,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      stateRevision: data.stateRevision.present
+          ? data.stateRevision.value
+          : this.stateRevision,
       type: data.type.present ? data.type.value : this.type,
       status: data.status.present ? data.status.value : this.status,
       requestJson:
@@ -2946,6 +3121,8 @@ class Task extends DataClass implements Insertable<Task> {
     return (StringBuffer('Task(')
           ..write('id: $id, ')
           ..write('conversationId: $conversationId, ')
+          ..write('projectId: $projectId, ')
+          ..write('stateRevision: $stateRevision, ')
           ..write('type: $type, ')
           ..write('status: $status, ')
           ..write('requestJson: $requestJson, ')
@@ -2958,14 +3135,26 @@ class Task extends DataClass implements Insertable<Task> {
   }
 
   @override
-  int get hashCode => Object.hash(id, conversationId, type, status, requestJson,
-      progressJson, resumeCount, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      conversationId,
+      projectId,
+      stateRevision,
+      type,
+      status,
+      requestJson,
+      progressJson,
+      resumeCount,
+      createdAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is Task &&
           other.id == this.id &&
           other.conversationId == this.conversationId &&
+          other.projectId == this.projectId &&
+          other.stateRevision == this.stateRevision &&
           other.type == this.type &&
           other.status == this.status &&
           other.requestJson == this.requestJson &&
@@ -2978,6 +3167,8 @@ class Task extends DataClass implements Insertable<Task> {
 class TasksCompanion extends UpdateCompanion<Task> {
   final Value<String> id;
   final Value<String> conversationId;
+  final Value<String?> projectId;
+  final Value<int> stateRevision;
   final Value<String> type;
   final Value<String> status;
   final Value<String> requestJson;
@@ -2989,6 +3180,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
   const TasksCompanion({
     this.id = const Value.absent(),
     this.conversationId = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.stateRevision = const Value.absent(),
     this.type = const Value.absent(),
     this.status = const Value.absent(),
     this.requestJson = const Value.absent(),
@@ -3001,6 +3194,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
   TasksCompanion.insert({
     required String id,
     required String conversationId,
+    this.projectId = const Value.absent(),
+    this.stateRevision = const Value.absent(),
     this.type = const Value.absent(),
     this.status = const Value.absent(),
     required String requestJson,
@@ -3017,6 +3212,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
   static Insertable<Task> custom({
     Expression<String>? id,
     Expression<String>? conversationId,
+    Expression<String>? projectId,
+    Expression<int>? stateRevision,
     Expression<String>? type,
     Expression<String>? status,
     Expression<String>? requestJson,
@@ -3029,6 +3226,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (conversationId != null) 'conversation_id': conversationId,
+      if (projectId != null) 'project_id': projectId,
+      if (stateRevision != null) 'state_revision': stateRevision,
       if (type != null) 'type': type,
       if (status != null) 'status': status,
       if (requestJson != null) 'request_json': requestJson,
@@ -3043,6 +3242,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
   TasksCompanion copyWith(
       {Value<String>? id,
       Value<String>? conversationId,
+      Value<String?>? projectId,
+      Value<int>? stateRevision,
       Value<String>? type,
       Value<String>? status,
       Value<String>? requestJson,
@@ -3054,6 +3255,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
     return TasksCompanion(
       id: id ?? this.id,
       conversationId: conversationId ?? this.conversationId,
+      projectId: projectId ?? this.projectId,
+      stateRevision: stateRevision ?? this.stateRevision,
       type: type ?? this.type,
       status: status ?? this.status,
       requestJson: requestJson ?? this.requestJson,
@@ -3073,6 +3276,12 @@ class TasksCompanion extends UpdateCompanion<Task> {
     }
     if (conversationId.present) {
       map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (stateRevision.present) {
+      map['state_revision'] = Variable<int>(stateRevision.value);
     }
     if (type.present) {
       map['type'] = Variable<String>(type.value);
@@ -3106,6 +3315,8 @@ class TasksCompanion extends UpdateCompanion<Task> {
     return (StringBuffer('TasksCompanion(')
           ..write('id: $id, ')
           ..write('conversationId: $conversationId, ')
+          ..write('projectId: $projectId, ')
+          ..write('stateRevision: $stateRevision, ')
           ..write('type: $type, ')
           ..write('status: $status, ')
           ..write('requestJson: $requestJson, ')
@@ -3113,6 +3324,1897 @@ class TasksCompanion extends UpdateCompanion<Task> {
           ..write('resumeCount: $resumeCount, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ProjectsTable extends Projects with TableInfo<$ProjectsTable, Project> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProjectsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _canonicalRootPathMeta =
+      const VerificationMeta('canonicalRootPath');
+  @override
+  late final GeneratedColumn<String> canonicalRootPath =
+      GeneratedColumn<String>('canonical_root_path', aliasedName, false,
+          type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sourceKindMeta =
+      const VerificationMeta('sourceKind');
+  @override
+  late final GeneratedColumn<String> sourceKind = GeneratedColumn<String>(
+      'source_kind', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('directory'));
+  static const VerificationMeta _projectKindMeta =
+      const VerificationMeta('projectKind');
+  @override
+  late final GeneratedColumn<String> projectKind = GeneratedColumn<String>(
+      'project_kind', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('unknown'));
+  static const VerificationMeta _runtimePreferenceMeta =
+      const VerificationMeta('runtimePreference');
+  @override
+  late final GeneratedColumn<String> runtimePreference =
+      GeneratedColumn<String>('runtime_preference', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _settingsJsonMeta =
+      const VerificationMeta('settingsJson');
+  @override
+  late final GeneratedColumn<String> settingsJson = GeneratedColumn<String>(
+      'settings_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('{}'));
+  static const VerificationMeta _settingsVersionMeta =
+      const VerificationMeta('settingsVersion');
+  @override
+  late final GeneratedColumn<int> settingsVersion = GeneratedColumn<int>(
+      'settings_version', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(1));
+  static const VerificationMeta _archivedMeta =
+      const VerificationMeta('archived');
+  @override
+  late final GeneratedColumn<bool> archived = GeneratedColumn<bool>(
+      'archived', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("archived" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        canonicalRootPath,
+        sourceKind,
+        projectKind,
+        runtimePreference,
+        settingsJson,
+        settingsVersion,
+        archived,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'projects';
+  @override
+  VerificationContext validateIntegrity(Insertable<Project> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('canonical_root_path')) {
+      context.handle(
+          _canonicalRootPathMeta,
+          canonicalRootPath.isAcceptableOrUnknown(
+              data['canonical_root_path']!, _canonicalRootPathMeta));
+    } else if (isInserting) {
+      context.missing(_canonicalRootPathMeta);
+    }
+    if (data.containsKey('source_kind')) {
+      context.handle(
+          _sourceKindMeta,
+          sourceKind.isAcceptableOrUnknown(
+              data['source_kind']!, _sourceKindMeta));
+    }
+    if (data.containsKey('project_kind')) {
+      context.handle(
+          _projectKindMeta,
+          projectKind.isAcceptableOrUnknown(
+              data['project_kind']!, _projectKindMeta));
+    }
+    if (data.containsKey('runtime_preference')) {
+      context.handle(
+          _runtimePreferenceMeta,
+          runtimePreference.isAcceptableOrUnknown(
+              data['runtime_preference']!, _runtimePreferenceMeta));
+    }
+    if (data.containsKey('settings_json')) {
+      context.handle(
+          _settingsJsonMeta,
+          settingsJson.isAcceptableOrUnknown(
+              data['settings_json']!, _settingsJsonMeta));
+    }
+    if (data.containsKey('settings_version')) {
+      context.handle(
+          _settingsVersionMeta,
+          settingsVersion.isAcceptableOrUnknown(
+              data['settings_version']!, _settingsVersionMeta));
+    }
+    if (data.containsKey('archived')) {
+      context.handle(_archivedMeta,
+          archived.isAcceptableOrUnknown(data['archived']!, _archivedMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Project map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Project(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      canonicalRootPath: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}canonical_root_path'])!,
+      sourceKind: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}source_kind'])!,
+      projectKind: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}project_kind'])!,
+      runtimePreference: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}runtime_preference']),
+      settingsJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}settings_json'])!,
+      settingsVersion: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}settings_version'])!,
+      archived: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}archived'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $ProjectsTable createAlias(String alias) {
+    return $ProjectsTable(attachedDatabase, alias);
+  }
+}
+
+class Project extends DataClass implements Insertable<Project> {
+  final String id;
+  final String name;
+  final String canonicalRootPath;
+  final String sourceKind;
+  final String projectKind;
+  final String? runtimePreference;
+  final String settingsJson;
+  final int settingsVersion;
+  final bool archived;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Project(
+      {required this.id,
+      required this.name,
+      required this.canonicalRootPath,
+      required this.sourceKind,
+      required this.projectKind,
+      this.runtimePreference,
+      required this.settingsJson,
+      required this.settingsVersion,
+      required this.archived,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['canonical_root_path'] = Variable<String>(canonicalRootPath);
+    map['source_kind'] = Variable<String>(sourceKind);
+    map['project_kind'] = Variable<String>(projectKind);
+    if (!nullToAbsent || runtimePreference != null) {
+      map['runtime_preference'] = Variable<String>(runtimePreference);
+    }
+    map['settings_json'] = Variable<String>(settingsJson);
+    map['settings_version'] = Variable<int>(settingsVersion);
+    map['archived'] = Variable<bool>(archived);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ProjectsCompanion toCompanion(bool nullToAbsent) {
+    return ProjectsCompanion(
+      id: Value(id),
+      name: Value(name),
+      canonicalRootPath: Value(canonicalRootPath),
+      sourceKind: Value(sourceKind),
+      projectKind: Value(projectKind),
+      runtimePreference: runtimePreference == null && nullToAbsent
+          ? const Value.absent()
+          : Value(runtimePreference),
+      settingsJson: Value(settingsJson),
+      settingsVersion: Value(settingsVersion),
+      archived: Value(archived),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory Project.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Project(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      canonicalRootPath: serializer.fromJson<String>(json['canonicalRootPath']),
+      sourceKind: serializer.fromJson<String>(json['sourceKind']),
+      projectKind: serializer.fromJson<String>(json['projectKind']),
+      runtimePreference:
+          serializer.fromJson<String?>(json['runtimePreference']),
+      settingsJson: serializer.fromJson<String>(json['settingsJson']),
+      settingsVersion: serializer.fromJson<int>(json['settingsVersion']),
+      archived: serializer.fromJson<bool>(json['archived']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'canonicalRootPath': serializer.toJson<String>(canonicalRootPath),
+      'sourceKind': serializer.toJson<String>(sourceKind),
+      'projectKind': serializer.toJson<String>(projectKind),
+      'runtimePreference': serializer.toJson<String?>(runtimePreference),
+      'settingsJson': serializer.toJson<String>(settingsJson),
+      'settingsVersion': serializer.toJson<int>(settingsVersion),
+      'archived': serializer.toJson<bool>(archived),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  Project copyWith(
+          {String? id,
+          String? name,
+          String? canonicalRootPath,
+          String? sourceKind,
+          String? projectKind,
+          Value<String?> runtimePreference = const Value.absent(),
+          String? settingsJson,
+          int? settingsVersion,
+          bool? archived,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Project(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        canonicalRootPath: canonicalRootPath ?? this.canonicalRootPath,
+        sourceKind: sourceKind ?? this.sourceKind,
+        projectKind: projectKind ?? this.projectKind,
+        runtimePreference: runtimePreference.present
+            ? runtimePreference.value
+            : this.runtimePreference,
+        settingsJson: settingsJson ?? this.settingsJson,
+        settingsVersion: settingsVersion ?? this.settingsVersion,
+        archived: archived ?? this.archived,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  Project copyWithCompanion(ProjectsCompanion data) {
+    return Project(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      canonicalRootPath: data.canonicalRootPath.present
+          ? data.canonicalRootPath.value
+          : this.canonicalRootPath,
+      sourceKind:
+          data.sourceKind.present ? data.sourceKind.value : this.sourceKind,
+      projectKind:
+          data.projectKind.present ? data.projectKind.value : this.projectKind,
+      runtimePreference: data.runtimePreference.present
+          ? data.runtimePreference.value
+          : this.runtimePreference,
+      settingsJson: data.settingsJson.present
+          ? data.settingsJson.value
+          : this.settingsJson,
+      settingsVersion: data.settingsVersion.present
+          ? data.settingsVersion.value
+          : this.settingsVersion,
+      archived: data.archived.present ? data.archived.value : this.archived,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Project(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('canonicalRootPath: $canonicalRootPath, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('projectKind: $projectKind, ')
+          ..write('runtimePreference: $runtimePreference, ')
+          ..write('settingsJson: $settingsJson, ')
+          ..write('settingsVersion: $settingsVersion, ')
+          ..write('archived: $archived, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      name,
+      canonicalRootPath,
+      sourceKind,
+      projectKind,
+      runtimePreference,
+      settingsJson,
+      settingsVersion,
+      archived,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Project &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.canonicalRootPath == this.canonicalRootPath &&
+          other.sourceKind == this.sourceKind &&
+          other.projectKind == this.projectKind &&
+          other.runtimePreference == this.runtimePreference &&
+          other.settingsJson == this.settingsJson &&
+          other.settingsVersion == this.settingsVersion &&
+          other.archived == this.archived &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ProjectsCompanion extends UpdateCompanion<Project> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> canonicalRootPath;
+  final Value<String> sourceKind;
+  final Value<String> projectKind;
+  final Value<String?> runtimePreference;
+  final Value<String> settingsJson;
+  final Value<int> settingsVersion;
+  final Value<bool> archived;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ProjectsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.canonicalRootPath = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.projectKind = const Value.absent(),
+    this.runtimePreference = const Value.absent(),
+    this.settingsJson = const Value.absent(),
+    this.settingsVersion = const Value.absent(),
+    this.archived = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProjectsCompanion.insert({
+    required String id,
+    required String name,
+    required String canonicalRootPath,
+    this.sourceKind = const Value.absent(),
+    this.projectKind = const Value.absent(),
+    this.runtimePreference = const Value.absent(),
+    this.settingsJson = const Value.absent(),
+    this.settingsVersion = const Value.absent(),
+    this.archived = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name),
+        canonicalRootPath = Value(canonicalRootPath),
+        createdAt = Value(createdAt),
+        updatedAt = Value(updatedAt);
+  static Insertable<Project> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? canonicalRootPath,
+    Expression<String>? sourceKind,
+    Expression<String>? projectKind,
+    Expression<String>? runtimePreference,
+    Expression<String>? settingsJson,
+    Expression<int>? settingsVersion,
+    Expression<bool>? archived,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (canonicalRootPath != null) 'canonical_root_path': canonicalRootPath,
+      if (sourceKind != null) 'source_kind': sourceKind,
+      if (projectKind != null) 'project_kind': projectKind,
+      if (runtimePreference != null) 'runtime_preference': runtimePreference,
+      if (settingsJson != null) 'settings_json': settingsJson,
+      if (settingsVersion != null) 'settings_version': settingsVersion,
+      if (archived != null) 'archived': archived,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProjectsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<String>? canonicalRootPath,
+      Value<String>? sourceKind,
+      Value<String>? projectKind,
+      Value<String?>? runtimePreference,
+      Value<String>? settingsJson,
+      Value<int>? settingsVersion,
+      Value<bool>? archived,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return ProjectsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      canonicalRootPath: canonicalRootPath ?? this.canonicalRootPath,
+      sourceKind: sourceKind ?? this.sourceKind,
+      projectKind: projectKind ?? this.projectKind,
+      runtimePreference: runtimePreference ?? this.runtimePreference,
+      settingsJson: settingsJson ?? this.settingsJson,
+      settingsVersion: settingsVersion ?? this.settingsVersion,
+      archived: archived ?? this.archived,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (canonicalRootPath.present) {
+      map['canonical_root_path'] = Variable<String>(canonicalRootPath.value);
+    }
+    if (sourceKind.present) {
+      map['source_kind'] = Variable<String>(sourceKind.value);
+    }
+    if (projectKind.present) {
+      map['project_kind'] = Variable<String>(projectKind.value);
+    }
+    if (runtimePreference.present) {
+      map['runtime_preference'] = Variable<String>(runtimePreference.value);
+    }
+    if (settingsJson.present) {
+      map['settings_json'] = Variable<String>(settingsJson.value);
+    }
+    if (settingsVersion.present) {
+      map['settings_version'] = Variable<int>(settingsVersion.value);
+    }
+    if (archived.present) {
+      map['archived'] = Variable<bool>(archived.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('canonicalRootPath: $canonicalRootPath, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('projectKind: $projectKind, ')
+          ..write('runtimePreference: $runtimePreference, ')
+          ..write('settingsJson: $settingsJson, ')
+          ..write('settingsVersion: $settingsVersion, ')
+          ..write('archived: $archived, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DraftsTable extends Drafts with TableInfo<$DraftsTable, Draft> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DraftsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _draftKeyMeta =
+      const VerificationMeta('draftKey');
+  @override
+  late final GeneratedColumn<String> draftKey = GeneratedColumn<String>(
+      'draft_key', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _conversationIdMeta =
+      const VerificationMeta('conversationId');
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+      'conversation_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _projectIdMeta =
+      const VerificationMeta('projectId');
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+      'project_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+      'body', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _attachmentsJsonMeta =
+      const VerificationMeta('attachmentsJson');
+  @override
+  late final GeneratedColumn<String> attachmentsJson = GeneratedColumn<String>(
+      'attachments_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('[]'));
+  static const VerificationMeta _referencesJsonMeta =
+      const VerificationMeta('referencesJson');
+  @override
+  late final GeneratedColumn<String> referencesJson = GeneratedColumn<String>(
+      'references_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('[]'));
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        draftKey,
+        conversationId,
+        projectId,
+        body,
+        attachmentsJson,
+        referencesJson,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'drafts';
+  @override
+  VerificationContext validateIntegrity(Insertable<Draft> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('draft_key')) {
+      context.handle(_draftKeyMeta,
+          draftKey.isAcceptableOrUnknown(data['draft_key']!, _draftKeyMeta));
+    } else if (isInserting) {
+      context.missing(_draftKeyMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+          _conversationIdMeta,
+          conversationId.isAcceptableOrUnknown(
+              data['conversation_id']!, _conversationIdMeta));
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(_projectIdMeta,
+          projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta));
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+          _bodyMeta, body.isAcceptableOrUnknown(data['body']!, _bodyMeta));
+    }
+    if (data.containsKey('attachments_json')) {
+      context.handle(
+          _attachmentsJsonMeta,
+          attachmentsJson.isAcceptableOrUnknown(
+              data['attachments_json']!, _attachmentsJsonMeta));
+    }
+    if (data.containsKey('references_json')) {
+      context.handle(
+          _referencesJsonMeta,
+          referencesJson.isAcceptableOrUnknown(
+              data['references_json']!, _referencesJsonMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {draftKey};
+  @override
+  Draft map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Draft(
+      draftKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}draft_key'])!,
+      conversationId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}conversation_id']),
+      projectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}project_id']),
+      body: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}body'])!,
+      attachmentsJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}attachments_json'])!,
+      referencesJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}references_json'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $DraftsTable createAlias(String alias) {
+    return $DraftsTable(attachedDatabase, alias);
+  }
+}
+
+class Draft extends DataClass implements Insertable<Draft> {
+  final String draftKey;
+  final String? conversationId;
+  final String? projectId;
+  final String body;
+  final String attachmentsJson;
+  final String referencesJson;
+  final DateTime updatedAt;
+  const Draft(
+      {required this.draftKey,
+      this.conversationId,
+      this.projectId,
+      required this.body,
+      required this.attachmentsJson,
+      required this.referencesJson,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['draft_key'] = Variable<String>(draftKey);
+    if (!nullToAbsent || conversationId != null) {
+      map['conversation_id'] = Variable<String>(conversationId);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
+    map['body'] = Variable<String>(body);
+    map['attachments_json'] = Variable<String>(attachmentsJson);
+    map['references_json'] = Variable<String>(referencesJson);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  DraftsCompanion toCompanion(bool nullToAbsent) {
+    return DraftsCompanion(
+      draftKey: Value(draftKey),
+      conversationId: conversationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conversationId),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
+      body: Value(body),
+      attachmentsJson: Value(attachmentsJson),
+      referencesJson: Value(referencesJson),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory Draft.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Draft(
+      draftKey: serializer.fromJson<String>(json['draftKey']),
+      conversationId: serializer.fromJson<String?>(json['conversationId']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
+      body: serializer.fromJson<String>(json['body']),
+      attachmentsJson: serializer.fromJson<String>(json['attachmentsJson']),
+      referencesJson: serializer.fromJson<String>(json['referencesJson']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'draftKey': serializer.toJson<String>(draftKey),
+      'conversationId': serializer.toJson<String?>(conversationId),
+      'projectId': serializer.toJson<String?>(projectId),
+      'body': serializer.toJson<String>(body),
+      'attachmentsJson': serializer.toJson<String>(attachmentsJson),
+      'referencesJson': serializer.toJson<String>(referencesJson),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  Draft copyWith(
+          {String? draftKey,
+          Value<String?> conversationId = const Value.absent(),
+          Value<String?> projectId = const Value.absent(),
+          String? body,
+          String? attachmentsJson,
+          String? referencesJson,
+          DateTime? updatedAt}) =>
+      Draft(
+        draftKey: draftKey ?? this.draftKey,
+        conversationId:
+            conversationId.present ? conversationId.value : this.conversationId,
+        projectId: projectId.present ? projectId.value : this.projectId,
+        body: body ?? this.body,
+        attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+        referencesJson: referencesJson ?? this.referencesJson,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  Draft copyWithCompanion(DraftsCompanion data) {
+    return Draft(
+      draftKey: data.draftKey.present ? data.draftKey.value : this.draftKey,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      body: data.body.present ? data.body.value : this.body,
+      attachmentsJson: data.attachmentsJson.present
+          ? data.attachmentsJson.value
+          : this.attachmentsJson,
+      referencesJson: data.referencesJson.present
+          ? data.referencesJson.value
+          : this.referencesJson,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Draft(')
+          ..write('draftKey: $draftKey, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('projectId: $projectId, ')
+          ..write('body: $body, ')
+          ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('referencesJson: $referencesJson, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(draftKey, conversationId, projectId, body,
+      attachmentsJson, referencesJson, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Draft &&
+          other.draftKey == this.draftKey &&
+          other.conversationId == this.conversationId &&
+          other.projectId == this.projectId &&
+          other.body == this.body &&
+          other.attachmentsJson == this.attachmentsJson &&
+          other.referencesJson == this.referencesJson &&
+          other.updatedAt == this.updatedAt);
+}
+
+class DraftsCompanion extends UpdateCompanion<Draft> {
+  final Value<String> draftKey;
+  final Value<String?> conversationId;
+  final Value<String?> projectId;
+  final Value<String> body;
+  final Value<String> attachmentsJson;
+  final Value<String> referencesJson;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const DraftsCompanion({
+    this.draftKey = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.body = const Value.absent(),
+    this.attachmentsJson = const Value.absent(),
+    this.referencesJson = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DraftsCompanion.insert({
+    required String draftKey,
+    this.conversationId = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.body = const Value.absent(),
+    this.attachmentsJson = const Value.absent(),
+    this.referencesJson = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  })  : draftKey = Value(draftKey),
+        updatedAt = Value(updatedAt);
+  static Insertable<Draft> custom({
+    Expression<String>? draftKey,
+    Expression<String>? conversationId,
+    Expression<String>? projectId,
+    Expression<String>? body,
+    Expression<String>? attachmentsJson,
+    Expression<String>? referencesJson,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (draftKey != null) 'draft_key': draftKey,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (projectId != null) 'project_id': projectId,
+      if (body != null) 'body': body,
+      if (attachmentsJson != null) 'attachments_json': attachmentsJson,
+      if (referencesJson != null) 'references_json': referencesJson,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DraftsCompanion copyWith(
+      {Value<String>? draftKey,
+      Value<String?>? conversationId,
+      Value<String?>? projectId,
+      Value<String>? body,
+      Value<String>? attachmentsJson,
+      Value<String>? referencesJson,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return DraftsCompanion(
+      draftKey: draftKey ?? this.draftKey,
+      conversationId: conversationId ?? this.conversationId,
+      projectId: projectId ?? this.projectId,
+      body: body ?? this.body,
+      attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+      referencesJson: referencesJson ?? this.referencesJson,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (draftKey.present) {
+      map['draft_key'] = Variable<String>(draftKey.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (attachmentsJson.present) {
+      map['attachments_json'] = Variable<String>(attachmentsJson.value);
+    }
+    if (referencesJson.present) {
+      map['references_json'] = Variable<String>(referencesJson.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DraftsCompanion(')
+          ..write('draftKey: $draftKey, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('projectId: $projectId, ')
+          ..write('body: $body, ')
+          ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('referencesJson: $referencesJson, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $RunControlsTable extends RunControls
+    with TableInfo<$RunControlsTable, RunControl> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunControlsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _clientControlIdMeta =
+      const VerificationMeta('clientControlId');
+  @override
+  late final GeneratedColumn<String> clientControlId = GeneratedColumn<String>(
+      'client_control_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+      'task_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+      'run_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+      'kind', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _payloadJsonMeta =
+      const VerificationMeta('payloadJson');
+  @override
+  late final GeneratedColumn<String> payloadJson = GeneratedColumn<String>(
+      'payload_json', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('{}'));
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('pending'));
+  static const VerificationMeta _sequenceNoMeta =
+      const VerificationMeta('sequenceNo');
+  @override
+  late final GeneratedColumn<int> sequenceNo = GeneratedColumn<int>(
+      'sequence_no', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _consumedAtMeta =
+      const VerificationMeta('consumedAt');
+  @override
+  late final GeneratedColumn<DateTime> consumedAt = GeneratedColumn<DateTime>(
+      'consumed_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        clientControlId,
+        taskId,
+        runId,
+        kind,
+        payloadJson,
+        status,
+        sequenceNo,
+        createdAt,
+        consumedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'run_controls';
+  @override
+  VerificationContext validateIntegrity(Insertable<RunControl> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('client_control_id')) {
+      context.handle(
+          _clientControlIdMeta,
+          clientControlId.isAcceptableOrUnknown(
+              data['client_control_id']!, _clientControlIdMeta));
+    } else if (isInserting) {
+      context.missing(_clientControlIdMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(_taskIdMeta,
+          taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta));
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+          _runIdMeta, runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta));
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+          _kindMeta, kind.isAcceptableOrUnknown(data['kind']!, _kindMeta));
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('payload_json')) {
+      context.handle(
+          _payloadJsonMeta,
+          payloadJson.isAcceptableOrUnknown(
+              data['payload_json']!, _payloadJsonMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
+    if (data.containsKey('sequence_no')) {
+      context.handle(
+          _sequenceNoMeta,
+          sequenceNo.isAcceptableOrUnknown(
+              data['sequence_no']!, _sequenceNoMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('consumed_at')) {
+      context.handle(
+          _consumedAtMeta,
+          consumedAt.isAcceptableOrUnknown(
+              data['consumed_at']!, _consumedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RunControl map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunControl(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      clientControlId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}client_control_id'])!,
+      taskId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}task_id'])!,
+      runId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}run_id']),
+      kind: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kind'])!,
+      payloadJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}payload_json'])!,
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      sequenceNo: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sequence_no'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      consumedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}consumed_at']),
+    );
+  }
+
+  @override
+  $RunControlsTable createAlias(String alias) {
+    return $RunControlsTable(attachedDatabase, alias);
+  }
+}
+
+class RunControl extends DataClass implements Insertable<RunControl> {
+  final String id;
+  final String clientControlId;
+  final String taskId;
+  final String? runId;
+  final String kind;
+  final String payloadJson;
+  final String status;
+  final int sequenceNo;
+  final DateTime createdAt;
+  final DateTime? consumedAt;
+  const RunControl(
+      {required this.id,
+      required this.clientControlId,
+      required this.taskId,
+      this.runId,
+      required this.kind,
+      required this.payloadJson,
+      required this.status,
+      required this.sequenceNo,
+      required this.createdAt,
+      this.consumedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['client_control_id'] = Variable<String>(clientControlId);
+    map['task_id'] = Variable<String>(taskId);
+    if (!nullToAbsent || runId != null) {
+      map['run_id'] = Variable<String>(runId);
+    }
+    map['kind'] = Variable<String>(kind);
+    map['payload_json'] = Variable<String>(payloadJson);
+    map['status'] = Variable<String>(status);
+    map['sequence_no'] = Variable<int>(sequenceNo);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || consumedAt != null) {
+      map['consumed_at'] = Variable<DateTime>(consumedAt);
+    }
+    return map;
+  }
+
+  RunControlsCompanion toCompanion(bool nullToAbsent) {
+    return RunControlsCompanion(
+      id: Value(id),
+      clientControlId: Value(clientControlId),
+      taskId: Value(taskId),
+      runId:
+          runId == null && nullToAbsent ? const Value.absent() : Value(runId),
+      kind: Value(kind),
+      payloadJson: Value(payloadJson),
+      status: Value(status),
+      sequenceNo: Value(sequenceNo),
+      createdAt: Value(createdAt),
+      consumedAt: consumedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(consumedAt),
+    );
+  }
+
+  factory RunControl.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunControl(
+      id: serializer.fromJson<String>(json['id']),
+      clientControlId: serializer.fromJson<String>(json['clientControlId']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      runId: serializer.fromJson<String?>(json['runId']),
+      kind: serializer.fromJson<String>(json['kind']),
+      payloadJson: serializer.fromJson<String>(json['payloadJson']),
+      status: serializer.fromJson<String>(json['status']),
+      sequenceNo: serializer.fromJson<int>(json['sequenceNo']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      consumedAt: serializer.fromJson<DateTime?>(json['consumedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'clientControlId': serializer.toJson<String>(clientControlId),
+      'taskId': serializer.toJson<String>(taskId),
+      'runId': serializer.toJson<String?>(runId),
+      'kind': serializer.toJson<String>(kind),
+      'payloadJson': serializer.toJson<String>(payloadJson),
+      'status': serializer.toJson<String>(status),
+      'sequenceNo': serializer.toJson<int>(sequenceNo),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'consumedAt': serializer.toJson<DateTime?>(consumedAt),
+    };
+  }
+
+  RunControl copyWith(
+          {String? id,
+          String? clientControlId,
+          String? taskId,
+          Value<String?> runId = const Value.absent(),
+          String? kind,
+          String? payloadJson,
+          String? status,
+          int? sequenceNo,
+          DateTime? createdAt,
+          Value<DateTime?> consumedAt = const Value.absent()}) =>
+      RunControl(
+        id: id ?? this.id,
+        clientControlId: clientControlId ?? this.clientControlId,
+        taskId: taskId ?? this.taskId,
+        runId: runId.present ? runId.value : this.runId,
+        kind: kind ?? this.kind,
+        payloadJson: payloadJson ?? this.payloadJson,
+        status: status ?? this.status,
+        sequenceNo: sequenceNo ?? this.sequenceNo,
+        createdAt: createdAt ?? this.createdAt,
+        consumedAt: consumedAt.present ? consumedAt.value : this.consumedAt,
+      );
+  RunControl copyWithCompanion(RunControlsCompanion data) {
+    return RunControl(
+      id: data.id.present ? data.id.value : this.id,
+      clientControlId: data.clientControlId.present
+          ? data.clientControlId.value
+          : this.clientControlId,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      payloadJson:
+          data.payloadJson.present ? data.payloadJson.value : this.payloadJson,
+      status: data.status.present ? data.status.value : this.status,
+      sequenceNo:
+          data.sequenceNo.present ? data.sequenceNo.value : this.sequenceNo,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      consumedAt:
+          data.consumedAt.present ? data.consumedAt.value : this.consumedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunControl(')
+          ..write('id: $id, ')
+          ..write('clientControlId: $clientControlId, ')
+          ..write('taskId: $taskId, ')
+          ..write('runId: $runId, ')
+          ..write('kind: $kind, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('status: $status, ')
+          ..write('sequenceNo: $sequenceNo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('consumedAt: $consumedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, clientControlId, taskId, runId, kind,
+      payloadJson, status, sequenceNo, createdAt, consumedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunControl &&
+          other.id == this.id &&
+          other.clientControlId == this.clientControlId &&
+          other.taskId == this.taskId &&
+          other.runId == this.runId &&
+          other.kind == this.kind &&
+          other.payloadJson == this.payloadJson &&
+          other.status == this.status &&
+          other.sequenceNo == this.sequenceNo &&
+          other.createdAt == this.createdAt &&
+          other.consumedAt == this.consumedAt);
+}
+
+class RunControlsCompanion extends UpdateCompanion<RunControl> {
+  final Value<String> id;
+  final Value<String> clientControlId;
+  final Value<String> taskId;
+  final Value<String?> runId;
+  final Value<String> kind;
+  final Value<String> payloadJson;
+  final Value<String> status;
+  final Value<int> sequenceNo;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> consumedAt;
+  final Value<int> rowid;
+  const RunControlsCompanion({
+    this.id = const Value.absent(),
+    this.clientControlId = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.payloadJson = const Value.absent(),
+    this.status = const Value.absent(),
+    this.sequenceNo = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RunControlsCompanion.insert({
+    required String id,
+    required String clientControlId,
+    required String taskId,
+    this.runId = const Value.absent(),
+    required String kind,
+    this.payloadJson = const Value.absent(),
+    this.status = const Value.absent(),
+    this.sequenceNo = const Value.absent(),
+    required DateTime createdAt,
+    this.consumedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        clientControlId = Value(clientControlId),
+        taskId = Value(taskId),
+        kind = Value(kind),
+        createdAt = Value(createdAt);
+  static Insertable<RunControl> custom({
+    Expression<String>? id,
+    Expression<String>? clientControlId,
+    Expression<String>? taskId,
+    Expression<String>? runId,
+    Expression<String>? kind,
+    Expression<String>? payloadJson,
+    Expression<String>? status,
+    Expression<int>? sequenceNo,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? consumedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (clientControlId != null) 'client_control_id': clientControlId,
+      if (taskId != null) 'task_id': taskId,
+      if (runId != null) 'run_id': runId,
+      if (kind != null) 'kind': kind,
+      if (payloadJson != null) 'payload_json': payloadJson,
+      if (status != null) 'status': status,
+      if (sequenceNo != null) 'sequence_no': sequenceNo,
+      if (createdAt != null) 'created_at': createdAt,
+      if (consumedAt != null) 'consumed_at': consumedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RunControlsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? clientControlId,
+      Value<String>? taskId,
+      Value<String?>? runId,
+      Value<String>? kind,
+      Value<String>? payloadJson,
+      Value<String>? status,
+      Value<int>? sequenceNo,
+      Value<DateTime>? createdAt,
+      Value<DateTime?>? consumedAt,
+      Value<int>? rowid}) {
+    return RunControlsCompanion(
+      id: id ?? this.id,
+      clientControlId: clientControlId ?? this.clientControlId,
+      taskId: taskId ?? this.taskId,
+      runId: runId ?? this.runId,
+      kind: kind ?? this.kind,
+      payloadJson: payloadJson ?? this.payloadJson,
+      status: status ?? this.status,
+      sequenceNo: sequenceNo ?? this.sequenceNo,
+      createdAt: createdAt ?? this.createdAt,
+      consumedAt: consumedAt ?? this.consumedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (clientControlId.present) {
+      map['client_control_id'] = Variable<String>(clientControlId.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (payloadJson.present) {
+      map['payload_json'] = Variable<String>(payloadJson.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (sequenceNo.present) {
+      map['sequence_no'] = Variable<int>(sequenceNo.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (consumedAt.present) {
+      map['consumed_at'] = Variable<DateTime>(consumedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunControlsCompanion(')
+          ..write('id: $id, ')
+          ..write('clientControlId: $clientControlId, ')
+          ..write('taskId: $taskId, ')
+          ..write('runId: $runId, ')
+          ..write('kind: $kind, ')
+          ..write('payloadJson: $payloadJson, ')
+          ..write('status: $status, ')
+          ..write('sequenceNo: $sequenceNo, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('consumedAt: $consumedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ExecutionLeasesTable extends ExecutionLeases
+    with TableInfo<$ExecutionLeasesTable, ExecutionLease> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ExecutionLeasesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _resourceKeyMeta =
+      const VerificationMeta('resourceKey');
+  @override
+  late final GeneratedColumn<String> resourceKey = GeneratedColumn<String>(
+      'resource_key', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+      'task_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+      'run_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _ownerTokenMeta =
+      const VerificationMeta('ownerToken');
+  @override
+  late final GeneratedColumn<String> ownerToken = GeneratedColumn<String>(
+      'owner_token', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _generationMeta =
+      const VerificationMeta('generation');
+  @override
+  late final GeneratedColumn<int> generation = GeneratedColumn<int>(
+      'generation', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _heartbeatAtMeta =
+      const VerificationMeta('heartbeatAt');
+  @override
+  late final GeneratedColumn<DateTime> heartbeatAt = GeneratedColumn<DateTime>(
+      'heartbeat_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _expiresAtMeta =
+      const VerificationMeta('expiresAt');
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+      'expires_at', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        resourceKey,
+        taskId,
+        runId,
+        ownerToken,
+        generation,
+        heartbeatAt,
+        expiresAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'execution_leases';
+  @override
+  VerificationContext validateIntegrity(Insertable<ExecutionLease> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('resource_key')) {
+      context.handle(
+          _resourceKeyMeta,
+          resourceKey.isAcceptableOrUnknown(
+              data['resource_key']!, _resourceKeyMeta));
+    } else if (isInserting) {
+      context.missing(_resourceKeyMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(_taskIdMeta,
+          taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta));
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+          _runIdMeta, runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta));
+    } else if (isInserting) {
+      context.missing(_runIdMeta);
+    }
+    if (data.containsKey('owner_token')) {
+      context.handle(
+          _ownerTokenMeta,
+          ownerToken.isAcceptableOrUnknown(
+              data['owner_token']!, _ownerTokenMeta));
+    } else if (isInserting) {
+      context.missing(_ownerTokenMeta);
+    }
+    if (data.containsKey('generation')) {
+      context.handle(
+          _generationMeta,
+          generation.isAcceptableOrUnknown(
+              data['generation']!, _generationMeta));
+    }
+    if (data.containsKey('heartbeat_at')) {
+      context.handle(
+          _heartbeatAtMeta,
+          heartbeatAt.isAcceptableOrUnknown(
+              data['heartbeat_at']!, _heartbeatAtMeta));
+    } else if (isInserting) {
+      context.missing(_heartbeatAtMeta);
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(_expiresAtMeta,
+          expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta));
+    } else if (isInserting) {
+      context.missing(_expiresAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {resourceKey};
+  @override
+  ExecutionLease map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ExecutionLease(
+      resourceKey: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}resource_key'])!,
+      taskId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}task_id'])!,
+      runId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}run_id'])!,
+      ownerToken: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}owner_token'])!,
+      generation: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}generation'])!,
+      heartbeatAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}heartbeat_at'])!,
+      expiresAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}expires_at'])!,
+    );
+  }
+
+  @override
+  $ExecutionLeasesTable createAlias(String alias) {
+    return $ExecutionLeasesTable(attachedDatabase, alias);
+  }
+}
+
+class ExecutionLease extends DataClass implements Insertable<ExecutionLease> {
+  final String resourceKey;
+  final String taskId;
+  final String runId;
+  final String ownerToken;
+  final int generation;
+  final DateTime heartbeatAt;
+  final DateTime expiresAt;
+  const ExecutionLease(
+      {required this.resourceKey,
+      required this.taskId,
+      required this.runId,
+      required this.ownerToken,
+      required this.generation,
+      required this.heartbeatAt,
+      required this.expiresAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['resource_key'] = Variable<String>(resourceKey);
+    map['task_id'] = Variable<String>(taskId);
+    map['run_id'] = Variable<String>(runId);
+    map['owner_token'] = Variable<String>(ownerToken);
+    map['generation'] = Variable<int>(generation);
+    map['heartbeat_at'] = Variable<DateTime>(heartbeatAt);
+    map['expires_at'] = Variable<DateTime>(expiresAt);
+    return map;
+  }
+
+  ExecutionLeasesCompanion toCompanion(bool nullToAbsent) {
+    return ExecutionLeasesCompanion(
+      resourceKey: Value(resourceKey),
+      taskId: Value(taskId),
+      runId: Value(runId),
+      ownerToken: Value(ownerToken),
+      generation: Value(generation),
+      heartbeatAt: Value(heartbeatAt),
+      expiresAt: Value(expiresAt),
+    );
+  }
+
+  factory ExecutionLease.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ExecutionLease(
+      resourceKey: serializer.fromJson<String>(json['resourceKey']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      runId: serializer.fromJson<String>(json['runId']),
+      ownerToken: serializer.fromJson<String>(json['ownerToken']),
+      generation: serializer.fromJson<int>(json['generation']),
+      heartbeatAt: serializer.fromJson<DateTime>(json['heartbeatAt']),
+      expiresAt: serializer.fromJson<DateTime>(json['expiresAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'resourceKey': serializer.toJson<String>(resourceKey),
+      'taskId': serializer.toJson<String>(taskId),
+      'runId': serializer.toJson<String>(runId),
+      'ownerToken': serializer.toJson<String>(ownerToken),
+      'generation': serializer.toJson<int>(generation),
+      'heartbeatAt': serializer.toJson<DateTime>(heartbeatAt),
+      'expiresAt': serializer.toJson<DateTime>(expiresAt),
+    };
+  }
+
+  ExecutionLease copyWith(
+          {String? resourceKey,
+          String? taskId,
+          String? runId,
+          String? ownerToken,
+          int? generation,
+          DateTime? heartbeatAt,
+          DateTime? expiresAt}) =>
+      ExecutionLease(
+        resourceKey: resourceKey ?? this.resourceKey,
+        taskId: taskId ?? this.taskId,
+        runId: runId ?? this.runId,
+        ownerToken: ownerToken ?? this.ownerToken,
+        generation: generation ?? this.generation,
+        heartbeatAt: heartbeatAt ?? this.heartbeatAt,
+        expiresAt: expiresAt ?? this.expiresAt,
+      );
+  ExecutionLease copyWithCompanion(ExecutionLeasesCompanion data) {
+    return ExecutionLease(
+      resourceKey:
+          data.resourceKey.present ? data.resourceKey.value : this.resourceKey,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      ownerToken:
+          data.ownerToken.present ? data.ownerToken.value : this.ownerToken,
+      generation:
+          data.generation.present ? data.generation.value : this.generation,
+      heartbeatAt:
+          data.heartbeatAt.present ? data.heartbeatAt.value : this.heartbeatAt,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ExecutionLease(')
+          ..write('resourceKey: $resourceKey, ')
+          ..write('taskId: $taskId, ')
+          ..write('runId: $runId, ')
+          ..write('ownerToken: $ownerToken, ')
+          ..write('generation: $generation, ')
+          ..write('heartbeatAt: $heartbeatAt, ')
+          ..write('expiresAt: $expiresAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(resourceKey, taskId, runId, ownerToken,
+      generation, heartbeatAt, expiresAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ExecutionLease &&
+          other.resourceKey == this.resourceKey &&
+          other.taskId == this.taskId &&
+          other.runId == this.runId &&
+          other.ownerToken == this.ownerToken &&
+          other.generation == this.generation &&
+          other.heartbeatAt == this.heartbeatAt &&
+          other.expiresAt == this.expiresAt);
+}
+
+class ExecutionLeasesCompanion extends UpdateCompanion<ExecutionLease> {
+  final Value<String> resourceKey;
+  final Value<String> taskId;
+  final Value<String> runId;
+  final Value<String> ownerToken;
+  final Value<int> generation;
+  final Value<DateTime> heartbeatAt;
+  final Value<DateTime> expiresAt;
+  final Value<int> rowid;
+  const ExecutionLeasesCompanion({
+    this.resourceKey = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.ownerToken = const Value.absent(),
+    this.generation = const Value.absent(),
+    this.heartbeatAt = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ExecutionLeasesCompanion.insert({
+    required String resourceKey,
+    required String taskId,
+    required String runId,
+    required String ownerToken,
+    this.generation = const Value.absent(),
+    required DateTime heartbeatAt,
+    required DateTime expiresAt,
+    this.rowid = const Value.absent(),
+  })  : resourceKey = Value(resourceKey),
+        taskId = Value(taskId),
+        runId = Value(runId),
+        ownerToken = Value(ownerToken),
+        heartbeatAt = Value(heartbeatAt),
+        expiresAt = Value(expiresAt);
+  static Insertable<ExecutionLease> custom({
+    Expression<String>? resourceKey,
+    Expression<String>? taskId,
+    Expression<String>? runId,
+    Expression<String>? ownerToken,
+    Expression<int>? generation,
+    Expression<DateTime>? heartbeatAt,
+    Expression<DateTime>? expiresAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (resourceKey != null) 'resource_key': resourceKey,
+      if (taskId != null) 'task_id': taskId,
+      if (runId != null) 'run_id': runId,
+      if (ownerToken != null) 'owner_token': ownerToken,
+      if (generation != null) 'generation': generation,
+      if (heartbeatAt != null) 'heartbeat_at': heartbeatAt,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ExecutionLeasesCompanion copyWith(
+      {Value<String>? resourceKey,
+      Value<String>? taskId,
+      Value<String>? runId,
+      Value<String>? ownerToken,
+      Value<int>? generation,
+      Value<DateTime>? heartbeatAt,
+      Value<DateTime>? expiresAt,
+      Value<int>? rowid}) {
+    return ExecutionLeasesCompanion(
+      resourceKey: resourceKey ?? this.resourceKey,
+      taskId: taskId ?? this.taskId,
+      runId: runId ?? this.runId,
+      ownerToken: ownerToken ?? this.ownerToken,
+      generation: generation ?? this.generation,
+      heartbeatAt: heartbeatAt ?? this.heartbeatAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (resourceKey.present) {
+      map['resource_key'] = Variable<String>(resourceKey.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (ownerToken.present) {
+      map['owner_token'] = Variable<String>(ownerToken.value);
+    }
+    if (generation.present) {
+      map['generation'] = Variable<int>(generation.value);
+    }
+    if (heartbeatAt.present) {
+      map['heartbeat_at'] = Variable<DateTime>(heartbeatAt.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ExecutionLeasesCompanion(')
+          ..write('resourceKey: $resourceKey, ')
+          ..write('taskId: $taskId, ')
+          ..write('runId: $runId, ')
+          ..write('ownerToken: $ownerToken, ')
+          ..write('generation: $generation, ')
+          ..write('heartbeatAt: $heartbeatAt, ')
+          ..write('expiresAt: $expiresAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7189,6 +9291,17 @@ class $RunRecordsTable extends RunRecords
   late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
       'conversation_id', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+      'task_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _projectIdMeta =
+      const VerificationMeta('projectId');
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+      'project_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _modelMeta = const VerificationMeta('model');
   @override
   late final GeneratedColumn<String> model = GeneratedColumn<String>(
@@ -7301,6 +9414,8 @@ class $RunRecordsTable extends RunRecords
   List<GeneratedColumn> get $columns => [
         runId,
         conversationId,
+        taskId,
+        projectId,
         model,
         status,
         startedAt,
@@ -7341,6 +9456,14 @@ class $RunRecordsTable extends RunRecords
               data['conversation_id']!, _conversationIdMeta));
     } else if (isInserting) {
       context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(_taskIdMeta,
+          taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta));
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(_projectIdMeta,
+          projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta));
     }
     if (data.containsKey('model')) {
       context.handle(
@@ -7445,6 +9568,10 @@ class $RunRecordsTable extends RunRecords
           .read(DriftSqlType.string, data['${effectivePrefix}run_id'])!,
       conversationId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}conversation_id'])!,
+      taskId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}task_id']),
+      projectId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}project_id']),
       model: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}model'])!,
       status: attachedDatabase.typeMapping
@@ -7489,6 +9616,8 @@ class $RunRecordsTable extends RunRecords
 class RunRecord extends DataClass implements Insertable<RunRecord> {
   final String runId;
   final String conversationId;
+  final String? taskId;
+  final String? projectId;
   final String model;
   final String status;
   final DateTime startedAt;
@@ -7510,6 +9639,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
   const RunRecord(
       {required this.runId,
       required this.conversationId,
+      this.taskId,
+      this.projectId,
       required this.model,
       required this.status,
       required this.startedAt,
@@ -7531,6 +9662,12 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
     final map = <String, Expression>{};
     map['run_id'] = Variable<String>(runId);
     map['conversation_id'] = Variable<String>(conversationId);
+    if (!nullToAbsent || taskId != null) {
+      map['task_id'] = Variable<String>(taskId);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
     map['model'] = Variable<String>(model);
     map['status'] = Variable<String>(status);
     map['started_at'] = Variable<DateTime>(startedAt);
@@ -7570,6 +9707,11 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
     return RunRecordsCompanion(
       runId: Value(runId),
       conversationId: Value(conversationId),
+      taskId:
+          taskId == null && nullToAbsent ? const Value.absent() : Value(taskId),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
       model: Value(model),
       status: Value(status),
       startedAt: Value(startedAt),
@@ -7611,6 +9753,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
     return RunRecord(
       runId: serializer.fromJson<String>(json['runId']),
       conversationId: serializer.fromJson<String>(json['conversationId']),
+      taskId: serializer.fromJson<String?>(json['taskId']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
       model: serializer.fromJson<String>(json['model']),
       status: serializer.fromJson<String>(json['status']),
       startedAt: serializer.fromJson<DateTime>(json['startedAt']),
@@ -7636,6 +9780,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
     return <String, dynamic>{
       'runId': serializer.toJson<String>(runId),
       'conversationId': serializer.toJson<String>(conversationId),
+      'taskId': serializer.toJson<String?>(taskId),
+      'projectId': serializer.toJson<String?>(projectId),
       'model': serializer.toJson<String>(model),
       'status': serializer.toJson<String>(status),
       'startedAt': serializer.toJson<DateTime>(startedAt),
@@ -7658,6 +9804,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
   RunRecord copyWith(
           {String? runId,
           String? conversationId,
+          Value<String?> taskId = const Value.absent(),
+          Value<String?> projectId = const Value.absent(),
           String? model,
           String? status,
           DateTime? startedAt,
@@ -7677,6 +9825,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       RunRecord(
         runId: runId ?? this.runId,
         conversationId: conversationId ?? this.conversationId,
+        taskId: taskId.present ? taskId.value : this.taskId,
+        projectId: projectId.present ? projectId.value : this.projectId,
         model: model ?? this.model,
         status: status ?? this.status,
         startedAt: startedAt ?? this.startedAt,
@@ -7712,6 +9862,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       conversationId: data.conversationId.present
           ? data.conversationId.value
           : this.conversationId,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
       model: data.model.present ? data.model.value : this.model,
       status: data.status.present ? data.status.value : this.status,
       startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
@@ -7756,6 +9908,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
     return (StringBuffer('RunRecord(')
           ..write('runId: $runId, ')
           ..write('conversationId: $conversationId, ')
+          ..write('taskId: $taskId, ')
+          ..write('projectId: $projectId, ')
           ..write('model: $model, ')
           ..write('status: $status, ')
           ..write('startedAt: $startedAt, ')
@@ -7780,6 +9934,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
   int get hashCode => Object.hash(
       runId,
       conversationId,
+      taskId,
+      projectId,
       model,
       status,
       startedAt,
@@ -7802,6 +9958,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
       (other is RunRecord &&
           other.runId == this.runId &&
           other.conversationId == this.conversationId &&
+          other.taskId == this.taskId &&
+          other.projectId == this.projectId &&
           other.model == this.model &&
           other.status == this.status &&
           other.startedAt == this.startedAt &&
@@ -7823,6 +9981,8 @@ class RunRecord extends DataClass implements Insertable<RunRecord> {
 class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
   final Value<String> runId;
   final Value<String> conversationId;
+  final Value<String?> taskId;
+  final Value<String?> projectId;
   final Value<String> model;
   final Value<String> status;
   final Value<DateTime> startedAt;
@@ -7843,6 +10003,8 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
   const RunRecordsCompanion({
     this.runId = const Value.absent(),
     this.conversationId = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.model = const Value.absent(),
     this.status = const Value.absent(),
     this.startedAt = const Value.absent(),
@@ -7864,6 +10026,8 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
   RunRecordsCompanion.insert({
     required String runId,
     required String conversationId,
+    this.taskId = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.model = const Value.absent(),
     this.status = const Value.absent(),
     required DateTime startedAt,
@@ -7887,6 +10051,8 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
   static Insertable<RunRecord> custom({
     Expression<String>? runId,
     Expression<String>? conversationId,
+    Expression<String>? taskId,
+    Expression<String>? projectId,
     Expression<String>? model,
     Expression<String>? status,
     Expression<DateTime>? startedAt,
@@ -7908,6 +10074,8 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
     return RawValuesInsertable({
       if (runId != null) 'run_id': runId,
       if (conversationId != null) 'conversation_id': conversationId,
+      if (taskId != null) 'task_id': taskId,
+      if (projectId != null) 'project_id': projectId,
       if (model != null) 'model': model,
       if (status != null) 'status': status,
       if (startedAt != null) 'started_at': startedAt,
@@ -7934,6 +10102,8 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
   RunRecordsCompanion copyWith(
       {Value<String>? runId,
       Value<String>? conversationId,
+      Value<String?>? taskId,
+      Value<String?>? projectId,
       Value<String>? model,
       Value<String>? status,
       Value<DateTime>? startedAt,
@@ -7954,6 +10124,8 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
     return RunRecordsCompanion(
       runId: runId ?? this.runId,
       conversationId: conversationId ?? this.conversationId,
+      taskId: taskId ?? this.taskId,
+      projectId: projectId ?? this.projectId,
       model: model ?? this.model,
       status: status ?? this.status,
       startedAt: startedAt ?? this.startedAt,
@@ -7982,6 +10154,12 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
     }
     if (conversationId.present) {
       map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
     }
     if (model.present) {
       map['model'] = Variable<String>(model.value);
@@ -8043,6 +10221,8 @@ class RunRecordsCompanion extends UpdateCompanion<RunRecord> {
     return (StringBuffer('RunRecordsCompanion(')
           ..write('runId: $runId, ')
           ..write('conversationId: $conversationId, ')
+          ..write('taskId: $taskId, ')
+          ..write('projectId: $projectId, ')
           ..write('model: $model, ')
           ..write('status: $status, ')
           ..write('startedAt: $startedAt, ')
@@ -11659,6 +13839,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ModelProfilesTable modelProfiles = $ModelProfilesTable(this);
   late final $MemoriesTable memories = $MemoriesTable(this);
   late final $TasksTable tasks = $TasksTable(this);
+  late final $ProjectsTable projects = $ProjectsTable(this);
+  late final $DraftsTable drafts = $DraftsTable(this);
+  late final $RunControlsTable runControls = $RunControlsTable(this);
+  late final $ExecutionLeasesTable executionLeases =
+      $ExecutionLeasesTable(this);
   late final $TaskFeedbackTable taskFeedback = $TaskFeedbackTable(this);
   late final $SyncMetaTable syncMeta = $SyncMetaTable(this);
   late final $KnowledgeDocsTable knowledgeDocs = $KnowledgeDocsTable(this);
@@ -11681,12 +13866,24 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $CollaborationArtifactsTable(this);
   late final $CollaborationMessagesTable collaborationMessages =
       $CollaborationMessagesTable(this);
+  late final Index idxConversationsProjectUpdated = Index(
+      'idx_conversations_project_updated',
+      'CREATE INDEX idx_conversations_project_updated ON conversations (project_id, updated_at)');
   late final Index idxMessagesConversation = Index('idx_messages_conversation',
       'CREATE INDEX idx_messages_conversation ON messages (conversation_id, created_at)');
   late final Index idxMemoriesEnabled = Index('idx_memories_enabled',
       'CREATE INDEX idx_memories_enabled ON memories (enabled)');
   late final Index idxTasksStatusUpdated = Index('idx_tasks_status_updated',
       'CREATE INDEX idx_tasks_status_updated ON tasks (status, updated_at)');
+  late final Index idxTasksProjectUpdated = Index('idx_tasks_project_updated',
+      'CREATE INDEX idx_tasks_project_updated ON tasks (project_id, updated_at)');
+  late final Index idxProjectsUpdated = Index('idx_projects_updated',
+      'CREATE INDEX idx_projects_updated ON projects (archived, updated_at)');
+  late final Index idxRunControlsRunSequence = Index(
+      'idx_run_controls_run_sequence',
+      'CREATE INDEX idx_run_controls_run_sequence ON run_controls (run_id, sequence_no)');
+  late final Index idxRunControlsClient = Index('idx_run_controls_client',
+      'CREATE UNIQUE INDEX idx_run_controls_client ON run_controls (client_control_id)');
   late final Index idxScheduledTasksEnabled = Index(
       'idx_scheduled_tasks_enabled',
       'CREATE INDEX idx_scheduled_tasks_enabled ON scheduled_tasks (enabled)');
@@ -11727,6 +13924,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         modelProfiles,
         memories,
         tasks,
+        projects,
+        drafts,
+        runControls,
+        executionLeases,
         taskFeedback,
         syncMeta,
         knowledgeDocs,
@@ -11744,9 +13945,14 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         collaborationAgentRuns,
         collaborationArtifacts,
         collaborationMessages,
+        idxConversationsProjectUpdated,
         idxMessagesConversation,
         idxMemoriesEnabled,
         idxTasksStatusUpdated,
+        idxTasksProjectUpdated,
+        idxProjectsUpdated,
+        idxRunControlsRunSequence,
+        idxRunControlsClient,
         idxScheduledTasksEnabled,
         idxAuditLogsCreated,
         idxRunRecordsStarted,
@@ -11765,6 +13971,9 @@ typedef $$ConversationsTableCreateCompanionBuilder = ConversationsCompanion
   required String id,
   Value<String> title,
   Value<String?> agentId,
+  Value<String?> projectId,
+  Value<String> mode,
+  Value<String?> providerProfileId,
   Value<bool> isPinned,
   Value<bool> isFavorite,
   Value<String> tagsJson,
@@ -11777,6 +13986,9 @@ typedef $$ConversationsTableUpdateCompanionBuilder = ConversationsCompanion
   Value<String> id,
   Value<String> title,
   Value<String?> agentId,
+  Value<String?> projectId,
+  Value<String> mode,
+  Value<String?> providerProfileId,
   Value<bool> isPinned,
   Value<bool> isFavorite,
   Value<String> tagsJson,
@@ -11802,6 +14014,16 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<String> get agentId => $composableBuilder(
       column: $table.agentId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get providerProfileId => $composableBuilder(
+      column: $table.providerProfileId,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<bool> get isPinned => $composableBuilder(
       column: $table.isPinned, builder: (column) => ColumnFilters(column));
@@ -11837,6 +14059,16 @@ class $$ConversationsTableOrderingComposer
   ColumnOrderings<String> get agentId => $composableBuilder(
       column: $table.agentId, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get mode => $composableBuilder(
+      column: $table.mode, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get providerProfileId => $composableBuilder(
+      column: $table.providerProfileId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<bool> get isPinned => $composableBuilder(
       column: $table.isPinned, builder: (column) => ColumnOrderings(column));
 
@@ -11870,6 +14102,15 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<String> get agentId =>
       $composableBuilder(column: $table.agentId, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get mode =>
+      $composableBuilder(column: $table.mode, builder: (column) => column);
+
+  GeneratedColumn<String> get providerProfileId => $composableBuilder(
+      column: $table.providerProfileId, builder: (column) => column);
 
   GeneratedColumn<bool> get isPinned =>
       $composableBuilder(column: $table.isPinned, builder: (column) => column);
@@ -11916,6 +14157,9 @@ class $$ConversationsTableTableManager extends RootTableManager<
             Value<String> id = const Value.absent(),
             Value<String> title = const Value.absent(),
             Value<String?> agentId = const Value.absent(),
+            Value<String?> projectId = const Value.absent(),
+            Value<String> mode = const Value.absent(),
+            Value<String?> providerProfileId = const Value.absent(),
             Value<bool> isPinned = const Value.absent(),
             Value<bool> isFavorite = const Value.absent(),
             Value<String> tagsJson = const Value.absent(),
@@ -11927,6 +14171,9 @@ class $$ConversationsTableTableManager extends RootTableManager<
             id: id,
             title: title,
             agentId: agentId,
+            projectId: projectId,
+            mode: mode,
+            providerProfileId: providerProfileId,
             isPinned: isPinned,
             isFavorite: isFavorite,
             tagsJson: tagsJson,
@@ -11938,6 +14185,9 @@ class $$ConversationsTableTableManager extends RootTableManager<
             required String id,
             Value<String> title = const Value.absent(),
             Value<String?> agentId = const Value.absent(),
+            Value<String?> projectId = const Value.absent(),
+            Value<String> mode = const Value.absent(),
+            Value<String?> providerProfileId = const Value.absent(),
             Value<bool> isPinned = const Value.absent(),
             Value<bool> isFavorite = const Value.absent(),
             Value<String> tagsJson = const Value.absent(),
@@ -11949,6 +14199,9 @@ class $$ConversationsTableTableManager extends RootTableManager<
             id: id,
             title: title,
             agentId: agentId,
+            projectId: projectId,
+            mode: mode,
+            providerProfileId: providerProfileId,
             isPinned: isPinned,
             isFavorite: isFavorite,
             tagsJson: tagsJson,
@@ -13075,6 +15328,8 @@ typedef $$MemoriesTableProcessedTableManager = ProcessedTableManager<
 typedef $$TasksTableCreateCompanionBuilder = TasksCompanion Function({
   required String id,
   required String conversationId,
+  Value<String?> projectId,
+  Value<int> stateRevision,
   Value<String> type,
   Value<String> status,
   required String requestJson,
@@ -13087,6 +15342,8 @@ typedef $$TasksTableCreateCompanionBuilder = TasksCompanion Function({
 typedef $$TasksTableUpdateCompanionBuilder = TasksCompanion Function({
   Value<String> id,
   Value<String> conversationId,
+  Value<String?> projectId,
+  Value<int> stateRevision,
   Value<String> type,
   Value<String> status,
   Value<String> requestJson,
@@ -13111,6 +15368,12 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
   ColumnFilters<String> get conversationId => $composableBuilder(
       column: $table.conversationId,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get stateRevision => $composableBuilder(
+      column: $table.stateRevision, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get type => $composableBuilder(
       column: $table.type, builder: (column) => ColumnFilters(column));
@@ -13150,6 +15413,13 @@ class $$TasksTableOrderingComposer
       column: $table.conversationId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get stateRevision => $composableBuilder(
+      column: $table.stateRevision,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get type => $composableBuilder(
       column: $table.type, builder: (column) => ColumnOrderings(column));
 
@@ -13187,6 +15457,12 @@ class $$TasksTableAnnotationComposer
 
   GeneratedColumn<String> get conversationId => $composableBuilder(
       column: $table.conversationId, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<int> get stateRevision => $composableBuilder(
+      column: $table.stateRevision, builder: (column) => column);
 
   GeneratedColumn<String> get type =>
       $composableBuilder(column: $table.type, builder: (column) => column);
@@ -13235,6 +15511,8 @@ class $$TasksTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<String> id = const Value.absent(),
             Value<String> conversationId = const Value.absent(),
+            Value<String?> projectId = const Value.absent(),
+            Value<int> stateRevision = const Value.absent(),
             Value<String> type = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<String> requestJson = const Value.absent(),
@@ -13247,6 +15525,8 @@ class $$TasksTableTableManager extends RootTableManager<
               TasksCompanion(
             id: id,
             conversationId: conversationId,
+            projectId: projectId,
+            stateRevision: stateRevision,
             type: type,
             status: status,
             requestJson: requestJson,
@@ -13259,6 +15539,8 @@ class $$TasksTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             required String id,
             required String conversationId,
+            Value<String?> projectId = const Value.absent(),
+            Value<int> stateRevision = const Value.absent(),
             Value<String> type = const Value.absent(),
             Value<String> status = const Value.absent(),
             required String requestJson,
@@ -13271,6 +15553,8 @@ class $$TasksTableTableManager extends RootTableManager<
               TasksCompanion.insert(
             id: id,
             conversationId: conversationId,
+            projectId: projectId,
+            stateRevision: stateRevision,
             type: type,
             status: status,
             requestJson: requestJson,
@@ -13298,6 +15582,917 @@ typedef $$TasksTableProcessedTableManager = ProcessedTableManager<
     $$TasksTableUpdateCompanionBuilder,
     (Task, BaseReferences<_$AppDatabase, $TasksTable, Task>),
     Task,
+    PrefetchHooks Function()>;
+typedef $$ProjectsTableCreateCompanionBuilder = ProjectsCompanion Function({
+  required String id,
+  required String name,
+  required String canonicalRootPath,
+  Value<String> sourceKind,
+  Value<String> projectKind,
+  Value<String?> runtimePreference,
+  Value<String> settingsJson,
+  Value<int> settingsVersion,
+  Value<bool> archived,
+  required DateTime createdAt,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$ProjectsTableUpdateCompanionBuilder = ProjectsCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String> canonicalRootPath,
+  Value<String> sourceKind,
+  Value<String> projectKind,
+  Value<String?> runtimePreference,
+  Value<String> settingsJson,
+  Value<int> settingsVersion,
+  Value<bool> archived,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$ProjectsTableFilterComposer
+    extends Composer<_$AppDatabase, $ProjectsTable> {
+  $$ProjectsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get canonicalRootPath => $composableBuilder(
+      column: $table.canonicalRootPath,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sourceKind => $composableBuilder(
+      column: $table.sourceKind, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projectKind => $composableBuilder(
+      column: $table.projectKind, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get runtimePreference => $composableBuilder(
+      column: $table.runtimePreference,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get settingsJson => $composableBuilder(
+      column: $table.settingsJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get settingsVersion => $composableBuilder(
+      column: $table.settingsVersion,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get archived => $composableBuilder(
+      column: $table.archived, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ProjectsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProjectsTable> {
+  $$ProjectsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get canonicalRootPath => $composableBuilder(
+      column: $table.canonicalRootPath,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sourceKind => $composableBuilder(
+      column: $table.sourceKind, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get projectKind => $composableBuilder(
+      column: $table.projectKind, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get runtimePreference => $composableBuilder(
+      column: $table.runtimePreference,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get settingsJson => $composableBuilder(
+      column: $table.settingsJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get settingsVersion => $composableBuilder(
+      column: $table.settingsVersion,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get archived => $composableBuilder(
+      column: $table.archived, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ProjectsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProjectsTable> {
+  $$ProjectsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get canonicalRootPath => $composableBuilder(
+      column: $table.canonicalRootPath, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceKind => $composableBuilder(
+      column: $table.sourceKind, builder: (column) => column);
+
+  GeneratedColumn<String> get projectKind => $composableBuilder(
+      column: $table.projectKind, builder: (column) => column);
+
+  GeneratedColumn<String> get runtimePreference => $composableBuilder(
+      column: $table.runtimePreference, builder: (column) => column);
+
+  GeneratedColumn<String> get settingsJson => $composableBuilder(
+      column: $table.settingsJson, builder: (column) => column);
+
+  GeneratedColumn<int> get settingsVersion => $composableBuilder(
+      column: $table.settingsVersion, builder: (column) => column);
+
+  GeneratedColumn<bool> get archived =>
+      $composableBuilder(column: $table.archived, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ProjectsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ProjectsTable,
+    Project,
+    $$ProjectsTableFilterComposer,
+    $$ProjectsTableOrderingComposer,
+    $$ProjectsTableAnnotationComposer,
+    $$ProjectsTableCreateCompanionBuilder,
+    $$ProjectsTableUpdateCompanionBuilder,
+    (Project, BaseReferences<_$AppDatabase, $ProjectsTable, Project>),
+    Project,
+    PrefetchHooks Function()> {
+  $$ProjectsTableTableManager(_$AppDatabase db, $ProjectsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProjectsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProjectsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProjectsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String> canonicalRootPath = const Value.absent(),
+            Value<String> sourceKind = const Value.absent(),
+            Value<String> projectKind = const Value.absent(),
+            Value<String?> runtimePreference = const Value.absent(),
+            Value<String> settingsJson = const Value.absent(),
+            Value<int> settingsVersion = const Value.absent(),
+            Value<bool> archived = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProjectsCompanion(
+            id: id,
+            name: name,
+            canonicalRootPath: canonicalRootPath,
+            sourceKind: sourceKind,
+            projectKind: projectKind,
+            runtimePreference: runtimePreference,
+            settingsJson: settingsJson,
+            settingsVersion: settingsVersion,
+            archived: archived,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            required String canonicalRootPath,
+            Value<String> sourceKind = const Value.absent(),
+            Value<String> projectKind = const Value.absent(),
+            Value<String?> runtimePreference = const Value.absent(),
+            Value<String> settingsJson = const Value.absent(),
+            Value<int> settingsVersion = const Value.absent(),
+            Value<bool> archived = const Value.absent(),
+            required DateTime createdAt,
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProjectsCompanion.insert(
+            id: id,
+            name: name,
+            canonicalRootPath: canonicalRootPath,
+            sourceKind: sourceKind,
+            projectKind: projectKind,
+            runtimePreference: runtimePreference,
+            settingsJson: settingsJson,
+            settingsVersion: settingsVersion,
+            archived: archived,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ProjectsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ProjectsTable,
+    Project,
+    $$ProjectsTableFilterComposer,
+    $$ProjectsTableOrderingComposer,
+    $$ProjectsTableAnnotationComposer,
+    $$ProjectsTableCreateCompanionBuilder,
+    $$ProjectsTableUpdateCompanionBuilder,
+    (Project, BaseReferences<_$AppDatabase, $ProjectsTable, Project>),
+    Project,
+    PrefetchHooks Function()>;
+typedef $$DraftsTableCreateCompanionBuilder = DraftsCompanion Function({
+  required String draftKey,
+  Value<String?> conversationId,
+  Value<String?> projectId,
+  Value<String> body,
+  Value<String> attachmentsJson,
+  Value<String> referencesJson,
+  required DateTime updatedAt,
+  Value<int> rowid,
+});
+typedef $$DraftsTableUpdateCompanionBuilder = DraftsCompanion Function({
+  Value<String> draftKey,
+  Value<String?> conversationId,
+  Value<String?> projectId,
+  Value<String> body,
+  Value<String> attachmentsJson,
+  Value<String> referencesJson,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$DraftsTableFilterComposer
+    extends Composer<_$AppDatabase, $DraftsTable> {
+  $$DraftsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get draftKey => $composableBuilder(
+      column: $table.draftKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get conversationId => $composableBuilder(
+      column: $table.conversationId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get attachmentsJson => $composableBuilder(
+      column: $table.attachmentsJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get referencesJson => $composableBuilder(
+      column: $table.referencesJson,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$DraftsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DraftsTable> {
+  $$DraftsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get draftKey => $composableBuilder(
+      column: $table.draftKey, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get conversationId => $composableBuilder(
+      column: $table.conversationId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get body => $composableBuilder(
+      column: $table.body, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get attachmentsJson => $composableBuilder(
+      column: $table.attachmentsJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get referencesJson => $composableBuilder(
+      column: $table.referencesJson,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$DraftsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DraftsTable> {
+  $$DraftsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get draftKey =>
+      $composableBuilder(column: $table.draftKey, builder: (column) => column);
+
+  GeneratedColumn<String> get conversationId => $composableBuilder(
+      column: $table.conversationId, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<String> get attachmentsJson => $composableBuilder(
+      column: $table.attachmentsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get referencesJson => $composableBuilder(
+      column: $table.referencesJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$DraftsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $DraftsTable,
+    Draft,
+    $$DraftsTableFilterComposer,
+    $$DraftsTableOrderingComposer,
+    $$DraftsTableAnnotationComposer,
+    $$DraftsTableCreateCompanionBuilder,
+    $$DraftsTableUpdateCompanionBuilder,
+    (Draft, BaseReferences<_$AppDatabase, $DraftsTable, Draft>),
+    Draft,
+    PrefetchHooks Function()> {
+  $$DraftsTableTableManager(_$AppDatabase db, $DraftsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DraftsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DraftsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DraftsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> draftKey = const Value.absent(),
+            Value<String?> conversationId = const Value.absent(),
+            Value<String?> projectId = const Value.absent(),
+            Value<String> body = const Value.absent(),
+            Value<String> attachmentsJson = const Value.absent(),
+            Value<String> referencesJson = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DraftsCompanion(
+            draftKey: draftKey,
+            conversationId: conversationId,
+            projectId: projectId,
+            body: body,
+            attachmentsJson: attachmentsJson,
+            referencesJson: referencesJson,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String draftKey,
+            Value<String?> conversationId = const Value.absent(),
+            Value<String?> projectId = const Value.absent(),
+            Value<String> body = const Value.absent(),
+            Value<String> attachmentsJson = const Value.absent(),
+            Value<String> referencesJson = const Value.absent(),
+            required DateTime updatedAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DraftsCompanion.insert(
+            draftKey: draftKey,
+            conversationId: conversationId,
+            projectId: projectId,
+            body: body,
+            attachmentsJson: attachmentsJson,
+            referencesJson: referencesJson,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DraftsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $DraftsTable,
+    Draft,
+    $$DraftsTableFilterComposer,
+    $$DraftsTableOrderingComposer,
+    $$DraftsTableAnnotationComposer,
+    $$DraftsTableCreateCompanionBuilder,
+    $$DraftsTableUpdateCompanionBuilder,
+    (Draft, BaseReferences<_$AppDatabase, $DraftsTable, Draft>),
+    Draft,
+    PrefetchHooks Function()>;
+typedef $$RunControlsTableCreateCompanionBuilder = RunControlsCompanion
+    Function({
+  required String id,
+  required String clientControlId,
+  required String taskId,
+  Value<String?> runId,
+  required String kind,
+  Value<String> payloadJson,
+  Value<String> status,
+  Value<int> sequenceNo,
+  required DateTime createdAt,
+  Value<DateTime?> consumedAt,
+  Value<int> rowid,
+});
+typedef $$RunControlsTableUpdateCompanionBuilder = RunControlsCompanion
+    Function({
+  Value<String> id,
+  Value<String> clientControlId,
+  Value<String> taskId,
+  Value<String?> runId,
+  Value<String> kind,
+  Value<String> payloadJson,
+  Value<String> status,
+  Value<int> sequenceNo,
+  Value<DateTime> createdAt,
+  Value<DateTime?> consumedAt,
+  Value<int> rowid,
+});
+
+class $$RunControlsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunControlsTable> {
+  $$RunControlsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get clientControlId => $composableBuilder(
+      column: $table.clientControlId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sequenceNo => $composableBuilder(
+      column: $table.sequenceNo, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get consumedAt => $composableBuilder(
+      column: $table.consumedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$RunControlsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunControlsTable> {
+  $$RunControlsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get clientControlId => $composableBuilder(
+      column: $table.clientControlId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+      column: $table.kind, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sequenceNo => $composableBuilder(
+      column: $table.sequenceNo, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get consumedAt => $composableBuilder(
+      column: $table.consumedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$RunControlsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunControlsTable> {
+  $$RunControlsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get clientControlId => $composableBuilder(
+      column: $table.clientControlId, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get payloadJson => $composableBuilder(
+      column: $table.payloadJson, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<int> get sequenceNo => $composableBuilder(
+      column: $table.sequenceNo, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get consumedAt => $composableBuilder(
+      column: $table.consumedAt, builder: (column) => column);
+}
+
+class $$RunControlsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $RunControlsTable,
+    RunControl,
+    $$RunControlsTableFilterComposer,
+    $$RunControlsTableOrderingComposer,
+    $$RunControlsTableAnnotationComposer,
+    $$RunControlsTableCreateCompanionBuilder,
+    $$RunControlsTableUpdateCompanionBuilder,
+    (RunControl, BaseReferences<_$AppDatabase, $RunControlsTable, RunControl>),
+    RunControl,
+    PrefetchHooks Function()> {
+  $$RunControlsTableTableManager(_$AppDatabase db, $RunControlsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunControlsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunControlsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RunControlsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> clientControlId = const Value.absent(),
+            Value<String> taskId = const Value.absent(),
+            Value<String?> runId = const Value.absent(),
+            Value<String> kind = const Value.absent(),
+            Value<String> payloadJson = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<int> sequenceNo = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime?> consumedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RunControlsCompanion(
+            id: id,
+            clientControlId: clientControlId,
+            taskId: taskId,
+            runId: runId,
+            kind: kind,
+            payloadJson: payloadJson,
+            status: status,
+            sequenceNo: sequenceNo,
+            createdAt: createdAt,
+            consumedAt: consumedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String clientControlId,
+            required String taskId,
+            Value<String?> runId = const Value.absent(),
+            required String kind,
+            Value<String> payloadJson = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<int> sequenceNo = const Value.absent(),
+            required DateTime createdAt,
+            Value<DateTime?> consumedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              RunControlsCompanion.insert(
+            id: id,
+            clientControlId: clientControlId,
+            taskId: taskId,
+            runId: runId,
+            kind: kind,
+            payloadJson: payloadJson,
+            status: status,
+            sequenceNo: sequenceNo,
+            createdAt: createdAt,
+            consumedAt: consumedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$RunControlsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $RunControlsTable,
+    RunControl,
+    $$RunControlsTableFilterComposer,
+    $$RunControlsTableOrderingComposer,
+    $$RunControlsTableAnnotationComposer,
+    $$RunControlsTableCreateCompanionBuilder,
+    $$RunControlsTableUpdateCompanionBuilder,
+    (RunControl, BaseReferences<_$AppDatabase, $RunControlsTable, RunControl>),
+    RunControl,
+    PrefetchHooks Function()>;
+typedef $$ExecutionLeasesTableCreateCompanionBuilder = ExecutionLeasesCompanion
+    Function({
+  required String resourceKey,
+  required String taskId,
+  required String runId,
+  required String ownerToken,
+  Value<int> generation,
+  required DateTime heartbeatAt,
+  required DateTime expiresAt,
+  Value<int> rowid,
+});
+typedef $$ExecutionLeasesTableUpdateCompanionBuilder = ExecutionLeasesCompanion
+    Function({
+  Value<String> resourceKey,
+  Value<String> taskId,
+  Value<String> runId,
+  Value<String> ownerToken,
+  Value<int> generation,
+  Value<DateTime> heartbeatAt,
+  Value<DateTime> expiresAt,
+  Value<int> rowid,
+});
+
+class $$ExecutionLeasesTableFilterComposer
+    extends Composer<_$AppDatabase, $ExecutionLeasesTable> {
+  $$ExecutionLeasesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get resourceKey => $composableBuilder(
+      column: $table.resourceKey, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get ownerToken => $composableBuilder(
+      column: $table.ownerToken, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get generation => $composableBuilder(
+      column: $table.generation, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get heartbeatAt => $composableBuilder(
+      column: $table.heartbeatAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+      column: $table.expiresAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ExecutionLeasesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ExecutionLeasesTable> {
+  $$ExecutionLeasesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get resourceKey => $composableBuilder(
+      column: $table.resourceKey, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get runId => $composableBuilder(
+      column: $table.runId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get ownerToken => $composableBuilder(
+      column: $table.ownerToken, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get generation => $composableBuilder(
+      column: $table.generation, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get heartbeatAt => $composableBuilder(
+      column: $table.heartbeatAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+      column: $table.expiresAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ExecutionLeasesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ExecutionLeasesTable> {
+  $$ExecutionLeasesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get resourceKey => $composableBuilder(
+      column: $table.resourceKey, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<String> get ownerToken => $composableBuilder(
+      column: $table.ownerToken, builder: (column) => column);
+
+  GeneratedColumn<int> get generation => $composableBuilder(
+      column: $table.generation, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get heartbeatAt => $composableBuilder(
+      column: $table.heartbeatAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+}
+
+class $$ExecutionLeasesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ExecutionLeasesTable,
+    ExecutionLease,
+    $$ExecutionLeasesTableFilterComposer,
+    $$ExecutionLeasesTableOrderingComposer,
+    $$ExecutionLeasesTableAnnotationComposer,
+    $$ExecutionLeasesTableCreateCompanionBuilder,
+    $$ExecutionLeasesTableUpdateCompanionBuilder,
+    (
+      ExecutionLease,
+      BaseReferences<_$AppDatabase, $ExecutionLeasesTable, ExecutionLease>
+    ),
+    ExecutionLease,
+    PrefetchHooks Function()> {
+  $$ExecutionLeasesTableTableManager(
+      _$AppDatabase db, $ExecutionLeasesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ExecutionLeasesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ExecutionLeasesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ExecutionLeasesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> resourceKey = const Value.absent(),
+            Value<String> taskId = const Value.absent(),
+            Value<String> runId = const Value.absent(),
+            Value<String> ownerToken = const Value.absent(),
+            Value<int> generation = const Value.absent(),
+            Value<DateTime> heartbeatAt = const Value.absent(),
+            Value<DateTime> expiresAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ExecutionLeasesCompanion(
+            resourceKey: resourceKey,
+            taskId: taskId,
+            runId: runId,
+            ownerToken: ownerToken,
+            generation: generation,
+            heartbeatAt: heartbeatAt,
+            expiresAt: expiresAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String resourceKey,
+            required String taskId,
+            required String runId,
+            required String ownerToken,
+            Value<int> generation = const Value.absent(),
+            required DateTime heartbeatAt,
+            required DateTime expiresAt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ExecutionLeasesCompanion.insert(
+            resourceKey: resourceKey,
+            taskId: taskId,
+            runId: runId,
+            ownerToken: ownerToken,
+            generation: generation,
+            heartbeatAt: heartbeatAt,
+            expiresAt: expiresAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ExecutionLeasesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ExecutionLeasesTable,
+    ExecutionLease,
+    $$ExecutionLeasesTableFilterComposer,
+    $$ExecutionLeasesTableOrderingComposer,
+    $$ExecutionLeasesTableAnnotationComposer,
+    $$ExecutionLeasesTableCreateCompanionBuilder,
+    $$ExecutionLeasesTableUpdateCompanionBuilder,
+    (
+      ExecutionLease,
+      BaseReferences<_$AppDatabase, $ExecutionLeasesTable, ExecutionLease>
+    ),
+    ExecutionLease,
     PrefetchHooks Function()>;
 typedef $$TaskFeedbackTableCreateCompanionBuilder = TaskFeedbackCompanion
     Function({
@@ -15360,6 +18555,8 @@ typedef $$AccountMetaTableProcessedTableManager = ProcessedTableManager<
 typedef $$RunRecordsTableCreateCompanionBuilder = RunRecordsCompanion Function({
   required String runId,
   required String conversationId,
+  Value<String?> taskId,
+  Value<String?> projectId,
   Value<String> model,
   Value<String> status,
   required DateTime startedAt,
@@ -15381,6 +18578,8 @@ typedef $$RunRecordsTableCreateCompanionBuilder = RunRecordsCompanion Function({
 typedef $$RunRecordsTableUpdateCompanionBuilder = RunRecordsCompanion Function({
   Value<String> runId,
   Value<String> conversationId,
+  Value<String?> taskId,
+  Value<String?> projectId,
   Value<String> model,
   Value<String> status,
   Value<DateTime> startedAt,
@@ -15415,6 +18614,12 @@ class $$RunRecordsTableFilterComposer
   ColumnFilters<String> get conversationId => $composableBuilder(
       column: $table.conversationId,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get model => $composableBuilder(
       column: $table.model, builder: (column) => ColumnFilters(column));
@@ -15487,6 +18692,12 @@ class $$RunRecordsTableOrderingComposer
       column: $table.conversationId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get taskId => $composableBuilder(
+      column: $table.taskId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+      column: $table.projectId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get model => $composableBuilder(
       column: $table.model, builder: (column) => ColumnOrderings(column));
 
@@ -15558,6 +18769,12 @@ class $$RunRecordsTableAnnotationComposer
 
   GeneratedColumn<String> get conversationId => $composableBuilder(
       column: $table.conversationId, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
 
   GeneratedColumn<String> get model =>
       $composableBuilder(column: $table.model, builder: (column) => column);
@@ -15633,6 +18850,8 @@ class $$RunRecordsTableTableManager extends RootTableManager<
           updateCompanionCallback: ({
             Value<String> runId = const Value.absent(),
             Value<String> conversationId = const Value.absent(),
+            Value<String?> taskId = const Value.absent(),
+            Value<String?> projectId = const Value.absent(),
             Value<String> model = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<DateTime> startedAt = const Value.absent(),
@@ -15654,6 +18873,8 @@ class $$RunRecordsTableTableManager extends RootTableManager<
               RunRecordsCompanion(
             runId: runId,
             conversationId: conversationId,
+            taskId: taskId,
+            projectId: projectId,
             model: model,
             status: status,
             startedAt: startedAt,
@@ -15675,6 +18896,8 @@ class $$RunRecordsTableTableManager extends RootTableManager<
           createCompanionCallback: ({
             required String runId,
             required String conversationId,
+            Value<String?> taskId = const Value.absent(),
+            Value<String?> projectId = const Value.absent(),
             Value<String> model = const Value.absent(),
             Value<String> status = const Value.absent(),
             required DateTime startedAt,
@@ -15696,6 +18919,8 @@ class $$RunRecordsTableTableManager extends RootTableManager<
               RunRecordsCompanion.insert(
             runId: runId,
             conversationId: conversationId,
+            taskId: taskId,
+            projectId: projectId,
             model: model,
             status: status,
             startedAt: startedAt,
@@ -17426,6 +20651,14 @@ class $AppDatabaseManager {
       $$MemoriesTableTableManager(_db, _db.memories);
   $$TasksTableTableManager get tasks =>
       $$TasksTableTableManager(_db, _db.tasks);
+  $$ProjectsTableTableManager get projects =>
+      $$ProjectsTableTableManager(_db, _db.projects);
+  $$DraftsTableTableManager get drafts =>
+      $$DraftsTableTableManager(_db, _db.drafts);
+  $$RunControlsTableTableManager get runControls =>
+      $$RunControlsTableTableManager(_db, _db.runControls);
+  $$ExecutionLeasesTableTableManager get executionLeases =>
+      $$ExecutionLeasesTableTableManager(_db, _db.executionLeases);
   $$TaskFeedbackTableTableManager get taskFeedback =>
       $$TaskFeedbackTableTableManager(_db, _db.taskFeedback);
   $$SyncMetaTableTableManager get syncMeta =>

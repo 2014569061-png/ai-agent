@@ -510,6 +510,18 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
           'type': 'string',
           'description': '可选的文件后缀过滤，如 ".dart" 或 ".html"'
         },
+        'pathPrefix': {
+          'type': 'string',
+          'description': '可选的相对路径前缀，限制搜索范围'
+        },
+        'offset': {
+          'type': 'integer',
+          'description': '跳过前 N 条命中，用于分页'
+        },
+        'limit': {
+          'type': 'integer',
+          'description': '返回条数上限，默认 50，最大 100'
+        },
       },
       'required': ['query'],
     },
@@ -526,13 +538,16 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
       );
     }
     final ext = arguments['fileExtension'] as String?;
+    final pathPrefix = arguments['pathPrefix']?.toString();
+    final offset = (arguments['offset'] as num?)?.toInt() ?? 0;
+    final limit = ((arguments['limit'] as num?)?.toInt() ?? 50).clamp(1, 100);
     try {
       final dir = Directory(sandbox.rootPath);
 
       if (!await dir.exists()) {
         recordMetadata({
           'operation': 'search',
-          'path': '.',
+          'path': pathPrefix ?? '.',
           'query': query,
           'exists': false,
         });
@@ -543,38 +558,53 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
       }
 
       final results = <String>[];
-      final lister = dir.list(recursive: true, followLinks: false);
-
-      await for (final entity in lister) {
-        if (entity is File) {
-          if (ext != null && !entity.path.endsWith(ext)) continue;
-
-          // 忽略常见的编译产物和二进制目录
-          if (entity.path.contains('.git') ||
-              entity.path.contains('.dart_tool') ||
-              entity.path.contains('build') ||
-              entity.path.contains('node_modules')) {
+      var skipped = 0;
+      Future<void> walk(Directory current) async {
+        if (results.length >= limit) return;
+        await for (final entity in current.list(followLinks: false)) {
+          if (results.length >= limit) return;
+          if (entity is Directory) {
+            final name = p.basename(entity.path);
+            if (const {
+              '.git',
+              '.dart_tool',
+              'build',
+              'node_modules',
+              'dist',
+              '.idea',
+              '.vscode',
+            }.contains(name)) {
+              continue;
+            }
+            await walk(entity);
             continue;
           }
-
+          if (entity is! File) continue;
+          if (ext != null && !entity.path.endsWith(ext)) continue;
+          final rel = sandbox.toRelative(entity.path);
+          if (pathPrefix != null &&
+              pathPrefix.isNotEmpty &&
+              !rel.startsWith(pathPrefix.replaceAll('\\', '/'))) {
+            continue;
+          }
           try {
             final content = await entity.readAsString();
-            if (content.contains(query)) {
-              final rel = sandbox.toRelative(entity.path);
-              final lines = const LineSplitter().convert(content);
-              for (var i = 0; i < lines.length; i++) {
-                if (lines[i].contains(query)) {
-                  results.add('$rel:${i + 1}: ${lines[i].trim()}');
-                  if (results.length >= 50) break;
-                }
+            if (!content.contains(query)) continue;
+            final lines = const LineSplitter().convert(content);
+            for (var i = 0; i < lines.length; i++) {
+              if (!lines[i].contains(query)) continue;
+              if (skipped < offset) {
+                skipped++;
+                continue;
               }
+              results.add('$rel:${i + 1}: ${lines[i].trim()}');
+              if (results.length >= limit) return;
             }
-          } catch (_) {
-            // 忽略二进制文件读取错误
-          }
+          } catch (_) {}
         }
-        if (results.length >= 50) break;
       }
+
+      await walk(dir);
 
       if (results.isEmpty) {
         recordMetadata({
@@ -597,12 +627,17 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
         'query': query,
         'fileExtension': ext,
         'matchCount': results.length,
-        'truncated': results.length >= 50,
+        'truncated': results.length >= limit,
+        'offset': offset,
+        'limit': limit,
+        if (pathPrefix != null) 'pathPrefix': pathPrefix,
       });
       return ToolResult.text(results.join('\n'), extra: {
         'query': query,
         'matchCount': results.length,
-        'truncated': results.length >= 50,
+        'truncated': results.length >= limit,
+        'offset': offset,
+        'limit': limit,
       });
     } catch (e) {
       return ToolResult.failure(

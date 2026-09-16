@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../domain/models.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
-import '../../widgets/immersive_surface.dart';
+import '../../widgets/nexus_surface.dart';
 
 /// 底部输入框小工具呼出 8 宫格面板
 /// 替代原输入框内展开的拥挤微型图标行，提供现代聊天应用标准的工具操作台。
@@ -146,8 +146,8 @@ class InputToolGridSheet extends StatelessWidget {
       ),
     ];
 
-    return ImmersiveSurface(
-      level: ImmersiveMaterialLevel.ultraThick,
+    return NexusSurface(
+      level: SurfaceLevel.ultraThick,
       borderRadius: const BorderRadius.vertical(
           top: Radius.circular(AppTokens.radiusModal)),
       child: SafeArea(

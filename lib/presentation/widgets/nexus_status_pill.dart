@@ -151,13 +151,19 @@ class NexusStatusPill extends StatelessWidget {
               Icon(icon, size: iconSize, color: color),
             const SizedBox(width: 4.0),
           ],
-          Text(
-            displayText,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w500,
-              color: color,
-              height: 1.2,
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isCompact ? 96 : 156),
+            child: Text(
+              displayText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w500,
+                color: color,
+                height: 1.2,
+              ),
             ),
           ),
         ],

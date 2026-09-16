@@ -137,6 +137,7 @@ class DashboardService {
     final runsF = db.runsSince(sevenDaysAgo);
     final weekTasksF = db.tasksSince(sevenDaysAgo);
     final runningTasksF = db.runningTasks();
+    final resumableTasksF = db.resumableTasks();
     final feedbackMetricsF =
         const TaskFeedbackService().metrics(db, since: sevenDaysAgo);
 
@@ -145,6 +146,7 @@ class DashboardService {
     final runs = await runsF;
     final weekTasks = await weekTasksF;
     final runningTasks = await runningTasksF;
+    final resumableTasks = await resumableTasksF;
     final feedbackMetrics = await feedbackMetricsF;
 
     // 1. 今日会话
@@ -255,20 +257,20 @@ class DashboardService {
       ));
     }
 
-    // 可恢复任务（运行中被中断且可恢复的）
-    for (final t in runningTasks) {
-      if (t.resumeCount > 0) {
-        final info = DevelopmentTaskInfo.fromTask(t);
-        todos.add(DashboardTodoItem(
-          id: 'resume-${t.id}',
-          title: '中断任务可恢复',
-          description: info.title,
-          type: TodoItemType.recoverable,
-          taskId: t.id,
-          conversationId: t.conversationId,
-          createdAt: t.updatedAt,
-        ));
-      }
+    // 可恢复任务（运行中被中断或预算暂停，均可续跑）
+    // 不要求 resumeCount > 0：预算暂停（paused）的首次中断同样要给入口，
+    // 否则用户没有任何途径发现这类任务（与聊天页启动检测同一数据源）。
+    for (final t in resumableTasks) {
+      final info = DevelopmentTaskInfo.fromTask(t);
+      todos.add(DashboardTodoItem(
+        id: 'resume-${t.id}',
+        title: info.status == 'paused' ? '任务已暂停，可继续执行' : '中断任务可恢复',
+        description: info.title,
+        type: TodoItemType.recoverable,
+        taskId: t.id,
+        conversationId: t.conversationId,
+        createdAt: t.updatedAt,
+      ));
     }
 
     // 6. 最近会话 (取前 5 条)

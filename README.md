@@ -1,6 +1,6 @@
 # NEXUS Agent
 
-面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.8.9.1**（Android versionCode `92`）。
+面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.8.9.2**（Android versionCode `93`）。
 
 ## 核心能力
 
@@ -11,6 +11,9 @@
 - 提供运行时间线、Token/费用统计、缓存命中信息、诊断日志和报告导出；仪表盘「本周有帮助任务」按近 7 天窗口统计你标记为有帮助的开发任务。
 - 长按助手消息可调用系统 TTS 朗读回复，朗读中同位置可随时停止（仅 Android 真机提供入口）。
 - 支持协作分析：启动前确认角色、预算、轮次和只读权限，多个子 Agent 并行分析后生成结构化汇总。
+- 支持「对话式创建 Agent」：说一句目标即可生成角色、系统指令、工作步骤、约束边界与工具范围的草稿，确认后才保存；草稿默认只勾选安全级工具。
+- 支持系统级入口：长按应用图标可通过快捷方式直达「描述建 Agent」「新对话」「记忆」，桌面小组件「NEXUS 指挥台」提供同样的三个入口。
+- 支持锁屏/通知栏审批：应用不在前台时，需要审批的工具会改发一条带「批准/拒绝」动作的通知，可在锁屏直接裁决；动作不拉起界面，超时视为拒绝。
 - API Key 使用系统安全存储，隐私保险箱支持加密备份与恢复。
 
 ## Android 隐私边界
@@ -60,12 +63,30 @@ flutter build apk --release
 cd android && ./gradlew app:assembleRelease -PallowDebugSigning=true
 ```
 
-正式发布 tag 使用 `v<versionName>`，本版本为 `v0.8.9.1`；`+92` 仅作为 Android versionCode。
+正式发布 tag 使用 `v<versionName>`，本版本为 `v0.8.9.2`；`+93` 仅作为 Android versionCode。
 
 ## 构建 APK
 
+日常本地构建推荐使用根目录的 `build-apk.bat`。它默认复用 Flutter、Gradle 和 native-assets 的增量缓存，不会执行 `flutter clean`，也不会修改全局 Flutter 的 JDK 配置：
+
+```bat
+build-apk.bat
+```
+
+脚本模式：
+
+```bat
+build-apk.bat --offline       rem 只使用本机 Pub/native-assets 缓存，缓存缺失时快速失败
+build-apk.bat --online        rem 显式允许恢复 Pub 依赖和 native-assets
+build-apk.bat --clean --online rem 冷构建；删除生成输出后在线预热缓存
+```
+
+首次 checkout 或依赖、Flutter/Android 工具链尚未缓存时仍需要网络。`--offline` 能约束 Pub 依赖恢复，但 Flutter 的 `sqlite3` native-assets hook 还需要本地已有经过 hash 校验的 ARM64 库；缺少时脚本会在构建前提示，而不是等待 GitHub 网络超时。完全断网、可复现的构建还需要将该原生资源放入受控的内部制品源或随构建环境预热，不能仅靠 Gradle `--offline` 实现。
+
+`build-apk.bat` 会保留正式签名、ARM64、APK 新鲜度、非空和 SHA-256 sidecar 检查，并将可分享副本写入 `dist/`。如果只需要 Flutter 默认构建，也可以直接运行：
+
 ```bash
-flutter build apk --release
+flutter build apk --release --target-platform android-arm64
 ```
 
 产物路径：

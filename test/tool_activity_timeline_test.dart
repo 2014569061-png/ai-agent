@@ -126,6 +126,43 @@ void main() {
     expect(find.text('已完成：读取文件 a0.txt'), findsOneWidget);
     expect(find.text('已完成：读取文件 a9.txt'), findsOneWidget);
   });
+
+  testWidgets('offers direct confirm, reject and retry actions',
+      (tester) async {
+    var confirmed = 0;
+    var rejected = 0;
+    var retried = 0;
+    await tester.pumpWidget(_Harness(
+      activities: const [
+        ToolActivity(
+          call: ToolCall(id: 'pending', name: 'terminal', arguments: {}),
+          risk: ToolRisk.requiresConfirmation,
+          status: '等待确认',
+        ),
+        ToolActivity(
+          call: ToolCall(id: 'failed', name: 'read_file', arguments: {}),
+          risk: ToolRisk.safe,
+          status: '执行失败',
+          ok: false,
+          effect: ToolEffect.none,
+        ),
+      ],
+      onConfirm: (_) => confirmed++,
+      onReject: (_) => rejected++,
+      onRetry: (_) => retried++,
+    ));
+
+    expect(find.text('确认执行'), findsOneWidget);
+    expect(find.text('拒绝'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+
+    await tester.tap(find.text('确认执行'));
+    await tester.tap(find.text('拒绝'));
+    await tester.tap(find.text('重试'));
+    expect(confirmed, 1);
+    expect(rejected, 1);
+    expect(retried, 1);
+  });
 }
 
 List<ToolActivity> _longTrajectory() => [
@@ -146,10 +183,19 @@ List<ToolActivity> _longTrajectory() => [
     ];
 
 class _Harness extends StatelessWidget {
-  const _Harness({required this.activities, this.running = false});
+  const _Harness({
+    required this.activities,
+    this.running = false,
+    this.onConfirm,
+    this.onReject,
+    this.onRetry,
+  });
 
   final List<ToolActivity> activities;
   final bool running;
+  final void Function(ToolActivity activity)? onConfirm;
+  final void Function(ToolActivity activity)? onReject;
+  final void Function(ToolActivity activity)? onRetry;
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -158,6 +204,9 @@ class _Harness extends StatelessWidget {
           body: ToolActivityTimeline(
             activities: activities,
             running: running,
+            onConfirm: onConfirm,
+            onReject: onReject,
+            onRetry: onRetry,
           ),
         ),
       );

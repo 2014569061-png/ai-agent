@@ -3,12 +3,14 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
-import '../../widgets/immersive_sheet.dart';
-import '../../widgets/immersive_surface.dart';
+import '../../widgets/nexus_sheet.dart';
+import '../../widgets/nexus_surface.dart';
 import '../../widgets/nexus_status_pill.dart';
+import '../../widgets/nexus_status_badge.dart';
 
 /// 执行计划浮层卡片 (PlanPanel)
 /// 严格依据 NEXUS UI 设计优化规范重构：
@@ -84,31 +86,40 @@ class _PlanPanelState extends State<PlanPanel> {
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 380, maxHeight: 420),
-      child: ImmersiveSurface(
-        level: ImmersiveMaterialLevel.ultraThick,
+      child: NexusSurface(
+        level: SurfaceLevel.ultraThick,
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-          child: _isCompleted && !_expanded
-              ? _buildCompletedCompact(muted)
-              : (_expanded
-                  ? SizedBox(
-                      height: math.min(
-                          410.0, MediaQuery.sizeOf(context).height * 0.58),
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child:
-                                  _buildExpanded(muted, includeActions: false),
+          child: AnimatedSize(
+            duration: NexusMotion.durationBase(context),
+            curve: NexusMotion.curveStandard,
+            alignment: Alignment.topCenter,
+            child: _isCompleted && !_expanded
+                ? _buildCompletedCompact(muted)
+                : (_expanded
+                    ? SizedBox(
+                        key: const ValueKey('plan_expanded'),
+                        height: math.min(
+                            410.0, MediaQuery.sizeOf(context).height * 0.58),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: SingleChildScrollView(
+                                child: _buildExpanded(muted,
+                                    includeActions: false),
+                              ),
                             ),
-                          ),
-                          _buildPlanActions(),
-                        ],
-                      ),
-                    )
-                  : _buildCollapsed(muted)),
+                            _buildPlanActions(),
+                          ],
+                        ),
+                      )
+                    : KeyedSubtree(
+                        key: const ValueKey('plan_collapsed'),
+                        child: _buildCollapsed(muted),
+                      )),
+          ),
         ),
       ),
     );
@@ -236,19 +247,30 @@ class _PlanPanelState extends State<PlanPanel> {
               const Icon(Icons.checklist_rounded,
                   size: 18, color: AppPalette.brand),
               const SizedBox(width: 8),
-              Text(
-                '执行计划',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '执行计划',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: NexusStatusPill.fromString(
+                        widget.plan.status,
+                        isCompact: true,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              NexusStatusPill.fromString(
-                widget.plan.status,
-                isCompact: true,
-              ),
-              const Spacer(),
               _threeDotMenu(muted),
               IconButton(
                 tooltip: '收起计划',
@@ -287,6 +309,8 @@ class _PlanPanelState extends State<PlanPanel> {
                   const SizedBox(height: 3),
                   Text(
                     widget.goal!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
                       height: 1.3,
@@ -592,10 +616,10 @@ class _PlanPanelState extends State<PlanPanel> {
             ),
           ),
           if (showSpinner)
-            const SizedBox(
-              width: 12,
-              height: 12,
-              child: CircularProgressIndicator(strokeWidth: 2),
+            const NexusStatusBadge(
+              label: '执行中',
+              tone: NexusBadgeTone.brand,
+              showDot: true,
             ),
         ],
       ),
@@ -603,7 +627,7 @@ class _PlanPanelState extends State<PlanPanel> {
   }
 
   Future<void> _showActionsMenu() async {
-    final action = await showImmersiveSheet<String>(
+    final action = await showNexusSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
         child: Column(

@@ -101,6 +101,37 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
     'plugins': (await db.allPlugins()).map((p) => p.toJson()).toList(),
     'skillPacks': (await db.allSkillPacks()).map((s) => s.toJson()).toList(),
     'skillFiles': await _collectSkillFiles(db),
+    'projects': (await db.allProjects(includeArchived: true))
+        .map((t) => t.toJson())
+        .toList(),
+    'drafts': (await db.select(db.drafts).get()).map((t) => t.toJson()).toList(),
+    'artifacts': await db.allArtifactRecords(),
+    'runControls':
+        (await db.select(db.runControls).get()).map((t) => t.toJson()).toList(),
+    'executionLeases': (await db.select(db.executionLeases).get())
+        .map((t) => t.toJson())
+        .toList(),
+    'tasks': (await db.allTasks(limit: 2000)).map((t) => t.toJson()).toList(),
+    'taskFeedback':
+        (await db.allTaskFeedback()).map((t) => t.toJson()).toList(),
+    'collaborationRuns':
+        (await db.allCollaborationRuns(limit: 2000)).map((t) => t.toJson()).toList(),
+    'collaborationAgentRuns':
+        (await db.allCollaborationAgentRuns()).map((t) => t.toJson()).toList(),
+    'collaborationArtifacts':
+        (await db.allCollaborationArtifacts()).map((t) => t.toJson()).toList(),
+    'collaborationMessages':
+        (await db.allCollaborationMessages()).map((t) => t.toJson()).toList(),
+    'auditLogs': (await db.allAuditLogs())
+        .map((t) => _redactAuditLog(t.toJson()))
+        .toList(),
+    'runRecords': (await db.allRunRecords()).map((t) => t.toJson()).toList(),
+    'runEvents': (await db.allRunEvents())
+        .map((t) => _redactRunEvent(t.toJson()))
+        .toList(),
+    'logRecords': (await db.allLogRecords())
+        .map((t) => _redactLogRecord(t.toJson()))
+        .toList(),
     if (includeSecrets)
       'providerProfiles': profiles
           .map((p) => {
@@ -164,6 +195,48 @@ Map<String, dynamic> _redactPersistedMessage(
   return result;
 }
 
+Map<String, dynamic> _redactAuditLog(Map<String, dynamic> raw) {
+  final result = Map<String, dynamic>.from(raw);
+  final type = result['type']?.toString() ?? '';
+  final risk = result['risk']?.toString() ?? '';
+  if (type == 'tool' ||
+      risk == 'requiresConfirmation' ||
+      risk == 'dangerous' ||
+      SensitiveToolPolicy.isSensitive(type)) {
+    result['detail'] = '[敏感审计详情已脱敏]';
+  }
+  return result;
+}
+
+Map<String, dynamic> _redactRunEvent(Map<String, dynamic> raw) {
+  final result = Map<String, dynamic>.from(raw);
+  final name = result['name']?.toString() ?? '';
+  if (SensitiveToolPolicy.isSensitive(name) ||
+      SensitiveToolPolicy.isArgumentSensitive(name) ||
+      SensitiveToolPolicy.isResultSensitive(name)) {
+    if (result['inputSummary'] != null) {
+      result['inputSummary'] = '[敏感工具参数已脱敏]';
+    }
+    if (result['outputSummary'] != null) {
+      result['outputSummary'] = '[敏感工具结果已脱敏]';
+    }
+    result['metadataJson'] = '{}';
+  }
+  return result;
+}
+
+Map<String, dynamic> _redactLogRecord(Map<String, dynamic> raw) {
+  final result = Map<String, dynamic>.from(raw);
+  final category = result['category']?.toString() ?? '';
+  final detail = result['detailJson']?.toString() ?? '';
+  if (category == 'tool' ||
+      detail.contains('"arguments"') ||
+      detail.contains('"result"')) {
+    result['detailJson'] = '{"redacted":true}';
+  }
+  return result;
+}
+
 Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
     {ProviderConfigStore? providerStore}) async {
   // Validate optional secret payload before clearing the database. A malformed
@@ -171,9 +244,19 @@ Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
   _providerConfigsFromJson(json['providerProfiles']);
   await db.transaction(() async {
     await db.clearAllUserData();
+    await _restoreOptionalRows(
+        json['projects'], db.saveProject, Project.fromJson);
+    await _restoreOptionalRows(json['drafts'], db.saveDraft, Draft.fromJson);
+    if (json['artifacts'] is List) {
+      for (final raw in (json['artifacts'] as List).whereType<Map>()) {
+        await db.saveArtifactRecord(Map<String, dynamic>.from(raw));
+      }
+    }
     for (final m in (json['conversations'] as List? ?? const [])
         .cast<Map<String, dynamic>>()) {
-      await db.saveConversation(Conversation.fromJson(m));
+      final row = Map<String, dynamic>.from(m);
+      row['mode'] ??= 'chat';
+      await db.saveConversation(Conversation.fromJson(row));
     }
     for (final m in (json['messages'] as List? ?? const [])
         .cast<Map<String, dynamic>>()) {
@@ -215,6 +298,32 @@ Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
         .cast<Map<String, dynamic>>()) {
       await db.saveSkillPack(SkillPack.fromJson(s));
     }
+    await _restoreOptionalRows(json['tasks'], db.saveTask, (row) {
+      final mapped = Map<String, dynamic>.from(row);
+      mapped['stateRevision'] ??= 0;
+      return Task.fromJson(mapped);
+    });
+    await _restoreOptionalRows(
+        json['runControls'], db.saveRunControl, RunControl.fromJson);
+    await _restoreOptionalRows(json['executionLeases'], db.saveExecutionLease,
+        ExecutionLease.fromJson);
+    await _restoreOptionalRows(
+        json['taskFeedback'], db.saveTaskFeedbackRow, TaskFeedbackData.fromJson);
+    await _restoreOptionalRows(json['collaborationRuns'],
+        db.saveCollaborationRun, CollaborationRun.fromJson);
+    await _restoreOptionalRows(json['collaborationAgentRuns'],
+        db.saveCollaborationAgentRun, CollaborationAgentRun.fromJson);
+    await _restoreOptionalRows(json['collaborationArtifacts'],
+        db.saveCollaborationArtifact, CollaborationArtifact.fromJson);
+    await _restoreOptionalRows(json['collaborationMessages'],
+        db.saveCollaborationMessage, CollaborationMessage.fromJson);
+    await _restoreOptionalRows(json['auditLogs'], db.saveAuditLog, AuditLog.fromJson);
+    await _restoreOptionalRows(
+        json['runRecords'], db.saveRunRecordRow, RunRecord.fromJson);
+    await _restoreOptionalRows(
+        json['runEvents'], db.saveRunEventRow, RunEvent.fromJson);
+    await _restoreOptionalRows(
+        json['logRecords'], db.saveLogRecordRow, LogRecord.fromJson);
     // MCP 配置的正式来源是数据库；仅当备份含该段（v2+）时覆盖。
     if (json['mcpServers'] is List) {
       await db.clearMcpServers();
@@ -258,6 +367,21 @@ List<ProviderConfig> _providerConfigsFromJson(Object? raw) {
 }
 
 /// 恢复 Provider 配置（含 API Key）与工具密钥到安全存储；旧版备份无该段时跳过。
+Future<void> _restoreOptionalRows<T>(
+  Object? raw,
+  Future<void> Function(T row) save,
+  T Function(Map<String, dynamic> json) fromJson,
+) async {
+  if (raw is! List) return;
+  for (final item in raw.whereType<Map>()) {
+    try {
+      await save(fromJson(Map<String, dynamic>.from(item)));
+    } catch (_) {
+      // 单行损坏不阻断整份备份恢复。
+    }
+  }
+}
+
 Future<void> _restoreProviderSecrets(AppDatabase db, Map<String, dynamic> json,
     ProviderConfigStore store) async {
   final profilesJson = json['providerProfiles'];

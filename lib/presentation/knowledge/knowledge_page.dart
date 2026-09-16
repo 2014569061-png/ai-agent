@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+﻿import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,7 +12,7 @@ import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -113,7 +113,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
   Future<void> _pasteText() async {
     final name = TextEditingController();
     final content = TextEditingController();
-    final saved = await showImmersiveDialog<bool>(
+    final saved = await showNexusDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('粘贴文本入库'),

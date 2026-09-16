@@ -5,9 +5,9 @@ import 'package:mobile_agent/infrastructure/database/app_database.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('schemaVersion 已升至 19', () {
+  test('schemaVersion 已升至 23', () {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 19);
+    expect(db.schemaVersion, 23);
     db.close();
   });
 
@@ -67,6 +67,94 @@ void main() {
     final columns =
         await db.customSelect('PRAGMA table_info(scheduled_tasks)').get();
     expect(columns.map((row) => row.data['name']), contains('last_run_at'));
+    await db.close();
+  });
+
+  test('v20→v21 迁移创建独立任务控制表', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.customStatement('DROP TABLE IF EXISTS run_controls');
+    await db.customStatement('DROP TABLE IF EXISTS execution_leases');
+    final m = db.createMigrator();
+    await db.migration.onUpgrade(m, 20, 21);
+    final tables = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN "
+          "('run_controls', 'execution_leases')",
+        )
+        .get();
+    expect(tables.map((row) => row.data['name']).toSet(),
+        {'run_controls', 'execution_leases'});
+    final columns =
+        await db.customSelect('PRAGMA table_info(run_records)').get();
+    expect(columns.map((row) => row.data['name']), containsAll(['task_id', 'project_id']));
+    await db.close();
+  });
+
+  test('v21→v22 迁移创建 artifacts 表', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.customStatement('DROP TABLE IF EXISTS artifacts');
+    final m = db.createMigrator();
+    await db.migration.onUpgrade(m, 21, 22);
+    final tables = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artifacts'",
+        )
+        .get();
+    expect(tables, isNotEmpty);
+    await db.saveArtifactRecord({
+      'id': 'art-1',
+      'projectId': 'p1',
+      'taskId': 't1',
+      'runId': 'r1',
+      'kind': 'apk',
+      'relativePath': 'build/app.apk',
+      'hash': 'abc',
+      'bytes': 12,
+      'inspectionJson': {'exists': true},
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+    final rows = await db.artifactsForProject('p1');
+    expect(rows.single['relativePath'], 'build/app.apk');
+    await db.close();
+  });
+
+  test('v22→v23 迁移创建锁屏审批决策表（含索引）', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    // 模拟 v22：把 fresh-create 时已建的表与索引删掉，再跑升级路径。
+    await db.customStatement('DROP INDEX IF EXISTS idx_pending_approvals_created');
+    await db.customStatement('DROP TABLE IF EXISTS pending_approvals');
+
+    final m = db.createMigrator();
+    await db.migration.onUpgrade(m, 22, 23);
+
+    final tables = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'pending_approvals'",
+        )
+        .get();
+    expect(tables, isNotEmpty, reason: '升级后必须有 pending_approvals 表');
+
+    final indexes = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'index' "
+          "AND name = 'idx_pending_approvals_created'",
+        )
+        .get();
+    expect(indexes, isNotEmpty, reason: '升级后必须有对应的清理索引');
+
+    // 表建出来还不算完，必须真的能完成一次握手（列名/类型写错会在这里暴露）。
+    await db.insertPendingApproval(
+      requestId: 'appr-migrated',
+      toolName: 'terminal',
+      summary: 'x',
+      risk: 'requiresConfirmation',
+      ttl: const Duration(minutes: 1),
+    );
+    expect(await db.findPendingApprovalDecision('appr-migrated'), isNull);
+    expect(await db.decidePendingApproval('appr-migrated', 'approve'), isTrue);
+    expect(
+        await db.findPendingApprovalDecision('appr-migrated'), 'approve');
     await db.close();
   });
 

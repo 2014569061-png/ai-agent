@@ -21,6 +21,7 @@ import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
+import '../motion/nexus_page_route_factory.dart';
 import 'log_viewer_page.dart';
 
 /// 运行分析与 Token 可观测性页面 (RunAnalysisPage)
@@ -112,7 +113,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
             tooltip: '全部诊断日志',
             icon: const Icon(Icons.receipt_long_outlined),
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const LogViewerPage()),
+              NexusPageRoute.detail(builder: (_) => const LogViewerPage()),
             ),
           ),
           IconButton(
@@ -419,7 +420,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
         ),
         trailing: const Icon(Icons.chevron_right_rounded, size: 18),
         onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => RunDetailPage(run: run)),
+          NexusPageRoute.detail(builder: (_) => RunDetailPage(run: run)),
         ),
       ),
     );
@@ -717,7 +718,7 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
               minHeight: AppTokens.kMinTouchTarget,
             ),
             icon: const Icon(Icons.receipt_long_outlined),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+            onPressed: () => Navigator.of(context).push(NexusPageRoute.detail(
                 builder: (_) => LogViewerPage(runId: _run.runId))),
           ),
         ],

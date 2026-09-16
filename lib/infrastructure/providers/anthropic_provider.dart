@@ -208,11 +208,11 @@ class AnthropicProvider extends StreamingProviderBase {
     }
     _markTrailingCacheBreakpoint(messages);
 
-    // Anthropic requires budget_tokens < max_tokens. Clamp the thinking budget
-    // at the provider boundary so the default 2048 output limit cannot turn a
-    // medium/high reasoning request into a guaranteed 400 response.
-    final thinking =
-        _buildThinking(request.reasoningEffort, maxTokens: request.maxTokens);
+    // Older Claude 4.5 models use manual extended thinking.  Newer Claude
+    // 4.6+ / 5 models use adaptive thinking and reject `type: enabled`.
+    final thinking = _buildThinking(request.model,
+        request.reasoningEffort, maxTokens: request.maxTokens);
+    final isAdaptiveThinking = thinking?['type'] == 'adaptive';
     return {
       'model': request.model,
       'max_tokens': request.maxTokens,
@@ -223,6 +223,8 @@ class AnthropicProvider extends StreamingProviderBase {
       },
       'stream': stream,
       if (thinking != null) 'thinking': thinking,
+      if (isAdaptiveThinking && request.reasoningEffort != ReasoningEffort.auto)
+        'output_config': {'effort': request.reasoningEffort.name},
       if (system != null)
         'system': [
           {
@@ -348,13 +350,26 @@ class AnthropicProvider extends StreamingProviderBase {
   ///
   /// The budget is capped below [maxTokens] because Anthropic rejects a
   /// request when the two values are equal or the budget is larger.
-  static Map<String, dynamic>? _buildThinking(ReasoningEffort effort,
+  static Map<String, dynamic>? _buildThinking(String model,
+      ReasoningEffort effort,
       {required int maxTokens}) {
-    if (effort == ReasoningEffort.auto || maxTokens <= 1) return null;
+    if (effort == ReasoningEffort.auto ||
+        effort == ReasoningEffort.off ||
+        maxTokens <= 1 ||
+        !_supportsThinking(model)) {
+      return null;
+    }
+    if (_usesAdaptiveThinking(model)) {
+      return const {'type': 'adaptive'};
+    }
+    // Anthropic requires manual thinking budgets to be >= 1024 and strictly
+    // less than max_tokens.  If the caller leaves too little output room,
+    // omit thinking instead of generating a guaranteed 400 request.
+    if (maxTokens <= 1024) {
+      return null;
+    }
     int budget;
     switch (effort) {
-      case ReasoningEffort.off:
-        return null;
       case ReasoningEffort.low:
         budget = 2048;
         break;
@@ -364,13 +379,30 @@ class AnthropicProvider extends StreamingProviderBase {
       case ReasoningEffort.high:
         budget = 16384;
         break;
+      case ReasoningEffort.off:
       case ReasoningEffort.auto:
         return null;
     }
+    budget = budget.clamp(1024, maxTokens - 1).toInt();
     return {
       'type': 'enabled',
-      'budget_tokens': budget < maxTokens ? budget : maxTokens - 1,
+      'budget_tokens': budget,
     };
+  }
+
+  static bool _supportsThinking(String model) {
+    final normalized = model.toLowerCase().replaceAll('.', '-').replaceAll('_', '-');
+    return RegExp(r'claude-(?:opus|sonnet|haiku)-(?:4|5)(?:-|$)')
+        .hasMatch(normalized);
+  }
+
+  static bool _usesAdaptiveThinking(String model) {
+    final normalized = model.toLowerCase().replaceAll('.', '-').replaceAll('_', '-');
+    return normalized.contains('4-6') ||
+        normalized.contains('4-7') ||
+        normalized.contains('4-8') ||
+        RegExp(r'claude-(?:opus|sonnet|haiku)-5(?:-|$)')
+            .hasMatch(normalized);
   }
 }
 

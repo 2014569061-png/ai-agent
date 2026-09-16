@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/project_kind.dart';
 import '../../application/providers.dart';
 import '../../application/task_service.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
@@ -251,8 +254,15 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                     )
                   : null,
               label: Text('${entry.value} $count'),
+              labelStyle: TextStyle(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              ),
               selected: isSelected,
-              onSelected: (_) => setState(() => _filter = entry.key),
+              onSelected: (_) {
+                HapticFeedback.selectionClick();
+                setState(() => _filter = entry.key);
+              },
             ),
           );
         }).toList(),
@@ -268,7 +278,10 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
     return SectionCard(
       child: InkWell(
         borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-        onTap: () => _openTaskDetails(task),
+        onTap: () {
+          HapticFeedback.lightImpact();
+          _openTaskDetails(task);
+        },
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -284,7 +297,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         fontSize: 14.5,
                       ),
                     ),
@@ -293,6 +306,19 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                   NexusStatusPill.fromString(task.status, isCompact: true),
                 ],
               ),
+              if (task.prompt.isNotEmpty && task.prompt != task.title) ...[
+                const SizedBox(height: 4),
+                Text(
+                  task.prompt,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant.withAlpha(210),
+                    height: 1.35,
+                  ),
+                ),
+              ],
               const SizedBox(height: 6),
 
               // 任务类型与工作区/模型说明
@@ -320,7 +346,8 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                   Expanded(
                     child: Text(
                       '${_relativeTime(task.updatedAt)}'
-                      '${task.workspacePath != null ? ' · ${task.workspacePath!.split('/').last}' : ''}'
+                      '${task.workspacePath != null ? ' · ${task.workspacePath!.split(RegExp(r'[\\\\/]')).last}' : ''}'
+                      '${task.projectKind != null ? ' · ${task.projectKind!.label}' : ''}'
                       '${task.resumeCount > 0 ? ' · 恢复 ${task.resumeCount} 次' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -385,7 +412,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
 
   Future<void> _openTaskDetails(DevelopmentTaskInfo task) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      NexusPageRoute.detail(
         builder: (_) => TaskDetailsPage(
           task: task,
           onConversationSelected: widget.onConversationSelected,

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  长按应用图标出现的静态快捷方式（App Shortcuts）。
+
+  ⚠️ android:targetPackage 必须写死包名，不能用 ${applicationId} 占位符（占位符只在
+  AndroidManifest 里生效）。而 debug 构建带 applicationIdSuffix=".debug"，因此
+  src/debug/res/xml/shortcuts.xml 另有一份同名的覆盖文件；修改本文件时必须同步改它，
+  否则调试包上点快捷方式不会有任何反应。
+
+  三个入口都用 nexus:// 深链，由 DeepLinkService 解析后路由：
+  · nexus://new-agent → 打开「描述目标创建 Agent」
+  · nexus://new-chat  → 新建对话
+  · nexus://memory    → 打开长期记忆页
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="describe_agent"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_describe_agent_short"
+        android:shortcutLongLabel="@string/shortcut_describe_agent_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nexusagent.app"
+            android:targetClass="com.nexusagent.app.MainActivity"
+            android:data="nexus://new-agent"/>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="new_chat"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_new_chat_short"
+        android:shortcutLongLabel="@string/shortcut_new_chat_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nexusagent.app"
+            android:targetClass="com.nexusagent.app.MainActivity"
+            android:data="nexus://new-chat"/>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="memory"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_memory_short"
+        android:shortcutLongLabel="@string/shortcut_memory_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.nexusagent.app"
+            android:targetClass="com.nexusagent.app.MainActivity"
+            android:data="nexus://memory"/>
+    </shortcut>
+
+</shortcuts>

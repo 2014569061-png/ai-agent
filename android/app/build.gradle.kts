@@ -49,7 +49,7 @@ android {
         versionCode = flutter.versionCode
         // Pub only accepts three-part semantic versions; expose the requested
         // four-part Android version name while keeping the build number in pubspec.
-        versionName = "0.8.9.1"
+        versionName = "0.8.9.2"
 
         // [体积优化] 仅打包现代 Android 设备使用的 ARM64 ABI，减少原生库体积
         ndk {

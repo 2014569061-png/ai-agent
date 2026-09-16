@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,7 +6,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../../application/error_humanizer.dart';
 
-import 'immersive_surface.dart';
+import 'nexus_surface.dart';
 import '../theme/app_tokens.dart';
 import 'glass_chip.dart';
 import '../chat/widgets/capsule_top_bar.dart';
@@ -291,8 +291,8 @@ class _ToastViewState extends State<_ToastView>
                       behavior: widget.persistent
                           ? HitTestBehavior.translucent
                           : HitTestBehavior.opaque,
-                      child: ImmersiveSurface(
-                        level: ImmersiveMaterialLevel.thick,
+                      child: NexusSurface(
+                        level: SurfaceLevel.thick,
                         borderRadius:
                             BorderRadius.circular(AppTokens.radiusPill),
                         padding: EdgeInsets.fromLTRB(

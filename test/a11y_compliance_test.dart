@@ -92,7 +92,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('拒绝'), findsOneWidget);
-      expect(find.text('允许一次'), findsOneWidget);
+      expect(find.text('确认执行'), findsOneWidget);
       expect(find.text('仅本次允许'), findsNothing);
       expect(find.text('始终允许'), findsNothing);
     });

@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-import 'immersive_surface.dart';
+import 'nexus_surface.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
@@ -55,10 +55,10 @@ class SectionCard extends StatelessWidget {
       );
     }
 
-    return ImmersiveSurface(
+    return NexusSurface(
       margin: margin,
       padding: padding,
-      level: ImmersiveMaterialLevel.regular,
+      level: SurfaceLevel.regular,
       borderRadius: radius,
       child: child,
     );

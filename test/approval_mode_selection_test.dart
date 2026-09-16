@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/chat/widgets/input_tool_grid_sheet.dart';
-import 'package:mobile_agent/presentation/widgets/immersive_action_sheet.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_action_sheet.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 
 void main() {
@@ -60,7 +60,7 @@ class _ApprovalModeHarnessState extends State<_ApprovalModeHarness> {
   }
 
   Future<void> _openApprovalMode(BuildContext context) async {
-    final selected = await showImmersiveActionSheet<ApprovalMode>(
+    final selected = await showNexusActionSheet<ApprovalMode>(
       context: context,
       title: '操作权限',
       items: [

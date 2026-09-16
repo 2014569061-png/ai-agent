@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/memory_service.dart';
@@ -10,7 +10,7 @@ import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_sheet.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
@@ -80,7 +80,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     final category = TextEditingController(text: memory?.category ?? 'general');
     var importance = memory?.importance ?? 1;
 
-    final saved = await showImmersiveDialog<bool>(
+    final saved = await showNexusDialog<bool>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(

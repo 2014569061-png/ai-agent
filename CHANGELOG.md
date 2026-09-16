@@ -1,5 +1,54 @@
 # Changelog
 
+## [未发布]
+
+- 新增桌面小组件「NEXUS 指挥台」：桌面上直接放三个深链入口（描述建 Agent / 新对话 / 记忆），不用先找到并打开 App。无状态实现（`updatePeriodMillis="0"`，不唤醒系统），深链与应用快捷方式完全同源。
+  - ⚠️ 小组件布局受 RemoteViews 限制，只能用 LinearLayout / TextView / Button 这类基础 View，**不能用 ConstraintLayout**，否则表现为白块或"加载失败"。
+  - 刻意不展示任务进度：读取 Dart 侧状态需要另建跨进程数据通道（文件或 ContentProvider），当前版本先用「入口」价值换实现复杂度。
+- 新增锁屏/通知栏审批：应用不在前台时，需要审批的工具原本会让运行**永久阻塞**（弹窗用户看不见），现在改为发一条带「批准 / 拒绝」动作的通知，可在锁屏直接裁决。动作走 `showsUserInterface: false` 的后台 isolate 通道，不拉起界面。
+  - 安全语义不放松：超时视为**拒绝**；未收到任何决定时调用方保守拒绝；只有第一条决定生效（`decision IS NULL` 作哨兵），锁屏动作与前台弹窗同时提交不会互相覆盖。
+  - 通知正文按持久化出口的同一口径脱敏：**参数敏感的工具只显示工具名与风险等级**，绝不带参数原文——锁屏上旁人也能看到这段文字。
+  - 诚实的边界：动作按钮在多数机型锁屏上可点，但「锁屏是否显示通知内容」由用户系统设置决定，各厂商实现不一致。因此这是**尽力而为的加速器**，前台弹窗仍是兜底路径。
+  - 前台路径完全不变：只有生命周期状态明确不是 `resumed` 时才走通知通道。
+- 数据库 `schemaVersion` 22 → 23：新增 `pending_approvals` 表（一次性审批握手行，分钟级过期）。用裸 SQL 建表（沿用 `artifacts` 先例），避免为一张小表重跑 build_runner；`onCreate` 与 `onUpgrade` 共用同一段 SQL，防止"全新安装正常、升级用户缺表"。
+- 新增测试 12 项：`test/approval_bridge_test.dart` 11 项覆盖动作 id 编解码（含 requestId 自带冒号、六种非法输入）、握手行的未决/首决定生效/过期清理、以及整条通道的批准/拒绝/超时三态；`test/db_migration_v17_test.dart` 新增 v22→v23 升级用例，断言表与索引建出并真能完成一次握手。
+- 分层修正：通知动作 id 的编解码放在 `lib/domain/`（原放在 `application/` 会形成 `infrastructure → application` 反向依赖，被 `layering_test.dart` 拦下）。
+
+- 新增系统级入口（App Shortcuts）：长按应用图标可直达三个入口——「描述建 Agent」（进入即弹出目标输入框）、「新对话」、「记忆」。三者都走既有的 `nexus://` 深链，由 `DeepLinkService` 解析后在 `ChatPage._consumeDeepLink` 路由。
+  - ⚠️ `android:targetPackage` 必须写死包名，无法用 `${applicationId}` 占位符；而 debug 构建带 `applicationIdSuffix=".debug"`，因此 `src/debug/res/xml/shortcuts.xml` 另有一份同名覆盖文件。**改 main 那份时必须同步改 debug 那份**，否则调试包上点快捷方式毫无反应（两份文件的注释里都写了这条）。
+  - `AgentsPage` 新增 `autoDescribe`：由快捷方式进入即弹出描述输入框。快捷方式的意义是少一次点击，落到列表页还要用户自己找入口就等于没做。
+- 新增测试 6 项（`test/deep_link_and_shortcuts_test.dart`）：深链三个入口互不串扰、`new-agent` 标记的 drain 是消费型（同一次快捷方式不反复弹窗）、非 `nexus` scheme 一律忽略、`autoDescribe` 进入即弹窗、默认进入不弹窗。
+
+- 新增「对话式创建 Agent」：在 Agent 页说一句目标，即可生成智能体草稿——角色定位、系统指令、工作步骤、约束边界、验收条件与工具范围，直接预填进编辑器，用户确认后才落库。生成结果**不是**已创建的 Agent：不写库、不授权、不触发任何工具，草稿进编辑器时视为「未保存的修改」，直接返回会先确认。
+  - 默认遵守最小权限：只有安全级工具被默认勾选；需逐次确认与高风险工具列成「AI 建议」，在编辑器里由用户自己决定是否打开。理由是「少授权」用户补勾很便宜，「多授权」是安全边界问题而用户不一定注意得到。
+  - 生成提示词会把当前设备**真实可用**的工具（内置 + 声明式插件 + 已启用 MCP，带风险等级）交给模型，返回结果再按同一份目录校验：不存在的工具名被剔除并在界面上说明，避免草稿里出现勾不上的幽灵项。
+  - 可离线退化：未配置模型、调用失败或输出无法解析时，回退为本地确定性草稿并如实说明原因，入口不会变成死路；解析是纯函数，可脱离网络单测。
+  - 解析容错：容忍 Markdown 代码围栏与前后解释文字、`tools` 给成逗号分隔字符串；越界或非数字参数被夹到编辑器允许的范围。
+- 收敛 Provider 构造：`createLlmProvider` 统一按 `ProviderConfig.type` 选适配器，聊天主流程与后台无头执行不再各自维护一份 switch（新增厂商时漏改其中一处的症状是「某个入口静默走错适配器」，很难从现象定位）。
+- 抽出 `loadAvailableAgentTools`：编辑器与草稿生成共用同一份工具来源，避免「生成时可选」与「编辑器里能勾选」两边漂移。
+- `AgentsPage` 与 `AgentEditorPage` 改用项目在 `providers.dart` 里写明的 `databaseProvider` 注入点（此前直接取全局单例），从而可以被内存库驱动、进入冒烟守护。
+- 修复 `loadAvailableAgentTools` 内部回落到全局数据库单例的问题：这样在 widget 测试的假异步环境里会去触发真实的 path_provider 平台通道，而 `testWidgets` 不会推进真实 I/O，函数永远挂住、界面卡在「生成中」。现在数据库依赖由调用方显式传入（`database:`），并把这个坑写进函数注释避免改回去。
+- 新增测试 21 项：`test/agent_draft_service_test.dart` 14 项覆盖提示词契约、分级授权、未知工具剔除、围栏容忍、非法与空输出回退、参数夹取、名称兜底与模型异常回退；`test/agent_draft_entry_test.dart` 7 项覆盖入口可达、弹窗可开、空目标只提示不关窗、草稿预填，以及**从描述生成到保存的完整链路**——断言保存进库的工具范围恰好只有安全级、高风险与需确认工具不会因为「这是 AI 生成的」而自动进入授权范围，并验证保存后返回列表能看到新 Agent。
+
+- 修复产物校验把「期望包名」当成「已解析包名」的问题：`ArtifactInspector` 只校验 ZIP 文件头，却把调用方传入的 `expectedPackageName` 写进 `packageName` 字段，下游产物记录与详情页「包名：…」因此会把一个未经解析的猜测当成已验证事实。现在包名一律保持未知，期望值只留在 `notes` 中说明。
+- 收尾阶段的自动验证跳过时不再静默：`DevelopmentLoopFinalizer` 会在任务摘要的 `openIssues` 里写入「未验证：<原因>」（未请求验证 / 缺少终端授权 / 未选择工作区 / 任务类型不要求 / 验证抛错），避免「未验证」被后续步骤读成「已验证」。该路径本身不与终端工具同源授权，因此不会绕过审批执行命令。
+- 新增备份范围一致性守护测试 `test/vault_coverage_guard_test.dart`：用 `db.allTables` 全表枚举断言「凡会被 `clearAllUserData` 清空的表都必须出现在 `buildVaultJson` 导出清单中」，并断言清库覆盖全部被恢复覆盖的表；同时补一个覆盖审计日志、诊断日志、任务反馈与协作历史的备份往返用例。此前的往返用例只覆盖 tasks/runRecords/runEvents/artifacts，新增表时漏加导出不会被发现，正是数据丢失事故的成因。
+- 新增 `test/automatic_backup_test.dart`：验证「立即备份」真的写出非空加密 `.nexusauto` 文件且只在写盘成功后才更新时间戳（历史缺陷是只写时间不写文件，导致后台 24 小时判断跳过真实备份），并覆盖保留上限与「非备份文件不被清理」。
+- 修正 `clearAllUserData` 的误导性注释：原注释称「保留 tasks / syncMeta」，但实现会删除 `tasks`。现在注释明确它与导出清单必须一致，且 `tasks` 属于会被清空的业务数据。
+- 测试稳定性：`terminal service rejects shell syntax and runs inside workspace` 在并发跑全套测试时，Windows 上偶发因 `cmd.exe` 启动被拖慢而触到产品默认 30s 超时（适配器以 124 表示超时）而失败。该用例断言的是行为而非默认超时常量，故为这一条真实子进程命令显式放宽预算。
+- 首页输入区操作行改为两端布局：「聊天模式」「完全访问」由长胶囊改为圆形磁贴并靠左对齐，「＋」与发送磁贴靠右对齐；磁贴不再承载长文案，窄屏不再挤压或溢出，可读名称保留在语义标签与长按提示中。
+- 修复「环境状态」面板恒报工具缺失的问题：`environmentServiceProvider` 此前构造服务时不传 `commandProbe`，所有工具（包括 rootfs 中确实存在的 `/bin/sh`）都被判为不可用，且「重新检查」只重跑同一段无探针逻辑。现在探针接到真实运行时上，并引入进程内探测缓存；`invalidate()` 会一并清空缓存，装完工具后重新检查能看到真实结果。
+- 修复安装作业把中文说明当命令执行的问题：`installHint` 是给人看的文案（例如「apk add nodejs npm 或在 Termux 执行 pkg install nodejs」），却被直接当作命令提交给 apk，必然失败。现在按运行时生成 `apk add --no-cache <pkgs>` 或 `pkg install -y <pkgs>`；没有包管理器的运行时（Android Shell / 本机进程）不生成步骤，如实告知而不是伪造一步假安装。
+
+## [0.8.9.2] - 2026-09-15（契约与发布稳定性修复）
+
+- 修复 Agent 工具白名单、定时任务参数继承和空权限配置被覆盖的问题。
+- 更新 OpenAI 推理模型、Anthropic thinking、Gemini 工具回传协议适配。
+- 修复 Android 本地 Ollama/MCP 明文连接配置与聊天空态回归测试。
+- 执行租约改为事务获取、带心跳续期并校验所有者，避免长任务期间同一工作区被并发写入；排队任务状态返回修正。
+- 项目主页改为项目壳优先、文件/任务/产物/环境分块加载，并复用预览服务实例，离开页面时会清理预览进程。
+- 首次引导显示模型配置状态并明确数据发送边界；CI 固定 Flutter 3.47.2，并增加 ARM64 Android debug 构建检查。
+
 ## [0.8.9.1] - 2026-09-14（流式性能与推理策略优化版）
 
 - 优化流式回答刷新，减少累计文本重复复制，并将上下文 Token 估算改为按需执行。

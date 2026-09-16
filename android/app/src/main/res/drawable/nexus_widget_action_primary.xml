@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主行动按钮背景（品牌色实心）。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/nexus_widget_action_primary"/>
+    <corners android:radius="10dp"/>
+</shape>

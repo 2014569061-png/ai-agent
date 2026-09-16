@@ -1,35 +1,54 @@
+import 'dart:async';
+
 import '../theme/app_palette.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../application/environment_service.dart';
 import '../chat/widgets/environment_sheet.dart';
+import '../environment/environment_status_view.dart';
 import '../diagnostics/log_viewer_page.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_loading_skeleton.dart';
+import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
 
-class LinuxEnvironmentPage extends StatefulWidget {
-  const LinuxEnvironmentPage({super.key});
+class LinuxEnvironmentPage extends ConsumerStatefulWidget {
+  const LinuxEnvironmentPage({
+    super.key,
+    this.environmentService,
+    this.preferencesLoader,
+    this.preferencesTimeout = const Duration(seconds: 2),
+    this.environmentCheckTimeout = const Duration(seconds: 10),
+  });
+
+  /// Test seam; production callers continue to use the Riverpod provider.
+  final EnvironmentService? environmentService;
+
+  /// Test seam for storage initialization failures.
+  final Future<SharedPreferences> Function()? preferencesLoader;
+  final Duration preferencesTimeout;
+  final Duration environmentCheckTimeout;
 
   @override
-  State<LinuxEnvironmentPage> createState() => _LinuxEnvironmentPageState();
+  ConsumerState<LinuxEnvironmentPage> createState() =>
+      _LinuxEnvironmentPageState();
 }
 
-class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
-  static const _bridge = MethodChannel('nexus/termux_bridge');
+class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
   static const _workDirKey = 'settings.linux.default_work_dir';
   static const _shellTypeKey = 'settings.linux.shell_type';
 
   bool _loading = true;
-  bool _termuxInstalled = false;
-  bool _bridgeAvailable = false;
   String _shellType = 'bash';
   String _defaultWorkDir = '/data/data/com.termux/files/home';
   String _diagnosticSummary = '未检测';
+  EnvironmentSnapshot? _snapshot;
 
   @override
   void initState() {
@@ -38,61 +57,64 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    _shellType = prefs.getString(_shellTypeKey) ?? 'bash';
-    _defaultWorkDir = prefs.getString(_workDirKey) ??
-        (kIsWeb ? '/workspace' : '/data/data/com.termux/files/home');
+    try {
+      final prefs = await (widget.preferencesLoader?.call() ??
+              SharedPreferences.getInstance())
+          .timeout(widget.preferencesTimeout);
+      if (!mounted) return;
+      _shellType = prefs.getString(_shellTypeKey) ?? 'bash';
+      _defaultWorkDir = prefs.getString(_workDirKey) ??
+          (kIsWeb ? '/workspace' : '/data/data/com.termux/files/home');
 
-    await _checkEnvironment();
+      await _checkEnvironment();
+    } on TimeoutException {
+      _finishLoading(
+          '偏好设置读取超时（${_formatTimeout(widget.preferencesTimeout)}），请重试。');
+    } catch (error) {
+      _finishLoading('偏好设置读取失败：$error');
+    } finally {
+      if (mounted && _loading) setState(() => _loading = false);
+    }
   }
 
   Future<void> _checkEnvironment() async {
+    if (!mounted) return;
     setState(() => _loading = true);
-    if (kIsWeb) {
+    try {
+      final EnvironmentService service =
+          widget.environmentService ?? ref.read(environmentServiceProvider);
+      service.invalidate();
+      final snapshot = await service
+          .inspect(force: true)
+          .timeout(widget.environmentCheckTimeout);
+      if (!mounted) return;
       setState(() {
-        _termuxInstalled = false;
-        _bridgeAvailable = false;
-        _diagnosticSummary = 'Web 预览环境（不支持底层 Linux 运行时）';
+        _snapshot = snapshot;
+        _diagnosticSummary = snapshot.scenarioLabel;
         _loading = false;
       });
-      return;
+    } on TimeoutException {
+      _finishLoading(
+          '环境检测超时（${_formatTimeout(widget.environmentCheckTimeout)}）；'
+          '请打开 Termux、检查桥授权后重试。');
+    } catch (error) {
+      _finishLoading('检测出错：$error');
+    } finally {
+      if (mounted && _loading) setState(() => _loading = false);
     }
+  }
 
-    try {
-      bool installed = false;
-      try {
-        installed = await _bridge.invokeMethod('isTermuxInstalled') == true;
-      } catch (_) {}
+  void _finishLoading(String diagnostic) {
+    if (!mounted) return;
+    setState(() {
+      _diagnosticSummary = diagnostic;
+      _loading = false;
+    });
+  }
 
-      bool bridgeOk = false;
-      if (installed) {
-        try {
-          final res = await _bridge.invokeMethod<Map>('execute', {
-            'command': 'echo bridge-ok',
-            'timeoutMs': 5000,
-          });
-          bridgeOk = res?['exitCode'] == 0;
-        } catch (_) {}
-      }
-
-      if (mounted) {
-        setState(() {
-          _termuxInstalled = installed;
-          _bridgeAvailable = bridgeOk;
-          _diagnosticSummary = installed
-              ? (bridgeOk ? 'Termux 桥接已连接，环境正常' : 'Termux 已安装，但外部应用调用未授权')
-              : 'Termux 尚未安装';
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _diagnosticSummary = '检测出错：$e';
-          _loading = false;
-        });
-      }
-    }
+  String _formatTimeout(Duration timeout) {
+    if (timeout.inMilliseconds < 1000) return '${timeout.inMilliseconds}ms';
+    return '${timeout.inSeconds}s';
   }
 
   Future<void> _editWorkDir() async {
@@ -169,7 +191,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('重新初始化环境？'),
-        content: const Text('将重置环境检测状态并重新触发 Termux 桥接握手。'),
+        content: const Text('将清空环境缓存并重新检查四个运行时。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -189,7 +211,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
   }
 
   void _openSetupGuide() {
-    showImmersiveSheet(
+    showNexusSheet(
       context: context,
       builder: (_) => const EnvironmentSheet(),
     );
@@ -197,10 +219,12 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
 
   @override
   Widget build(BuildContext context) {
+    final snapshot = _snapshot;
+    final ready = snapshot?.selected.available == true;
     final bridgeColor = kIsWeb
         ? AppPalette.lightTextMuted
-        : (_bridgeAvailable ? AppPalette.success : AppPalette.warning);
-    final bridgeText = kIsWeb ? '仅预览' : (_bridgeAvailable ? '已连接' : '待配置');
+        : (ready ? AppPalette.success : AppPalette.warning);
+    final bridgeText = kIsWeb ? '仅预览' : (ready ? '已连接' : '待配置');
 
     return Scaffold(
       backgroundColor: settingsBgColor(context),
@@ -209,7 +233,10 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
         subtitle: 'Termux · proot · 宿主终端交互管理',
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          ? const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: NexusListSkeleton(itemCount: 4),
+            )
           : ListView(
               padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [
@@ -222,9 +249,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                       title: '当前运行环境',
                       subtitle: kIsWeb
                           ? 'Web Sandbox'
-                          : (_termuxInstalled
-                              ? 'Termux / Android Shell'
-                              : '未安装 Termux 环境'),
+                          : (snapshot?.summary ?? '尚未检测'),
                       trailingBadge: Container(
                         margin: const EdgeInsets.only(right: 4),
                         padding: const EdgeInsets.symmetric(
@@ -257,7 +282,25 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                         onPressed: _checkEnvironment,
                       ),
                     ),
-                    if (!kIsWeb && !_bridgeAvailable) ...[
+                    if (snapshot != null) ...[
+                      const SettingsDivider(),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        child: EnvironmentStatusView(
+                          snapshot: snapshot,
+                          compact: true,
+                        ),
+                      ),
+                    ],
+                    if (snapshot == null && !kIsWeb)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                        child: Text(
+                          '检测超时或平台桥不可用。请先打开 Termux，配置 '
+                          'allow-external-apps，并允许后台运行后重试。',
+                        ),
+                      ),
+                    if (!kIsWeb && snapshot?.termuxAvailable != true) ...[
                       const SettingsDivider(),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -267,9 +310,9 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                             onPressed: _openSetupGuide,
                             icon: const Icon(Icons.settings_suggest_rounded,
                                 size: 18),
-                            label: Text(_termuxInstalled
-                                ? '去配置：授权 Termux 外部调用'
-                                : '去配置：安装 Termux'),
+                            label: Text(snapshot?.alpineAvailable == true
+                                ? '去补充 Termux 工具链'
+                                : '去配置运行环境'),
                           ),
                         ),
                       ),
@@ -303,7 +346,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                       icon: Icons.play_circle_filled_rounded,
                       iconColor: AppPalette.success,
                       title: '环境检测与安装引导',
-                      subtitle: '分步检测 Termux、桥授权与 Go 工具链',
+                      subtitle: '检测 Alpine / Termux / Android Shell / 本机进程',
                       onTap: _openSetupGuide,
                     ),
                     const SettingsDivider(),
@@ -323,7 +366,7 @@ class _LinuxEnvironmentPageState extends State<LinuxEnvironmentPage> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
+                          NexusPageRoute.detail(
                             builder: (_) => const LogViewerPage(),
                           ),
                         );

@@ -32,9 +32,11 @@ class TerminalCommandService {
     String? shellType,
     String? defaultWorkingDirectory,
     TerminalDaemonPersistence? daemonPersistence,
+    Directory? jobLogDirectory,
   })  : _runtime = runtime ?? createDefaultLinuxRuntime(),
         _shellTypeOverride = shellType,
         _defaultWorkDirOverride = defaultWorkingDirectory,
+        _jobLogDirectory = jobLogDirectory,
         _daemonPersistence = daemonPersistence ?? TerminalDaemonPersistence() {
     unawaited(_loadEnvironmentSettings());
     _daemonReady = _restoreDaemons();
@@ -51,6 +53,7 @@ class TerminalCommandService {
   final LinuxRuntimeAdapter _runtime;
   final String? _shellTypeOverride;
   final String? _defaultWorkDirOverride;
+  final Directory? _jobLogDirectory;
   final TerminalDaemonPersistence _daemonPersistence;
 
   final Map<String, _TerminalSession> _sessions = {};
@@ -63,7 +66,10 @@ class TerminalCommandService {
   String? _defaultWorkDir;
 
   static const _allowedCommands = {
+    'aapt2',
+    'apk',
     'cat',
+    'd8',
     'dart',
     'dir',
     'findstr',
@@ -71,19 +77,39 @@ class TerminalCommandService {
     'git',
     'gradle',
     'gradlew',
+    'javac',
     'ls',
     'node',
     'npm',
     'pip',
+    'pkg',
+    'pnpm',
+    'poetry',
     'python',
     'python3',
     'pwd',
     'rg',
+    'sh',
     'type',
+    'yarn',
   };
 
   /// 解释器类命令的内联求值参数可以执行任意代码（如
   /// `python -c "import os; ..."`），实质绕过工作区沙箱，予以拦截。
+  static const _workspaceWrapperNames = {
+    'gradlew',
+    'gradlew.bat',
+  };
+
+  bool _isAllowedExecutableToken(String raw, String normalized) {
+    if (!raw.contains('/') && !raw.contains('\\')) return true;
+    final name = p.basename(raw.replaceAll('\\', '/'));
+    final relative = raw.replaceAll('\\', '/');
+    if (relative != './$name' && relative != name) return false;
+    return _workspaceWrapperNames.contains(normalized) ||
+        _workspaceWrapperNames.contains(name.toLowerCase());
+  }
+
   static const _inlineEvalFlags = {
     'python': {'-c'},
     'python3': {'-c'},
@@ -95,6 +121,145 @@ class TerminalCommandService {
   LinuxRuntimeAdapter get runtime => _runtime;
 
   Future<LinuxRuntimeInfo> inspectRuntime() => _runtime.inspect();
+
+  bool get supportsLiveOutput {
+    try {
+      return FileSystemEntity.typeSync(workspacePath) !=
+          FileSystemEntityType.notFound;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Directory get _resolvedJobLogDirectory {
+    final override = _jobLogDirectory;
+    if (override != null) return override;
+    return Directory(p.join(workspacePath, '.nexus', 'jobs'));
+  }
+
+  Future<TerminalJobHandle> startJob({
+    required String command,
+    String? workingDirectory,
+    String? taskId,
+    String? runId,
+    Duration timeout = defaultTimeout,
+  }) async {
+    final jobId =
+        'job-${DateTime.now().microsecondsSinceEpoch}-${_jobs.length}';
+    final cwd = _resolveWorkingDirectory(workingDirectory) ??
+        _resolveWorkingDirectory(_defaultWorkDir) ??
+        workspacePath;
+    final future = run(command, workingDirectory: cwd, timeout: timeout);
+    final logDir = _resolvedJobLogDirectory;
+    await logDir.create(recursive: true);
+    final logFile = File(p.join(logDir.path, '$jobId.log'));
+    final job = _TerminalJob(
+      jobId: jobId,
+      sessionId: '',
+      command: command,
+      future: future,
+      taskId: taskId,
+      runId: runId,
+      logPath: logFile.path,
+    );
+    job.appendEvent(TerminalJobEvent(
+      jobId: jobId,
+      taskId: taskId,
+      runId: runId,
+      sequence: 0,
+      timestamp: DateTime.now(),
+      type: 'started',
+      payload: command,
+    ));
+    _jobs[jobId] = job;
+    unawaited(future.then((result) {
+      if (job.cancelled) return;
+      job.result = result;
+      job.completed = true;
+      job.appendEvent(TerminalJobEvent(
+        jobId: jobId,
+        taskId: taskId,
+        runId: runId,
+        sequence: job.nextSequence,
+        timestamp: DateTime.now(),
+        type: result.exitCode == 0 ? 'stdout' : 'stderr',
+        payload: result.output,
+      ));
+      job.appendEvent(TerminalJobEvent(
+        jobId: jobId,
+        taskId: taskId,
+        runId: runId,
+        sequence: job.nextSequence,
+        timestamp: DateTime.now(),
+        type: result.timedOut ? 'timeout' : 'completed',
+        payload: result.output,
+        exitCode: result.exitCode,
+      ));
+    }, onError: (Object error, StackTrace stack) {
+      if (job.cancelled) return;
+      job.error = error.toString();
+      job.completed = true;
+      job.appendEvent(TerminalJobEvent(
+        jobId: jobId,
+        taskId: taskId,
+        runId: runId,
+        sequence: job.nextSequence,
+        timestamp: DateTime.now(),
+        type: 'completed',
+        payload: error.toString(),
+        exitCode: 127,
+      ));
+    }));
+    return TerminalJobHandle(
+      jobId: jobId,
+      taskId: taskId,
+      runId: runId,
+      liveOutput: supportsLiveOutput,
+      logPath: logFile.path,
+    );
+  }
+
+  Stream<TerminalJobEvent> watchJob(String jobId, {int afterSequence = -1}) {
+    final job = _jobs[jobId];
+    if (job == null) {
+      return const Stream<TerminalJobEvent>.empty();
+    }
+    return job.watch(afterSequence: afterSequence);
+  }
+
+  List<TerminalJobSnapshot> listJobs() =>
+      _jobs.values.map((job) => job.snapshot).toList(growable: false);
+
+  Future<bool> cancelJob(String jobId) async {
+    final job = _jobs[jobId];
+    if (job == null) return false;
+    if (!job.completed) {
+      job.cancelled = true;
+      // 只停止当前作业，不 stop() 整个 runtime，避免误杀其他作业或预览服务。
+      final othersRunning =
+          _jobs.values.any((item) => item.jobId != jobId && !item.completed);
+      if (!othersRunning) {
+        stop();
+      }
+      job.completed = true;
+      job.result = const CommandResult(
+        output: 'cancelled',
+        exitCode: 130,
+        notExecuted: false,
+      );
+      job.appendEvent(TerminalJobEvent(
+        jobId: job.jobId,
+        taskId: job.taskId,
+        runId: job.runId,
+        sequence: job.nextSequence,
+        timestamp: DateTime.now(),
+        type: 'completed',
+        payload: 'cancelled',
+        exitCode: 130,
+      ));
+    }
+    return true;
+  }
 
   /// 创建可复用的轻量终端会话。会话只持有工作目录与任务索引，真正的
   /// 进程仍由 Runtime 串行执行，避免 Android 前台状态下并发碰撞。
@@ -530,7 +695,7 @@ class TerminalCommandService {
     final parsed = _parse(commandLine);
     if (parsed.isEmpty) return null;
     final command = _normalizeCommand(parsed.first);
-    if (parsed.first.contains('/') || parsed.first.contains('\\')) return null;
+    if (!_isAllowedExecutableToken(parsed.first, command)) return null;
     final cwd = _resolveWorkingDirectory(workingDirectory);
     if (cwd == null) return null;
     if (_inlineEvalFlag(command, parsed.skip(1)) != null) return null;
@@ -560,7 +725,7 @@ class TerminalCommandService {
           output: '请输入要执行的命令', exitCode: 2, notExecuted: true);
     }
     final command = _normalizeCommand(parsed.first);
-    if (parsed.first.contains('/') || parsed.first.contains('\\')) {
+    if (!_isAllowedExecutableToken(parsed.first, command)) {
       return const CommandResult(
           output: '不允许通过路径指定可执行文件', exitCode: 126, notExecuted: true);
     }
@@ -820,21 +985,126 @@ class _TerminalSession {
       TerminalSessionSnapshot(id: id, cwd: cwd);
 }
 
+class TerminalJobEvent {
+  const TerminalJobEvent({
+    required this.jobId,
+    required this.sequence,
+    required this.timestamp,
+    required this.type,
+    this.taskId,
+    this.runId,
+    this.payload = '',
+    this.exitCode,
+  });
+
+  final String jobId;
+  final String? taskId;
+  final String? runId;
+  final int sequence;
+  final DateTime timestamp;
+  final String type;
+  final String payload;
+  final int? exitCode;
+}
+
+class TerminalJobHandle {
+  const TerminalJobHandle({
+    required this.jobId,
+    this.taskId,
+    this.runId,
+    this.liveOutput = false,
+    this.logPath,
+  });
+
+  final String jobId;
+  final String? taskId;
+  final String? runId;
+  final bool liveOutput;
+  final String? logPath;
+}
+
+class TerminalJobSnapshot {
+  const TerminalJobSnapshot({
+    required this.jobId,
+    required this.command,
+    required this.completed,
+    this.taskId,
+    this.runId,
+    this.exitCode,
+    this.sessionId,
+  });
+
+  final String jobId;
+  final String command;
+  final bool completed;
+  final String? taskId;
+  final String? runId;
+  final int? exitCode;
+  final String? sessionId;
+}
+
 class _TerminalJob {
   _TerminalJob({
     required this.jobId,
     required this.sessionId,
     required this.command,
     required this.future,
+    this.taskId,
+    this.runId,
+    this.logPath,
   });
 
   final String jobId;
   final String sessionId;
   final String command;
+  final String? taskId;
+  final String? runId;
+  final String? logPath;
   final Future<CommandResult> future;
+  final List<TerminalJobEvent> events = [];
+  final StreamController<TerminalJobEvent> _controller =
+      StreamController<TerminalJobEvent>.broadcast();
   CommandResult? result;
   String? error;
   bool completed = false;
+  bool cancelled = false;
+
+  int get nextSequence => events.length;
+
+  TerminalJobSnapshot get snapshot => TerminalJobSnapshot(
+        jobId: jobId,
+        command: command,
+        completed: completed,
+        taskId: taskId,
+        runId: runId,
+        exitCode: result?.exitCode,
+        sessionId: sessionId.isEmpty ? null : sessionId,
+      );
+
+  void appendEvent(TerminalJobEvent event) {
+    events.add(event);
+    if (!_controller.isClosed) _controller.add(event);
+    final path = logPath;
+    if (path == null) return;
+    try {
+      File(path).writeAsStringSync(
+        '${event.sequence}|${event.type}|${event.payload}\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+    } catch (_) {}
+  }
+
+  Stream<TerminalJobEvent> watch({int afterSequence = -1}) async* {
+    for (final event in events) {
+      if (event.sequence > afterSequence) yield event;
+    }
+    if (completed) return;
+    await for (final event in _controller.stream) {
+      if (event.sequence > afterSequence) yield event;
+      if (event.type == 'completed' || event.type == 'timeout') return;
+    }
+  }
 }
 
 class _TerminalDaemon {

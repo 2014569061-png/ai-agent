@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -9,6 +10,8 @@ import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/skills/builtin_skills.dart';
 import 'package:mobile_agent/infrastructure/skills/skill_installer.dart';
 import 'package:mobile_agent/infrastructure/skills/skill_parser.dart';
+import 'package:mobile_agent/infrastructure/skills/skill_store.dart';
+import 'package:mobile_agent/infrastructure/tools/skill_tools.dart';
 
 class _FakePathProvider extends PathProviderPlatform {
   final Directory root;
@@ -41,6 +44,35 @@ void main() {
       expect(parsed.metadata.description, isNotEmpty);
       expect(parsed.body, contains('## '));
     }
+  });
+
+  test('内置技能会安装声明的参考资源', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    await BuiltinSkillSeeder().ensureInstalled(db);
+    final pack = await db.findSkillPackByName('android-build');
+    expect(pack, isNotNull);
+
+    final files = (jsonDecode(pack!.fileListJson) as List).cast<String>();
+    expect(
+      files,
+      containsAll(<String>[
+        'references/build.md',
+        'references/toolchain.md',
+      ]),
+    );
+    expect(
+      SkillStore().readResource(pack, 'references/toolchain.md'),
+      contains('# Android 工具链'),
+    );
+
+    final result = await SkillsReadResourceTool(database: db).execute({
+      'skill': pack.id,
+      'path': 'references/toolchain.md',
+    });
+    expect(result.ok, isTrue, reason: result.message);
+    expect(result.data?['text'], contains('# Android 工具链'));
   });
 
   test('ensureInstalled 幂等：同版本重复安装只保留一条记录', () async {

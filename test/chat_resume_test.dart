@@ -37,6 +37,18 @@ void main() {
   // 否则恢复路径会以 MissingPluginException 整轮失败。
   SharedPreferences.setMockInitialValues(<String, Object>{});
 
+  test('聊天模式不向 Provider 暴露工具定义', () async {
+    final upstream = await _FakeUpstream.start(_UpstreamMode.text);
+    final env = await _Env.boot(upstream: upstream);
+
+    await env.controller
+        .send(text: '你好', attachments: const [], approveTool: _allowOnce);
+
+    expect(env.state.mode, ChatMode.chat);
+    expect(upstream.requests, hasLength(1));
+    expect(upstream.requests.single.containsKey('tools'), isFalse);
+  });
+
   test('recoverableTasks 把 running 与 paused 任务都当作可恢复候选', () async {
     final env = await _Env.boot();
     final service = TaskService();
@@ -130,6 +142,32 @@ void main() {
     expect(env.state.running, isFalse);
     expect((await env.db.findTask(completed.id))!.resumeCount, 0);
     expect((await env.db.findTask(completed.id))!.status, 'completed');
+  });
+
+  test('resumeTask 恢复任务工作区并向 Provider 暴露工作区工具', () async {
+    final upstream = await _FakeUpstream.start(_UpstreamMode.text);
+    final env = await _Env.boot(upstream: upstream);
+    final workspace = await Directory.systemTemp.createTemp('nexus-resume-ws-');
+    addTearDown(() => workspace.delete(recursive: true));
+    await _seedConversation(env.db, 'c1', '工作区恢复');
+    final task = await TaskService().create(
+      db: env.db,
+      conversationId: 'c1',
+      requestJson: jsonEncode({'prompt': '继续开发', 'maxSteps': 2}),
+      metadata: {'workspacePath': workspace.path},
+    );
+
+    await env.controller.resumeTask(task.id, approveTool: _allowOnce);
+
+    expect(upstream.requests, hasLength(1));
+    final tools =
+        upstream.requests.single['tools'] as List<dynamic>? ?? const [];
+    expect(
+      jsonEncode(tools),
+      contains('list_directory'),
+      reason: '恢复执行必须使用任务保存的工作区组装文件工具',
+    );
+    expect(env.state.currentWorkspacePath, workspace.path);
   });
 
   test('resumeTask 用保存的 checkpoint 上下文续跑，而非重提交原始 prompt', () async {
@@ -248,6 +286,7 @@ void main() {
       id: 'c2',
       title: '会话二',
       agentId: null,
+      mode: 'chat',
       isPinned: false,
       isFavorite: false,
       tagsJson: '[]',
@@ -268,7 +307,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 80));
     expect(env.state.running, isTrue);
 
-    // 运行中切走：switchConversation 会 invalidate 当前 run（runGeneration++）。
+    // 运行中切走只取消 UI 订阅，开发任务继续，结果必须写回原会话。
     await env.controller
         .switchConversation((await env.db.findConversation('c2'))!);
     await pending;
@@ -280,9 +319,8 @@ void main() {
     expect(state.messages.map((message) => message.text), ['会话二的内容']);
     final c2Rows = await env.db.messagesFor('c2');
     expect(c2Rows.map((row) => row.content), ['会话二的内容']);
-    // 旧会话也不应凭空多出助手回复（该轮已被判定为失效代次）。
     final c1Rows = await env.db.messagesFor('c1');
-    expect(c1Rows.where((row) => row.role == 'assistant'), isEmpty);
+    expect(c1Rows.where((row) => row.role == 'assistant'), isNotEmpty);
   });
 
   test('resumeFromBudgetPause 在运行中不会插队', () async {
@@ -323,6 +361,7 @@ Future<Conversation> _seedConversation(
     id: id,
     title: title,
     agentId: null,
+    mode: 'chat',
     isPinned: false,
     isFavorite: false,
     tagsJson: '[]',

@@ -153,10 +153,17 @@ class GeminiProvider extends StreamingProviderBase {
                     : <String, dynamic>{
                         '_unparsed': jsonEncode(args),
                       };
+            final signature = part['thoughtSignature'] ??
+                functionCall['thoughtSignature'];
             pendingCalls.add(ToolCall(
-              id: 'gemini-call-${pendingCalls.length}',
+              id: functionCall['id'] as String? ??
+                  'gemini-call-${pendingCalls.length}',
               name: functionCall['name'] as String? ?? '',
               arguments: parsedArguments,
+              providerMetadata: {
+                if (signature is String && signature.isNotEmpty)
+                  'thoughtSignature': signature,
+              },
             ));
           }
         }
@@ -218,11 +225,15 @@ class GeminiProvider extends StreamingProviderBase {
       ChatMessage message, Map<String, String> toolNames) {
     if (message.role == MessageRole.tool) {
       return {
-        'role': 'function',
+        // The current Gemini REST examples send functionResponse in a user
+        // turn.  Keep the call id when the model provides one so parallel
+        // calls can be matched unambiguously.
+        'role': 'user',
         'parts': [
           {
             'functionResponse': {
               'name': toolNames[message.toolCallId] ?? 'tool',
+              if (message.toolCallId != null) 'id': message.toolCallId,
               'response': {'result': message.text},
             },
           },
@@ -234,7 +245,13 @@ class GeminiProvider extends StreamingProviderBase {
       if (message.text.isNotEmpty) parts.add({'text': message.text});
       for (final call in message.toolCalls) {
         parts.add({
-          'functionCall': {'name': call.name, 'args': call.arguments},
+          'functionCall': {
+            'name': call.name,
+            'args': call.arguments,
+            if (call.id.isNotEmpty) 'id': call.id,
+            if (call.thoughtSignature != null)
+              'thoughtSignature': call.thoughtSignature,
+          },
         });
       }
       if (parts.isEmpty) parts.add({'text': ''});

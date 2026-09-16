@@ -41,6 +41,44 @@ void main() {
       });
     });
 
+    test('uses adaptive thinking for Claude 4.7+ models', () {
+      final provider = AnthropicProvider(config: config);
+      final payload = provider.buildRequestPayload(UnifiedRequest(
+        model: 'claude-opus-4-7',
+        maxTokens: 4096,
+        reasoningEffort: ReasoningEffort.high,
+        messages: [
+          ChatMessage(
+            role: MessageRole.user,
+            parts: const [MessagePart.text('hello')],
+          ),
+        ],
+      ));
+
+      expect(payload['thinking'], {'type': 'adaptive'});
+      expect(payload['output_config'], {'effort': 'high'});
+      expect(payload.containsKey('temperature'), isFalse);
+    });
+
+    test('omits invalid manual thinking when max_tokens is below the minimum',
+        () {
+      final provider = AnthropicProvider(config: config);
+      final payload = provider.buildRequestPayload(UnifiedRequest(
+        model: 'claude-sonnet-4-5',
+        maxTokens: 512,
+        reasoningEffort: ReasoningEffort.high,
+        messages: [
+          ChatMessage(
+            role: MessageRole.user,
+            parts: const [MessagePart.text('hello')],
+          ),
+        ],
+      ));
+
+      expect(payload.containsKey('thinking'), isFalse);
+      expect(payload['temperature'], 0.7);
+    });
+
     test('system prompt uses an ephemeral prompt-cache boundary', () {
       final provider = AnthropicProvider(config: config);
       final payload = provider.buildRequestPayload(UnifiedRequest(
@@ -257,10 +295,45 @@ data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}
         {
           'functionCall': {
             'name': 'calculator',
-            'args': {'a': 1}
+            'args': {'a': 1},
+            'id': 'call-1',
           },
         },
       ]);
+    });
+
+    test('preserves Gemini thought signatures across tool turns', () async {
+      final dio = Dio()
+        ..httpClientAdapter = _SseAdapter('''
+data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"calculator","args":{"a":1},"id":"call-1"},"thoughtSignature":"sig-abc"}]}}]}
+
+''');
+      final provider = GeminiProvider(config: config, dio: dio);
+      final events = await provider
+          .stream(UnifiedRequest(
+            model: 'gemini-3-flash-preview',
+            messages: [
+              ChatMessage(
+                role: MessageRole.user,
+                parts: const [MessagePart.text('hello')],
+              ),
+            ],
+          ))
+          .toList();
+      final call = events.whereType<ToolCallEvent>().single.call;
+      expect(call.thoughtSignature, 'sig-abc');
+      final replayed = provider.toGeminiMessage(
+        ChatMessage(
+          role: MessageRole.assistant,
+          parts: const [],
+          toolCalls: [call],
+        ),
+        const {},
+      );
+      expect(
+        (replayed['parts'] as List).single['functionCall']['thoughtSignature'],
+        'sig-abc',
+      );
     });
 
     test('converts tool results into functionResponse parts with resolved name',
@@ -273,11 +346,12 @@ data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}
             parts: const [MessagePart.text('3')]),
         const {'call-1': 'calculator'},
       );
-      expect(result['role'], 'function');
+      expect(result['role'], 'user');
       expect(result['parts'], [
         {
           'functionResponse': {
             'name': 'calculator',
+            'id': 'call-1',
             'response': {'result': '3'}
           },
         },
@@ -466,6 +540,31 @@ data: [DONE]
     final usage = events.whereType<UsageEvent>().single;
     expect(usage.cachedTokens, 80);
     expect(usage.cacheStatsReported, isTrue);
+  });
+
+  test('uses reasoning-model output fields for o-series requests', () async {
+    final dio = Dio()..httpClientAdapter = _SseAdapter('data: [DONE]\n\n');
+    final provider = OpenAiCompatibleProvider(config: config, dio: dio);
+    await provider
+        .stream(UnifiedRequest(
+          model: 'o3-mini',
+          reasoningEffort: ReasoningEffort.high,
+          messages: [
+            ChatMessage(
+              role: MessageRole.user,
+              parts: const [MessagePart.text('hello')],
+            ),
+          ],
+        ))
+        .toList();
+
+    final payload = (dio.httpClientAdapter as _SseAdapter)
+        .capturedPayloads
+        .single as Map<String, dynamic>;
+    expect(payload['max_completion_tokens'], 2048);
+    expect(payload.containsKey('max_tokens'), isFalse);
+    expect(payload.containsKey('temperature'), isFalse);
+    expect(payload.containsKey('top_p'), isFalse);
   });
 
   test('OpenAI-compatible stream retries without stream_options on 400',

@@ -24,20 +24,19 @@ void main() {
     expect(runs.generation, second);
   });
 
-  test('ownsRun 同时要求代次有效、未取消、会话未切走', () {
+  test('ownsRun 不因切会话而取消开发任务', () {
     var conversationId = 'c1';
     final runs = build(() => conversationId);
     final generation = runs.beginRun();
     expect(runs.ownsRun(generation, 'c1'), isTrue);
+    expect(runs.isVisible('c1'), isTrue);
 
-    // 会话被切走 → 旧代次失去写回权。
     conversationId = 'c2';
-    expect(runs.ownsRun(generation, 'c1'), isFalse);
+    expect(runs.ownsRun(generation, 'c1'), isTrue);
+    expect(runs.isVisible('c1'), isFalse);
 
-    // 新的代次在正确的会话里恢复写回权。
     final next = runs.beginRun();
     expect(runs.ownsRun(next, 'c2'), isTrue);
-    // 旧代次即使会话对得上也已过期。
     expect(runs.ownsRun(generation, 'c2'), isFalse);
   });
 
@@ -56,7 +55,7 @@ void main() {
     expect(runs.ownsRunUnbound(generation, null), isTrue);
 
     conversationId = 'c2';
-    expect(runs.ownsRunUnbound(generation, 'c1'), isFalse);
+    expect(runs.ownsRunUnbound(generation, 'c1'), isTrue);
     expect(runs.ownsRunUnbound(generation, 'c2'), isTrue);
   });
 

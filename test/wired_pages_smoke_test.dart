@@ -12,6 +12,7 @@ import 'package:mobile_agent/presentation/audit/audit_log_page.dart';
 import 'package:mobile_agent/presentation/knowledge/knowledge_page.dart';
 import 'package:mobile_agent/presentation/l10n/app_strings.dart';
 import 'package:mobile_agent/presentation/scheduled/scheduled_tasks_page.dart';
+import 'package:mobile_agent/presentation/settings/data_management_page.dart';
 import 'package:mobile_agent/presentation/settings/settings_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -155,7 +156,7 @@ void main() {
   });
 
   group('SettingsPage 入口接线', () {
-    testWidgets('三个入口行都能推入对应页面', (tester) async {
+    testWidgets('通过数据管理入口行都能推入对应页面', (tester) async {
       tester.view.physicalSize = const Size(1080, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -169,61 +170,47 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // 知识库：上下文与扩展区，靠近顶部，无需滚动。
+      // 点击「数据管理」卡片行
+      await tester.tap(find.text('数据管理'));
+      await tester.pumpAndSettle();
+      expect(find.text('数据管理'), findsWidgets);
+
+      // 知识库入口
       await tester.tap(find.text(AppStrings.knowledgeSectionTitle));
       await tester.pumpAndSettle();
       expect(find.text('文档切片检索与 RAG 管理'), findsOneWidget);
-      expect(find.text(AppStrings.settings), findsNothing);
       await tester.tap(find.byTooltip('返回'));
       await tester.pumpAndSettle();
 
-      final mainScrollable = find.byType(Scrollable).first;
-
-      // 审计日志：工具区，数据与隐私边界之后。
-      await tester.scrollUntilVisible(
-        find.text(AppStrings.auditLogEntry),
-        200,
-        scrollable: mainScrollable,
-      );
+      // 审计日志入口
       await tester.tap(find.text(AppStrings.auditLogEntry));
       await tester.pumpAndSettle();
       expect(find.text('启用审计'), findsOneWidget);
       await tester.tap(find.byTooltip('返回'));
       await tester.pumpAndSettle();
 
-      // 定时任务：通用区，数据备份之后（列表更靠下，继续同向滚动）。
-      await tester.scrollUntilVisible(
-        find.text(AppStrings.scheduledTasksEntry),
-        300,
-        scrollable: mainScrollable,
-      );
+      // 定时任务入口
       await tester.tap(find.text(AppStrings.scheduledTasksEntry));
       await tester.pumpAndSettle();
       expect(find.text('自动化循环计划与后台执行'), findsOneWidget);
     });
 
-    testWidgets('设置搜索能检索到三个新入口', (tester) async {
+    testWidgets('DataManagementPage 独立渲染各项统计与数据入口', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [databaseProvider.overrideWith((ref) async => db)],
-          child: const MaterialApp(home: SettingsPage()),
+          child: const MaterialApp(home: DataManagementPage()),
         ),
       );
       await tester.pumpAndSettle();
 
-      // 搜索词会同时命中输入框自身的 EditableText，因此用
-      // 「搜索结果（N 项）」计数断言，恰好 1 项即证明对应入口可检索。
-      await tester.enterText(find.byType(TextField), '知识库');
-      await tester.pumpAndSettle();
-      expect(find.text('搜索结果（1 项）'), findsOneWidget);
-
-      await tester.enterText(find.byType(TextField), '定时任务');
-      await tester.pumpAndSettle();
-      expect(find.text('搜索结果（1 项）'), findsOneWidget);
-
-      await tester.enterText(find.byType(TextField), '审计');
-      await tester.pumpAndSettle();
-      expect(find.text('搜索结果（1 项）'), findsOneWidget);
+      expect(find.text('上下文与知识库'), findsOneWidget);
+      expect(find.text('自动化与审计'), findsOneWidget);
+      expect(find.text('备份与还原'), findsOneWidget);
+      expect(find.text(AppStrings.knowledgeSectionTitle), findsOneWidget);
+      expect(find.text(AppStrings.memorySectionTitle), findsOneWidget);
+      expect(find.text(AppStrings.scheduledTasksEntry), findsOneWidget);
+      expect(find.text(AppStrings.auditLogEntry), findsOneWidget);
     });
   });
 }

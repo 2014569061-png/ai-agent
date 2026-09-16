@@ -47,6 +47,7 @@ void main() {
     await db.saveConversation(Conversation(
       id: 'conv-today',
       title: '今日会话',
+      mode: 'chat',
       isPinned: false,
       isFavorite: false,
       tagsJson: '[]',
@@ -56,6 +57,7 @@ void main() {
     await db.saveConversation(Conversation(
       id: 'conv-yesterday',
       title: '昨日会话',
+      mode: 'chat',
       isPinned: false,
       isFavorite: false,
       tagsJson: '[]',
@@ -67,6 +69,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-1',
           conversationId: 'conv-today',
+          stateRevision: 0,
           type: 'development:bug_fix',
           status: 'completed',
           requestJson: jsonEncode({'title': '任务1'}),
@@ -78,6 +81,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-2',
           conversationId: 'conv-today',
+          stateRevision: 0,
           type: 'development:code_review',
           status: 'failed',
           requestJson: jsonEncode({'title': '任务2'}),
@@ -89,6 +93,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-3',
           conversationId: 'conv-today',
+          stateRevision: 0,
           type: 'development:project_analysis',
           status: 'running',
           requestJson: jsonEncode({'title': '任务3'}),
@@ -119,6 +124,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-old',
           conversationId: 'conv-today',
+          stateRevision: 0,
           type: 'development:bug_fix',
           status: 'completed',
           requestJson: '{}',
@@ -135,6 +141,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-non-dev',
           conversationId: 'conv-today',
+          stateRevision: 0,
           type: 'agent',
           status: 'created',
           requestJson: '{}',
@@ -170,6 +177,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-approval',
           conversationId: 'conv-1',
+          stateRevision: 0,
           type: 'agent',
           status: 'awaiting_approval',
           requestJson: jsonEncode({'title': '安装依赖 vite'}),
@@ -183,6 +191,7 @@ void main() {
     await db.into(db.tasks).insert(Task(
           id: 'task-recover',
           conversationId: 'conv-1',
+          stateRevision: 0,
           type: 'agent',
           status: 'running',
           requestJson: jsonEncode({'title': '代码重构'}),

@@ -115,8 +115,9 @@ class _DeclarativePluginsViewState
     if (bytes == null) return;
     final manifest = utf8.decode(bytes);
     final store = PluginStore();
-    if (!store.validateManifest(manifest)) {
-      FloatingToast.show(context, '插件 manifest 格式无效');
+    final manifestError = store.manifestError(manifest);
+    if (manifestError != null) {
+      FloatingToast.show(context, '插件 manifest 无效：$manifestError');
       return;
     }
     final map = jsonDecode(manifest) as Map<String, dynamic>;

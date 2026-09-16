@@ -17,8 +17,10 @@ class SessionContextSheet extends StatelessWidget {
     required this.onSelectAgent,
     required this.onPickWorkspace,
     required this.onClearWorkspace,
-    required this.onReasoningEffort,
+    required this.onSelectReasoningMode,
+    required this.onToggleWebSearch,
     required this.onTogglePlanMode,
+    this.onSelectMode,
   });
 
   final ChatState state;
@@ -26,8 +28,10 @@ class SessionContextSheet extends StatelessWidget {
   final VoidCallback onSelectAgent;
   final VoidCallback onPickWorkspace;
   final VoidCallback onClearWorkspace;
-  final VoidCallback onReasoningEffort;
+  final VoidCallback onSelectReasoningMode;
+  final ValueChanged<bool> onToggleWebSearch;
   final VoidCallback onTogglePlanMode;
+  final VoidCallback? onSelectMode;
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +84,13 @@ class SessionContextSheet extends StatelessWidget {
                       ?.copyWith(fontWeight: FontWeight.w500)),
             ]),
             const SizedBox(height: 8),
+            if (onSelectMode != null)
+              tile(
+                icon: _modeIcon(state.mode),
+                label: '当前模式',
+                value: '${state.mode.label} · ${state.mode.description}',
+                onTap: onSelectMode,
+              ),
             tile(
               icon: Icons.model_training_rounded,
               label: '模型 / 服务',
@@ -96,9 +107,23 @@ class SessionContextSheet extends StatelessWidget {
             ),
             tile(
               icon: Icons.psychology_outlined,
-              label: '思考程度',
-              value: _effortLabel(state.activeReasoningEffort),
-              onTap: onReasoningEffort,
+              label: '思考模式',
+              value:
+                  '${state.reasoningMode.label} · ${state.reasoningMode.description}',
+              onTap: onSelectReasoningMode,
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: Icon(Icons.language_rounded,
+                  color: state.webSearchEnabled
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outline),
+              title: const Text('智能搜索',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              subtitle: const Text('仅在 Agent / 计划模式下向模型提供联网工具',
+                  style: TextStyle(fontSize: 12)),
+              value: state.webSearchEnabled,
+              onChanged: onToggleWebSearch,
             ),
             tile(
               icon: Icons.folder_open_outlined,
@@ -141,30 +166,30 @@ class SessionContextSheet extends StatelessWidget {
                         activity.call.name)
                     .join('、'),
               ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              secondary: Icon(Icons.checklist_rounded,
-                  color: state.planMode
-                      ? AppTheme.warning
-                      : theme.colorScheme.outline),
-              title: const Text('计划审批模式',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-              subtitle: const Text('开启后首轮先生成分步计划，确认后才执行',
-                  style: TextStyle(fontSize: 12)),
-              value: state.planMode,
-              onChanged: (_) => onTogglePlanMode(),
-            ),
+            if (onSelectMode == null)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: Icon(Icons.checklist_rounded,
+                    color: state.planMode
+                        ? AppTheme.warning
+                        : theme.colorScheme.outline),
+                title: const Text('计划审批模式',
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                subtitle: const Text('开启后首轮先生成分步计划，确认后才执行',
+                    style: TextStyle(fontSize: 12)),
+                value: state.planMode,
+                onChanged: (_) => onTogglePlanMode(),
+              ),
           ],
         ),
       ),
     );
   }
 
-  static String _effortLabel(ReasoningEffort e) => switch (e) {
-        ReasoningEffort.auto => '自动',
-        ReasoningEffort.off => '关',
-        ReasoningEffort.low => '低',
-        ReasoningEffort.medium => '中',
-        ReasoningEffort.high => '高',
+  static IconData _modeIcon(ChatMode mode) => switch (mode) {
+        ChatMode.chat => Icons.chat_bubble_outline_rounded,
+        ChatMode.agent => Icons.smart_toy_outlined,
+        ChatMode.plan => Icons.checklist_rounded,
       };
 }

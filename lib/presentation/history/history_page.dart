@@ -11,7 +11,7 @@ import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -97,7 +97,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Future<void> _rename(Conversation conversation) async {
     final controller = TextEditingController(text: conversation.title);
-    final result = await showImmersiveDialog<String>(
+    final result = await showNexusDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('重命名会话'),
@@ -178,6 +178,7 @@ class _HistoryPageState extends State<HistoryPage> {
       id: UniqueId.generate('conversation', now: now),
       title: '新会话',
       agentId: null,
+      mode: 'chat',
       isPinned: false,
       isFavorite: false,
       tagsJson: '[]',
@@ -439,7 +440,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
   /// 会话行操作菜单：与全应用一致的沉浸式毛玻璃面板。
   Future<void> _showConversationActions(Conversation conversation) async {
-    final action = await showImmersiveSheet<String>(
+    final action = await showNexusSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
         child: Column(

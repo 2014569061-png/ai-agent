@@ -3,20 +3,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/tools/command_tool.dart';
-import '../widgets/immersive_sheet.dart';
+import '../terminal/terminal_page.dart';
+import '../widgets/nexus_sheet.dart';
 import 'file_tree_sheet.dart';
+import 'terminal_job_panel.dart';
 
 class TerminalSheet extends StatefulWidget {
   const TerminalSheet({
     super.key,
     required this.workspacePath,
     this.onReselectWorkspace,
+    this.sharedService,
   });
 
   final String workspacePath;
 
   /// 透传给文件树的“重新选择工作区”回调。
   final VoidCallback? onReselectWorkspace;
+
+  /// 项目页可注入同一个 TerminalCommandService，关闭页签时保留受管理作业。
+  final TerminalCommandService? sharedService;
 
   @override
   State<TerminalSheet> createState() => _TerminalSheetState();
@@ -28,19 +34,28 @@ class _TerminalSheetState extends State<TerminalSheet> {
   final _scrollController = ScrollController();
   String _output = '';
   bool _running = false;
+  String? _activeJobId;
+  int _lastSequence = -1;
+  StreamSubscription<TerminalJobEvent>? _jobSub;
+  Timer? _flushTimer;
+  String _pendingChunk = '';
   String _runtimeLabel = '正在检测 Linux Runtime…';
+  String? _sessionId;
 
   @override
   void initState() {
     super.initState();
-    _service = TerminalCommandService(workspacePath: widget.workspacePath);
-    unawaited(_loadRuntimeInfo());
+    _service =
+        widget.sharedService ?? TerminalCommandService(workspacePath: widget.workspacePath);
+    unawaited(_bootstrap());
   }
 
-  Future<void> _loadRuntimeInfo() async {
+  Future<void> _bootstrap() async {
     final info = await _service.inspectRuntime();
+    final session = await _service.openSession(workingDirectory: widget.workspacePath);
     if (!mounted) return;
     setState(() {
+      _sessionId = session.id;
       _runtimeLabel = info.available
           ? '${info.label} · ${info.detail}'
           : '${info.label} 不可用 · ${info.detail}';
@@ -49,7 +64,9 @@ class _TerminalSheetState extends State<TerminalSheet> {
 
   @override
   void dispose() {
-    _service.stop();
+    unawaited(_jobSub?.cancel());
+    _flushTimer?.cancel();
+    // 关闭页签只取消 UI 订阅，不 stop() 受管理作业。
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -59,16 +76,50 @@ class _TerminalSheetState extends State<TerminalSheet> {
     if (_running) return;
     final command = _controller.text.trim();
     if (command.isEmpty) return;
+    await _jobSub?.cancel();
     setState(() {
       _running = true;
       _output = '\$ $command\n';
+      _lastSequence = -1;
+      _pendingChunk = '';
     });
-    final result = await _service.run(command);
-    if (!mounted) return;
-    setState(() {
-      _running = false;
-      _output += '${result.output}\n[退出码 ${result.exitCode}]';
+    final handle = await _service.startJob(
+      command: command,
+      workingDirectory: widget.workspacePath,
+    );
+    _activeJobId = handle.jobId;
+    if (!handle.liveOutput) {
+      _queueOutput('运行中，完成后返回日志\n');
+    }
+    _jobSub = _service.watchJob(handle.jobId).listen((event) {
+      if (event.sequence <= _lastSequence) return;
+      _lastSequence = event.sequence;
+      if (event.type == 'started') return;
+      if (event.type == 'completed' || event.type == 'timeout') {
+        _queueOutput('\n[退出码 ${event.exitCode ?? -1}]', flush: true);
+        if (mounted) setState(() => _running = false);
+        return;
+      }
+      _queueOutput(event.payload);
     });
+  }
+
+  void _queueOutput(String chunk, {bool flush = false}) {
+    _pendingChunk += chunk;
+    if (flush) {
+      _flushOutput();
+      return;
+    }
+    _flushTimer ??= Timer(const Duration(milliseconds: 150), _flushOutput);
+  }
+
+  void _flushOutput() {
+    _flushTimer?.cancel();
+    _flushTimer = null;
+    if (!mounted || _pendingChunk.isEmpty) return;
+    final chunk = _pendingChunk;
+    _pendingChunk = '';
+    setState(() => _output += chunk);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
@@ -76,14 +127,49 @@ class _TerminalSheetState extends State<TerminalSheet> {
     });
   }
 
-  void _stop() {
-    _service.stop();
-    if (mounted) setState(() => _output += '\n[正在终止命令]');
+  Future<void> _selectJob(String jobId) async {
+    await _jobSub?.cancel();
+    _activeJobId = jobId;
+    _lastSequence = -1;
+    setState(() {
+      _output = '';
+      _running = !_service.listJobs()
+          .firstWhere((job) => job.jobId == jobId, orElse: () =>
+              const TerminalJobSnapshot(
+                  jobId: '', command: '', completed: true))
+          .completed;
+    });
+    _jobSub = _service.watchJob(jobId).listen((event) {
+      if (event.sequence <= _lastSequence) return;
+      _lastSequence = event.sequence;
+      if (event.type == 'started') {
+        _queueOutput('\$ ${event.payload}\n');
+        return;
+      }
+      if (event.type == 'completed' || event.type == 'timeout') {
+        _queueOutput('\n[退出码 ${event.exitCode ?? -1}]', flush: true);
+        if (mounted) setState(() => _running = false);
+        return;
+      }
+      _queueOutput(event.payload);
+    });
+  }
+
+  void _cancelJob(String jobId) {
+    unawaited(_service.cancelJob(jobId));
+    if (jobId == _activeJobId && mounted) {
+      setState(() => _running = false);
+    }
+  }
+
+  void _clearDisplay() {
+    setState(() => _output = '');
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final jobs = _service.listJobs();
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -99,11 +185,23 @@ class _TerminalSheetState extends State<TerminalSheet> {
                           TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
                 ),
                 IconButton(
+                  tooltip: '打开全屏交互终端 (PTY)',
+                  icon: const Icon(Icons.open_in_new_rounded),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TerminalPage(),
+                      ),
+                    );
+                  },
+                ),
+                IconButton(
                   tooltip: '查看文件树',
                   icon: const Icon(Icons.folder_open_outlined),
                   onPressed: () {
                     Navigator.pop(context);
-                    showImmersiveSheet<void>(
+                    showNexusSheet<void>(
                       context: context,
                       builder: (_) => SizedBox(
                         height: MediaQuery.of(context).size.height * .75,
@@ -116,9 +214,9 @@ class _TerminalSheetState extends State<TerminalSheet> {
                   },
                 ),
                 IconButton(
-                  tooltip: '清空输出',
+                  tooltip: '清空显示（不停止作业）',
                   icon: const Icon(Icons.delete_sweep_outlined),
-                  onPressed: () => setState(() => _output = ''),
+                  onPressed: _clearDisplay,
                 ),
               ],
             ),
@@ -132,13 +230,21 @@ class _TerminalSheetState extends State<TerminalSheet> {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '运行时：$_runtimeLabel',
+                '运行时：$_runtimeLabel'
+                '${_sessionId == null ? '' : ' · 会话 $_sessionId'}',
                 style: theme.textTheme.bodySmall,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
+            TerminalJobPanel(
+              jobs: jobs,
+              activeJobId: _activeJobId,
+              onSelect: _selectJob,
+              onCancel: _cancelJob,
+            ),
+            const SizedBox(height: 8),
             Expanded(
               child: Container(
                 width: double.infinity,
@@ -178,8 +284,13 @@ class _TerminalSheetState extends State<TerminalSheet> {
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  tooltip: _running ? '停止命令' : '运行命令',
-                  onPressed: _running ? _stop : _run,
+                  tooltip: _running ? '停止当前作业' : '运行命令',
+                  onPressed: _running
+                      ? () {
+                          final id = _activeJobId;
+                          if (id != null) _cancelJob(id);
+                        }
+                      : _run,
                   icon: Icon(
                       _running ? Icons.stop_rounded : Icons.play_arrow_rounded),
                 ),

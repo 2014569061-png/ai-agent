@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
@@ -8,7 +8,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -265,7 +265,7 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
   }
 
   void _use(PromptTemplate template) {
-    showImmersiveSheet<PromptApplyMode>(
+    showNexusSheet<PromptApplyMode>(
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(

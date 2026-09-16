@@ -1,47 +1,53 @@
 import '../l10n/app_strings.dart';
-import 'dart:convert';
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
-import '../../domain/models.dart';
-import '../../domain/unique_id.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../application/agent_draft_service.dart';
+import '../../application/agent_tool_catalog.dart';
+import '../../application/providers.dart';
+import '../../domain/agent_draft.dart';
 import '../../infrastructure/database/app_database.dart';
-import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
-import '../../infrastructure/tools/core_tools.dart';
-import '../../infrastructure/tools/tool_registry.dart';
-import '../../infrastructure/mcp/mcp_tool_provider.dart';
-import '../../infrastructure/plugins/plugin_store.dart';
-import '../../application/mcp_service.dart';
+import '../../infrastructure/providers/provider_config_store.dart';
+import '../motion/nexus_page_route_factory.dart';
+import 'agent_editor_page.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
+import '../widgets/nexus_sheet.dart';
 import '../widgets/section_card.dart';
 
-class AgentsPage extends StatefulWidget {
-  const AgentsPage({super.key});
+class AgentsPage extends ConsumerStatefulWidget {
+  const AgentsPage({super.key, this.autoDescribe = false});
+
+  /// 由系统级入口（应用快捷方式 / `nexus://new-agent` 深链）进入时置为 true，
+  /// 进入页面即弹出「描述目标」输入框——快捷方式的意义就是少一次点击，
+  /// 落到列表页还要用户再找入口就等于没做。
+  final bool autoDescribe;
+
   @override
-  State<AgentsPage> createState() => _AgentsPageState();
+  ConsumerState<AgentsPage> createState() => _AgentsPageState();
 }
 
-class _AgentsPageState extends State<AgentsPage> {
+class _AgentsPageState extends ConsumerState<AgentsPage> {
   late Future<List<Agent>> _agents;
-  final _toolOptions = <AgentTool>[
-    CalculatorTool(),
-    GetTimeTool(),
-    JsonQueryTool(),
-    HttpRequestTool(),
-    WebSearchTool(apiKey: '')
-  ];
 
   @override
   void initState() {
     super.initState();
     _reload();
+    if (widget.autoDescribe) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _createFromDescription();
+      });
+    }
   }
 
+  /// 走 [databaseProvider] 而不是全局单例：这是项目在 `providers.dart` 里写明的
+  /// 注入点，测试可以 override 成内存库，页面才进得了冒烟守护。
   void _reload() {
-    _agents = DatabaseProvider.instance.database.then((db) async {
+    _agents = ref.read(databaseProvider.future).then((db) async {
       final agents = await db.allAgents();
       return agents
           .map((agent) =>
@@ -50,413 +56,28 @@ class _AgentsPageState extends State<AgentsPage> {
     });
   }
 
-  Future<List<AgentTool>> _loadAvailableTools() async {
-    final tools = <AgentTool>[..._toolOptions];
-    try {
-      tools.addAll(await PluginStore()
-          .loadDeclarativeTools(await DatabaseProvider.instance.database));
-    } catch (_) {}
-
-    final provider = McpToolProvider();
-    try {
-      final servers = await McpService().loadEnabled();
-      for (final server in servers) {
-        try {
-          tools.addAll(await provider.connectAndListTools(server));
-        } catch (_) {}
-      }
-    } catch (_) {}
-    await provider.dispose();
-
-    final seen = <String>{};
-    return tools.where((tool) => seen.add(tool.manifest.name)).toList();
-  }
-
-  Future<void> _openAgentEditor([Agent? agent]) async {
-    final toolOptions = await _loadAvailableTools();
-    if (!mounted) return;
-
-    final nameController = TextEditingController(text: agent?.name ?? '通用助手');
-    final promptController = TextEditingController(
-        text: agent?.systemPrompt ?? '你是一个有帮助的 AI Agent。');
-    var steps = (agent?.maxSteps ?? 8).clamp(1, 32);
-    var temperature = (agent?.temperature ?? 0.7).clamp(0.0, 2.0);
-    var maxTokens = (agent?.maxTokens ?? 2048).clamp(256, 8192);
-    var topP = (agent?.topP ?? 1.0).clamp(0.0, 1.0);
-
-    final parsed = agent != null
-        ? (jsonDecode(agent.enabledToolsJson) as List<dynamic>? ?? const [])
-            .whereType<String>()
-            .toSet()
-        : const <String>{};
-    // 默认工具兜底集合：与 ToolRegistry 内注册的 safe 只读/计算工具保持一致（用于新建或空配置智能体）。
-    final enabled = parsed.isEmpty
-        ? <String>{'calculator', 'get_time', 'json_query'}
-        : {...parsed};
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor:
-          isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (context, setSheetState) => FractionallySizedBox(
-          heightFactor: 0.85,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.viewInsetsOf(context).bottom,
-              ),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          agent == null
-                              ? AppStrings.createAgent
-                              : AppStrings.editAgent,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          tooltip: '关闭',
-                          onPressed: () => Navigator.pop(context, false),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Divider(
-                    height: 1,
-                    color: isDark
-                        ? AppPalette.darkHairline
-                        : AppPalette.lightHairline,
-                  ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // 1. 基本信息
-                          const Text(
-                            '基本信息',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppPalette.brandAction,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: nameController,
-                            decoration: const InputDecoration(
-                              labelText: '${AppStrings.agentName} *',
-                              hintText: '如：代码分析师、客服助手',
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: promptController,
-                            maxLines: 4,
-                            minLines: 2,
-                            decoration: const InputDecoration(
-                              labelText: '${AppStrings.systemPrompt} *',
-                              hintText: '描述该智能体的角色设定、行为规则与专业能力…',
-                              alignLabelWithHint: true,
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // 2. 模型参数
-                          const Text(
-                            AppStrings.modelParams,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppPalette.brandAction,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          // 最大执行步数
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(AppStrings.maxExecutionSteps,
-                                  style: TextStyle(fontSize: 13)),
-                              Text('$steps 步',
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500)),
-                            ],
-                          ),
-                          Slider(
-                            value: steps.toDouble(),
-                            min: 1,
-                            max: 32,
-                            divisions: 31,
-                            activeColor: AppPalette.brandAction,
-                            onChanged: (val) =>
-                                setSheetState(() => steps = val.round()),
-                          ),
-                          // 温度 Temperature
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(AppStrings.temperature,
-                                  style: TextStyle(fontSize: 13)),
-                              Text(temperature.toStringAsFixed(2),
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500)),
-                            ],
-                          ),
-                          Slider(
-                            value: temperature,
-                            min: 0.0,
-                            max: 2.0,
-                            divisions: 40,
-                            activeColor: AppPalette.brandAction,
-                            onChanged: (val) =>
-                                setSheetState(() => temperature = val),
-                          ),
-                          // 最大输出 Token
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(AppStrings.maxOutputTokens,
-                                  style: TextStyle(fontSize: 13)),
-                              Text('$maxTokens Tokens',
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500)),
-                            ],
-                          ),
-                          Slider(
-                            value: maxTokens.toDouble(),
-                            min: 256,
-                            max: 8192,
-                            divisions: 31,
-                            activeColor: AppPalette.brandAction,
-                            onChanged: (val) =>
-                                setSheetState(() => maxTokens = val.round()),
-                          ),
-                          // Top P
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(AppStrings.topP,
-                                  style: TextStyle(fontSize: 13)),
-                              Text(topP.toStringAsFixed(2),
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500)),
-                            ],
-                          ),
-                          Slider(
-                            value: topP,
-                            min: 0.0,
-                            max: 1.0,
-                            divisions: 20,
-                            activeColor: AppPalette.brandAction,
-                            onChanged: (val) => setSheetState(() => topP = val),
-                          ),
-                          const SizedBox(height: 20),
-
-                          // 3. 工具权限
-                          const Text(
-                            AppStrings.availableTools,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: AppPalette.brandAction,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          ...toolOptions.map((tool) {
-                            final isChecked =
-                                enabled.contains(tool.manifest.name);
-                            final isDanger =
-                                tool.manifest.risk == ToolRisk.dangerous;
-                            final isConfirm = tool.manifest.risk ==
-                                ToolRisk.requiresConfirmation;
-
-                            return CheckboxListTile(
-                              value: isChecked,
-                              contentPadding: EdgeInsets.zero,
-                              activeColor: AppPalette.brandAction,
-                              title: Row(
-                                children: [
-                                  Text(
-                                    tool.manifest.name,
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: isDanger
-                                          ? AppPalette.danger
-                                              .withValues(alpha: 0.12)
-                                          : isConfirm
-                                              ? AppPalette.warning
-                                                  .withValues(alpha: 0.12)
-                                              : (isDark
-                                                  ? AppPalette.brandSoftDark
-                                                  : AppPalette.brandSoftLight),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      isDanger
-                                          ? '危险操作'
-                                          : isConfirm
-                                              ? '需确认'
-                                              : '安全',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDanger
-                                            ? AppPalette.danger
-                                            : isConfirm
-                                                ? AppPalette.warning
-                                                : AppPalette.brandAction,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              subtitle: Text(
-                                tool.manifest.description,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: isDark
-                                      ? AppPalette.darkTextMuted
-                                      : AppPalette.lightTextMuted,
-                                ),
-                              ),
-                              onChanged: (val) {
-                                setSheetState(() {
-                                  if (val == true) {
-                                    enabled.add(tool.manifest.name);
-                                  } else {
-                                    enabled.remove(tool.manifest.name);
-                                  }
-                                });
-                              },
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // 固定底部操作栏
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppPalette.darkSurface
-                          : AppPalette.lightSurface,
-                      border: Border(
-                        top: BorderSide(
-                          color: isDark
-                              ? AppPalette.darkHairline
-                              : AppPalette.lightHairline,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(
-                                  AppTokens.kMinTouchTarget),
-                            ),
-                            onPressed: () => Navigator.pop(context, false),
-                            child: const Text(AppStrings.cancel),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton(
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(
-                                  AppTokens.kMinTouchTarget),
-                              backgroundColor: AppPalette.brandAction,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () {
-                              if (nameController.text.trim().isEmpty ||
-                                  promptController.text.trim().isEmpty) {
-                                return;
-                              }
-                              Navigator.pop(context, true);
-                            },
-                            child: const Text(AppStrings.save),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+  Future<void> _openAgentEditor({Agent? agent, AgentDraft? draft}) async {
+    final changed = await Navigator.of(context).push<bool>(
+      NexusPageRoute.detail(
+        builder: (_) => AgentEditorPage(agent: agent, draft: draft),
       ),
     );
-
-    if (saved != true || !mounted) return;
-
-    final db = await DatabaseProvider.instance.database;
-    final now = DateTime.now();
-
-    if (agent == null) {
-      await db.insertAgent(AgentsCompanion.insert(
-        id: UniqueId.generate('agent', now: now),
-        name: nameController.text.trim(),
-        systemPrompt: Value(promptController.text.trim()),
-        modelProfileId: 'default',
-        maxSteps: Value(steps),
-        temperature: Value(temperature),
-        maxTokens: Value(maxTokens),
-        topP: Value(topP),
-        enabledToolsJson: Value(jsonEncode(enabled.toList())),
-        updatedAt: now,
-      ));
-    } else {
-      await db.saveAgent(agent.copyWith(
-        name: nameController.text.trim(),
-        systemPrompt: promptController.text.trim(),
-        maxSteps: steps,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        topP: topP,
-        enabledToolsJson: jsonEncode(enabled.toList()),
-        updatedAt: now,
-      ));
+    if (changed == true && mounted) {
+      setState(_reload);
     }
+  }
 
-    if (mounted) setState(_reload);
+  /// 「说目标 → 生成 Agent 草稿」入口。
+  ///
+  /// 生成结果只作为编辑器的预填内容：本方法不写库、不授权，用户必须先在编辑器里
+  /// 确认并保存。生成的权限范围默认只含安全级工具，其余在编辑器里由用户决定。
+  Future<void> _createFromDescription() async {
+    final draft = await showNexusDialog<AgentDraft>(
+      context: context,
+      builder: (_) => const _DescribeGoalDialog(),
+    );
+    if (draft == null || !mounted) return;
+    await _openAgentEditor(draft: draft);
   }
 
   @override
@@ -488,23 +109,28 @@ class _AgentsPageState extends State<AgentsPage> {
           future: _agents,
           builder: (context, snapshot) {
             if (!snapshot.hasData) {
-              return const Center(
-                  child: CircularProgressIndicator(strokeWidth: 2));
+              return const NexusCardSkeleton(count: 3);
             }
             final agents = snapshot.data!;
             if (agents.isEmpty) {
-              return const EmptyStateView(
+              return EmptyStateView(
                 icon: Icons.smart_toy_outlined,
                 title: '还没有 Agent',
-                message: '点击右下角创建一个 Agent',
+                message: '说一句你要它做什么，AI 会生成角色、指令与工具范围，你确认后即可用',
+                actionLabel: '描述目标，让 AI 生成',
+                onAction: _createFromDescription,
               );
             }
             return ListView.separated(
                 padding: const EdgeInsets.all(16),
-                itemCount: agents.length,
+                // 首项是「描述生成」入口，其余是已有 Agent。
+                itemCount: agents.length + 1,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
-                  final agent = agents[index];
+                  if (index == 0) {
+                    return _DescribeEntryCard(onTap: _createFromDescription);
+                  }
+                  final agent = agents[index - 1];
                   return SectionCard(
                       child: ListTile(
                           leading: Container(
@@ -545,11 +171,210 @@ class _AgentsPageState extends State<AgentsPage> {
                               minWidth: AppTokens.kMinTouchTarget,
                               minHeight: AppTokens.kMinTouchTarget,
                             ),
-                            onPressed: () => _openAgentEditor(agent),
+                            onPressed: () => _openAgentEditor(agent: agent),
                           ),
-                          onTap: () => _openAgentEditor(agent)));
+                          onTap: () => _openAgentEditor(agent: agent)));
                 });
           }),
+    );
+  }
+}
+
+/// 「描述生成」入口卡片。
+///
+/// 放在已有 Agent 列表之前，因为它才是这个页面的默认动作——手填表单应当是备选，
+/// 而不是让用户自己想清楚角色、系统指令与工具白名单。
+class _DescribeEntryCard extends StatelessWidget {
+  const _DescribeEntryCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    return SectionCard(
+      child: ListTile(
+        onTap: onTap,
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight,
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          ),
+          child: const Icon(Icons.auto_awesome_outlined,
+              size: 20, color: AppPalette.brand),
+        ),
+        title: const Text(
+          '用一句话描述，让 AI 生成',
+          style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+        ),
+        subtitle: Text(
+          '生成角色、系统指令与工具范围，你确认后再保存',
+          style: TextStyle(fontSize: 13, color: textMuted),
+        ),
+      ),
+    );
+  }
+}
+
+/// 收集一句目标，产出待确认的 Agent 草稿。
+///
+/// 弹窗只负责「拿到目标 + 调生成」，任何写库和授权都在编辑器里由用户触发；
+/// 失败时保持弹窗打开，避免用户刚写的内容被清掉。
+class _DescribeGoalDialog extends ConsumerStatefulWidget {
+  const _DescribeGoalDialog();
+
+  @override
+  ConsumerState<_DescribeGoalDialog> createState() =>
+      _DescribeGoalDialogState();
+}
+
+class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _generate() async {
+    final goal = _controller.text.trim();
+    if (goal.isEmpty) {
+      setState(() => _error = '先写一句你要它做什么');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+
+    AgentDraft draft;
+    try {
+      final config = await ProviderConfigStore().load();
+      final specs = toToolSpecs(await loadAvailableAgentTools(
+          database: ref.read(databaseProvider.future)));
+      draft = await const AgentDraftService()
+          .generate(config: config, goal: goal, tools: specs);
+    } catch (error) {
+      // 生成服务内部已会退化成本地草稿；这里只兜住配置读取一类的极端异常，
+      // 并保持弹窗打开让用户直接重试。
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _error = '生成失败：$error';
+      });
+      return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(draft);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '用一句话描述这个智能体',
+            style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w500, color: textColor),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '例如：帮我审代码，重点看空指针和边界条件',
+            style: TextStyle(fontSize: 12, color: textMuted),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _controller,
+            enabled: !_busy,
+            autofocus: true,
+            maxLines: 3,
+            minLines: 3,
+            style: TextStyle(fontSize: 14, height: 1.4, color: textColor),
+            decoration: InputDecoration(
+              hintText: '你希望它替你做的那件事…',
+              hintStyle: TextStyle(fontSize: 13, color: textMuted),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+              ),
+              contentPadding: const EdgeInsets.all(14),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!,
+                style: const TextStyle(fontSize: 12, color: AppPalette.danger)),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize:
+                        const Size.fromHeight(AppTokens.kControlHeight),
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
+                    ),
+                  ),
+                  onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                  child: const Text(AppStrings.cancel),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize:
+                        const Size.fromHeight(AppTokens.kControlHeight),
+                    backgroundColor: AppPalette.brand,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
+                    ),
+                  ),
+                  onPressed: _busy ? null : _generate,
+                  child: _busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('生成草稿',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w500)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '生成结果只作为编辑器的预填内容，不会自动保存，也不会授予任何权限。',
+            style: TextStyle(fontSize: 11.5, color: textMuted),
+          ),
+        ],
+      ),
     );
   }
 }

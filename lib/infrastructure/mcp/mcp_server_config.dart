@@ -64,6 +64,7 @@ class McpServerConfig {
 
   McpServerConfig copyWith({
     String? name,
+    McpServerKind? kind,
     String? url,
     String? command,
     List<String>? args,
@@ -72,7 +73,7 @@ class McpServerConfig {
       McpServerConfig(
         id: id,
         name: name ?? this.name,
-        kind: kind,
+        kind: kind ?? this.kind,
         url: url ?? this.url,
         command: command ?? this.command,
         args: args ?? this.args,

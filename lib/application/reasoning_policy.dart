@@ -20,7 +20,8 @@ class ReasoningPolicy {
       'project_analysis' ||
       'bug_fix' ||
       'code_review' ||
-      'release_check' =>
+      'release_check' ||
+      'implement_and_verify' =>
         ReasoningEffort.medium,
       'complex_debug' || 'planning' || 'math' => ReasoningEffort.high,
       _ => ReasoningEffort.low,

@@ -187,6 +187,13 @@ class ProviderConfigStore {
   Future<void> restoreProfiles(List<ProviderConfig> configs,
       {String? activeId}) async {
     final preferences = await SharedPreferences.getInstance();
+    final existing = await loadAll();
+    final nextIds = configs.map((item) => item.id).toSet();
+    for (final item in existing) {
+      if (!nextIds.contains(item.id)) {
+        await _deleteKey('provider.api_key.${item.id}');
+      }
+    }
     await preferences.setString(
         _profilesKey, jsonEncode(configs.map(_profileMeta).toList()));
     for (final item in configs) {
@@ -197,7 +204,16 @@ class ProviderConfigStore {
             ? null
             : configs.first
         : configs.where((item) => item.id == activeId).firstOrNull;
-    if (active == null) return;
+    if (active == null) {
+      await Future.wait([
+        preferences.remove(_activeKey),
+        preferences.remove(_baseUrlKey),
+        preferences.remove(_modelKey),
+        _deleteKey(_apiKeyKey),
+      ]);
+      _activeId = null;
+      return;
+    }
     await preferences.setString(_activeKey, active.id);
     await preferences.setString(_baseUrlKey, active.baseUrl.trim());
     await preferences.setString(_modelKey, active.model.trim());
@@ -205,6 +221,26 @@ class ProviderConfigStore {
   }
 
   Future<void> clearKey() => _deleteKey(_apiKeyKey);
+
+  /// Removes all persisted provider profiles and tool credentials.  This is
+  /// intentionally separate from [clearKey], which only clears the legacy
+  /// active key and would leave per-profile keys behind.
+  Future<void> clearAll() async {
+    final preferences = await SharedPreferences.getInstance();
+    final profiles = await loadAll();
+    for (final profile in profiles) {
+      await _deleteKey('provider.api_key.${profile.id}');
+    }
+    await Future.wait([
+      _deleteKey(_apiKeyKey),
+      _deleteKey('tool.api_key.tavily'),
+      preferences.remove(_profilesKey),
+      preferences.remove(_activeKey),
+      preferences.remove(_baseUrlKey),
+      preferences.remove(_modelKey),
+    ]);
+    _activeId = null;
+  }
 
   Future<String> readToolKey(String name) async =>
       await _readKey('tool.api_key.$name') ?? '';

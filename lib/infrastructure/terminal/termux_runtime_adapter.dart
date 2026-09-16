@@ -12,12 +12,23 @@ import 'linux_runtime.dart';
 /// 工具链；默认优先使用内置 PRoot，只有内置运行时不可用时才选择本 Adapter。
 class TermuxRuntimeAdapter
     implements LinuxRuntimeAdapter, DetachedLinuxRuntimeAdapter {
-  TermuxRuntimeAdapter({this.maxOutputBytes = 128 * 1024});
+  TermuxRuntimeAdapter({
+    this.maxOutputBytes = 128 * 1024,
+    MethodChannel? bridge,
+    this.inspectTimeout = const Duration(seconds: 3),
+    this.bridgeCallTimeout = const Duration(seconds: 5),
+    bool? isAndroid,
+  })  : _bridge = bridge ?? _defaultBridge,
+        _isAndroid = isAndroid ?? Platform.isAndroid;
 
   static const bridgeDir = '/sdcard/pocketforge-bridge';
-  static const _bridge = MethodChannel('nexus/termux_bridge');
+  static const _defaultBridge = MethodChannel('nexus/termux_bridge');
 
   final int maxOutputBytes;
+  final MethodChannel _bridge;
+  final Duration inspectTimeout;
+  final Duration bridgeCallTimeout;
+  final bool _isAndroid;
   bool _running = false;
   final Map<String, DateTime> _procVerificationCache = {};
 
@@ -35,7 +46,7 @@ class TermuxRuntimeAdapter
 
   @override
   Future<LinuxRuntimeInfo> inspect() async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       return const LinuxRuntimeInfo(
         kind: LinuxRuntimeKind.termux,
         label: 'Termux',
@@ -45,7 +56,10 @@ class TermuxRuntimeAdapter
       );
     }
     try {
-      final installed = await _bridge.invokeMethod('isTermuxInstalled') == true;
+      final installed = await _bridge
+              .invokeMethod('isTermuxInstalled')
+              .timeout(inspectTimeout) ==
+          true;
       return LinuxRuntimeInfo(
         kind: kind,
         label: 'Termux Linux',
@@ -53,8 +67,18 @@ class TermuxRuntimeAdapter
         detail: installed
             ? '使用外部 Termux 提供 bash、Git、Python、Node、Go 等 Linux 工具。'
             : '未检测到 Termux；后续可切换到内置 PRoot Runtime。',
-        supportsInteractive: false,
+        supportsInteractive: installed,
+        supportsLiveOutput: installed,
         supportsShellSyntax: true,
+        requiresExternalApp: true,
+      );
+    } on TimeoutException {
+      return LinuxRuntimeInfo(
+        kind: kind,
+        label: 'Termux Linux',
+        available: false,
+        detail: 'Termux 检测超时（${_formatTimeout(inspectTimeout)}）。'
+            '请先打开 Termux、允许本应用外部调用并重试。',
         requiresExternalApp: true,
       );
     } on MissingPluginException {
@@ -114,7 +138,7 @@ class TermuxRuntimeAdapter
     required String ownerToken,
     required String logPath,
   }) async {
-    if (!Platform.isAndroid || ownerToken.trim().isEmpty) return null;
+    if (!_isAndroid || ownerToken.trim().isEmpty) return null;
     final paths = _detachedPaths(ownerToken);
     await _deleteFiles(paths.values);
     final inner = _detachedScript(
@@ -132,7 +156,7 @@ class TermuxRuntimeAdapter
       await _bridge.invokeMethod('runInTermux', {
         'command': launch,
         'timeoutMs': const Duration(seconds: 30).inMilliseconds,
-      });
+      }).timeout(bridgeCallTimeout);
     } on PlatformException {
       return null;
     } on MissingPluginException {
@@ -157,7 +181,7 @@ class TermuxRuntimeAdapter
 
   @override
   Future<bool> verifyDetached(int pid, String ownerToken) async {
-    if (!Platform.isAndroid || pid <= 0 || ownerToken.trim().isEmpty) {
+    if (!_isAndroid || pid <= 0 || ownerToken.trim().isEmpty) {
       return false;
     }
     final paths = _detachedPaths(ownerToken);
@@ -227,7 +251,7 @@ class TermuxRuntimeAdapter
       await _bridge.invokeMethod('runInTermux', {
         'command': command,
         'timeoutMs': const Duration(seconds: 30).inMilliseconds,
-      });
+      }).timeout(bridgeCallTimeout);
     } catch (_) {
       return false;
     }
@@ -275,7 +299,7 @@ class TermuxRuntimeAdapter
       await _bridge.invokeMethod('runInTermux', {
         'command': command,
         'timeoutMs': const Duration(seconds: 10).inMilliseconds,
-      });
+      }).timeout(bridgeCallTimeout);
     } catch (_) {
       return false;
     }
@@ -425,15 +449,17 @@ $commandLine
       await _bridge.invokeMethod('runInTermux', {
         'command': script,
         'timeoutMs': timeout.inMilliseconds,
-      });
-    } on PlatformException catch (error) {
-      return CommandResult(
-        output: 'Termux 桥不可用：${error.message}\n'
-            '请确认：① 手机已安装 Termux；② Termux 内已配置 allow-external-apps=true'
-            '（~/.termux/termux.properties）并重启 Termux；③ 若仍失败，请先打开一次'
-            ' Termux 再试（部分 ROM 会冻结后台应用）。',
-        exitCode: 127,
+      }).timeout(bridgeCallTimeout);
+    } on TimeoutException {
+      return _bridgeFailure(
+        '等待 Termux 响应超时（${_formatTimeout(bridgeCallTimeout)}）。',
       );
+    } on PlatformException catch (error) {
+      return _bridgeFailure('调用失败：${error.message ?? error.code}');
+    } on MissingPluginException {
+      return _bridgeFailure('当前平台没有注册 Termux 桥。');
+    } catch (error) {
+      return _bridgeFailure('调用失败：$error');
     }
 
     final deadline = DateTime.now().add(timeout);
@@ -462,5 +488,20 @@ $commandLine
       exitCode: 124,
       timedOut: true,
     );
+  }
+
+  CommandResult _bridgeFailure(String reason) {
+    return CommandResult(
+      output: 'Termux 桥不可用：$reason\n'
+          '请确认：① 手机已安装 Termux；② Termux 内已配置 allow-external-apps=true'
+          '（~/.termux/termux.properties）并重启 Termux；③ 请打开 Termux 一次，'
+          '允许后台运行并关闭电池限制后再试。',
+      exitCode: 127,
+    );
+  }
+
+  String _formatTimeout(Duration timeout) {
+    if (timeout.inMilliseconds < 1000) return '${timeout.inMilliseconds}ms';
+    return '${timeout.inSeconds}s';
   }
 }

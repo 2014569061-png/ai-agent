@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
-import 'immersive_sheet.dart';
+import 'nexus_sheet.dart';
 
 Future<bool> showConfirmAction(
   BuildContext context, {
@@ -12,7 +12,7 @@ Future<bool> showConfirmAction(
   String? requiredKeyword,
   List<String>? bulletItems,
 }) async {
-  final result = await showImmersiveDialog<bool>(
+  final result = await showNexusDialog<bool>(
     context: context,
     builder: (dialogContext) {
       final isDark = Theme.of(dialogContext).brightness == Brightness.dark;

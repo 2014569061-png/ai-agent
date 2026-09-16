@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'agent_executor.dart';
-import 'headless_executor.dart';
+import 'background_execution_gateway.dart';
 import 'scheduled_task_service.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/notifications/notification_service.dart';
@@ -28,7 +28,11 @@ void scheduledTaskCallbackDispatcher() {
     AppDatabase? db;
     try {
       db = await openAppDatabase();
-      await _runAutomaticBackup(db);
+      try {
+        await _runAutomaticBackup(db);
+      } catch (error, stack) {
+        debugPrint('自动备份失败，继续执行到期任务: $error\n$stack');
+      }
       final due = await ScheduledTaskService().dueTasks(db, DateTime.now());
       if (due.isEmpty) return true;
       final config = await ProviderConfigStore().load();
@@ -36,20 +40,38 @@ void scheduledTaskCallbackDispatcher() {
       final usedNotificationIds = <int>{};
       for (final task in due) {
         try {
-          String? systemPrompt;
-          if (task.agentId != null) {
-            systemPrompt = (await db.findAgent(task.agentId!))?.systemPrompt;
+          final agent = task.agentId == null
+              ? null
+              : await db.findAgent(task.agentId!);
+          final systemPrompt = agent?.systemPrompt;
+          Set<String>? allowedToolNames;
+          if (agent != null) {
+            try {
+              final decoded = jsonDecode(agent.enabledToolsJson);
+              allowedToolNames = decoded is List
+                  ? decoded.whereType<String>().toSet()
+                  : <String>{};
+            } catch (_) {
+              // A corrupt permission record must fail closed in the
+              // background instead of silently granting the default tools.
+              allowedToolNames = <String>{};
+            }
           }
           final cancellationToken = AgentCancellationToken();
           final cancelToken = CancelToken();
-          final execution = HeadlessExecutor.run(
+          final execution = BackgroundExecutionGateway().run(
             db: db,
             config: config,
             prompt: task.prompt,
             systemPrompt: systemPrompt,
+            allowedToolNames: allowedToolNames,
+            maxSteps: agent?.maxSteps ?? 4,
+            temperature: agent?.temperature ?? 0.7,
+            maxTokens: agent?.maxTokens ?? 1024,
+            topP: agent?.topP ?? 1.0,
             cancellationToken: cancellationToken,
             cancelToken: cancelToken,
-          );
+          ).then((result) => result.text);
           String result;
           try {
             result = await execution.timeout(const Duration(minutes: 2));
@@ -116,8 +138,47 @@ Future<void> _runAutomaticBackup(AppDatabase db) async {
     'nexus-auto-${DateTime.now().millisecondsSinceEpoch}.nexusauto',
   );
   await File(path).writeAsString(encrypted, flush: true);
+  await pruneAutomaticBackups(backupDir);
   await prefs.setString(
     'settings.backup.last_time',
     DateTime.now().toIso8601String(),
   );
+}
+
+const automaticBackupRetention = 8;
+
+Future<void> pruneAutomaticBackups(Directory backupDir,
+    {int keep = automaticBackupRetention}) async {
+  if (keep < 1 || !await backupDir.exists()) return;
+  final files = backupDir
+      .listSync()
+      .whereType<File>()
+      .where((file) => file.path.endsWith('.nexusauto'))
+      .toList()
+    ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+  for (final file in files.skip(keep)) {
+    try {
+      await file.delete();
+    } catch (_) {}
+  }
+}
+
+Future<String?> createAutomaticBackupNow(AppDatabase db) async {
+  final snapshot = jsonEncode(await buildVaultJson(db));
+  final encrypted = await LocalCryptoService().encryptString(snapshot);
+  final dir = await getApplicationDocumentsDirectory();
+  final backupDir = Directory(p.join(dir.path, 'backups'));
+  await backupDir.create(recursive: true);
+  final path = p.join(
+    backupDir.path,
+    'nexus-auto-${DateTime.now().millisecondsSinceEpoch}.nexusauto',
+  );
+  await File(path).writeAsString(encrypted, flush: true);
+  await pruneAutomaticBackups(backupDir);
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(
+    'settings.backup.last_time',
+    DateTime.now().toIso8601String(),
+  );
+  return path;
 }

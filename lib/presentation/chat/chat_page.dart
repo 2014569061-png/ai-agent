@@ -6,25 +6,30 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
-import '../theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
-import 'package:super_clipboard/super_clipboard.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/chat_controller.dart';
+import '../../application/draft_service.dart';
+import '../../application/file_citation.dart';
+import '../../application/project_context_service.dart';
 import '../../application/app_lock_service.dart';
 import '../../application/providers.dart';
+import '../../application/task_service.dart';
+import '../../domain/unique_id.dart';
+import '../../application/workspace_service.dart';
 import '../../application/skill_intent_matcher.dart';
 import '../../application/tts_text.dart';
 import '../../domain/sensitive_tool_policy.dart';
 import '../../domain/models.dart';
 import '../../domain/session_metrics.dart';
+import '../../domain/tool_result.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/skills/skill_parser.dart';
 import '../../infrastructure/skills/skill_store.dart';
@@ -32,6 +37,7 @@ import '../../infrastructure/tts/tts_service.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
 import '../../infrastructure/share/deep_link_service.dart';
 import '../../infrastructure/share/sharing_service.dart';
+import '../agents/agents_page.dart';
 import '../dashboard/dashboard_page.dart';
 import '../history/history_page.dart';
 import '../tasks/development_tasks_page.dart';
@@ -44,15 +50,15 @@ import '../settings/settings_page.dart';
 import 'chat_layout_controller.dart';
 import 'composer_skill_slot.dart';
 import '../workspace/file_tree_sheet.dart';
-import '../workspace/terminal_sheet.dart';
 import '../workspace/development_workbench_page.dart';
+import '../projects/project_home_page.dart';
+import '../projects/project_picker_page.dart';
 import '../utils/keyboard_insets.dart';
 
 import 'widgets/floating_capsule_input.dart';
+import 'widgets/attachment_drawer_panel.dart';
 import 'widgets/session_metrics_bar.dart';
 import 'widgets/session_metrics_sheet.dart';
-import 'widgets/input_tool_grid_sheet.dart';
-import 'widgets/environment_sheet.dart';
 import '../../../infrastructure/background_service.dart';
 import 'widgets/session_context_sheet.dart';
 import 'widgets/capsule_top_bar.dart';
@@ -62,11 +68,15 @@ import 'widgets/model_picker_sheet.dart';
 import 'widgets/tool_activity_section.dart';
 import 'widgets/skill_suggestion_bar.dart';
 import 'widgets/chat_catalog_drawer.dart';
-import '../widgets/immersive_sheet.dart';
-import '../widgets/immersive_action_sheet.dart';
-import '../widgets/immersive_surface.dart';
+import '../widgets/nexus_sheet.dart';
+import '../widgets/nexus_action_sheet.dart';
+import '../widgets/nexus_surface.dart';
+import '../widgets/nexus_status_pill.dart';
 import '../widgets/tool_approval_helper.dart';
 import '../theme/app_tokens.dart';
+import '../motion/nexus_page_route_factory.dart';
+import '../widgets/nexus_loading_skeleton.dart';
+import 'widgets/nexus_back_to_latest_button.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -80,22 +90,42 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   Future<void> _pickWorkspace() async {
-    await ref.read(chatControllerProvider.notifier).pickWorkspace();
+    await _openProjectPicker();
+  }
+
+  Future<void> _openProjectPicker() async {
+    await Navigator.of(context).push(
+      NexusPageRoute.workspace(builder: (_) => const ProjectPickerPage()),
+    );
   }
 
   void _handleTopBarWorkspace() {
-    final ws = ref.read(chatControllerProvider).currentWorkspacePath;
+    final state = ref.read(chatControllerProvider);
+    final ws = state.currentWorkspacePath;
     if (ws == null || ws.isEmpty) {
-      _pickWorkspace();
+      _openProjectPicker();
       return;
     }
-    // 已有工作区：弹出操作面板，提供浏览 / 重选 / 解绑三条路径，
-    // 修复“选定工作区后主界面无重新选择入口”的问题（复用会话上下文菜单同款能力）。
-    showImmersiveActionSheet<void>(
+    showNexusActionSheet<void>(
       context: context,
-      title: '当前工作区',
+      title: state.currentProjectName ?? '当前项目',
       subtitle: ws,
       items: [
+        ActionSheetItem(
+          title: '打开项目主页',
+          subtitle: '文件、终端、任务和产物',
+          icon: Icons.home_outlined,
+          onTap: () {
+            final id = state.currentProjectId;
+            if (id == null) {
+              _openProjectPicker();
+              return;
+            }
+            Navigator.of(context).push(NexusPageRoute.workspace(
+              builder: (_) => ProjectHomePage(projectId: id),
+            ));
+          },
+        ),
         ActionSheetItem(
           title: '浏览文件树',
           subtitle: '在应用内查看与导航项目目录',
@@ -103,19 +133,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
           onTap: _openFileTree,
         ),
         ActionSheetItem(
-          title: '重新选择工作区',
-          subtitle: '调用系统目录选择器更换目录',
-          icon: Icons.drive_folder_upload_rounded,
-          onTap: _pickWorkspace,
+          title: '切换项目',
+          subtitle: '新建、导入或选择已有项目',
+          icon: Icons.swap_horiz_rounded,
+          onTap: _openProjectPicker,
         ),
         ActionSheetItem(
-          title: '解绑当前工作区',
-          subtitle: '清除绑定，回到无工作区状态',
+          title: '解绑当前项目',
+          subtitle: '清除绑定，回到普通聊天',
           icon: Icons.link_off_rounded,
           destructive: true,
           onTap: () {
             ref.read(chatControllerProvider.notifier).setWorkspace(null);
-            FloatingToast.show(context, '已解绑工作区', tone: ToastTone.success);
+            FloatingToast.show(context, '已解绑项目', tone: ToastTone.success);
           },
         ),
       ],
@@ -124,8 +154,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _openModelConfig() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const SettingsPage()),
+      NexusPageRoute.settingsPage(builder: (_) => const SettingsPage()),
     );
+  }
+
+  Future<void> _configureModel() async {
+    await Navigator.of(context).push(
+      NexusPageRoute.settingsPage(builder: (_) => const ProviderListPage()),
+    );
+    if (mounted) await _chat.reloadProviderConfig();
   }
 
   void _openFileTree() {
@@ -134,7 +171,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       _pickWorkspace();
       return;
     }
-    showImmersiveSheet<void>(
+    showNexusSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -144,6 +181,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
           workspacePath: ws,
           onReselectWorkspace: () =>
               _reselectWorkspaceFromSheet(sheetContext, ws),
+          onCiteFile: (relativePath) =>
+              unawaited(_citeWorkspaceFile(relativePath)),
         ),
       ),
     );
@@ -161,41 +200,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
-  // G1 开发环境引导:检测/安装 Termux、授权、Go 工具链。
-  void _openEnvSetup() {
-    showImmersiveSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => SizedBox(
-        height: MediaQuery.of(context).size.height * 0.85,
-        child: const EnvironmentSheet(),
-      ),
-    );
-  }
-
-  void _openTerminal() {
-    final ws = ref.read(chatControllerProvider).currentWorkspacePath;
-    if (ws == null || ws.isEmpty) {
-      _pickWorkspace();
-      return;
-    }
-    showImmersiveSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (sheetContext) => SizedBox(
-        height: MediaQuery.of(context).size.height * 0.9,
-        child: TerminalSheet(
-          workspacePath: ws,
-          onReselectWorkspace: () =>
-              _reselectWorkspaceFromSheet(sheetContext, ws),
-        ),
-      ),
-    );
-  }
-
   final _controller = TextEditingController();
+  final _draftService = const DraftService();
+  Timer? _draftPersistTimer;
   final _skillStore = SkillStore();
   final _skillMatcher = SkillIntentMatcher();
   final _installedSkills = <_InstalledSkill>[];
@@ -204,10 +211,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   List<_InstalledSkill> _slashSkillSuggestions = const [];
   Timer? _skillSuggestionDebounce;
   bool _skillSuggestionsDismissed = false;
+  static const _dismissedRecoveryTasksKey = 'recovery.dismissed_task_ids';
   final _attachments = <PlatformFile>[];
+  String? _pendingClientRequestId;
+  bool _attachmentPanelExpanded = false;
   final _picker = ImagePicker();
   final _scrollController = ScrollController();
   bool _showScrollToBottom = false;
+  int _unreadNewMessagesCount = 0;
   bool _followTailScheduled = false;
   bool _followTailAnimate = false;
 
@@ -222,15 +233,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   StreamSubscription<String>? _shareSub;
   String _pendingTaskType = 'general';
   String _pendingSourceType = 'manual';
-
-  // 首页能力开关（对标 DeepSeek 的「深度思考」/「智能搜索」）。
-  // 持久化键与 ChatController._prepareRun 读取的键保持完全一致，
-  // 这样这里切换后，下一次发送即可生效，无需改动控制器。
-  static const _kDeepReasoningPref = 'settings.llm.deep_reasoning';
-  static const _kWebBrowsingPref = 'settings.tool.web_browsing';
-
-  bool _deepThinking = true;
-  bool _webSearch = true;
+  final Map<String, Completer<ToolApproval>> _pendingToolApprovals = {};
 
   /// 处于「文本选择模式」的消息索引（null = 无）。
   /// 正文默认不可选，否则长按会被文本选择器截走、消息菜单永远打不开。
@@ -241,7 +244,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final BackgroundService _backgroundService = BackgroundService();
 
   void _rememberCurrentDraft() {
-    final conversationId = ref.read(chatControllerProvider).conversationId;
+    final state = ref.read(chatControllerProvider);
+    final conversationId = state.conversationId;
     if (conversationId == null) return;
     final draft = _controller.text;
     if (draft.trim().isEmpty) {
@@ -249,19 +253,122 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } else {
       _draftsByConversation[conversationId] = draft;
     }
+    _schedulePersistDraft(
+      conversationId: conversationId,
+      projectId: state.currentProjectId,
+      text: draft,
+    );
+  }
+
+  void _schedulePersistDraft({
+    required String conversationId,
+    String? projectId,
+    required String text,
+  }) {
+    _draftPersistTimer?.cancel();
+    _draftPersistTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(_persistDraft(
+        conversationId: conversationId,
+        projectId: projectId,
+        text: text,
+      ));
+    });
+  }
+
+  Future<void> _persistDraft({
+    required String conversationId,
+    String? projectId,
+    required String text,
+  }) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final key = DraftService.keyFor(
+        conversationId: conversationId,
+        projectId: projectId,
+      );
+      final attachments = await _stageCurrentAttachments();
+      final references = [
+        for (final citation
+            in ref.read(chatControllerProvider).pendingCitations)
+          citation.toJson(),
+      ];
+      if (text.trim().isEmpty && attachments.isEmpty && references.isEmpty) {
+        await _draftService.clear(db, key);
+        return;
+      }
+      await _draftService.save(
+        db,
+        draftKey: key,
+        conversationId: conversationId,
+        projectId: projectId,
+        text: text,
+        attachments: attachments,
+        references: references,
+      );
+    } catch (_) {}
+  }
+
+  Future<List<DraftAttachment>> _stageCurrentAttachments() async {
+    final staged = <DraftAttachment>[];
+    for (final file in _attachments) {
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        staged.add(DraftAttachment(
+          id: UniqueId.generate('att'),
+          name: file.name,
+          mime: file.extension ?? 'application/octet-stream',
+          path: file.path ?? '',
+          status: file.path == null ? 'missing' : 'ready',
+        ));
+        continue;
+      }
+      staged.add(await _draftService.stageFile(
+        id: UniqueId.generate('att'),
+        name: file.name,
+        mime: file.extension ?? 'application/octet-stream',
+        bytes: bytes,
+      ));
+    }
+    return staged;
   }
 
   void _clearCurrentDraft() {
-    final conversationId = ref.read(chatControllerProvider).conversationId;
-    if (conversationId != null) {
-      _draftsByConversation.remove(conversationId);
-    }
+    final state = ref.read(chatControllerProvider);
+    final conversationId = state.conversationId;
+    if (conversationId == null) return;
+    _draftsByConversation.remove(conversationId);
+    unawaited(_persistDraft(
+      conversationId: conversationId,
+      projectId: state.currentProjectId,
+      text: '',
+    ));
   }
 
-  void _restoreDraft(String? conversationId) {
-    final draft = conversationId == null
+  Future<void> _restoreDraft(String? conversationId) async {
+    var draft = conversationId == null
         ? ''
         : (_draftsByConversation[conversationId] ?? '');
+    if (draft.isEmpty && conversationId != null) {
+      try {
+        final db = await ref.read(databaseProvider.future);
+        final key = DraftService.keyFor(
+          conversationId: conversationId,
+          projectId: ref.read(chatControllerProvider).currentProjectId,
+        );
+        final stored = await _draftService.load(db, key);
+        draft = stored?.text ?? '';
+        if (draft.isNotEmpty) {
+          _draftsByConversation[conversationId] = draft;
+        }
+        if (stored != null) {
+          _restoreDraftAttachments(stored);
+          for (final reference in stored.references) {
+            unawaited(_chat.addFileCitation(FileCitation.fromJson(reference)));
+          }
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
     _controller.value = TextEditingValue(
       text: draft,
       selection: TextSelection.collapsed(offset: draft.length),
@@ -278,7 +385,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     await _chat.newConversation();
     if (!mounted) return;
     _attachments.clear();
-    _restoreDraft(ref.read(chatControllerProvider).conversationId);
+    await _restoreDraft(ref.read(chatControllerProvider).conversationId);
     if (initialText != null && initialText.isNotEmpty) {
       _controller.value = TextEditingValue(
         text: initialText,
@@ -304,7 +411,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       return;
     }
     _attachments.clear();
-    _restoreDraft(conversation.id);
+    await _restoreDraft(conversation.id);
     _resetSessionSkills();
   }
 
@@ -322,6 +429,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void initState() {
     super.initState();
     _controller.addListener(_onSkillInputChanged);
+    _controller.addListener(_rememberCurrentDraft);
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
     // 消费冷启动缓冲的分享内容。
@@ -340,8 +448,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _backgroundService.load().then((c) {
       BackgroundService.bgNotifier.value = c;
     });
-    // 首页能力开关：读取「深度思考 / 智能搜索」的持久化状态。
-    Future.microtask(_loadHomeToggles);
     Future.microtask(_loadInstalledSkills);
   }
 
@@ -474,45 +580,63 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _refreshSkillSuggestions();
   }
 
-  /// 读取首页两个能力开关的持久化状态（默认均开启）。
-  Future<void> _loadHomeToggles() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final deep = prefs.getBool(_kDeepReasoningPref) ?? true;
-      final web = prefs.getBool(_kWebBrowsingPref) ?? true;
-      if (!mounted) return;
-      setState(() {
-        _deepThinking = deep;
-        _webSearch = web;
-      });
-    } catch (_) {
-      // 读取失败时保持默认值（两项默认开启）。
+  Future<void> _showChatModeSheet() async {
+    final state = ref.read(chatControllerProvider);
+    if (state.running) {
+      FloatingToast.show(context, '运行中不能切换模式', tone: ToastTone.warning);
+      return;
     }
+    final selected = await showNexusActionSheet<ChatMode>(
+      context: context,
+      title: '选择当前模式',
+      subtitle: '模式会决定是否允许工具执行，以及计划是否需要确认',
+      items: [
+        for (final mode in ChatMode.values)
+          ActionSheetItem<ChatMode>(
+            icon: _chatModeIcon(mode),
+            title: mode.label,
+            subtitle: mode.description,
+            value: mode,
+            selected: mode == state.mode,
+          ),
+      ],
+    );
+    if (!mounted || selected == null || selected == state.mode) return;
+    _chat.setMode(selected);
+    unawaited(HapticFeedback.selectionClick());
+    FloatingToast.show(context, '已切换到${selected.label}模式');
   }
 
-  Future<void> _setHomeToggle(String key, bool value) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(key, value);
-    } catch (_) {
-      // 持久化失败不阻塞交互，本次会话内仍然生效。
-    }
-  }
+  static IconData _chatModeIcon(ChatMode mode) => switch (mode) {
+        ChatMode.chat => Icons.chat_bubble_outline_rounded,
+        ChatMode.agent => Icons.smart_toy_outlined,
+        ChatMode.plan => Icons.checklist_rounded,
+      };
 
-  void _toggleDeepThinking() {
-    final next = !_deepThinking;
-    setState(() => _deepThinking = next);
-    HapticFeedback.selectionClick();
-    _setHomeToggle(_kDeepReasoningPref, next);
-    FloatingToast.show(context, next ? '深度思考已开启' : '深度思考已关闭');
-  }
-
-  void _toggleWebSearch() {
-    final next = !_webSearch;
-    setState(() => _webSearch = next);
-    HapticFeedback.selectionClick();
-    _setHomeToggle(_kWebBrowsingPref, next);
-    FloatingToast.show(context, next ? '智能搜索已开启' : '智能搜索已关闭');
+  Future<void> _showReasoningModeSheet() async {
+    final state = ref.read(chatControllerProvider);
+    final selected = await showNexusActionSheet<ReasoningMode>(
+      context: context,
+      title: '思考模式',
+      subtitle: '标准适合普通对话；深度适合复杂任务；自动按任务调整',
+      items: [
+        for (final mode in ReasoningMode.values)
+          ActionSheetItem<ReasoningMode>(
+            icon: switch (mode) {
+              ReasoningMode.standard => Icons.bolt_outlined,
+              ReasoningMode.deep => Icons.psychology_outlined,
+              ReasoningMode.auto => Icons.auto_awesome_outlined,
+            },
+            title: mode.label,
+            subtitle: mode.description,
+            value: mode,
+            selected: mode == state.reasoningMode,
+          ),
+      ],
+    );
+    if (selected == null || !mounted || selected == state.reasoningMode) return;
+    await _chat.setReasoningMode(selected);
+    if (mounted) FloatingToast.show(context, '思考模式已设为「${selected.label}」');
   }
 
   /// 会话指标条（对标 DeepSeek 输入区上方的指标胶囊）。
@@ -625,7 +749,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     HapticFeedback.lightImpact();
-    setState(() => _showScrollToBottom = false);
+    setState(() {
+      _showScrollToBottom = false;
+      _unreadNewMessagesCount = 0;
+    });
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent,
       duration: const Duration(milliseconds: 260),
@@ -702,49 +829,101 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (prompt != null && prompt.isNotEmpty) {
       _startNewConversation(initialText: prompt);
     }
+    if (DeepLinkService.instance.drainNewAgent()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).push(NexusPageRoute.detail(
+              builder: (_) => const AgentsPage(autoDescribe: true)));
+        }
+      });
+    }
     if (DeepLinkService.instance.drainMemory()) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => const MemoryPage()));
+              .push(NexusPageRoute.detail(builder: (_) => const MemoryPage()));
         }
       });
     }
   }
 
   /// 检测可续跑的后台任务（进程被杀遗留的 running + 预算暂停的 paused），提示用户是否继续。
+  ///
+  /// 用户点过「忽略」的任务会被记录到 SharedPreferences，之后不再反复打扰
+  /// （同一任务除非被再次发起，否则只在首次冷启动提示一次）。仪表盘的
+  /// 「待我处理」区始终保留这些可恢复任务的常驻入口，因此这里静默忽略不会
+  /// 让任务失去发现途径。
   Future<void> _checkRecoverableTask() async {
     try {
       final tasks = await _chat.recoverableTasks();
       if (!mounted || tasks.isEmpty) return;
-      final resume = await showImmersiveDialog<bool>(
+      final dismissed = await _dismissedRecoveryTaskIds();
+      final candidates =
+          tasks.where((task) => !dismissed.contains(task.id)).toList();
+      if (candidates.isEmpty) return;
+      final info = TaskService().describe(candidates.first);
+      final accessible =
+          await WorkspaceService().isAccessible(info.workspacePath);
+      if (!mounted) return;
+      final resume = await showNexusDialog<_RecoveryDecision>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('发现未完成的任务'),
-          content: const Text('上次有 Agent 任务在后台中断或暂停，是否继续执行？'),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('忽略')),
-            FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('继续执行')),
-          ],
+        builder: (_) => _RecoverableTaskDialog(
+          info: info,
+          accessible: accessible,
         ),
       );
-      if (resume == true && mounted) {
-        await _chat.resumeTask(tasks.first.id, approveTool: _approveTool);
+      if (!mounted) return;
+      switch (resume) {
+        case _RecoveryDecision.ignore:
+          await _dismissRecoveryTask(candidates.first.id);
+        case _RecoveryDecision.rebind:
+          await _pickWorkspace();
+        case _RecoveryDecision.continueExecuting:
+          await _dismissRecoveryTask(candidates.first.id);
+          await _chat.resumeTask(candidates.first.id,
+              approveTool: _approveTool);
+        case null:
+          break;
       }
     } catch (e, stack) {
       debugPrint('恢复检测失败: $e\n$stack');
     }
   }
 
+  static Future<Set<String>> _dismissedRecoveryTaskIds() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getStringList(_dismissedRecoveryTasksKey)?.toSet() ??
+          <String>{};
+    } catch (_) {
+      return <String>{};
+    }
+  }
+
+  static Future<void> _dismissRecoveryTask(String taskId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final current =
+          prefs.getStringList(_dismissedRecoveryTasksKey)?.toList() ??
+              <String>[];
+      if (!current.contains(taskId)) {
+        current.add(taskId);
+        await prefs.setStringList(_dismissedRecoveryTasksKey, current);
+      }
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    for (final approval in _pendingToolApprovals.values) {
+      if (!approval.isCompleted) approval.complete(ToolApproval.reject);
+    }
+    _pendingToolApprovals.clear();
     _shareSub?.cancel();
     _skillSuggestionDebounce?.cancel();
+    _draftPersistTimer?.cancel();
+    _controller.removeListener(_rememberCurrentDraft);
     _controller.removeListener(_onSkillInputChanged);
     _controller.dispose();
     _scrollController.dispose();
@@ -753,6 +932,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused) {
+      _rememberCurrentDraft();
+    }
     if (state == AppLifecycleState.resumed) {
       Future.microtask(_maybeLock);
     }
@@ -771,7 +954,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _showLockFailed(AppLockService lock) async {
-    final retry = await showImmersiveDialog<bool>(
+    final retry = await showNexusDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
@@ -847,7 +1030,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (gotoConfig == true && mounted) {
       await Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const ProviderListPage()),
+        NexusPageRoute.settingsPage(builder: (_) => const ProviderListPage()),
       );
       await _chat.reloadProviderConfig();
       final reloaded = await store.load();
@@ -861,7 +1044,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final input = _controller.text.trim();
     // 纯附件（无文本）同样允许发送，与输入框可发送状态一致（文档 7.4）。
     final canSend = input.isNotEmpty || _attachments.isNotEmpty;
-    if (!canSend || state.running || state.loading) return;
+    if (!canSend || state.loading) return;
+    if (state.running) {
+      final accepted = _chat.steer(input);
+      if (accepted) {
+        _controller.clear();
+        _clearCurrentDraft();
+        if (mounted) {
+          FloatingToast.show(context, '已接收，将在下一检查点生效', tone: ToastTone.success);
+        }
+      } else if (mounted) {
+        FloatingToast.show(context, '任务已结束，请新建后续任务', tone: ToastTone.warning);
+      }
+      return;
+    }
 
     final text = _resolveSlashSkillReferences(input);
     if (text == null) return;
@@ -873,21 +1069,49 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final configured = await _ensureProviderConfigured();
     if (!configured) return;
 
-    _clearCurrentDraft();
-    _controller.clear();
+    final requestId = _pendingClientRequestId ?? UniqueId.generate('req');
+    _pendingClientRequestId = requestId;
     final attachments = List<PlatformFile>.of(_attachments);
+    final originalText = _controller.text;
+    _controller.clear();
     _attachments.clear();
+    if (mounted) setState(() {});
     final taskType = _pendingTaskType;
     final sourceType = _pendingSourceType;
     _pendingTaskType = 'general';
     _pendingSourceType = 'manual';
-    await _chat.send(
-      text: text,
-      attachments: attachments,
-      approveTool: _approveTool,
-      taskType: taskType,
-      sourceType: sourceType,
-    );
+    var sendSucceeded = false;
+    try {
+      await _chat.send(
+        text: text,
+        attachments: attachments,
+        approveTool: _approveTool,
+        taskType: taskType,
+        sourceType: sourceType,
+        clientRequestId: requestId,
+      );
+      sendSucceeded = true;
+      _pendingClientRequestId = null;
+      _clearCurrentDraft();
+    } catch (_) {
+      if (!mounted) return;
+      _controller.value = TextEditingValue(
+        text: originalText,
+        selection: TextSelection.collapsed(offset: originalText.length),
+      );
+      setState(() {
+        _attachments
+          ..clear()
+          ..addAll(attachments);
+      });
+      FloatingToast.show(context, '发送失败，输入已保留', tone: ToastTone.warning);
+    }
+    if (!sendSucceeded && mounted && _controller.text.isEmpty) {
+      _controller.value = TextEditingValue(
+        text: originalText,
+        selection: TextSelection.collapsed(offset: originalText.length),
+      );
+    }
   }
 
   /// Resolves explicit `/skill_name` references before the user message is sent.
@@ -952,12 +1176,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
     required int liveContextTokens,
     required int contextTokens,
     required bool running,
+    List<String> omittedContext = const [],
   }) {
-    if (running || contextTokens <= 0 || liveContextTokens <= 0) {
+    if (omittedContext.isEmpty &&
+        (running || contextTokens <= 0 || liveContextTokens <= 0)) {
       return const SizedBox.shrink();
     }
-    final ratio = liveContextTokens / contextTokens;
-    if (ratio < .8) return const SizedBox.shrink();
+    final ratio = contextTokens <= 0 ? 0.0 : liveContextTokens / contextTokens;
+    if (omittedContext.isEmpty && ratio < .8) return const SizedBox.shrink();
     final warning = ratio >= .95;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
@@ -982,9 +1208,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    warning
-                        ? '上下文已接近容量，下一轮可能压缩较早记录'
-                        : '上下文使用较高，较早记录将在接近上限时自动压缩',
+                    omittedContext.isNotEmpty
+                        ? '因预算省略：${omittedContext.join('、')}'
+                        : warning
+                            ? '上下文已接近容量，下一轮可能压缩较早记录'
+                            : '上下文使用较高，较早记录将在接近上限时自动压缩',
                     style: const TextStyle(fontSize: 12, height: 1.4),
                   ),
                 ),
@@ -999,34 +1227,48 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _stop() => _chat.stop();
 
-  Future<void> _steerCurrentRun() async {
-    final input = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('补充运行指令'),
-        content: TextField(
-          controller: input,
-          autofocus: true,
-          minLines: 1,
-          maxLines: 4,
-          decoration: const InputDecoration(hintText: '下一轮执行时生效'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, input.text),
-            child: const Text('加入'),
-          ),
-        ],
-      ),
-    );
-    input.dispose();
-    if (!mounted || text == null || text.trim().isEmpty) return;
-    _chat.steer(text);
+  Future<void> _citeWorkspaceFile(String relativePath) async {
+    final state = ref.read(chatControllerProvider);
+    final workspace = state.currentWorkspacePath;
+    final projectId = state.currentProjectId;
+    if (workspace == null || projectId == null) return;
+    try {
+      final citation = await const ProjectContextService().cite(
+        projectId: projectId,
+        workspacePath: workspace,
+        relativePath: relativePath,
+      );
+      await _chat.addFileCitation(citation);
+      if (!mounted) return;
+      FloatingToast.show(context, '已引用 ${citation.displayLabel}',
+          tone: ToastTone.success);
+    } catch (error) {
+      if (mounted) {
+        FloatingToast.show(context, '引用失败：$error', tone: ToastTone.warning);
+      }
+    }
+  }
+
+  void _restoreDraftAttachments(ConversationDraft draft) {
+    final restored = <PlatformFile>[];
+    var missing = 0;
+    for (final item in draft.attachments) {
+      if (item.status == 'missing' || item.path.isEmpty) {
+        missing++;
+        continue;
+      }
+      restored.add(PlatformFile(name: item.name, path: item.path, size: 0));
+    }
+    if (!mounted) return;
+    setState(() {
+      _attachments
+        ..clear()
+        ..addAll(restored);
+    });
+    if (missing > 0) {
+      FloatingToast.show(context, '有 $missing 个附件失效，请重新选择',
+          tone: ToastTone.warning);
+    }
   }
 
   String _buildMarkdown(ChatState state) {
@@ -1094,37 +1336,46 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// 统一会话上下文面板：模型/Agent/工作区/思考程度/计划模式一处调整。
   void _showSessionContext() {
-    showImmersiveSheet<void>(
+    showNexusSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => SessionContextSheet(
-        state: ref.read(chatControllerProvider),
-        onSelectModel: () {
-          Navigator.pop(sheetContext);
-          _switchProvider();
-        },
-        onSelectAgent: () {
-          Navigator.pop(sheetContext);
-          _selectAgent();
-        },
-        onPickWorkspace: () {
-          Navigator.pop(sheetContext);
-          _pickWorkspace();
-        },
-        onClearWorkspace: () {
-          ref.read(chatControllerProvider.notifier).setWorkspace(null);
-          Navigator.pop(sheetContext);
-          FloatingToast.show(context, '已解绑工作区', tone: ToastTone.success);
-        },
-        onReasoningEffort: () {
-          Navigator.pop(sheetContext);
-          _showReasoningEffortSheet();
-        },
-        onTogglePlanMode: () {
-          ref
-              .read(chatControllerProvider.notifier)
-              .setPlanMode(!ref.read(chatControllerProvider).planMode);
-        },
+      builder: (sheetContext) => Consumer(
+        builder: (context, ref, _) => SessionContextSheet(
+          state: ref.watch(chatControllerProvider),
+          onSelectModel: () {
+            Navigator.pop(sheetContext);
+            _switchProvider();
+          },
+          onSelectAgent: () {
+            Navigator.pop(sheetContext);
+            _selectAgent();
+          },
+          onPickWorkspace: () {
+            Navigator.pop(sheetContext);
+            _pickWorkspace();
+          },
+          onClearWorkspace: () {
+            ref.read(chatControllerProvider.notifier).setWorkspace(null);
+            Navigator.pop(sheetContext);
+            FloatingToast.show(context, '已解绑工作区', tone: ToastTone.success);
+          },
+          onSelectReasoningMode: () {
+            Navigator.pop(sheetContext);
+            _showReasoningModeSheet();
+          },
+          onToggleWebSearch: (enabled) {
+            _chat.setWebSearchEnabled(enabled);
+          },
+          onTogglePlanMode: () {
+            ref
+                .read(chatControllerProvider.notifier)
+                .setPlanMode(!ref.read(chatControllerProvider).planMode);
+          },
+          onSelectMode: () {
+            Navigator.pop(sheetContext);
+            _showChatModeSheet();
+          },
+        ),
       ),
     );
   }
@@ -1135,7 +1386,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final currentId = state.activeProviderId;
     final profiles = await store.loadAll();
     if (!mounted) return;
-    final selected = await showImmersiveSheet<ModelPickerSelection>(
+    final selected = await showNexusSheet<ModelPickerSelection>(
       context: context,
       isScrollControlled: true,
       builder: (_) => ModelPickerSheet(
@@ -1143,21 +1394,22 @@ class _ChatPageState extends ConsumerState<ChatPage>
         selectedId: currentId,
         reasoningEffort: state.activeReasoningEffort,
         planMode: state.planMode,
+        mode: state.mode,
         onOpenSettings: () {
           Navigator.of(context).pop();
           _openModelConfig();
         },
         onOpenTools: () {
           Navigator.of(context).pop();
-          Navigator.of(context)
-              .push(MaterialPageRoute(builder: (_) => const McpServersPage()));
+          Navigator.of(context).push(
+              NexusPageRoute.detail(builder: (_) => const McpServersPage()));
         },
       ),
     );
     if (selected == null || !mounted) return;
     await _chat.switchProvider(selected.profile);
-    if (selected.planMode != state.planMode) {
-      _chat.setPlanMode(selected.planMode);
+    if (selected.mode != state.mode) {
+      _chat.setMode(selected.mode);
     }
     if (mounted) {
       FloatingToast.show(
@@ -1167,7 +1419,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   void _showAvatarMenu() {
     final state = ref.read(chatControllerProvider);
-    showImmersiveActionSheet<void>(
+    showNexusActionSheet<void>(
       context: context,
       title: '更多操作',
       scrollable: true,
@@ -1216,7 +1468,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           subtitle: '查看任务状态、结果与恢复记录',
           onTap: () {
             Navigator.of(context).push(
-              MaterialPageRoute(
+              NexusPageRoute.detail(
                 builder: (_) => DevelopmentTasksPage(
                   onConversationSelected: (conversation) async {
                     Navigator.of(context).pop();
@@ -1228,21 +1480,29 @@ class _ChatPageState extends ConsumerState<ChatPage>
           },
         ),
         ActionSheetItem(
+          icon: Icons.account_tree_outlined,
+          title: '项目',
+          subtitle: '新建、导入或打开开发项目',
+          onTap: _openProjectPicker,
+        ),
+        ActionSheetItem(
           icon: Icons.build_circle_outlined,
           title: '开发工作台',
           subtitle: '一键执行构建模板并查看产物校验和',
           onTap: () async {
-            final workspace =
-                ref.read(chatControllerProvider).currentWorkspacePath;
+            final chat = ref.read(chatControllerProvider);
+            final workspace = chat.currentWorkspacePath;
             if (workspace == null || workspace.isEmpty) {
               if (mounted) {
-                FloatingToast.show(context, '请先选择工作区', tone: ToastTone.warning);
+                FloatingToast.show(context, '请先选择项目', tone: ToastTone.warning);
               }
               return;
             }
-            await Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) =>
-                  DevelopmentWorkbenchPage(workspacePath: workspace),
+            await Navigator.of(context).push(NexusPageRoute.workspace(
+              builder: (_) => DevelopmentWorkbenchPage(
+                workspacePath: workspace,
+                projectId: chat.currentProjectId,
+              ),
             ));
           },
         ),
@@ -1252,7 +1512,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           subtitle: 'Token 消耗、费用指标与运行态',
           onTap: () {
             Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const DashboardPage()),
+              NexusPageRoute.detail(builder: (_) => const DashboardPage()),
             );
           },
         ),
@@ -1309,118 +1569,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
-  /// 附件入口：底部菜单在「拍照 / 相册 / 多图 / 文件 / 粘贴图片」间选择。
-  Future<void> _showAttachmentMenu() async {
-    final choice = await showImmersiveActionSheet<String>(
-      context: context,
-      title: '添加附件',
-      items: [
-        const ActionSheetItem(
-          icon: Icons.photo_camera_outlined,
-          title: AppStrings.takePhoto,
-          value: 'camera',
-        ),
-        const ActionSheetItem(
-          icon: Icons.photo_library_outlined,
-          title: AppStrings.fromGallery,
-          value: 'gallery',
-        ),
-        const ActionSheetItem(
-          icon: Icons.collections_outlined,
-          title: '多图选择',
-          value: 'multi',
-        ),
-        const ActionSheetItem(
-          icon: Icons.attach_file,
-          title: AppStrings.addFile,
-          value: 'file',
-        ),
-        const ActionSheetItem(
-          icon: Icons.content_paste_outlined,
-          title: '粘贴图片',
-          value: 'paste',
-        ),
-        const ActionSheetItem(
-          icon: Icons.grid_view_rounded,
-          title: '更多工具',
-          subtitle: '命令、MCP、终端、环境与仪表盘',
-          value: 'tools',
-        ),
-        ActionSheetItem(
-          icon: Icons.checklist_rounded,
-          title:
-              ref.read(chatControllerProvider).planMode ? '关闭计划模式' : '开启计划模式',
-          value: 'plan',
-        ),
-        if (ref.read(chatControllerProvider).running)
-          const ActionSheetItem(
-            icon: Icons.playlist_add_rounded,
-            title: '补充运行指令',
-            subtitle: '不打断当前运行，下一轮执行时生效',
-            value: 'steer',
-          ),
-      ],
-    );
-    if (!mounted || choice == null) return;
-    switch (choice) {
-      case 'camera':
-        await _pickImage(ImageSource.camera);
-      case 'gallery':
-        await _pickImage(ImageSource.gallery);
-      case 'multi':
-        await _pickMultiImage();
-      case 'file':
-        await _pickFiles();
-      case 'paste':
-        await _pasteClipboardImage();
-      case 'tools':
-        if (mounted) _openToolsSheet();
-      case 'plan':
-        _chat.setPlanMode(!ref.read(chatControllerProvider).planMode);
-      case 'steer':
-        await _steerCurrentRun();
-    }
-  }
-
-  /// 「更多工具」网格：承接原先输入区「工具」chip 的全部能力
-  /// （命令库 / MCP / 终端 / 环境 / 仪表盘 / 计划模式 / 审批模式）。
-  ///
-  /// 对标 DeepSeek 后输入区只保留「深度思考 / 智能搜索」两个 chip，
-  /// 这些进阶入口统一收进「＋」菜单，避免首页出现第三个 chip。
-  void _openToolsSheet() {
-    final state = ref.read(chatControllerProvider);
-    InputToolGridSheet.show(
-      context,
-      onCommandMenu: _openPromptLibrary,
-      onMcpMenu: () => Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const McpServersPage())),
-      onTerminalPreview: _openTerminal,
-      onEnvSetup: _openEnvSetup,
-      onOpenDashboard: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => DashboardPage(
-            onConversationSelected: (c) => _switchConversation(c),
-          ),
-        ),
-      ),
-      onOpenWorkbench: () {
-        Navigator.of(context).pop();
-        final workspace = ref.read(chatControllerProvider).currentWorkspacePath;
-        if (workspace == null || workspace.isEmpty) {
-          FloatingToast.show(context, '请先选择工作区', tone: ToastTone.warning);
-          return;
-        }
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => DevelopmentWorkbenchPage(workspacePath: workspace),
-        ));
-      },
-      planModeEnabled: state.planMode,
-      onPlanModeToggle: () => _chat.setPlanMode(!state.planMode),
-      approvalMode: state.approvalMode,
-      onApprovalModeTap: _selectApprovalMode,
-    );
-  }
-
   /// 拍照/相册：压缩到 1280px / 80% 质量，控制 base64 体积，复用现有附件管线。
   Future<void> _pickImage(ImageSource source) async {
     try {
@@ -1451,7 +1599,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (_selectingMessageIndex != null) {
       setState(() => _selectingMessageIndex = null);
     }
-    final action = await showImmersiveActionSheet<String>(
+    final action = await showNexusActionSheet<String>(
       context: context,
       title: AppStrings.messageActions,
       items: [
@@ -1469,6 +1617,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
             value: 'edit',
           ),
         const ActionSheetItem(
+          icon: Icons.call_split_outlined,
+          title: '新建分支',
+          subtitle: '只复制到此的对话上下文，不重放工具、不改文件',
+          value: 'fork',
+        ),
+        const ActionSheetItem(
           icon: Icons.copy_outlined,
           title: AppStrings.copyFullText,
           value: 'copy',
@@ -1485,6 +1639,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (!mounted || action == null) return;
     if (action == 'edit') {
       await _editAndResend(messageIndex, message);
+    } else if (action == 'fork') {
+      try {
+        await _chat.forkFromMessage(messageIndex);
+        if (mounted) {
+          FloatingToast.show(context, '已新建会话分支，不会重放工具或改文件',
+              tone: ToastTone.success);
+        }
+      } catch (error) {
+        if (mounted) {
+          FloatingToast.show(context, '无法创建分支：$error', tone: ToastTone.warning);
+        }
+      }
     } else if (action == 'speak') {
       await _toggleSpeak(message.text);
     } else if (action == 'select') {
@@ -1535,7 +1701,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _editAndResend(int messageIndex, ChatMessage message) async {
     if (ref.read(chatControllerProvider).running) return;
     final controller = TextEditingController(text: message.text);
-    final submitted = await showImmersiveDialog<bool>(
+    final submitted = await showNexusDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('编辑并重发'),
@@ -1572,75 +1738,104 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
-  /// A5：从剪贴板粘贴图片为附件。
-  Future<void> _pasteClipboardImage() async {
-    try {
-      final clipboard = SystemClipboard.instance;
-      if (clipboard == null) {
-        if (mounted) FloatingToast.error(context, '剪贴板不可用');
-        return;
-      }
-      final reader = await clipboard.read();
-      FileFormat format;
-      String ext;
-      if (reader.canProvide(Formats.png)) {
-        format = Formats.png;
-        ext = 'png';
-      } else if (reader.canProvide(Formats.jpeg)) {
-        format = Formats.jpeg;
-        ext = 'jpg';
-      } else {
-        if (mounted) FloatingToast.error(context, '剪贴板没有图片');
-        return;
-      }
-      final bytes = await _readClipboardFile(reader, format);
-      if (bytes == null) {
-        if (mounted) FloatingToast.error(context, '无法读取剪贴板图片');
-        return;
-      }
-      if (mounted) {
-        setState(() => _attachments.add(PlatformFile(
-            name: '剪贴板图片.$ext', size: bytes.length, bytes: bytes)));
-        FloatingToast.show(context, '已粘贴图片', tone: ToastTone.success);
-      }
-    } catch (e) {
-      if (mounted) {
-        FloatingToast.error(context, '无法读取剪贴板，请手动选图', rawDetail: e.toString());
-      }
-    }
-  }
-
-  /// 通过 super_clipboard 的 getFile 回调读取图片字节。
-  Future<Uint8List?> _readClipboardFile(
-      ClipboardReader reader, FileFormat format) {
-    final completer = Completer<Uint8List?>();
-    reader.getFile(
-      format,
-      (file) async {
-        try {
-          completer.complete(await file.readAll());
-        } catch (_) {
-          completer.complete(null);
-        }
-      },
-      onError: (_) {
-        if (!completer.isCompleted) completer.complete(null);
-      },
-    );
-    return completer.future
-        .timeout(const Duration(seconds: 8), onTimeout: () => null);
-  }
-
   Future<ToolApproval> _approveTool(
     ToolCall call,
     ToolRisk risk,
     bool sensitive,
-  ) =>
-      promptToolApproval(context, ref, call, risk, sensitive);
+  ) async {
+    if (!mounted) return ToolApproval.reject;
+    final previous = _pendingToolApprovals[call.id];
+    if (previous != null && !previous.isCompleted) {
+      previous.complete(ToolApproval.reject);
+    }
+    final approval = Completer<ToolApproval>();
+    _pendingToolApprovals[call.id] = approval;
+    try {
+      return await approval.future;
+    } finally {
+      if (identical(_pendingToolApprovals[call.id], approval)) {
+        _pendingToolApprovals.remove(call.id);
+      }
+    }
+  }
+
+  bool _resolveToolApproval(String callId, ToolApproval decision) {
+    final approval = _pendingToolApprovals[callId];
+    if (approval == null || approval.isCompleted) return false;
+    approval.complete(decision);
+    return true;
+  }
+
+  void _confirmToolActivity(ToolActivity activity) {
+    if (!_resolveToolApproval(activity.call.id, ToolApproval.allowOnce)) {
+      FloatingToast.show(context, '该审批已失效，请重试任务', tone: ToastTone.warning);
+    }
+  }
+
+  void _rejectToolActivity(ToolActivity activity) {
+    if (!_resolveToolApproval(activity.call.id, ToolApproval.reject)) {
+      FloatingToast.show(context, '该审批已失效，请重试任务', tone: ToastTone.warning);
+    }
+  }
+
+  void _reviewToolActivity(ToolActivity activity) {
+    if (!_pendingToolApprovals.containsKey(activity.call.id)) {
+      FloatingToast.show(context, '该审批已失效，请重试任务', tone: ToastTone.warning);
+      return;
+    }
+    unawaited(_showToolApprovalDetails(activity));
+  }
+
+  Future<void> _showToolApprovalDetails(ToolActivity activity) async {
+    final decision = await promptToolApproval(
+      context,
+      ref,
+      activity.call,
+      activity.risk,
+      activity.sensitive,
+    );
+    if (!mounted) return;
+    _resolveToolApproval(activity.call.id, decision);
+  }
+
+  void _retryToolActivity(ToolActivity activity) {
+    final state = ref.read(chatControllerProvider);
+    if (state.running) {
+      FloatingToast.show(context, '当前任务仍在运行', tone: ToastTone.warning);
+      return;
+    }
+    unawaited(_confirmToolRetry(activity));
+  }
+
+  Future<void> _confirmToolRetry(ToolActivity activity) async {
+    final unknownEffect = activity.effect == ToolEffect.unknown;
+    final confirmed = await showNexusDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('重试上一次任务？'),
+        content: Text(
+          unknownEffect
+              ? '该操作的副作用无法确认。请先检查目标状态，避免重复写入后再重试。'
+              : '将重新运行上一条请求和其工具步骤。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认重试'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) _regenerate();
+  }
 
   Future<void> _selectApprovalMode() async {
     final currentMode = ref.read(chatControllerProvider).approvalMode;
-    final selected = await showImmersiveActionSheet<ApprovalMode>(
+    final selected = await showNexusActionSheet<ApprovalMode>(
       context: context,
       title: '操作权限',
       items: [
@@ -1682,7 +1877,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final database = await ref.read(databaseProvider.future);
     final agents = await database.allAgents();
     if (!mounted) return;
-    final selected = await showImmersiveSheet<Agent>(
+    final selected = await showNexusSheet<Agent>(
       context: context,
       builder: (context) => SafeArea(
         child: ListView(
@@ -1712,7 +1907,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _openHistory() async {
     final selected = await Navigator.of(context).push<Conversation>(
-      MaterialPageRoute(builder: (_) => const HistoryPage()),
+      NexusPageRoute.detail(builder: (_) => const HistoryPage()),
     );
     if (selected == null || !mounted) return;
     await _switchConversation(selected);
@@ -1720,7 +1915,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _openPromptLibrary() async {
     final result = await Navigator.of(context).push<PromptApplyResult>(
-      MaterialPageRoute(builder: (_) => const PromptLibraryPage()),
+      NexusPageRoute.detail(builder: (_) => const PromptLibraryPage()),
     );
     if (result == null || !mounted) return;
     if (result.mode == PromptApplyMode.systemPrompt) {
@@ -1736,71 +1931,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
-  Future<void> _showReasoningEffortSheet() async {
-    final store = ref.read(providerConfigStoreProvider);
-    final config = await store.load();
-    if (!mounted) return;
-    final effort = await showImmersiveSheet<ReasoningEffort>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(children: [
-                Icon(Icons.psychology_outlined),
-                SizedBox(width: 12),
-                Expanded(
-                    child: Text('思考程度',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w500))),
-              ]),
-              const SizedBox(height: 4),
-              const Text(
-                  '仅推理模型（OpenAI o1/o3/GPT-5、Claude thinking、Gemini 2.0 thinking）生效，其他模型忽略。',
-                  style: TextStyle(
-                      fontSize: 12, color: AppTheme.mutedOnGlassLight)),
-              const SizedBox(height: 16),
-              Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: ReasoningEffort.values
-                      .map((e) => ChoiceChip(
-                            label: Text(_effortLabel(e)),
-                            selected: config.reasoningEffort == e,
-                            onSelected: (_) => Navigator.pop(context, e),
-                          ))
-                      .toList()),
-            ],
-          ),
-        ),
-      ),
-    );
-    if (effort == null || !mounted) return;
-    await store.save(config.copyWith(reasoningEffort: effort));
-    _chat.setReasoningEffort(effort);
-    if (mounted) {
-      FloatingToast.show(context, '思考程度已设为「${_effortLabel(effort)}」');
-    }
-  }
-
-  String _effortLabel(ReasoningEffort effort) {
-    switch (effort) {
-      case ReasoningEffort.auto:
-        return '自动';
-      case ReasoningEffort.off:
-        return '关';
-      case ReasoningEffort.low:
-        return '低';
-      case ReasoningEffort.medium:
-        return '中';
-      case ReasoningEffort.high:
-        return '高';
-    }
-  }
-
   // --- 渲染 ---
 
   void _fillSuggestion(QuickAction action) {
@@ -1810,6 +1940,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
     _pendingSourceType = 'quick_action';
     _pendingTaskType = _taskTypeForSuggestion(action.label);
+    if (_pendingTaskType != 'general') {
+      _chat.setMode(ChatMode.agent);
+    }
     final state = ref.read(chatControllerProvider);
     final needsWorkspace =
         !(state.currentWorkspacePath?.trim().isNotEmpty ?? false) &&
@@ -1824,6 +1957,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   String _taskTypeForSuggestion(String text) {
+    if (text.contains('实现并验证') ||
+        text.contains('测试与修复') ||
+        text.contains('构建')) {
+      return 'implement_and_verify';
+    }
     if (text.contains('项目') || text.contains('工作区')) {
       return 'project_analysis';
     }
@@ -1855,7 +1993,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final hasWorkspace = ws != null && ws.isNotEmpty;
     final suggestions = <QuickAction>[
       if (!hasWorkspace)
-        const QuickAction(id: 'select_workspace', label: '选择工作区'),
+        const QuickAction(id: 'select_workspace', label: '选择项目'),
       const QuickAction(label: '解读项目'),
       const QuickAction(label: '修复问题'),
       const QuickAction(
@@ -1871,6 +2009,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return ChatEmptyState(
       suggestions: suggestions,
       hasWorkspace: hasWorkspace,
+      providerConfigured: state.providerConfigured,
       keyboardVisible: keyboardVisible,
       workspaceLabel: hasWorkspace ? p.basename(ws) : null,
       modelLabel: state.activeModel.isNotEmpty
@@ -1879,6 +2018,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
       onSuggestionTap: _fillSuggestion,
       onWorkspaceTap: _handleTopBarWorkspace,
       onModelTap: _switchProvider,
+      onConfigureModel: _configureModel,
+      onAnalyzeWorkspace: () =>
+          _fillSuggestion(const QuickAction(label: '解读项目')),
     );
   }
 
@@ -1911,6 +2053,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if (previous == null) return;
       final messageAdded = next.messages.length > previous.messages.length;
       final completed = previous.running && !next.running;
+      if (!_isNearBottom() && messageAdded) {
+        setState(() {
+          _unreadNewMessagesCount +=
+              next.messages.length - previous.messages.length;
+          _showScrollToBottom = true;
+        });
+      }
       if (next.running || messageAdded || completed) {
         _scheduleFollowTail(
             animate: (messageAdded || completed) && !next.running);
@@ -1945,6 +2094,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
             ref.watch(chatControllerProvider.select((s) => s.paused));
         final planMode =
             ref.watch(chatControllerProvider.select((s) => s.planMode));
+        final chatMode =
+            ref.watch(chatControllerProvider.select((s) => s.mode));
         final approvalMode =
             ref.watch(chatControllerProvider.select((s) => s.approvalMode));
         final planState =
@@ -1959,11 +2110,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
             ref.watch(chatControllerProvider.select((s) => s.totalSteps));
         final sessionSkills = ref.watch(
             chatControllerProvider.select((s) => s.sessionSkillInstructions));
+        final omittedContext =
+            ref.watch(chatControllerProvider.select((s) => s.omittedContext));
 
-        if (loading) {
-          return const Scaffold(
-              body: Center(child: CircularProgressIndicator(strokeWidth: 2)));
-        }
         return Scaffold(
           key: _scaffoldKey,
           backgroundColor: Colors.transparent, // Background handled by stack
@@ -1984,7 +2133,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
             onWorkspaceTap: _handleTopBarWorkspace,
             onModelTap: _switchProvider,
             onMcpMenu: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const McpServersPage()),
+              NexusPageRoute.detail(builder: (_) => const McpServersPage()),
             ),
             onPromptLibrary: _openPromptLibrary,
             onPlanModeToggle: () => _chat.setPlanMode(!planMode),
@@ -2053,7 +2202,6 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     const SizedBox(
                         height: kCapsuleTopBarHeight +
                             4), // Clear the absolute positioned top bar
-                    // 计划面板改为 Stack 顶层悬浮，避免挤压消息区和被顶部蒙版覆盖。
                     if (activityLog.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -2063,157 +2211,98 @@ class _ChatPageState extends ConsumerState<ChatPage>
                               style: Theme.of(context).textTheme.bodySmall),
                         ),
                       ),
+                    if ((planState != null &&
+                            planState.status != 'cancelled') ||
+                        toolActivities.isNotEmpty)
+                      Padding(
+                        key: const ValueKey('chat_activity_dock'),
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (planState != null &&
+                                planState.status != 'cancelled')
+                              PlanPanel(
+                                plan: planState,
+                                goal: planState.steps.isEmpty
+                                    ? null
+                                    : planState.steps.first.description,
+                                onApprove: () => _chat.respondToPlan(true),
+                                onCancel: () => _chat.respondToPlan(false),
+                                onResume: () => _chat.resumeFromBudgetPause(
+                                    approveTool: _approveTool),
+                              ),
+                            if (toolActivities.isNotEmpty)
+                              ToolActivityTimeline(
+                                activities: toolActivities,
+                                running: running,
+                                compact: true,
+                                onConfirm: _confirmToolActivity,
+                                onReject: _rejectToolActivity,
+                                onReview: _reviewToolActivity,
+                                onRetry: _retryToolActivity,
+                              ),
+                          ],
+                        ),
+                      ),
                     Expanded(
                       child: Stack(
                         children: [
-                          messages.isEmpty
-                              ? _emptyState(context)
-                              : NotificationListener<ScrollNotification>(
-                                  // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
-                                  onNotification: _handleScrollNotification,
-                                  child: Consumer(
-                                    builder: (context, ref, _) {
-                                      // 高频流式文本在此单独订阅：只有本子树随
-                                      // liveReply 更新而重建，页面其余部分不动。
-                                      final liveReply =
-                                          ref.watch(liveReplyProvider);
-                                      return ChatMessageList(
-                                        sessionKey: conversationId,
-                                        messages: messages,
-                                        liveReply: liveReply,
-                                        controller: _scrollController,
-                                        running: running,
-                                        onLoadOlder: () =>
-                                            _chat.loadOlderMessages(),
-                                        onLongPress: (index) {
-                                          if (!_longPressHintShown) {
-                                            _longPressHintShown = true;
-                                          }
-                                          _showMessageActions(index);
+                          loading
+                              ? const NexusChatMessageSkeleton()
+                              : (messages.isEmpty
+                                  ? _emptyState(context)
+                                  : NotificationListener<ScrollNotification>(
+                                      // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
+                                      onNotification: _handleScrollNotification,
+                                      child: Consumer(
+                                        builder: (context, ref, _) {
+                                          // 高频流式文本在此单独订阅：只有本子树随
+                                          // liveReply 更新而重建，页面其余部分不动。
+                                          final liveReply =
+                                              ref.watch(liveReplyProvider);
+                                          return ChatMessageList(
+                                            sessionKey: conversationId,
+                                            messages: messages,
+                                            liveReply: liveReply,
+                                            controller: _scrollController,
+                                            running: running,
+                                            onLoadOlder: () =>
+                                                _chat.loadOlderMessages(),
+                                            onLongPress: (index) {
+                                              if (!_longPressHintShown) {
+                                                _longPressHintShown = true;
+                                              }
+                                              _showMessageActions(index);
+                                            },
+                                            onRegenerate: _regenerate,
+                                            onEditPrompt: _editLatestQuestion,
+                                            onSwitchModel: _switchProvider,
+                                            onSpeak:
+                                                TtsService.instance.isAvailable
+                                                    ? _speakMessageAt
+                                                    : null,
+                                            speakingListenable: TtsService
+                                                .instance.speakingListenable,
+                                            selectionIndex:
+                                                _selectingMessageIndex,
+                                            onExitSelection: () => setState(
+                                                () => _selectingMessageIndex =
+                                                    null),
+                                            trailingWidgets: const [],
+                                          );
                                         },
-                                        onRegenerate: _regenerate,
-                                        onEditPrompt: _editLatestQuestion,
-                                        onSwitchModel: _switchProvider,
-                                        onSpeak: TtsService.instance.isAvailable
-                                            ? _speakMessageAt
-                                            : null,
-                                        speakingListenable: TtsService
-                                            .instance.speakingListenable,
-                                        selectionIndex: _selectingMessageIndex,
-                                        onExitSelection: () => setState(() =>
-                                            _selectingMessageIndex = null),
-                                        trailingWidgets: [
-                                          if (planState != null &&
-                                              planState.status != 'cancelled')
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                  bottom: 12),
-                                              child: PlanPanel(
-                                                plan: planState,
-                                                goal: planState.steps.isEmpty
-                                                    ? null
-                                                    : planState.steps.first
-                                                        .description,
-                                                onApprove: () =>
-                                                    _chat.respondToPlan(true),
-                                                onCancel: () =>
-                                                    _chat.respondToPlan(false),
-                                                onResume: () =>
-                                                    _chat.resumeFromBudgetPause(
-                                                        approveTool:
-                                                            _approveTool),
-                                              ),
-                                            ),
-                                          if (toolActivities.isNotEmpty)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                  bottom: 12),
-                                              child: ToolActivityTimeline(
-                                                activities: toolActivities,
-                                                running: running,
-                                              ),
-                                            ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ),
+                                      ),
+                                    )),
                           if (_showScrollToBottom)
                             Positioned(
                               right: 16,
                               bottom: 16,
-                              child: ImmersiveSurface(
-                                level: ImmersiveMaterialLevel.thick,
-                                borderRadius:
-                                    BorderRadius.circular(AppTokens.radiusPill),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: _scrollToBottom,
-                                    borderRadius: BorderRadius.circular(
-                                        AppTokens.radiusPill),
-                                    child: Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: running ? 12 : 8,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primaryContainer
-                                            .withValues(alpha: 0.90),
-                                        borderRadius: BorderRadius.circular(
-                                            AppTokens.radiusPill),
-                                        border: Border.all(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary
-                                              .withValues(alpha: 0.35),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if (running) ...[
-                                            SizedBox(
-                                              width: 12,
-                                              height: 12,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                valueColor:
-                                                    AlwaysStoppedAnimation<
-                                                        Color>(
-                                                  Theme.of(context)
-                                                      .colorScheme
-                                                      .primary,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              '生成中 · 回到底部',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w500,
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .onPrimaryContainer,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 2),
-                                          ],
-                                          Icon(
-                                            Icons.arrow_downward_rounded,
-                                            size: 16,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onPrimaryContainer,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                              child: NexusBackToLatestButton(
+                                onTap: _scrollToBottom,
+                                unreadCount: _unreadNewMessagesCount,
+                                isRunning: running,
                               ),
                             ),
                         ],
@@ -2240,8 +2329,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                     height: 52,
                                     margin:
                                         const EdgeInsets.only(top: 4, right: 4),
-                                    child: ImmersiveSurface(
-                                      level: ImmersiveMaterialLevel.thin,
+                                    child: NexusSurface(
+                                      level: SurfaceLevel.thin,
                                       borderRadius: BorderRadius.circular(8),
                                       child: Container(
                                         decoration: BoxDecoration(
@@ -2304,6 +2393,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       liveContextTokens: liveContextTokens,
                       contextTokens: contextTokens,
                       running: running,
+                      omittedContext: omittedContext,
                     ),
                     // 技能提示只占一个槽位（/ 补全 > 自动建议 > 已加载），
                     // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
@@ -2322,14 +2412,37 @@ class _ChatPageState extends ConsumerState<ChatPage>
                       ),
                       onSend: _send,
                       onStop: _stop,
-                      onAttachmentMenu: _showAttachmentMenu,
-                      deepThinking: _deepThinking,
-                      onDeepThinkingToggle: _toggleDeepThinking,
-                      webSearch: _webSearch,
-                      onWebSearchToggle: _toggleWebSearch,
+                      onPause: () => _chat.pause(),
+                      onResume: () => _chat.resume(),
+                      isPaused: paused,
+                      onAttachmentMenu: () {
+                        setState(() => _attachmentPanelExpanded =
+                            !_attachmentPanelExpanded);
+                      },
+                      approvalMode: approvalMode,
+                      onApprovalModeTap: _selectApprovalMode,
+                      modeLabel: chatMode.label,
+                      onModeTap: _showSessionContext,
                       planModeEnabled: planMode,
                       hasAttachments: _attachments.isNotEmpty,
+                      isAttachmentExpanded: _attachmentPanelExpanded,
                     ),
+                    if (_attachmentPanelExpanded)
+                      AttachmentDrawerPanel(
+                        attachments: _attachments,
+                        onCamera: () async {
+                          setState(() => _attachmentPanelExpanded = false);
+                          await _pickImage(ImageSource.camera);
+                        },
+                        onGallery: () async {
+                          setState(() => _attachmentPanelExpanded = false);
+                          await _pickMultiImage();
+                        },
+                        onFile: () async {
+                          setState(() => _attachmentPanelExpanded = false);
+                          await _pickFiles();
+                        },
+                      ),
                   ]);
                   if (wide) {
                     column = Align(
@@ -2353,13 +2466,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
                     maxContextTokens: contextTokens,
                     workspaceLabel: currentWorkspacePath == null ||
                             currentWorkspacePath.isEmpty
-                        ? null
-                        : p.basename(currentWorkspacePath),
+                        ? '未选择项目'
+                        : (ref
+                                .read(chatControllerProvider)
+                                .currentProjectName ??
+                            p.basename(currentWorkspacePath)),
                     modelLabel: activeModel.isNotEmpty
                         ? activeModel
                         : (activeProviderName.isEmpty
-                            ? null
+                            ? '未配置模型'
                             : activeProviderName),
+                    modeLabel: chatMode.label,
                     sessionTitle: messages.isEmpty ? null : conversationTitle,
                     runningStage: _currentRunningStage(
                       toolActivities: toolActivities,
@@ -2383,6 +2500,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         _scaffoldKey.currentState?.openDrawer(),
                     onTitleTap: _showSessionContext,
                     onWorkspaceTap: _handleTopBarWorkspace,
+                    onModeTap: _showChatModeSheet,
                   ),
                 ),
               ),
@@ -2399,4 +2517,196 @@ class _InstalledSkill {
 
   final SkillPack pack;
   final SkillMetadata metadata;
+}
+
+/// 可恢复任务提示弹窗的用户选择。
+enum _RecoveryDecision {
+  /// 忽略本次提示（同一任务后续冷启动不再弹出）。
+  ignore,
+
+  /// 项目目录不可访问，跳去重新绑定工作区。
+  rebind,
+
+  /// 从断点继续执行该任务。
+  continueExecuting,
+}
+
+/// 冷启动检测到可恢复任务时的提示卡片。
+///
+/// 与原生 AlertDialog 对齐的语义，但视觉上贴合全站 Nexus 规范：状态徽标、
+/// 工作区可访问状态醒目呈现，暂停原因在暂停任务上优先展示。
+class _RecoverableTaskDialog extends StatelessWidget {
+  const _RecoverableTaskDialog({
+    required this.info,
+    required this.accessible,
+  });
+
+  final DevelopmentTaskInfo info;
+  final bool accessible;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final isPaused = info.status == 'paused';
+
+    return AlertDialog(
+      titlePadding: const EdgeInsets.fromLTRB(20, 18, 12, 0),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+      title: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppPalette.brand.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isPaused
+                  ? Icons.pause_circle_outline_rounded
+                  : Icons.replay_rounded,
+              color: AppPalette.brand,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              isPaused ? '任务已暂停' : '发现未完成的任务',
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              NexusStatusPill.fromString(info.status, isCompact: true),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  info.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          if (info.prompt.trim().isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _infoRow(
+              icon: Icons.subject_rounded,
+              text: info.prompt,
+            ),
+          ],
+          const SizedBox(height: 8),
+          _infoRow(
+            icon: Icons.folder_outlined,
+            text: info.workspacePath ?? '未绑定项目',
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                accessible
+                    ? Icons.verified_user_outlined
+                    : Icons.link_off_rounded,
+                size: 16,
+                color: accessible ? AppPalette.success : AppPalette.warning,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  accessible ? '项目可访问' : '项目目录不可访问，需重新绑定',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: accessible ? AppPalette.success : AppPalette.warning,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (info.executedSteps.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _infoRow(
+              icon: Icons.checklist_rounded,
+              text: '已执行步骤：${info.executedSteps.join('、')}',
+            ),
+          ],
+          if (info.pauseReason != null && info.pauseReason!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _infoRow(
+              icon: Icons.info_outline_rounded,
+              text: '暂停原因：${info.pauseReason}',
+              forceHighlight: true,
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            '忽略后可在仪表盘「待我处理」中随时继续。',
+            style: TextStyle(fontSize: 12, color: muted),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, _RecoveryDecision.ignore),
+            child: const Text('忽略')),
+        if (!accessible)
+          TextButton(
+            onPressed: () => Navigator.pop(context, _RecoveryDecision.rebind),
+            child: const Text('重新绑定'),
+          ),
+        FilledButton.icon(
+          onPressed: accessible
+              ? () =>
+                  Navigator.pop(context, _RecoveryDecision.continueExecuting)
+              : null,
+          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+          label: const Text('继续执行'),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow({
+    required IconData icon,
+    required String text,
+    bool forceHighlight = false,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 16,
+          color: forceHighlight ? AppPalette.warning : AppPalette.brand,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.35,
+              color: forceHighlight ? AppPalette.warning : null,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

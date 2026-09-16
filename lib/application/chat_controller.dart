@@ -20,12 +20,9 @@ import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/files/document_extractor.dart';
 import '../infrastructure/skills/builtin_skills.dart';
-import '../infrastructure/providers/anthropic_provider.dart';
-import '../infrastructure/providers/gemini_provider.dart';
 import '../infrastructure/providers/llm_provider.dart';
-import '../infrastructure/providers/openai_compatible_provider.dart';
-import '../infrastructure/providers/proxy_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
+import '../infrastructure/providers/provider_factory.dart';
 import '../infrastructure/tools/core_tools.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/tools/sub_agent_tool.dart';
@@ -40,7 +37,6 @@ import 'context_window.dart';
 import 'error_humanizer.dart';
 import 'reasoning_policy.dart';
 import 'system_prompt_assembly.dart';
-import 'headless_executor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
 import 'providers.dart';
@@ -49,7 +45,22 @@ import 'run_event_tracker.dart';
 import 'run_controller.dart';
 import '../domain/sensitive_tool_policy.dart';
 import 'task_service.dart';
+import 'task_template_service.dart';
 import 'workspace_service.dart';
+import 'workspace_snapshot.dart';
+import 'project_kind.dart';
+import 'project_kind_detector.dart';
+import 'conversation_fork_service.dart';
+import 'file_citation.dart';
+import 'project_context_service.dart';
+import 'project_service.dart';
+import 'project_settings.dart';
+import 'project_template_service.dart';
+import 'prompt_budget.dart';
+import 'task_summary.dart';
+import 'background_execution_gateway.dart';
+import 'development_execution_service.dart';
+import 'development_loop_finalizer.dart';
 import '../infrastructure/plugins/plugin_store.dart';
 import '../infrastructure/skills/skill_store.dart';
 import '../infrastructure/notifications/notification_service.dart';
@@ -64,6 +75,7 @@ class ToolActivity {
   const ToolActivity(
       {required this.call,
       required this.risk,
+      this.sensitive = false,
       this.status = '等待执行',
       this.result,
       this.ok,
@@ -73,6 +85,7 @@ class ToolActivity {
       this.runningSince});
   final ToolCall call;
   final ToolRisk risk;
+  final bool sensitive;
   final String status;
   final String? result;
   final bool? ok;
@@ -95,6 +108,7 @@ class ToolActivity {
   Duration get duration => Duration(milliseconds: executionMs);
 
   ToolActivity copyWith({
+    bool? sensitive,
     String? status,
     String? result,
     bool? ok,
@@ -124,6 +138,7 @@ class ToolActivity {
     return ToolActivity(
       call: call,
       risk: risk,
+      sensitive: sensitive ?? this.sensitive,
       status: nextStatus,
       result: result ?? this.result,
       ok: ok ?? this.ok,
@@ -140,11 +155,11 @@ class ToolActivity {
 /// 关闭的开关会对应地从工具注册表中剔除对应工具。
 class ToolSettings {
   const ToolSettings({
-    this.webBrowsing = true,
+    this.webBrowsing = false,
     this.terminalFile = true,
   });
 
-  /// 网页浏览（web_search）。
+  /// 网页浏览（web_search）。默认关闭，避免普通聊天隐式携带联网工具。
   final bool webBrowsing;
 
   /// 终端 / 工作区文件工具。
@@ -186,12 +201,21 @@ class ChatState {
     this.liveReply,
     this.totalSteps = 0,
     this.activeReasoningEffort = ReasoningEffort.auto,
+    this.reasoningMode = ReasoningMode.standard,
+    this.webSearchEnabled = false,
     this.providerConfigured = false,
     this.planMode = false,
+    ChatMode? mode,
     this.approvalMode = ApprovalMode.ask,
     this.planState,
     this.currentWorkspacePath,
-  });
+    this.currentProjectId,
+    this.currentProjectName,
+    this.currentTaskId,
+    this.currentRunId,
+    this.pendingCitations = const [],
+    this.omittedContext = const [],
+  }) : mode = mode ?? (planMode ? ChatMode.plan : ChatMode.chat);
 
   final List<ChatMessage> messages;
   final bool running;
@@ -226,11 +250,20 @@ class ChatState {
   /// agent 循环」的迭代次数，而不是消息条数（一轮对话只落一条最终 assistant 消息）。
   final int totalSteps;
   final ReasoningEffort activeReasoningEffort;
+  final ReasoningMode reasoningMode;
+  final bool webSearchEnabled;
   final bool providerConfigured;
   final bool planMode;
+  final ChatMode mode;
   final ApprovalMode approvalMode;
   final PlanState? planState;
   final String? currentWorkspacePath;
+  final String? currentProjectId;
+  final String? currentProjectName;
+  final String? currentTaskId;
+  final String? currentRunId;
+  final List<FileCitation> pendingCitations;
+  final List<String> omittedContext;
 
   ChatState copyWith({
     List<ChatMessage>? messages,
@@ -253,52 +286,87 @@ class ChatState {
     LiveReply? liveReply,
     int? totalSteps,
     ReasoningEffort? activeReasoningEffort,
+    ReasoningMode? reasoningMode,
+    bool? webSearchEnabled,
     bool? providerConfigured,
     bool? planMode,
+    ChatMode? mode,
     ApprovalMode? approvalMode,
     PlanState? planState,
     String? currentWorkspacePath,
+    String? currentProjectId,
+    String? currentProjectName,
+    String? currentTaskId,
+    String? currentRunId,
+    List<FileCitation>? pendingCitations,
+    List<String>? omittedContext,
     bool clearWorkspace = false,
+    bool clearProject = false,
+    bool clearTask = false,
     bool clearConversationId = false,
     bool clearAgentId = false,
     bool clearPlanState = false,
     bool clearLiveReply = false,
     bool clearSessionSkillInstructions = false,
-  }) =>
-      ChatState(
-        messages: messages ?? this.messages,
-        running: running ?? this.running,
-        paused: paused ?? this.paused,
-        loading: loading ?? this.loading,
-        conversationId: clearConversationId
-            ? null
-            : (conversationId ?? this.conversationId),
-        conversationTitle: conversationTitle ?? this.conversationTitle,
-        agentName: agentName ?? this.agentName,
-        systemPrompt: systemPrompt ?? this.systemPrompt,
-        sessionSkillInstructions: clearSessionSkillInstructions
-            ? const []
-            : (sessionSkillInstructions ?? this.sessionSkillInstructions),
-        agentId: clearAgentId ? null : (agentId ?? this.agentId),
-        toolActivities: toolActivities ?? this.toolActivities,
-        activityLog: activityLog ?? this.activityLog,
-        activeModel: activeModel ?? this.activeModel,
-        activeProviderName: activeProviderName ?? this.activeProviderName,
-        activeProviderId: activeProviderId ?? this.activeProviderId,
-        contextTokens: contextTokens ?? this.contextTokens,
-        liveContextTokens: liveContextTokens ?? this.liveContextTokens,
-        liveReply: clearLiveReply ? null : (liveReply ?? this.liveReply),
-        totalSteps: totalSteps ?? this.totalSteps,
-        activeReasoningEffort:
-            activeReasoningEffort ?? this.activeReasoningEffort,
-        providerConfigured: providerConfigured ?? this.providerConfigured,
-        planMode: planMode ?? this.planMode,
-        approvalMode: approvalMode ?? this.approvalMode,
-        planState: clearPlanState ? null : (planState ?? this.planState),
-        currentWorkspacePath: clearWorkspace
-            ? null
-            : (currentWorkspacePath ?? this.currentWorkspacePath),
-      );
+  }) {
+    // Keep the old planMode named argument source-compatible for callers that
+    // still use the plan toggle, while making ChatMode the public source of
+    // truth for the new three-way selector.
+    final nextMode = mode ??
+        (planMode == null
+            ? this.mode
+            : planMode
+                ? ChatMode.plan
+                : (this.mode == ChatMode.plan ? ChatMode.chat : this.mode));
+    final nextPlanMode =
+        mode == null ? (planMode ?? this.planMode) : mode == ChatMode.plan;
+    return ChatState(
+      messages: messages ?? this.messages,
+      running: running ?? this.running,
+      paused: paused ?? this.paused,
+      loading: loading ?? this.loading,
+      conversationId:
+          clearConversationId ? null : (conversationId ?? this.conversationId),
+      conversationTitle: conversationTitle ?? this.conversationTitle,
+      agentName: agentName ?? this.agentName,
+      systemPrompt: systemPrompt ?? this.systemPrompt,
+      sessionSkillInstructions: clearSessionSkillInstructions
+          ? const []
+          : (sessionSkillInstructions ?? this.sessionSkillInstructions),
+      agentId: clearAgentId ? null : (agentId ?? this.agentId),
+      toolActivities: toolActivities ?? this.toolActivities,
+      activityLog: activityLog ?? this.activityLog,
+      activeModel: activeModel ?? this.activeModel,
+      activeProviderName: activeProviderName ?? this.activeProviderName,
+      activeProviderId: activeProviderId ?? this.activeProviderId,
+      contextTokens: contextTokens ?? this.contextTokens,
+      liveContextTokens: liveContextTokens ?? this.liveContextTokens,
+      liveReply: clearLiveReply ? null : (liveReply ?? this.liveReply),
+      totalSteps: totalSteps ?? this.totalSteps,
+      activeReasoningEffort:
+          activeReasoningEffort ?? this.activeReasoningEffort,
+      reasoningMode: reasoningMode ?? this.reasoningMode,
+      webSearchEnabled: webSearchEnabled ?? this.webSearchEnabled,
+      providerConfigured: providerConfigured ?? this.providerConfigured,
+      planMode: nextPlanMode,
+      mode: nextMode,
+      approvalMode: approvalMode ?? this.approvalMode,
+      planState: clearPlanState ? null : (planState ?? this.planState),
+      currentWorkspacePath: clearWorkspace
+          ? null
+          : (currentWorkspacePath ?? this.currentWorkspacePath),
+      currentProjectId: clearProject
+          ? null
+          : (currentProjectId ?? this.currentProjectId),
+      currentProjectName: clearProject
+          ? null
+          : (currentProjectName ?? this.currentProjectName),
+      currentTaskId: clearTask ? null : (currentTaskId ?? this.currentTaskId),
+      currentRunId: clearTask ? null : (currentRunId ?? this.currentRunId),
+      pendingCitations: pendingCitations ?? this.pendingCitations,
+      omittedContext: omittedContext ?? this.omittedContext,
+    );
+  }
 }
 
 /// Chat orchestration controller.
@@ -309,6 +377,7 @@ class ChatController extends Notifier<ChatState> {
 
   DateTime? _cancelRequestedAt;
   final Set<String> _resumingTaskIds = <String>{};
+  final Set<String> _inflightRequestIds = <String>{};
   int? _activePlanGeneration;
 
   /// 单次运行的代次 / 取消 / 预算断点状态（见 RunCoordinator）。
@@ -349,6 +418,18 @@ class ChatController extends Notifier<ChatState> {
       final config = results[1] as ProviderConfig;
       final conversations = results[2] as List<Conversation>;
       var agents = results[3] as List<Agent>;
+      ReasoningMode reasoningMode = ReasoningMode.standard;
+      var webSearchEnabled = false;
+      try {
+        final preferences = await SharedPreferences.getInstance();
+        reasoningMode = ReasoningModeX.parse(
+          preferences.getString('settings.llm.reasoning_mode'),
+          legacyDeepEnabled:
+              preferences.getBool('settings.llm.deep_reasoning') ?? false,
+        );
+        webSearchEnabled =
+            preferences.getBool('settings.tool.web_browsing') ?? false;
+      } catch (_) {}
       // 历史脏数据修复：统一修复早期版本遗留的乱码文本。
       // F-5：版本位短路 —— 完整跑过一次后不再每次启动全表扫描。
       await _healMojibakeAgents(database);
@@ -387,9 +468,12 @@ class ChatController extends Notifier<ChatState> {
         activeProviderId: config.id,
         contextTokens: config.contextTokens,
         activeReasoningEffort: config.reasoningEffort,
+        reasoningMode: reasoningMode,
+        webSearchEnabled: webSearchEnabled,
         providerConfigured: config.isConfigured,
         currentWorkspacePath: activeWorkspace,
       );
+      unawaited(_hydrateActiveProject(database, conversation));
     } catch (_) {
       // 初始化失败时降级为空会话，避免首屏永久显示加载状态。
       state = state.copyWith(loading: false);
@@ -439,6 +523,10 @@ class ChatController extends Notifier<ChatState> {
       id: UniqueId.generate('conversation', now: now),
       title: '新会话',
       agentId: null,
+      projectId: state.currentProjectId,
+      mode: state.mode.name,
+      providerProfileId:
+          state.activeProviderId.isEmpty ? null : state.activeProviderId,
       isPinned: false,
       isFavorite: false,
       tagsJson: '[]',
@@ -519,6 +607,9 @@ class ChatController extends Notifier<ChatState> {
           id: item['id'] as String? ?? '',
           name: item['name'] as String? ?? '',
           arguments: item['arguments'] as Map<String, dynamic>? ?? const {},
+          providerMetadata: item['providerMetadata'] is Map
+              ? Map<String, dynamic>.from(item['providerMetadata'] as Map)
+              : const {},
         );
         final risk = ToolRisk.values.firstWhere((r) => r.name == item['risk'],
             orElse: () => ToolRisk.safe);
@@ -530,9 +621,11 @@ class ChatController extends Notifier<ChatState> {
   }
 
   Future<void> _persistMessage(ChatMessage message,
-      {String? toolName, ToolResult? toolResult}) async {
-    final conversationId = state.conversationId;
-    if (conversationId == null) return;
+      {String? toolName,
+      ToolResult? toolResult,
+      String? conversationId}) async {
+    final targetId = conversationId ?? state.conversationId;
+    if (targetId == null) return;
     final database = await ref.read(databaseProvider.future);
     var content = _contentForPersist(message);
     if (message.role == MessageRole.tool &&
@@ -551,7 +644,7 @@ class ChatController extends Notifier<ChatState> {
     }
     await database.insertMessage(MessagesCompanion.insert(
       id: UniqueId.generate('message'),
-      conversationId: conversationId,
+      conversationId: targetId,
       role: message.role.name,
       content: content,
       toolCallId: Value(message.toolCallId),
@@ -568,13 +661,14 @@ class ChatController extends Notifier<ChatState> {
       }).join();
 
   /// Persist a tool call for restoring tool cards.
-  Future<void> _persistToolCall(ToolCall call, ToolRisk risk) async {
-    final conversationId = state.conversationId;
-    if (conversationId == null) return;
+  Future<void> _persistToolCall(ToolCall call, ToolRisk risk,
+      {String? conversationId}) async {
+    final targetId = conversationId ?? state.conversationId;
+    if (targetId == null) return;
     final database = await ref.read(databaseProvider.future);
     await database.insertMessage(MessagesCompanion.insert(
       id: UniqueId.generate('message'),
-      conversationId: conversationId,
+      conversationId: targetId,
       role: 'assistant',
       content: '',
       toolCallsJson: Value(jsonEncode([
@@ -583,6 +677,8 @@ class ChatController extends Notifier<ChatState> {
           'name': call.name,
           'arguments':
               SensitiveToolPolicy.redactArguments(call.name, call.arguments),
+          if (call.providerMetadata.isNotEmpty)
+            'providerMetadata': call.providerMetadata,
           'risk': risk.name
         },
       ])),
@@ -591,22 +687,6 @@ class ChatController extends Notifier<ChatState> {
   }
 
   // --- Provider 与工具构建 ---
-
-  LlmProvider _buildProvider(ProviderConfig config) {
-    switch (config.type) {
-      case ProviderType.anthropic:
-        return AnthropicProvider(config: config);
-      case ProviderType.gemini:
-        return GeminiProvider(config: config);
-      case ProviderType.openaiCompatible:
-        return OpenAiCompatibleProvider(config: config);
-      case ProviderType.proxy:
-        return ProxyProvider(
-            backendBaseUrl: config.baseUrl,
-            managedKey: config.apiKey,
-            model: config.model);
-    }
-  }
 
   Future<ToolRegistry> _buildRegistry(
     Set<String> enabledTools,
@@ -645,7 +725,7 @@ class ChatController extends Notifier<ChatState> {
     } catch (_) {
       // 数据库尚未就绪时，当前回合不暴露 Skill 读取工具。
     }
-    // 子 Agent：复用 HeadlessExecutor 无 UI 执行，safe 工具才放行。
+    // 子 Agent：走统一后台入口，safe 工具才放行。
     // 风险由自主委派开关决定：开启 → safe（自动放行），关闭 → requiresConfirmation（走审批）。
     registry.register(SubAgentTool(onRun: _runSubAgent, risk: subAgentRisk));
     // 计划模式：模型首轮调用 manage_plan 后由回调更新 planState。
@@ -674,21 +754,22 @@ class ChatController extends Notifier<ChatState> {
   /// 读取「设置 → 工具」页面上各工具开关的当前值。开关写在
   /// SharedPreferences（settings.tool.*），由 [ToolSettings] 统一消费，
   /// 关闭的开关会对应地从工具注册表中剔除。
-  static Future<ToolSettings> _loadToolSettings() async {
+  Future<ToolSettings> _loadToolSettings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       return ToolSettings(
-        webBrowsing: prefs.getBool('settings.tool.web_browsing') ?? true,
+        webBrowsing: state.webSearchEnabled,
         terminalFile: prefs.getBool('settings.tool.terminal_file') ?? true,
       );
     } catch (_) {
-      return const ToolSettings();
+      return ToolSettings(webBrowsing: state.webSearchEnabled);
     }
   }
 
   /// 把已启用的 MCP 服务器工具并入 registry。
   /// 单个服务器连接失败不影响其余工具（失败静默跳过）。
-  Future<void> _mergeMcpTools(ToolRegistry registry) async {
+  Future<void> _mergeMcpTools(ToolRegistry registry,
+      {Set<String>? allowedToolNames}) async {
     try {
       final servers = await ref.read(mcpServiceProvider).loadEnabled();
       if (servers.isEmpty) return;
@@ -697,7 +778,10 @@ class ChatController extends Notifier<ChatState> {
       for (final server in servers) {
         final tools = await mcp.connectAndListTools(server);
         for (final tool in tools) {
-          registry.register(tool);
+          if (allowedToolNames == null ||
+              allowedToolNames.contains(tool.manifest.name)) {
+            registry.register(tool);
+          }
         }
       }
     } catch (_) {
@@ -706,12 +790,15 @@ class ChatController extends Notifier<ChatState> {
   }
 
   /// 把已启用插件里的声明式 HTTP 工具并入 registry（与内置/MCP 工具重名时跳过）。
-  Future<void> _mergePluginTools(ToolRegistry registry) async {
+  Future<void> _mergePluginTools(ToolRegistry registry,
+      {Set<String>? allowedToolNames}) async {
     try {
       final database = await ref.read(databaseProvider.future);
       final tools = await PluginStore().loadDeclarativeTools(database);
       for (final tool in tools) {
-        if (registry.findRegistration(tool.manifest.name) == null) {
+        if ((allowedToolNames == null ||
+                allowedToolNames.contains(tool.manifest.name)) &&
+            registry.findRegistration(tool.manifest.name) == null) {
           registry.register(tool);
         }
       }
@@ -734,21 +821,16 @@ class ChatController extends Notifier<ChatState> {
       _prepareRun(AppDatabase database, {String taskType = 'general'}) async {
     final store = ref.read(providerConfigStoreProvider);
     var config = await store.load();
-    var deepReasoning = true;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      deepReasoning = prefs.getBool('settings.llm.deep_reasoning') ?? true;
-    } catch (_) {
-      // Keep the fast, automatic default if preferences are unavailable.
-    }
     config = config.copyWith(
-      reasoningEffort: deepReasoning
-          ? ReasoningPolicy.resolve(
-              taskType: taskType,
-              configured: config.reasoningEffort,
-              planMode: state.planMode,
-            )
-          : ReasoningEffort.off,
+      reasoningEffort: switch (state.reasoningMode) {
+        ReasoningMode.standard => ReasoningEffort.off,
+        ReasoningMode.deep => ReasoningEffort.high,
+        ReasoningMode.auto => ReasoningPolicy.resolve(
+            taskType: taskType,
+            configured: config.reasoningEffort,
+            planMode: state.planMode,
+          ),
+      },
     );
     final tavilyKey = await store.readToolKey('tavily');
     var enabledTools = <String>{'calculator', 'get_time', 'json_query'};
@@ -765,25 +847,38 @@ class ChatController extends Notifier<ChatState> {
         temperature = agent.temperature;
         maxTokens = agent.maxTokens;
         topP = agent.topP;
-        if (agent.enabledToolsJson.trim().isNotEmpty) {
+        try {
           final decoded = jsonDecode(agent.enabledToolsJson);
           if (decoded is List) {
+            // An empty list is an explicit per-Agent permission choice.
             enabledTools = decoded.whereType<String>().toSet();
           }
+        } catch (_) {
+          // Corrupt legacy metadata must not abort an otherwise valid run.
+          enabledTools = <String>{};
         }
       }
     }
-    // 自主委派开关决定 sub_agent 工具的风险等级：开启 → 自动放行（safe），
-    // 关闭 → requiresConfirmation（与审批模式兼容）。
-    final autonomousDelegation =
-        await AutonomousDelegationService().isEnabled();
-    final subAgentRisk =
-        autonomousDelegation ? ToolRisk.safe : ToolRisk.requiresConfirmation;
-    final toolSettings = await _loadToolSettings();
-    var registry = await _buildRegistry(
-        enabledTools, tavilyKey, config, subAgentRisk, toolSettings);
-    await _mergeMcpTools(registry);
-    await _mergePluginTools(registry);
+    // 聊天模式只发送普通对话请求，不装配工具/MCP/插件，避免模型在简单问答
+    // 中主动执行工具。Agent 与计划模式沿用完整工具链。
+    var registry = ToolRegistry();
+    if (state.mode != ChatMode.chat) {
+      // 自主委派开关决定 sub_agent 工具的风险等级：开启 → 自动放行（safe），
+      // 关闭 → requiresConfirmation（与审批模式兼容）。
+      final autonomousDelegation =
+          await AutonomousDelegationService().isEnabled();
+      final subAgentRisk =
+          autonomousDelegation ? ToolRisk.safe : ToolRisk.requiresConfirmation;
+      final toolSettings = await _loadToolSettings();
+      registry = await _buildRegistry(
+          enabledTools, tavilyKey, config, subAgentRisk, toolSettings);
+      // A selected Agent owns the allow-list for user-selectable extension
+      // tools.  Without an Agent, retain the workspace-wide enabled MCP and
+      // plugin tools for backwards-compatible Agent/plan mode behavior.
+      final extensionAllowList = agentId == null ? null : enabledTools;
+      await _mergeMcpTools(registry, allowedToolNames: extensionAllowList);
+      await _mergePluginTools(registry, allowedToolNames: extensionAllowList);
+    }
     final platform = kIsWeb
         ? 'web'
         : switch (defaultTargetPlatform) {
@@ -829,11 +924,35 @@ class ChatController extends Notifier<ChatState> {
       'bug_fix': '问题修复',
       'code_review': '代码审查',
       'release_check': '发布检查',
+      'implement_and_verify': '实现并验证',
     };
     final label = labels[taskType] ?? '开发任务';
     final shortPrompt = prompt.trim();
     if (shortPrompt.isEmpty) return label;
     return '$label：${shortPrompt.length > 28 ? '${shortPrompt.substring(0, 28)}…' : shortPrompt}';
+  }
+
+  Future<void> addFileCitation(FileCitation citation) async {
+    if (citation.relativePath.isEmpty) return;
+    final next = [
+      ...state.pendingCitations.where((item) =>
+          item.relativePath != citation.relativePath ||
+          item.startLine != citation.startLine ||
+          item.endLine != citation.endLine),
+      citation,
+    ];
+    state = state.copyWith(pendingCitations: next);
+  }
+
+  void removeFileCitation(FileCitation citation) {
+    state = state.copyWith(
+      pendingCitations: state.pendingCitations
+          .where((item) =>
+              item.relativePath != citation.relativePath ||
+              item.startLine != citation.startLine ||
+              item.endLine != citation.endLine)
+          .toList(growable: false),
+    );
   }
 
   Future<void> send({
@@ -842,11 +961,16 @@ class ChatController extends Notifier<ChatState> {
     required ToolApprovalCallback approveTool,
     String taskType = 'general',
     String sourceType = 'manual',
+    String? clientRequestId,
   }) async {
     final trimmed = text.trim();
     if ((trimmed.isEmpty && attachments.isEmpty) ||
         state.running ||
         state.loading) return;
+    final requestId = (clientRequestId == null || clientRequestId.isEmpty)
+        ? UniqueId.generate('req')
+        : clientRequestId;
+    if (!_inflightRequestIds.add(requestId)) return;
     final conversationId = state.conversationId;
     final workspacePath = state.currentWorkspacePath;
     final runGeneration = _runs.beginRun();
@@ -909,6 +1033,8 @@ class ChatController extends Notifier<ChatState> {
       running: true,
       paused: false,
       conversationTitle: newTitle,
+      currentTaskId: null,
+      currentRunId: null,
       toolActivities: const [],
       activityLog: const [],
       liveContextTokens: initialContextTokens,
@@ -934,7 +1060,28 @@ class ChatController extends Notifier<ChatState> {
       if (!_runs.ownsRun(runGeneration, conversationId)) return;
       // C2 断点恢复：注册一个"运行中"任务，App 被杀后可在启动时提示继续执行。
       String? runningTaskId;
+      ProjectKindDetection? project;
       try {
+        if (workspacePath != null && workspacePath.trim().isNotEmpty) {
+          project = await const ProjectKindDetector().detect(workspacePath);
+        }
+      } catch (_) {}
+      try {
+        final existing = await TaskService().findByRequestId(database, requestId);
+        if (existing != null) {
+          runningTaskId = existing.id;
+          _runs.activeTaskId = existing.id;
+          _runs.boundConversationId = conversationId;
+          state = state.copyWith(
+            currentTaskId: existing.id,
+            pendingCitations: const [],
+          );
+        }
+      } catch (_) {}
+      try {
+        if (runningTaskId != null) {
+          // clientRequestId 已创建过任务，不再插入第二条。
+        } else {
         final task = await TaskService().create(
           db: database,
           conversationId: conversationId ?? '',
@@ -944,16 +1091,49 @@ class ChatController extends Notifier<ChatState> {
             'conversationId': conversationId,
             'model': prep.model,
             'maxSteps': prep.maxSteps,
+            'requestId': requestId,
           }),
           metadata: {
             'taskType': taskType,
             'sourceType': sourceType,
             'workspacePath': workspacePath,
+            if (state.currentProjectId != null)
+              'projectId': state.currentProjectId,
             'title': _taskTitle(taskType, trimmed),
             'attachments': attachments.map((file) => file.name).toList(),
+            'requestId': requestId,
+            if (project != null) 'projectKind': project.kind.id,
+            if (state.pendingCitations.isNotEmpty)
+              'citations': [
+                for (final citation in state.pendingCitations) citation.toJson()
+              ],
           },
         );
         runningTaskId = task.id;
+        _runs.activeTaskId = task.id;
+        _runs.boundConversationId = conversationId;
+        state = state.copyWith(currentTaskId: task.id);
+        Map<String, dynamic>? snapshotJson;
+        if (workspacePath != null && workspacePath.trim().isNotEmpty) {
+          try {
+            snapshotJson = (await const WorkspaceSnapshotService()
+                    .capture(workspacePath))
+                .toJson();
+          } catch (_) {}
+        }
+        await TaskService().updateProgress(
+          database,
+          task.id,
+          phase: 'running',
+          extra: {
+            if (project != null) 'projectKind': project.kind.id,
+            'workspaceAccessible': workspacePath != null &&
+                workspacePath.trim().isNotEmpty,
+            if (snapshotJson != null) 'workspaceSnapshot': snapshotJson,
+          },
+        );
+        }
+        state = state.copyWith(pendingCitations: const []);
       } catch (_) {} // 任务登记失败不阻断执行。
 
       if (!_runs.ownsRun(runGeneration, conversationId)) return;
@@ -985,6 +1165,8 @@ class ChatController extends Notifier<ChatState> {
           await _persistMessage(failed);
         } catch (_) {}
       }
+    } finally {
+      _inflightRequestIds.remove(requestId);
     }
   }
 
@@ -1227,8 +1409,19 @@ class ChatController extends Notifier<ChatState> {
       final maxSteps = maxStepsValue is num
           ? maxStepsValue.toInt()
           : int.tryParse(maxStepsValue?.toString() ?? '') ?? 8;
-      final workspacePath = request['workspacePath']?.toString();
+      final workspaceValue = request['workspacePath']?.toString().trim();
+      final workspacePath = workspaceValue == null || workspaceValue.isEmpty
+          ? null
+          : workspaceValue;
       final systemPrompt = request['systemPrompt']?.toString();
+      if (workspacePath != null) {
+        await ref
+            .read(workspaceServiceProvider)
+            .setActiveWorkspace(workspacePath);
+        if (ownsRun()) {
+          state = state.copyWith(currentWorkspacePath: workspacePath);
+        }
+      }
 
       final progress = _decodeTaskProgress(taskData.progressJson);
       final checkpoint = progress['checkpoint'];
@@ -1236,17 +1429,23 @@ class ChatController extends Notifier<ChatState> {
           ? decodeChatContext(checkpoint['context'])
           : const <ChatMessage>[];
       final executionRunId = UniqueId.generate('run');
-      final result = await HeadlessExecutor.runDetailed(
+      _runs.activeTaskId = taskId;
+      _runs.activeRunId = executionRunId;
+      _runs.boundConversationId = uiConversationId ?? taskData.conversationId;
+      final result = await BackgroundExecutionGateway().run(
         db: db,
         config: config,
         prompt: request['prompt']?.toString() ?? '',
+        taskId: taskId,
         initialHistory: checkpointContext.isEmpty ? null : checkpointContext,
         systemPrompt: systemPrompt,
+        taskType: request['taskType']?.toString(),
         workspacePath: workspacePath,
         maxSteps: maxSteps,
         cancellationToken: cancellationToken,
         approveTool: approveTool,
         approvalMode: runApprovalMode,
+        keepAlive: true,
       );
 
       final taskStatus = switch (result.status) {
@@ -1273,6 +1472,20 @@ class ChatController extends Notifier<ChatState> {
             : null,
         runId: executionRunId,
       );
+      if (workspacePath != null &&
+          workspacePath.trim().isNotEmpty &&
+          taskStatus != 'cancelled') {
+        try {
+          await DevelopmentLoopFinalizer().finalize(
+            db: db,
+            taskId: taskId,
+            runId: executionRunId,
+            workspacePath: workspacePath,
+            terminal: null,
+            runVerification: false,
+          );
+        } catch (_) {}
+      }
 
       if (ownsRun()) {
         state =
@@ -1288,7 +1501,8 @@ class ChatController extends Notifier<ChatState> {
             clearLiveReply: true,
           );
           try {
-            await _persistMessage(assistantMessage);
+            await _persistMessage(assistantMessage,
+                conversationId: uiConversationId);
           } catch (_) {}
         }
       }
@@ -1409,7 +1623,7 @@ class ChatController extends Notifier<ChatState> {
     final service = ref.read(workspaceServiceProvider);
     final path = await service.pickDirectory();
     if (path != null) {
-      state = state.copyWith(currentWorkspacePath: path);
+      await bindDirectoryAsProject(path);
     }
   }
 
@@ -1417,15 +1631,122 @@ class ChatController extends Notifier<ChatState> {
     final service = ref.read(workspaceServiceProvider);
     await service.setActiveWorkspace(path);
     state = state.copyWith(
-        currentWorkspacePath: path, clearWorkspace: path == null);
+      currentWorkspacePath: path,
+      clearWorkspace: path == null,
+      clearProject: path == null,
+    );
+  }
+
+  Future<void> bindDirectoryAsProject(String path) async {
+    final database = await ref.read(databaseProvider.future);
+    final projectService = ProjectService(
+      db: database,
+      workspace: ref.read(workspaceServiceProvider),
+    );
+    final project = await projectService.importDirectory(
+      ImportDirectoryRequest(directoryPath: path),
+    );
+    await openProject(project);
+  }
+
+  Future<void> openProject(Project project) async {
+    final database = await ref.read(databaseProvider.future);
+    final projectService = ProjectService(
+      db: database,
+      workspace: ref.read(workspaceServiceProvider),
+    );
+    final opened = await projectService.open(project.id);
+    await _applyOpenedProject(opened.project, bindConversation: true);
+    if (!opened.accessible) {
+      throw ProjectException(
+          opened.missingReason ?? '原目录不可访问，请重新定位项目路径');
+    }
+  }
+
+  Future<void> clearProjectBinding() async {
+    await setWorkspace(null);
+  }
+
+  Future<void> _hydrateActiveProject(
+      AppDatabase database, Conversation conversation) async {
+    try {
+      final projectService = ProjectService(
+        db: database,
+        workspace: ref.read(workspaceServiceProvider),
+      );
+      await projectService.migrateLegacyWorkspaces();
+      Project? project;
+      if (conversation.projectId != null &&
+          conversation.projectId!.isNotEmpty) {
+        project = await database.findProject(conversation.projectId!);
+      }
+      project ??= await projectService.activeProject();
+      if (project == null) return;
+      await _applyOpenedProject(project, bindConversation: false);
+    } catch (_) {}
+  }
+
+  Future<void> _applyOpenedProject(
+    Project project, {
+    required bool bindConversation,
+  }) async {
+    state = state.copyWith(
+      currentWorkspacePath: project.canonicalRootPath,
+      currentProjectId: project.id,
+      currentProjectName: project.name,
+    );
+    if (!bindConversation) return;
+    final conversationId = state.conversationId;
+    if (conversationId == null) return;
+    try {
+      final database = await ref.read(databaseProvider.future);
+      final conversation = await database.findConversation(conversationId);
+      if (conversation == null) return;
+      await database.saveConversation(conversation.copyWith(
+        projectId: Value(project.id),
+        updatedAt: DateTime.now(),
+      ));
+    } catch (_) {}
   }
 
   void setPlanMode(bool value) {
-    state = state.copyWith(planMode: value, clearPlanState: true);
+    setMode(value
+        ? ChatMode.plan
+        : (state.mode == ChatMode.plan ? ChatMode.chat : state.mode));
+  }
+
+  /// Switches the user-facing execution mode. Mode changes are intentionally
+  /// blocked while a run is active so a request keeps one stable tool policy.
+  void setMode(ChatMode mode) {
+    if (state.running) return;
+    state = state.copyWith(
+      mode: mode,
+      planMode: mode == ChatMode.plan,
+      clearPlanState: true,
+    );
   }
 
   void setApprovalMode(ApprovalMode mode) {
     state = state.copyWith(approvalMode: mode);
+  }
+
+  Future<void> setReasoningMode(ReasoningMode mode) async {
+    state = state.copyWith(reasoningMode: mode);
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setString('settings.llm.reasoning_mode', mode.name);
+      // Retain a compatible value for older settings/export paths.
+      await preferences.setBool(
+          'settings.llm.deep_reasoning', mode != ReasoningMode.standard);
+    } catch (_) {}
+  }
+
+  Future<void> setWebSearchEnabled(bool value) async {
+    state = state.copyWith(webSearchEnabled: value);
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool('settings.tool.web_browsing', value);
+    } catch (_) {}
   }
 
   /// remember 工具回调：异步懒加载 DB 并写入一条手动来源记忆。
@@ -1560,7 +1881,7 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  /// sub_agent 工具回调：复用 HeadlessExecutor 无 UI 执行一个子任务。
+  /// sub_agent 工具回调：走统一后台入口执行一个子任务。
   /// [budget] 为可选的受限 token 预算，越界/缺省值会被钳制到
   /// [SubAgentTool.minBudget]~[SubAgentTool.maxBudget]。
   Future<String> _runSubAgent(
@@ -1579,13 +1900,13 @@ class ChatController extends Notifier<ChatState> {
       final database = await ref.read(databaseProvider.future);
       final store = ref.read(providerConfigStoreProvider);
       final config = await store.load();
-      return await HeadlessExecutor.run(
+      return (await BackgroundExecutionGateway().run(
         db: database,
         config: config,
         prompt: prompt,
         systemPrompt: systemPrompt,
         maxTokens: SubAgentTool.clampBudget(budget),
-      );
+      )).text;
     } catch (error) {
       return '子任务执行失败：$error';
     }
@@ -1828,6 +2149,27 @@ class ChatController extends Notifier<ChatState> {
     return completer.future;
   }
 
+  void _detachVisibleRun() {
+    if (state.running ||
+        state.planState != null ||
+        state.toolActivities.isNotEmpty) {
+      state = state.copyWith(
+        running: false,
+        paused: false,
+        toolActivities: const [],
+        activityLog: const [],
+        clearPlanState: true,
+        clearLiveReply: true,
+      );
+    }
+  }
+
+  bool get hasBoundDevelopmentRun =>
+      _runs.runController != null && !_runs.runController!.isSealed;
+
+  bool get isBoundRunVisible =>
+      hasBoundDevelopmentRun && _runs.isVisible(_runs.currentConversationId());
+
   void _invalidateActiveRun() {
     // 代次、取消令牌与预算断点统一交给 RunCoordinator 处理。
     _runs.invalidateActiveRun();
@@ -1897,12 +2239,14 @@ class ChatController extends Notifier<ChatState> {
 
   /// 暂停只在下一个 Agent 检查点生效，不打断当前模型流或工具调用。
   bool pause() {
-    if (!state.running) return false;
     final controller = _runs.runController;
     if (controller == null || !controller.pause()) return false;
-    state = state.copyWith(
-      activityLog: [...state.activityLog, '运行已暂停，等待检查点'],
-    );
+    unawaited(_persistControl(TaskControlKind.pause));
+    if (_runs.isVisible(state.conversationId)) {
+      state = state.copyWith(
+        activityLog: [...state.activityLog, '运行已暂停，等待检查点'],
+      );
+    }
     return true;
   }
 
@@ -1910,27 +2254,56 @@ class ChatController extends Notifier<ChatState> {
   bool resume() {
     final controller = _runs.runController;
     if (controller == null || !controller.resume()) return false;
-    state = state.copyWith(
-      paused: false,
-      activityLog: [...state.activityLog, '运行已恢复'],
-    );
+    unawaited(_persistControl(TaskControlKind.resume));
+    if (_runs.isVisible(state.conversationId)) {
+      state = state.copyWith(
+        paused: false,
+        activityLog: [...state.activityLog, '运行已恢复'],
+      );
+    }
     return true;
   }
 
   /// 把补充指令排入当前 turn 边界，不打断正在执行的工具批次。
   bool steer(String text) {
-    if (!state.running) return false;
     final controller = _runs.runController;
     if (controller == null || !controller.steer(text)) return false;
-    state = state.copyWith(
-      activityLog: [...state.activityLog, '补充指令已排队，将在下一轮生效'],
-    );
+    unawaited(_persistControl(
+      TaskControlKind.followUp,
+      payload: {'text': text},
+    ));
+    if (_runs.isVisible(state.conversationId)) {
+      state = state.copyWith(
+        activityLog: [...state.activityLog, '已接收，将在下一检查点生效'],
+      );
+    }
     return true;
+  }
+
+  Future<void> _persistControl(
+    TaskControlKind kind, {
+    Map<String, dynamic> payload = const {},
+  }) async {
+    final taskId = _runs.activeTaskId;
+    if (taskId == null || taskId.isEmpty) return;
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await DevelopmentExecutionService(db: db).submitControl(
+        TaskControlRequest(
+          taskId: taskId,
+          kind: kind,
+          clientControlId: UniqueId.generate('client'),
+          runId: _runs.activeRunId,
+          payload: payload,
+        ),
+      );
+    } catch (_) {}
   }
 
   void stop() {
     _commitLiveReply();
     _cancelRequestedAt = DateTime.now();
+    unawaited(_persistControl(TaskControlKind.cancel));
     _invalidateActiveRun();
     // 真正中断底层 HTTP 流（Dio 层），避免连接与带宽继续被占用。
     _runs.dioCancelToken?.cancel();
@@ -1998,7 +2371,7 @@ class ChatController extends Notifier<ChatState> {
   // --- 浼氳瘽 / Agent / Provider 操作 ---
 
   Future<void> newConversation() async {
-    _invalidateActiveRun();
+    _detachVisibleRun();
     final newGeneration = _runs.generation;
     final database = await ref.read(databaseProvider.future);
     final conversation = await _createConversation(database);
@@ -2012,6 +2385,8 @@ class ChatController extends Notifier<ChatState> {
       liveContextTokens: 0,
       // 步数不落库，新会话即归零。
       totalSteps: 0,
+      mode: ChatMode.chat,
+      planMode: false,
       clearPlanState: true,
       clearLiveReply: true,
       clearSessionSkillInstructions: true,
@@ -2085,7 +2460,7 @@ class ChatController extends Notifier<ChatState> {
   }
 
   Future<void> switchConversation(Conversation conversation) async {
-    _invalidateActiveRun();
+    _detachVisibleRun();
     final switchGeneration = _runs.generation;
     final database = await ref.read(databaseProvider.future);
     final storedPage = await _loadConversationPage(database, conversation.id);
@@ -2104,10 +2479,26 @@ class ChatController extends Notifier<ChatState> {
     }
     if (switchGeneration != _runs.generation) return;
     final restored = _restoreFromMessages(stored);
+    String? workspacePath = state.currentWorkspacePath;
+    String? projectId = conversation.projectId ?? state.currentProjectId;
+    String? projectName = state.currentProjectName;
+    if (conversation.projectId != null && conversation.projectId!.isNotEmpty) {
+      try {
+        final project = await database.findProject(conversation.projectId!);
+        if (project != null) {
+          projectId = project.id;
+          projectName = project.name;
+          workspacePath = project.canonicalRootPath;
+        }
+      } catch (_) {}
+    }
     state = state.copyWith(
       conversationId: conversation.id,
       conversationTitle: conversation.title,
       agentId: agentId,
+      currentProjectId: projectId,
+      currentProjectName: projectName,
+      currentWorkspacePath: workspacePath,
       agentName: agentName,
       systemPrompt: systemPrompt,
       messages: restored.$1,
@@ -2117,10 +2508,67 @@ class ChatController extends Notifier<ChatState> {
           0, (sum, message) => sum + ContextWindow.estimateTokens(message)),
       // 步数（agent 循环迭代数）未持久化，切回历史会话时从 0 重新累计。
       totalSteps: 0,
+      mode: conversation.agentId == null ? ChatMode.chat : ChatMode.agent,
+      planMode: false,
       clearAgentId: agentId == null,
       clearPlanState: true,
       clearLiveReply: true,
       clearSessionSkillInstructions: true,
+    );
+    _restoreVisibleRunIfNeeded(conversation.id);
+  }
+
+  Future<TaskHandle> enqueueRepairFollowUp({
+    required String prompt,
+    String taskType = 'bug_fix',
+    String? requestId,
+  }) async {
+    final database = await ref.read(databaseProvider.future);
+    final conversationId = state.conversationId ??
+        (await _createConversation(database)).id;
+    final handle = await DevelopmentExecutionService(db: database).enqueue(
+      DevelopmentTaskRequest(
+        prompt: prompt,
+        conversationId: conversationId,
+        projectId: state.currentProjectId,
+        workspacePath: state.currentWorkspacePath,
+        taskType: taskType,
+        sourceType: 'verification_repair',
+        requestId: requestId,
+      ),
+    );
+    state = state.copyWith(currentTaskId: handle.taskId);
+    return handle;
+  }
+
+  Future<Conversation> forkFromMessage(int messageIndex) async {
+    final conversationId = state.conversationId;
+    if (conversationId == null) {
+      throw StateError('当前没有会话');
+    }
+    final database = await ref.read(databaseProvider.future);
+    final stored = await database.messagesFor(conversationId);
+    if (messageIndex < 0 || messageIndex >= stored.length) {
+      throw StateError('找不到分叉消息');
+    }
+    final branch = await const ConversationForkService().fork(
+      db: database,
+      sourceConversationId: conversationId,
+      forkMessageId: stored[messageIndex].id,
+    );
+    await switchConversation(branch);
+    return branch;
+  }
+
+  void _restoreVisibleRunIfNeeded(String conversationId) {
+    if (!hasBoundDevelopmentRun) return;
+    if (_runs.boundConversationId != conversationId) return;
+    if (!_runs.isVisible(conversationId)) return;
+    state = state.copyWith(
+      running: true,
+      paused: _runs.runController?.isPaused ?? false,
+      currentTaskId: _runs.activeTaskId,
+      currentRunId: _runs.activeRunId,
     );
   }
 
@@ -2128,7 +2576,10 @@ class ChatController extends Notifier<ChatState> {
     state = state.copyWith(
         agentId: agent.id,
         agentName: agent.name,
-        systemPrompt: agent.systemPrompt);
+        systemPrompt: agent.systemPrompt,
+        mode: ChatMode.agent,
+        planMode: false,
+        clearPlanState: true);
     final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
     if (conversationId != null) {

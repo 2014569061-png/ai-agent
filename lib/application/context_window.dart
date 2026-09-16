@@ -199,6 +199,7 @@ class ContextWindow {
             truncatedArgumentMark: true,
             'originalChars': encoded.length,
           },
+          providerMetadata: call.providerMetadata,
         );
       }).toList(growable: false);
       return changed ? message.copyWith(toolCalls: calls) : message;

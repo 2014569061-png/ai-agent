@@ -16,6 +16,7 @@ void main() {
       await db.into(db.tasks).insert(Task(
             id: id,
             conversationId: 'conversation-1',
+            stateRevision: 0,
             type: 'development:bug_fix',
             status: 'completed',
             requestJson: '{}',
@@ -73,6 +74,6 @@ void main() {
         .getSingle();
     expect(feedbackTable, isNotEmpty);
     expect(sentinel.data['value'], 'kept');
-    expect(rawDb.userVersion, 19);
+    expect(rawDb.userVersion, 23);
   });
 }

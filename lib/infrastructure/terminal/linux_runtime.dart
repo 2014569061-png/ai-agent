@@ -13,6 +13,7 @@ class LinuxRuntimeInfo {
     this.supportsInteractive = false,
     this.supportsShellSyntax = false,
     this.requiresExternalApp = false,
+    this.supportsLiveOutput = false,
   });
 
   final LinuxRuntimeKind kind;
@@ -22,6 +23,10 @@ class LinuxRuntimeInfo {
   final bool supportsInteractive;
   final bool supportsShellSyntax;
   final bool requiresExternalApp;
+
+  /// 运行时是否能边执行边写出可重连日志。false 时 UI 只能显示
+  /// “运行中，完成后返回日志”，不能伪造进度。
+  final bool supportsLiveOutput;
 }
 
 class LinuxCommandRequest {

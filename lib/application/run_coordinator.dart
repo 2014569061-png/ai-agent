@@ -30,6 +30,11 @@ class RunCoordinator {
   /// 当前运行的生命周期控制器（pause / steer / cancel）。
   AgentRunController? runController;
 
+  /// 当前开发任务与运行标识，切会话后仍可用于补充指令 / 暂停。
+  String? activeTaskId;
+  String? activeRunId;
+  String? boundConversationId;
+
   /// 预算暂停时保存的 Agent 内部上下文；用于断点续跑而非重提原始 prompt。
   List<ChatMessage>? budgetPauseContext;
 
@@ -50,24 +55,30 @@ class RunCoordinator {
   /// 该代次结束收尾后忘掉取消标记，避免集合无界增长。
   void forget(int generation) => _cancelledGenerations.remove(generation);
 
-  /// 该代次的运行是否仍拥有状态写回权：代次未过期、未被取消、会话未被切走。
+  /// 该代次是否仍拥有执行权：代次未过期、未被取消。
+  ///
+  /// 切会话只改变 UI 订阅，不取消开发任务；因此这里不再要求当前可见会话
+  /// 与任务会话一致。可见会话写回由 [isVisible] 单独判断。
   bool ownsRun(int generation, String? conversationId) =>
       generation == _generation &&
-      currentConversationId() == conversationId &&
       !_cancelledGenerations.contains(generation);
+
+  bool isVisible(String? conversationId) =>
+      conversationId != null && currentConversationId() == conversationId;
 
   /// 与 [ownsRun] 同义，但当 [conversationId] 为空时不校验会话归属
   /// （任务恢复时可能没有可切换的会话，此时只校验代次与取消标记）。
   bool ownsRunUnbound(int generation, String? conversationId) =>
-      generation == _generation &&
-      !_cancelledGenerations.contains(generation) &&
-      (conversationId == null || currentConversationId() == conversationId);
+      ownsRun(generation, conversationId);
 
   /// 让当前运行失效：标记取消、清空预算断点、自增代次，并取消三个取消源。
   void invalidateActiveRun() {
     final generation = _generation;
     _cancelledGenerations.add(generation);
     budgetPauseContext = null;
+    activeTaskId = null;
+    activeRunId = null;
+    boundConversationId = null;
     _generation++;
     runController?.cancel();
     cancellationToken?.cancel();

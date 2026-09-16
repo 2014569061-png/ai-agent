@@ -1,7 +1,6 @@
 import 'package:flutter/animation.dart';
 
-@Deprecated('视觉规范已改为平面，该材质层级枚举已废弃')
-enum ImmersiveMaterialLevel { ultraThin, thin, regular, thick, ultraThick }
+enum SurfaceLevel { ultraThin, thin, regular, thick, ultraThick }
 
 abstract final class AppTokens {
   // 4px 基栅间距 Token (锁定 4 / 8 / 12 / 16 / 24 / 32 / 48 / 64)
@@ -32,12 +31,25 @@ abstract final class AppTokens {
   static const radiusModal = 16.0;
   static const radiusPill = 999.0;
 
-  /// 首页输入区专用圆角：对标 DeepSeek 的大圆角输入框，比常规弹层更圆。
-  static const radiusComposer = 24.0;
+  /// 首页输入区专用圆角：更克制利落的 20px（去掉软糖感）
+  static const radiusComposer = 20.0;
+
+  // 字号阶 Token（双轨制：Display 轨 + Content 轨）
+  static const fontSizeDisplay1 = 34.0;
+  static const fontSizeDisplay2 = 28.0;
+  static const fontSizeHeadline = 22.0;
+  static const fontSizeTitle = 17.0;
+  static const fontSizeBody = 15.0;
+  static const fontSizeCaption = 13.0;
+  static const fontSizeBadge = 11.0;
+
+  // 微环境光遮蔽阴影 Token（Ambient Occlusion，防内容穿透）
+  static const shadowFloatingBlur = 20.0;
+  static const shadowFloatingOffset = Offset(0, 4);
 
   /// 首页输入区内部控件尺寸
   static const composerChipHeight = 30.0;
-  static const composerCircleButton = 30.0;
+  static const composerCircleButton = 26.0;
 
   // 兼容历史别名
   @Deprecated('请改用 radiusControl')

@@ -1,7 +1,7 @@
 import 'package:crypto/crypto.dart';
 
 import 'agent_executor.dart';
-import 'headless_executor.dart';
+import 'background_execution_gateway.dart';
 import '../domain/collaboration_models.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/provider_config.dart';
@@ -64,7 +64,7 @@ $context
 
 请围绕你的职责提交结构化结论。不要输出 Markdown 代码围栏。
 ''';
-    final result = await HeadlessExecutor.runDetailed(
+    final result = await BackgroundExecutionGateway().run(
       db: db,
       config: config,
       prompt: prompt,

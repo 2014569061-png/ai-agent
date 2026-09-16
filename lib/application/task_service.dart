@@ -5,6 +5,9 @@ import '../domain/models.dart';
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../domain/sensitive_tool_policy.dart';
+import 'change_review.dart';
+import 'development_verification.dart';
+import 'project_kind.dart';
 
 /// v0.9 各类开发任务共用的结构化结果载体。
 class StructuredTaskResult {
@@ -65,6 +68,16 @@ class TaskService {
   Future<List<Task>> allTasks(AppDatabase db, {int limit = 100}) =>
       db.allTasks(limit: limit);
 
+  Future<Task?> findByRequestId(AppDatabase db, String requestId) async {
+    if (requestId.trim().isEmpty) return null;
+    final tasks = await db.allTasks(limit: 400);
+    for (final task in tasks) {
+      final metadata = _decodeJsonMap(task.requestJson);
+      if (metadata['requestId']?.toString() == requestId) return task;
+    }
+    return null;
+  }
+
   Future<Task> create({
     required AppDatabase db,
     required String conversationId,
@@ -73,9 +86,12 @@ class TaskService {
     Map<String, dynamic> metadata = const <String, dynamic>{},
   }) async {
     final now = DateTime.now();
+    final projectId = metadata['projectId']?.toString().trim();
     final task = Task(
       id: _newTaskId(),
       conversationId: conversationId,
+      projectId: projectId == null || projectId.isEmpty ? null : projectId,
+      stateRevision: 0,
       type: type,
       status: 'running',
       requestJson: _mergeRequest(requestJson, metadata),
@@ -282,6 +298,12 @@ class DevelopmentTaskInfo {
     required this.updatedAt,
     required this.resumeCount,
     this.structuredResult,
+    this.projectKind,
+    this.workspaceAccessible,
+    this.pauseReason,
+    this.verificationPlan,
+    this.changeReview,
+    this.executedSteps = const [],
   });
 
   final String id;
@@ -299,6 +321,12 @@ class DevelopmentTaskInfo {
   final DateTime updatedAt;
   final int resumeCount;
   final StructuredTaskResult? structuredResult;
+  final ProjectKind? projectKind;
+  final bool? workspaceAccessible;
+  final String? pauseReason;
+  final DevelopmentVerificationPlan? verificationPlan;
+  final ChangeReview? changeReview;
+  final List<String> executedSteps;
 
   factory DevelopmentTaskInfo.fromTask(Task task) {
     final request = _decode(task.requestJson);
@@ -307,6 +335,10 @@ class DevelopmentTaskInfo {
     final taskType = (request['taskType'] ?? task.type).toString();
     final title = (request['title'] ?? _titleFor(taskType, prompt)).toString();
     final workspace = request['workspacePath']?.toString();
+    final checkpoint = progress['checkpoint'];
+    final pauseReason = checkpoint is Map
+        ? checkpoint['reason']?.toString()
+        : progress['pauseReason']?.toString();
     return DevelopmentTaskInfo(
       id: task.id,
       conversationId: task.conversationId,
@@ -326,6 +358,19 @@ class DevelopmentTaskInfo {
           ? StructuredTaskResult.fromJson(
               Map<String, dynamic>.from(progress['structuredResult'] as Map))
           : null,
+      projectKind: ProjectKindX.parse(progress['projectKind']?.toString() ??
+          request['projectKind']?.toString()),
+      workspaceAccessible: progress['workspaceAccessible'] as bool?,
+      pauseReason: pauseReason,
+      verificationPlan: progress['verificationPlan'] is Map
+          ? DevelopmentVerificationPlan.fromJson(
+              Map<String, dynamic>.from(progress['verificationPlan'] as Map))
+          : null,
+      changeReview: progress['changeReview'] is Map
+          ? ChangeReview.fromJson(
+              Map<String, dynamic>.from(progress['changeReview'] as Map))
+          : null,
+      executedSteps: _stringList(progress['executedSteps']),
     );
   }
 
@@ -344,6 +389,7 @@ class DevelopmentTaskInfo {
       'bug_fix': '问题修复',
       'code_review': '代码审查',
       'release_check': '发布检查',
+      'implement_and_verify': '实现并验证',
     };
     final label = labels[type] ?? '开发任务';
     final shortPrompt = prompt.trim();
@@ -383,6 +429,8 @@ Map<String, dynamic> chatMessageToJson(ChatMessage message) => {
                   'id': call.id,
                   'name': call.name,
                   'arguments': call.arguments,
+                  if (call.providerMetadata.isNotEmpty)
+                    'providerMetadata': call.providerMetadata,
                 })
             .toList(growable: false),
       if (message.modelName != null) 'modelName': message.modelName,
@@ -431,6 +479,9 @@ ChatMessage? chatMessageFromJson(dynamic value) {
             name: item['name']?.toString() ?? '',
             arguments: item['arguments'] is Map
                 ? Map<String, dynamic>.from(item['arguments'] as Map)
+                : const {},
+            providerMetadata: item['providerMetadata'] is Map
+                ? Map<String, dynamic>.from(item['providerMetadata'] as Map)
                 : const {},
           );
         }).toList(growable: false)

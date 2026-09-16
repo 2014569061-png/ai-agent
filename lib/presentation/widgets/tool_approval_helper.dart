@@ -1,12 +1,14 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/approval_bridge.dart';
+import '../../application/approval_notification_text.dart';
 import '../../application/audit_service.dart';
 import '../../application/chat_controller.dart';
 import '../../application/providers.dart';
 import '../../domain/models.dart';
 import '../chat/widgets/tool_approval_sheet.dart';
-import 'immersive_sheet.dart';
+import 'nexus_sheet.dart';
 
 /// 共享工具审批入口：审批弹窗 → 记录允许范围与审计。
 ///
@@ -23,13 +25,31 @@ Future<ToolApproval> promptToolApproval(
 ) async {
   // 页面未挂载时无法弹窗，保守拒绝，让执行层暂停等待。
   if (!context.mounted) return ToolApproval.reject;
+
+  // 应用不在前台（锁屏 / 已切走）时，弹窗用户根本看不见，需审批的工具会一直等
+  // 下去——这不是体验问题而是死锁。这种情况改走通知裁决通道：带「批准/拒绝」
+  // 动作的通知可在锁屏或通知栏直接处理。超时即拒绝，因此不比原路径宽松。
+  if (!_appIsInteractive()) {
+    final approved = await const ApprovalBridge().requestDecision(
+      toolName: call.name,
+      summary: approvalNotificationSummary(call, risk),
+      risk: risk.name,
+      database: await ref.read(databaseProvider.future),
+    );
+    if (approved == true && context.mounted) {
+      _recordToolGrant(ref, call, risk, ToolApproval.allowOnce);
+      return ToolApproval.allowOnce;
+    }
+    return ToolApproval.reject;
+  }
+
   final trust = await ref.read(toolTrustStoreProvider.future);
   if (!context.mounted) return ToolApproval.reject;
 
   final allowPersistentTrust = !sensitive &&
       risk != ToolRisk.dangerous &&
       risk != ToolRisk.requiresConfirmation;
-  final decision = await showImmersiveSheet<ToolApproval>(
+  final decision = await showNexusSheet<ToolApproval>(
     context: context,
     builder: (context) => ToolApprovalSheet(
       call: call,
@@ -69,4 +89,13 @@ void _recordToolGrant(
       conversationId: ref.read(chatControllerProvider).conversationId,
     );
   });
+}
+
+/// 应用是否处于用户可见的前台状态。
+///
+/// 取不到生命周期状态（启动早期、测试环境）时按前台处理，保持既有弹窗行为不变——
+/// 锁屏通道只应在「确定用户看不到弹窗」时才接管。
+bool _appIsInteractive() {
+  final state = WidgetsBinding.instance.lifecycleState;
+  return state == null || state == AppLifecycleState.resumed;
 }

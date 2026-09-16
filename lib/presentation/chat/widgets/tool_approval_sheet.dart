@@ -8,6 +8,7 @@ import '../../theme/app_theme.dart';
 import '../../../domain/models.dart';
 import '../../l10n/app_strings.dart';
 import '../../../infrastructure/tools/tool_humanizer.dart';
+import '../../widgets/nexus_disclosure.dart';
 
 /// 工具审批弹窗主体：按风险展示人性化摘要与关键参数，「技术细节」折叠完整 JSON，
 /// 按钮返回 [ToolApproval] 决策由调用方处理（记录信任/审计）。
@@ -147,32 +148,26 @@ class ToolApprovalSheet extends StatelessWidget {
                     _codeWritePreview(codeContent, targetFile),
 
                   // 完整 JSON 收进「技术细节」折叠区，供审计/核对，不干扰主决策。
-                  Theme(
-                    data: Theme.of(context)
-                        .copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      title: Text('技术细节',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: Theme.of(context).colorScheme.outline)),
-                      childrenPadding: const EdgeInsets.only(top: 6),
-                      children: [
-                        Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(maxHeight: 160),
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(10)),
-                          child: SingleChildScrollView(
-                              child: SelectableText(_prettyJson(call.arguments),
-                                  style: const TextStyle(
-                                      fontFamily: 'monospace', fontSize: 12))),
-                        ),
-                      ],
+                  NexusDisclosure(
+                    headerPadding: EdgeInsets.zero,
+                    contentPadding: const EdgeInsets.only(top: 6),
+                    title: Text('技术细节',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.outline)),
+                    child: Container(
+                      width: double.infinity,
+                      constraints: const BoxConstraints(maxHeight: 160),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(10)),
+                      child: SingleChildScrollView(
+                          child: SelectableText(_prettyJson(call.arguments),
+                              style: const TextStyle(
+                                  fontFamily: 'monospace', fontSize: 12))),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -216,7 +211,7 @@ class ToolApprovalSheet extends StatelessWidget {
                       HapticFeedback.mediumImpact();
                       Navigator.pop(context, ToolApproval.allowOnce);
                     },
-                    child: const Text(AppStrings.allowOnce),
+                    child: const Text('确认执行'),
                   ),
                 ),
               ],

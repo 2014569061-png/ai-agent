@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/change_review.dart';
+import '../../application/development_verification.dart';
 import '../../application/providers.dart';
 import '../../application/run_audit_report.dart';
 import '../../application/task_feedback_service.dart';
 import '../../application/task_service.dart';
+import '../../application/workspace_service.dart';
 import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
@@ -16,8 +19,12 @@ import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
 import '../l10n/app_strings.dart';
 import '../diagnostics/run_analysis_page.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/nexus_disclosure.dart';
+import '../widgets/nexus_execution_status.dart';
+import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
@@ -51,10 +58,10 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   RunRecord? _run;
   RunAuditReport? _auditReport;
   bool _auditLoading = false;
-  bool _auditExpanded = false;
   Object? _auditError;
   bool? _helpful;
   bool _feedbackLoading = false;
+  bool? _workspaceAccessible;
 
   @override
   void initState() {
@@ -62,6 +69,13 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     _task = widget.task;
     _loadAudit();
     _loadFeedback();
+    _checkWorkspace();
+  }
+
+  Future<void> _checkWorkspace() async {
+    final path = _task.workspacePath;
+    final accessible = await WorkspaceService().isAccessible(path);
+    if (mounted) setState(() => _workspaceAccessible = accessible);
   }
 
   Future<void> _loadFeedback() async {
@@ -79,7 +93,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
               'project_analysis',
               'bug_fix',
               'code_review',
-              'release_check'
+              'release_check',
+              'implement_and_verify',
             }.contains(_task.type.toLowerCase())) &&
         (status == 'completed' || status == 'failed' || status == 'cancelled');
   }
@@ -161,7 +176,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     final run = _run;
     if (run == null || !mounted) return;
     await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => RunDetailPage(run: run)),
+      NexusPageRoute.detail(builder: (_) => RunDetailPage(run: run)),
     );
   }
 
@@ -317,6 +332,23 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
                 children: [
+                  if (_needsImmediateAction) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: NexusExecutionStatus(
+                        state: (_task.status == 'running')
+                            ? NexusExecutionState.running
+                            : NexusExecutionState.waitingForUser,
+                        label: (_task.status == 'running')
+                            ? '任务正在执行中…'
+                            : '任务等待用户授权确认',
+                        detail: '可点击下方按钮进入会话流处理',
+                        onViewDetails: _task.conversationId.isNotEmpty
+                            ? _openConversation
+                            : null,
+                      ),
+                    ),
+                  ],
                   // ==========================================
                   // 1. 任务总览卡 (Overview Card)
                   // ==========================================
@@ -418,6 +450,15 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 ),
                               ],
                             ),
+                            if (_workspaceAccessible == false)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '项目目录已不可访问，请重新绑定工作区后再恢复任务。',
+                                  style: TextStyle(
+                                      fontSize: 12, color: AppPalette.warning),
+                                ),
+                              ),
                             const SizedBox(height: 6),
                           ],
                           Row(
@@ -451,6 +492,27 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                       ),
                     ),
                   ),
+
+                  // ==========================================
+                  // 2.1 执行流水线与代码 Diff (Pipeline & Diff)
+                  // ==========================================
+                  NexusSection(
+                    title: '执行流水线与变更',
+                    child: _PipelineTimelineCard(
+                      task: _task,
+                      auditReport: _auditReport,
+                      onRollback: _rollbackAuditEntry,
+                    ),
+                  ),
+                  if (_task.changeReview != null ||
+                      _task.verificationPlan != null)
+                    NexusSection(
+                      title: '改动审查与验证',
+                      child: _ChangeReviewCard(
+                        review: _task.changeReview,
+                        plan: _task.verificationPlan,
+                      ),
+                    ),
 
                   // ==========================================
                   // 3. 执行结果与结构化产物卡 (Results Card)
@@ -717,14 +779,9 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   Widget _buildAuditSection() {
     if (_auditLoading) {
       return const SectionCard(
-        child: ListTile(
-          leading: SizedBox(
-            width: 18,
-            height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          title: Text('副作用审计'),
-          subtitle: Text('正在读取本次运行的结构化轨迹…'),
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: NexusCardSkeleton(),
         ),
       );
     }
@@ -746,43 +803,16 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     if (report == null) return const SizedBox.shrink();
     final metrics = report.metrics;
     return SectionCard(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: () => setState(() => _auditExpanded = !_auditExpanded),
-            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  const Icon(Icons.fact_check_outlined, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '副作用审计 (${report.entries.length} 项)',
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                  Text(
-                    _auditExpanded ? '收起' : '展开详情',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppPalette.brandAction),
-                  ),
-                  const SizedBox(width: 2),
-                  Icon(
-                    _auditExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
-                    size: 18,
-                    color: AppPalette.brandAction,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_auditExpanded) ...[
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: NexusDisclosure(
+        leading: const Icon(Icons.fact_check_outlined, size: 18),
+        title: Text(
+          '副作用审计 (${report.entries.length} 项)',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             const SizedBox(height: 8),
             Wrap(
               spacing: 12,
@@ -845,7 +875,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
             else
               ...report.entries.map((entry) => _auditEntry(entry)),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -861,11 +891,25 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
       if (entry.code.isNotEmpty) entry.code,
       if (entry.evidence != null && entry.evidence!.isNotEmpty) entry.evidence!,
     ].join(' · ');
+    final diff = entry.metadata['diff']?.toString();
+    final hasDiff = diff != null && diff.trim().isNotEmpty;
     final canRollback = entry.tool == 'edit_file' &&
         entry.operation == 'edit' &&
         entry.effect == 'applied' &&
         entry.path != null &&
-        (entry.metadata['diff']?.toString().isNotEmpty ?? false);
+        hasDiff;
+
+    if (hasDiff) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: _CodeDiffCard(
+          filePath: entry.path ?? entry.tool,
+          diffText: diff,
+          onRollback: canRollback ? () => _rollbackAuditEntry(entry) : null,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 6),
       child: Row(
@@ -915,3 +959,436 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     );
   }
 }
+
+/// 垂直流水线步骤节点卡片（对标效果图 3）
+class _PipelineTimelineCard extends StatelessWidget {
+  const _PipelineTimelineCard({
+    required this.task,
+    required this.auditReport,
+    required this.onRollback,
+  });
+
+  final DevelopmentTaskInfo task;
+  final RunAuditReport? auditReport;
+  final ValueChanged<RunAuditEntry> onRollback;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isCompleted = task.status.toLowerCase() == 'completed';
+    final isRunning = task.status.toLowerCase() == 'running';
+    final isWaiting = task.status.toLowerCase().contains('approval');
+
+    final diffEntries = auditReport?.entries.where((e) {
+          final diff = e.metadata['diff']?.toString();
+          return diff != null && diff.trim().isNotEmpty;
+        }).toList() ??
+        const [];
+
+    return SectionCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Step 1: 意图与工作区解析
+          _timelineStep(
+            context: context,
+            stepNum: 1,
+            title: '解析任务意图与工作区环境',
+            status: _StepStatus.done,
+            isLast: false,
+            content: task.workspacePath != null && task.workspacePath!.isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 4, bottom: 4),
+                    child: Text(
+                      '工作区：${task.workspacePath}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark
+                            ? AppPalette.darkTextMuted
+                            : AppPalette.lightTextMuted,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+
+          // Step 2: 代码变更与工具执行
+          _timelineStep(
+            context: context,
+            stepNum: 2,
+            title: '执行代码变更与工具流水线',
+            status: isCompleted
+                ? _StepStatus.done
+                : (isRunning || isWaiting
+                    ? _StepStatus.active
+                    : _StepStatus.pending),
+            isLast: false,
+            content: diffEntries.isNotEmpty
+                ? Column(
+                    children: diffEntries.take(3).map((entry) {
+                      return _CodeDiffCard(
+                        filePath: entry.path ?? entry.tool,
+                        diffText: entry.metadata['diff'].toString(),
+                        onRollback: () => onRollback(entry),
+                      );
+                    }).toList(),
+                  )
+                : (task.summary != null && task.summary!.isNotEmpty
+                    ? null
+                    : Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 4),
+                        child: Text(
+                          isRunning ? '正在运行工具执行变更…' : '阶段执行就绪',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark
+                                ? AppPalette.darkTextMuted
+                                : AppPalette.lightTextMuted,
+                          ),
+                        ),
+                      )),
+          ),
+
+          // Step 3: 副作用审计与质量评估
+          _timelineStep(
+            context: context,
+            stepNum: 3,
+            title: '副作用审计与完成评估',
+            status: isCompleted
+                ? _StepStatus.done
+                : (task.status.toLowerCase() == 'failed'
+                    ? _StepStatus.failed
+                    : _StepStatus.pending),
+            isLast: true,
+            content: null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _timelineStep({
+    required BuildContext context,
+    required int stepNum,
+    required String title,
+    required _StepStatus status,
+    required bool isLast,
+    Widget? content,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final text = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    Widget nodeIcon;
+    Color lineColor;
+    switch (status) {
+      case _StepStatus.done:
+        nodeIcon = Container(
+          width: 22,
+          height: 22,
+          decoration: const BoxDecoration(
+            color: Color(0xFF00E676),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.check, size: 14, color: Colors.black),
+        );
+        lineColor = const Color(0xFF00E676);
+      case _StepStatus.active:
+        nodeIcon = Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
+            border: Border.all(color: const Color(0xFF00E5FF), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: Center(
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFF00E5FF),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        );
+        lineColor = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+      case _StepStatus.failed:
+        nodeIcon = Container(
+          width: 22,
+          height: 22,
+          decoration: const BoxDecoration(
+            color: Color(0xFFFF5252),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.close, size: 14, color: Colors.white),
+        );
+        lineColor = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+      case _StepStatus.pending:
+        nodeIcon = Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+              width: 2,
+            ),
+          ),
+        );
+        lineColor = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    }
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              nodeIcon,
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    color: lineColor,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Step $stepNum',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: status == _StepStatus.active
+                          ? const Color(0xFF00E5FF)
+                          : muted,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: text,
+                    ),
+                  ),
+                  if (content != null) ...[
+                    const SizedBox(height: 6),
+                    content,
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _StepStatus { done, active, failed, pending }
+
+/// 代码 Diff 预览卡片（对标效果图 3）
+class _CodeDiffCard extends StatelessWidget {
+  const _CodeDiffCard({
+    required this.filePath,
+    required this.diffText,
+    this.onRollback,
+  });
+
+  final String filePath;
+  final String diffText;
+  final VoidCallback? onRollback;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    final lines = diffText.split('\n');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF14171F) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        border: Border.all(
+          color: isDark ? const Color(0xFF282D3D) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 头部：文件路径与回滚操作
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E2330) : const Color(0xFFEDF2F7),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.insert_drive_file_outlined,
+                    size: 15, color: textMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    filePath,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (onRollback != null)
+                  GestureDetector(
+                    onTap: onRollback,
+                    behavior: HitTestBehavior.opaque,
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.undo_rounded,
+                              size: 14, color: AppPalette.brand),
+                          SizedBox(width: 2),
+                          Text(
+                            '回滚',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: AppPalette.brand,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // Diff 语法着色行
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: lines.map((line) {
+                final isAdded = line.startsWith('+');
+                final isDeleted = line.startsWith('-');
+                final bgColor = isAdded
+                    ? const Color(0xFF2E7D32).withValues(alpha: 0.2)
+                    : isDeleted
+                        ? const Color(0xFFC62828).withValues(alpha: 0.2)
+                        : Colors.transparent;
+                final textColor = isAdded
+                    ? const Color(0xFF69F0AE)
+                    : isDeleted
+                        ? const Color(0xFFFF5252)
+                        : (isDark ? AppPalette.darkText : AppPalette.lightText);
+
+                return Container(
+                  width: double.infinity,
+                  color: bgColor,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                  child: Text(
+                    line,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11.5,
+                      color: textColor,
+                      height: 1.4,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChangeReviewCard extends StatelessWidget {
+  const _ChangeReviewCard({this.review, this.plan});
+
+  final ChangeReview? review;
+  final DevelopmentVerificationPlan? plan;
+
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (review != null) ...[
+            Text(
+              '本次修改 ${review!.files.length} 个文件（+${review!.linesAdded} / -${review!.linesRemoved}）· ${review!.mark.label}',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            for (final file in review!.files) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      file.path,
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 12),
+                    ),
+                  ),
+                  Text(
+                    '${file.operation} +${file.linesAdded}/-${file.linesRemoved}',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+              if (file.diff.isNotEmpty)
+                _CodeDiffCard(filePath: file.path, diffText: file.diff),
+              const SizedBox(height: 8),
+            ],
+          ],
+          if (plan != null) ...[
+            const Text('验证步骤',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            for (final step in plan!.steps)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '${step.title} · ${step.status.label}'
+                  '${step.command.isEmpty ? '' : ' · ${step.command}'}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+

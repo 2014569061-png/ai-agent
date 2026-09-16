@@ -8,9 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/providers.dart';
+import '../../application/scheduled_task_runner.dart';
 import '../../infrastructure/files/vault_exporter.dart';
 import '../../infrastructure/files/local_crypto_service.dart';
+import '../../infrastructure/providers/provider_config_store.dart';
 import '../vault/vault_page.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
@@ -58,6 +61,28 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
     }
   }
 
+  Future<void> _createManualBackup() async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final path = await createAutomaticBackupNow(db);
+      if (!mounted) return;
+      if (path == null) {
+        FloatingToast.show(context, '备份失败', tone: ToastTone.danger);
+        return;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _lastBackupTime = prefs.getString(_lastBackupKey) ?? _lastBackupTime;
+      });
+      FloatingToast.show(context, '已生成新的数据快照', tone: ToastTone.success);
+    } catch (e) {
+      if (mounted) {
+        FloatingToast.show(context, '备份失败: $e', tone: ToastTone.danger);
+      }
+    }
+  }
+
   Future<void> _restoreAutomaticBackup() async {
     if (!mounted) return;
     final result = await FilePicker.platform.pickFiles(
@@ -84,17 +109,18 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
   Future<void> _clearLocalData() async {
     final confirmed = await showConfirmAction(
       context,
-      title: '危险操作：清除本地全部数据？',
-      message: '此操作将永久抹掉本机上的所有 NEXUS 数据，操作不可撤销，请确保已事先导出备份。请输入确认词继续：',
+      title: '危险操作：清除本地核心数据？',
+      message: '此操作将永久抹掉本机数据库、Provider 配置、MCP 配置与本地密钥，操作不可撤销，请确保已事先导出备份。请输入确认词继续：',
       confirmLabel: '确认清空',
       cancelLabel: '取消',
       isDanger: true,
       requiredKeyword: '清空',
       bulletItems: const [
         '全部历史会话与消息记录',
-        '长期记忆库与用户偏好',
+        '长期记忆库',
         '自定义 Prompt 模板与定时任务',
         '模型调用缓存与本地诊断日志',
+        'Provider / 工具密钥与 MCP 服务器配置',
       ],
     );
 
@@ -103,6 +129,13 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
     try {
       final db = await ref.read(databaseProvider.future);
       await db.clearAllUserData();
+      await db.clearMcpServers();
+      await ProviderConfigStore().clearAll();
+      final prefs = await SharedPreferences.getInstance();
+      await Future.wait([
+        prefs.remove(_autoBackupKey),
+        prefs.remove(_lastBackupKey),
+      ]);
       if (mounted) {
         FloatingToast.show(context, '本地核心数据已成功清空', tone: ToastTone.success);
       }
@@ -139,7 +172,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
+                          NexusPageRoute.settingsPage(
                             builder: (_) => const VaultPage(),
                           ),
                         );
@@ -150,7 +183,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                       icon: Icons.backup_rounded,
                       iconColor: AppPalette.success,
                       title: '自动备份',
-                      subtitle: '应用处于空闲状态时自动创建增量快照',
+                      subtitle: '应用空闲时自动创建加密全量快照',
                       trailingWidget: SettingsSwitch(
                         value: _autoBackup,
                         onChanged: _toggleAutoBackup,
@@ -164,18 +197,8 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                       subtitle: _lastBackupTime,
                       trailingWidget: IconButton(
                         icon: const Icon(Icons.refresh_rounded, size: 20),
-                        onPressed: () {
-                          setState(() {
-                            _lastBackupTime = DateTime.now()
-                                .toLocal()
-                                .toString()
-                                .substring(0, 16);
-                          });
-                          SharedPreferences.getInstance().then((p) {
-                            p.setString(_lastBackupKey, _lastBackupTime);
-                          });
-                          FloatingToast.show(context, '已生成新的数据快照记录');
-                        },
+                        tooltip: '立即备份',
+                        onPressed: _createManualBackup,
                       ),
                     ),
                     const SettingsDivider(),

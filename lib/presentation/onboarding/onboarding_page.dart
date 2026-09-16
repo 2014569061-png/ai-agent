@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../application/onboarding_service.dart';
 import '../../infrastructure/observability/sentry_service.dart';
+import '../../infrastructure/providers/provider_config_store.dart';
 import '../chat/chat_page.dart';
 import '../l10n/app_strings.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../settings/settings_page.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -21,6 +23,8 @@ class _OnboardingPageState extends State<OnboardingPage> {
   final _controller = PageController();
   int _index = 0;
   bool _crashReport = false;
+  String _providerStatus = '正在读取模型配置…';
+  bool _providerConfigured = false;
 
   static const _steps = [
     (
@@ -41,16 +45,45 @@ class _OnboardingPageState extends State<OnboardingPage> {
     (
       Icons.shield_outlined,
       '隐私，本地优先',
-      'API Key 只存本机加密存储，聊天记录只存本机数据库，卸载即清空，无云端残留。'
+      'API Key 和聊天记录默认只存本机；发送消息时，内容会按你的配置传给所选服务商。卸载应用会清除本机数据。'
     ),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshProviderStatus();
+  }
+
+  Future<void> _refreshProviderStatus() async {
+    try {
+      final config = await ProviderConfigStore().load();
+      if (!mounted) return;
+      setState(() {
+        _providerConfigured = config.isConfigured;
+        _providerStatus = config.isConfigured
+            ? '已配置：${config.name} · ${config.model}'
+            : '尚未配置模型，可以先浏览界面，发送消息前再配置。';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _providerStatus = '读取配置失败：$error');
+    }
+  }
+
+  Future<void> _configureProvider() async {
+    await Navigator.of(context).push(
+      NexusPageRoute.settingsPage(builder: (_) => const SettingsPage()),
+    );
+    await _refreshProviderStatus();
+  }
 
   Future<void> _finish() async {
     await SentryService.setEnabled(_crashReport);
     await OnboardingService.markDone();
     if (!mounted) return;
-    Navigator.of(context)
-        .pushReplacement(MaterialPageRoute(builder: (_) => const ChatPage()));
+    Navigator.of(context).pushReplacement(
+        NexusPageRoute.workspace(builder: (_) => const ChatPage()));
   }
 
   void _next() {
@@ -139,10 +172,39 @@ class _OnboardingPageState extends State<OnboardingPage> {
                                     AppTokens.radiusControl),
                               ),
                             ),
-                            onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const SettingsPage())),
+                            onPressed: _configureProvider,
                             child: const Text('去配置模型'),
+                          ),
+                          const SizedBox(height: 12),
+                          SectionCard(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _providerConfigured
+                                      ? Icons.check_circle_outline
+                                      : Icons.info_outline,
+                                  color: _providerConfigured
+                                      ? AppPalette.success
+                                      : (isDark
+                                          ? AppPalette.darkTextMuted
+                                          : AppPalette.lightTextMuted),
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _providerStatus,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: isDark
+                                          ? AppPalette.darkTextMuted
+                                          : AppPalette.lightTextMuted,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                         if (i == _steps.length - 1) ...[

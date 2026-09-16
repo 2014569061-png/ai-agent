@@ -4,6 +4,53 @@ enum MessageRole { system, user, assistant, tool }
 /// sensible floor for the current task while the other values remain explicit.
 enum ReasoningEffort { auto, off, low, medium, high }
 
+/// Three user-facing profiles. Provider-specific effort values stay internal;
+/// this keeps the UI comprehensible while allowing each provider to adapt.
+enum ReasoningMode { standard, deep, auto }
+
+extension ReasoningModeX on ReasoningMode {
+  String get label => switch (this) {
+        ReasoningMode.standard => '标准',
+        ReasoningMode.deep => '深度',
+        ReasoningMode.auto => '自动',
+      };
+
+  String get description => switch (this) {
+        ReasoningMode.standard => '快速回答，默认不额外推理',
+        ReasoningMode.deep => '复杂任务使用更充分的推理',
+        ReasoningMode.auto => '按任务复杂度自动选择推理强度',
+      };
+
+  static ReasoningMode parse(String? value, {bool legacyDeepEnabled = false}) =>
+      switch (value) {
+        'deep' => ReasoningMode.deep,
+        'auto' => ReasoningMode.auto,
+        'standard' => ReasoningMode.standard,
+        _ => legacyDeepEnabled ? ReasoningMode.auto : ReasoningMode.standard,
+      };
+}
+
+/// User-facing execution mode for the current conversation.
+///
+/// Chat keeps ordinary questions lightweight and does not expose tools.
+/// Agent enables workspace/tool execution, while plan requires a confirmed
+/// plan before execution.
+enum ChatMode { chat, agent, plan }
+
+extension ChatModeX on ChatMode {
+  String get label => switch (this) {
+        ChatMode.chat => '聊天',
+        ChatMode.agent => 'Agent',
+        ChatMode.plan => '计划',
+      };
+
+  String get description => switch (this) {
+        ChatMode.chat => '简单问答，不主动执行工具',
+        ChatMode.agent => '允许调用工具与操作工作区',
+        ChatMode.plan => '先生成计划，确认后执行',
+      };
+}
+
 enum RunStatus {
   created,
   sendingRequest,
@@ -229,11 +276,34 @@ class ToolCall {
     required this.id,
     required this.name,
     required this.arguments,
+    this.providerMetadata = const {},
   });
 
   final String id;
   final String name;
   final Map<String, dynamic> arguments;
+
+  /// Vendor-specific fields that must round-trip, such as Gemini
+  /// `thoughtSignature`.
+  final Map<String, dynamic> providerMetadata;
+
+  String? get thoughtSignature {
+    final value = providerMetadata['thoughtSignature'];
+    return value is String && value.isNotEmpty ? value : null;
+  }
+
+  ToolCall copyWith({
+    String? id,
+    String? name,
+    Map<String, dynamic>? arguments,
+    Map<String, dynamic>? providerMetadata,
+  }) =>
+      ToolCall(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        arguments: arguments ?? this.arguments,
+        providerMetadata: providerMetadata ?? this.providerMetadata,
+      );
 }
 
 class UnifiedTool {

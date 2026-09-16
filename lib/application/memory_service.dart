@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
+import 'project_context_service.dart';
 
 /// 长期记忆服务：负责记忆的增删改查与按预算构建注入块。
 class MemoryService {
@@ -32,7 +33,7 @@ class MemoryService {
 
   /// 构建注入块。记忆明确标记为背景资料，且只保留预算内内容。
   Future<String> buildInjectionBlock(AppDatabase database,
-      {int? budget, int? contextTokens}) async {
+      {int? budget, int? contextTokens, String? projectId}) async {
     if (!await isEnabled()) return '';
     final memories = await database.enabledMemories();
     if (memories.isEmpty) return '';
@@ -49,6 +50,12 @@ class MemoryService {
     var used = 0;
     var truncated = false;
     for (final memory in memories) {
+      if (projectId != null &&
+          projectId.isNotEmpty &&
+          memory.category.startsWith('project:') &&
+          memory.category != projectKindMemoryScope(projectId)) {
+        continue;
+      }
       final line = '- ${memory.content}\n';
       // 预算是 token 近似值；中文按字符保守估算，避免注入块无限膨胀。
       if (used + line.length > effectiveBudget) {

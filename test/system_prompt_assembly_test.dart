@@ -11,13 +11,14 @@ void main() {
         sessionSkillBlocks: const ['会话技能'],
         delegationRules: '委派规则',
         workspaceRules: '工作区规则',
+        projectContextBlock: '项目上下文',
         memoryBlock: '长期记忆',
         knowledgeBlock: '知识片段',
       );
 
       expect(
         prompt,
-        '人格\n\n技能索引\n\n会话技能\n\n委派规则\n\n工作区规则\n\n长期记忆\n\n知识片段',
+        '人格\n\n技能索引\n\n会话技能\n\n委派规则\n\n工作区规则\n\n项目上下文\n\n长期记忆\n\n知识片段',
       );
     });
 

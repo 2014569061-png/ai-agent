@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import '../../../domain/session_metrics.dart';
 import '../../dashboard/widgets/token_numbers.dart';
 import '../../theme/app_palette.dart';
-import '../../widgets/immersive_sheet.dart';
+import '../../widgets/nexus_sheet.dart';
 import '../../widgets/nexus_metric_tile.dart';
 
 /// 打开会话指标详情弹层。
@@ -13,7 +13,7 @@ Future<void> showSessionMetricsSheet(
   int liveContextTokens = 0,
   int contextLimit = 0,
 }) {
-  return showImmersiveSheet<void>(
+  return showNexusSheet<void>(
     context: context,
     builder: (_) => SessionMetricsSheet(
       metrics: metrics,

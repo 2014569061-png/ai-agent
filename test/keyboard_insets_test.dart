@@ -142,25 +142,25 @@ void main() {
     });
   });
 
-  group('聊天空态：键盘弹出时隐藏建议 chips（真机可见行为）', () {
-    testWidgets('键盘收起 → 显示建议 chips', (tester) async {
+  group('聊天空态：键盘弹出时隐藏工作流入口（真机可见行为）', () {
+    testWidgets('键盘收起 → 显示工作流入口', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpChatPage(tester);
 
-      expect(find.text('解读项目'), findsOneWidget);
-      expect(find.text('修复问题'), findsOneWidget);
+      expect(find.text('审计变更'), findsOneWidget);
+      expect(find.text('配置模型'), findsOneWidget);
     });
 
-    testWidgets('键盘弹出 → 建议 chips 与状态行一并隐藏', (tester) async {
+    testWidgets('键盘弹出 → 工作流入口与状态行一并隐藏', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpChatPage(tester);
-      expect(find.text('解读项目'), findsOneWidget);
+      expect(find.text('审计变更'), findsOneWidget);
 
       // 弹出键盘：TestFlutterView 的 setter 会派发 metrics 变化。
       tester.view.viewInsets = const FakeViewPadding(bottom: 336);
@@ -168,17 +168,17 @@ void main() {
       await tester.pump();
 
       expect(
-        find.text('解读项目'),
+        find.text('审计变更'),
         findsNothing,
         reason: '键盘弹出时空态建议必须隐藏，否则小屏下会与键盘挤在一起',
       );
-      expect(find.text('修复问题'), findsNothing);
+      expect(find.text('配置模型'), findsNothing);
 
       // 收起键盘应当恢复。
       tester.view.resetViewInsets();
       await tester.pump();
       await tester.pump();
-      expect(find.text('解读项目'), findsOneWidget);
+      expect(find.text('审计变更'), findsOneWidget);
     });
   });
 

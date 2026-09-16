@@ -11,13 +11,21 @@ import 'termux_runtime_adapter.dart';
 ///
 /// Android 按“内置 PRoot → Termux → Android Shell”顺序选择，桌面端继续使用
 /// 本机进程 Adapter；TerminalCommandService 与 Agent 层无需感知平台分支。
-LinuxRuntimeAdapter createDefaultLinuxRuntime() {
+List<LinuxRuntimeAdapter> defaultLinuxRuntimeCandidates() {
   if (Platform.isAndroid) {
-    return AdaptiveLinuxRuntimeAdapter([
+    return [
       BuiltinProotRuntimeAdapter(),
       TermuxRuntimeAdapter(),
       AndroidShellRuntimeAdapter(),
-    ]);
+    ];
   }
-  return HostProcessRuntimeAdapter();
+  return [HostProcessRuntimeAdapter()];
+}
+
+LinuxRuntimeAdapter createDefaultLinuxRuntime() {
+  final candidates = defaultLinuxRuntimeCandidates();
+  if (Platform.isAndroid) {
+    return AdaptiveLinuxRuntimeAdapter(candidates);
+  }
+  return candidates.first;
 }

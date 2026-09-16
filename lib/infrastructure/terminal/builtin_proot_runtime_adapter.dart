@@ -23,10 +23,13 @@ class BuiltinProotRuntimeAdapter
     MethodChannel? bridge,
     Future<Directory> Function()? applicationSupportDirectory,
     AssetBundle? assetBundle,
+    this.inspectTimeout = const Duration(seconds: 3),
+    bool? isAndroid,
   })  : _bridge = bridge ?? const MethodChannel(_channelName),
         _applicationSupportDirectory =
             applicationSupportDirectory ?? getApplicationSupportDirectory,
-        _assetBundle = assetBundle ?? rootBundle;
+        _assetBundle = assetBundle ?? rootBundle,
+        _isAndroid = isAndroid ?? Platform.isAndroid;
 
   static const _channelName = 'nexus/builtin_linux';
   static const _defaultRootfsAssetPath =
@@ -43,6 +46,8 @@ class BuiltinProotRuntimeAdapter
   final MethodChannel _bridge;
   final Future<Directory> Function() _applicationSupportDirectory;
   final AssetBundle _assetBundle;
+  final Duration inspectTimeout;
+  final bool _isAndroid;
 
   bool _running = false;
   Future<String>? _preparingRootfs;
@@ -61,7 +66,7 @@ class BuiltinProotRuntimeAdapter
 
   @override
   Future<LinuxRuntimeInfo> inspect() async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       return const LinuxRuntimeInfo(
         kind: LinuxRuntimeKind.builtinProot,
         label: '内置 PRoot',
@@ -71,7 +76,9 @@ class BuiltinProotRuntimeAdapter
     }
 
     try {
-      final raw = await _bridge.invokeMethod<Map<dynamic, dynamic>>('inspect');
+      final raw = await _bridge
+          .invokeMethod<Map<dynamic, dynamic>>('inspect')
+          .timeout(inspectTimeout);
       final available = raw?['available'] == true;
       return LinuxRuntimeInfo(
         kind: kind,
@@ -82,6 +89,14 @@ class BuiltinProotRuntimeAdapter
         supportsInteractive: false,
         supportsShellSyntax: true,
         requiresExternalApp: false,
+      );
+    } on TimeoutException {
+      return LinuxRuntimeInfo(
+        kind: kind,
+        label: '内置 Alpine Linux',
+        available: false,
+        detail: '内置 PRoot 检测超时（${_formatTimeout(inspectTimeout)}），'
+            '请稍后重试。',
       );
     } on MissingPluginException {
       return const LinuxRuntimeInfo(
@@ -106,7 +121,7 @@ class BuiltinProotRuntimeAdapter
     required String workingDirectory,
     required Duration timeout,
   }) async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       return const CommandResult(
         output: '[builtin-proot] 该运行时仅支持 Android。',
         exitCode: 127,
@@ -115,7 +130,9 @@ class BuiltinProotRuntimeAdapter
 
     _running = true;
     try {
-      final rootfsPath = await _ensureRootfs();
+      // Rootfs extraction and storage providers are part of the command
+      // boundary too; a native bridge timeout must not be the only guard.
+      final rootfsPath = await _ensureRootfs().timeout(timeout);
       final runtimeLibraryPath =
           p.join(Directory(rootfsPath).parent.path, 'native-libs');
       final raw = await _bridge.invokeMethod<Map<dynamic, dynamic>>('run', {
@@ -162,9 +179,9 @@ class BuiltinProotRuntimeAdapter
     required String ownerToken,
     required String logPath,
   }) async {
-    if (!Platform.isAndroid) return null;
+    if (!_isAndroid) return null;
     try {
-      final rootfsPath = await _ensureRootfs();
+      final rootfsPath = await _ensureRootfs().timeout(timeout);
       final runtimeLibraryPath =
           p.join(Directory(rootfsPath).parent.path, 'native-libs');
       final completionPath = '$logPath.exit.json';
@@ -201,7 +218,7 @@ class BuiltinProotRuntimeAdapter
 
   @override
   Future<bool> verifyDetached(int pid, String ownerToken) async {
-    if (!Platform.isAndroid || pid <= 0 || ownerToken.isEmpty) return false;
+    if (!_isAndroid || pid <= 0 || ownerToken.isEmpty) return false;
     try {
       return await _bridge.invokeMethod<bool>('verifyDetached', {
             'pid': pid,
@@ -215,7 +232,7 @@ class BuiltinProotRuntimeAdapter
 
   @override
   Future<bool> stopDetached(int pid, String ownerToken) async {
-    if (!Platform.isAndroid || pid <= 0 || ownerToken.isEmpty) return false;
+    if (!_isAndroid || pid <= 0 || ownerToken.isEmpty) return false;
     try {
       return await _bridge.invokeMethod<bool>('stopDetached', {
             'pid': pid,
@@ -427,5 +444,10 @@ class BuiltinProotRuntimeAdapter
       exitCode: exitCode,
       timedOut: raw['timedOut'] == true || exitCode == 124,
     );
+  }
+
+  String _formatTimeout(Duration timeout) {
+    if (timeout.inMilliseconds < 1000) return '${timeout.inMilliseconds}ms';
+    return '${timeout.inSeconds}s';
   }
 }

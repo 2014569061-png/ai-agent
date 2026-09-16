@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../infrastructure/database/app_database.dart';
 import '../../application/error_humanizer.dart';
 import '../history/history_page.dart';
 import '../l10n/app_strings.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state_view.dart';
@@ -40,13 +42,35 @@ class DashboardPage extends ConsumerStatefulWidget {
 
 class _DashboardPageState extends ConsumerState<DashboardPage>
     with WidgetsBindingObserver {
+  static const _developerModeKey = 'dashboard.developer_mode';
   Timer? _refreshTimer;
+  bool _developerMode = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startRefreshTimer();
+    Future.microtask(_loadPresentationMode);
+  }
+
+  Future<void> _loadPresentationMode() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() =>
+            _developerMode = preferences.getBool(_developerModeKey) ?? false);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _togglePresentationMode() async {
+    final next = !_developerMode;
+    setState(() => _developerMode = next);
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool(_developerModeKey, next);
+    } catch (_) {}
   }
 
   void _startRefreshTimer() {
@@ -112,6 +136,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                   icon: const Icon(Icons.refresh_rounded, size: 20),
                   onPressed: _refresh,
                 ),
+                IconButton(
+                  tooltip: _developerMode ? '切换到简洁模式' : '切换到开发者模式',
+                  icon: Icon(_developerMode
+                      ? Icons.visibility_outlined
+                      : Icons.terminal_rounded),
+                  onPressed: _togglePresentationMode,
+                ),
               ],
             ),
 
@@ -133,36 +164,36 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                     children: [
-                      // 1. 今日 Token 与费用概览 Hero
-                      TokenUsageHero(days: summary.weeklyUsage),
-
-                      const SizedBox(height: 16),
-
-                      // 2. 待我处理聚合区（工具审批、计划确认，置顶展示）
+                      // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
                       TodoSection(
                         todos: summary.todos,
                         onConversationSelected: widget.onConversationSelected,
                       ),
-
-                      // 3. 运行状态与任务队列
-                      RunStatusList(
-                        runs: summary.recentRuns,
-                        onConversationSelected: widget.onConversationSelected,
-                      ),
-
                       const SizedBox(height: 16),
-
-                      // 4. 2×2 核心指标网格
-                      KpiCardGrid(kpis: summary.kpis),
-
-                      const SizedBox(height: 16),
-
-                      // 5. Token 7 天用量趋势
-                      TokenTrendCard(days: summary.weeklyUsage),
-
-                      const SizedBox(height: 16),
-
-                      // 6. 最近会话
+                      if (_developerMode) ...[
+                        TokenUsageHero(days: summary.weeklyUsage),
+                        const SizedBox(height: 16),
+                        KpiCardGrid(kpis: summary.kpis),
+                        const SizedBox(height: 16),
+                        RunStatusList(
+                          runs: summary.recentRuns,
+                          onConversationSelected: widget.onConversationSelected,
+                        ),
+                        const SizedBox(height: 16),
+                        TokenTrendCard(days: summary.weeklyUsage),
+                        const SizedBox(height: 16),
+                      ] else
+                        SectionCard(
+                          child: ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.insights_outlined),
+                            title: const Text('性能详情'),
+                            subtitle: const Text('Token、费用、运行指标与趋势'),
+                            trailing: const Icon(Icons.chevron_right_rounded),
+                            onTap: _togglePresentationMode,
+                          ),
+                        ),
+                      if (!_developerMode) const SizedBox(height: 16),
                       _RecentConversationsSection(
                         conversations: summary.recentConversations,
                         onConversationSelected: widget.onConversationSelected,
@@ -278,7 +309,7 @@ class _RecentConversationsSection extends StatelessWidget {
         ),
         onPressed: () {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const HistoryPage()),
+            NexusPageRoute.detail(builder: (_) => const HistoryPage()),
           );
         },
         child: Row(

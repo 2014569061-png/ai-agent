@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,7 +9,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_theme_controller.dart';
 import '../theme/app_appearance_controller.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_dropdown.dart';
+import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
 
@@ -196,7 +196,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            ImmersiveDropdown<String>(
+                            NexusDropdown<String>(
                               key: ValueKey(_widthOption(widthFactor)),
                               labelText: '对话气泡宽度模式',
                               initialValue: _widthOption(widthFactor),

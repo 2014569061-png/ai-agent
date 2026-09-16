@@ -1,12 +1,20 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'database_executor.dart';
 
 part 'app_database.g.dart';
 
+@TableIndex(
+    name: 'idx_conversations_project_updated',
+    columns: {#projectId, #updatedAt})
 class Conversations extends Table {
   TextColumn get id => text()();
   TextColumn get title => text().withDefault(const Constant('新会话'))();
   TextColumn get agentId => text().nullable()();
+  TextColumn get projectId => text().nullable()();
+  TextColumn get mode => text().withDefault(const Constant('chat'))();
+  TextColumn get providerProfileId => text().nullable()();
   BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
   BoolColumn get isFavorite => boolean().withDefault(const Constant(false))();
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
@@ -96,9 +104,12 @@ class ModelProfiles extends Table {
 
 /// 后台任务持久化（C2）：记录 Agent / 定时任务的运行状态与请求快照，用于断点恢复。
 @TableIndex(name: 'idx_tasks_status_updated', columns: {#status, #updatedAt})
+@TableIndex(name: 'idx_tasks_project_updated', columns: {#projectId, #updatedAt})
 class Tasks extends Table {
   TextColumn get id => text()();
   TextColumn get conversationId => text()();
+  TextColumn get projectId => text().nullable()();
+  IntColumn get stateRevision => integer().withDefault(const Constant(0))();
   TextColumn get type => text().withDefault(const Constant('agent'))();
   TextColumn get status => text().withDefault(const Constant('running'))();
   TextColumn get requestJson => text()();
@@ -109,6 +120,74 @@ class Tasks extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {id};
+}
+
+@TableIndex(
+    name: 'idx_projects_updated', columns: {#archived, #updatedAt})
+class Projects extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get canonicalRootPath => text()();
+  TextColumn get sourceKind => text().withDefault(const Constant('directory'))();
+  TextColumn get projectKind => text().withDefault(const Constant('unknown'))();
+  TextColumn get runtimePreference => text().nullable()();
+  TextColumn get settingsJson => text().withDefault(const Constant('{}'))();
+  IntColumn get settingsVersion => integer().withDefault(const Constant(1))();
+  BoolColumn get archived => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class Drafts extends Table {
+  TextColumn get draftKey => text()();
+  TextColumn get conversationId => text().nullable()();
+  TextColumn get projectId => text().nullable()();
+  TextColumn get body => text().withDefault(const Constant(''))();
+  TextColumn get attachmentsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get referencesJson => text().withDefault(const Constant('[]'))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {draftKey};
+}
+
+@TableIndex(
+    name: 'idx_run_controls_run_sequence',
+    columns: {#runId, #sequenceNo})
+@TableIndex(
+    name: 'idx_run_controls_client',
+    columns: {#clientControlId},
+    unique: true)
+class RunControls extends Table {
+  TextColumn get id => text()();
+  TextColumn get clientControlId => text()();
+  TextColumn get taskId => text()();
+  TextColumn get runId => text().nullable()();
+  TextColumn get kind => text()();
+  TextColumn get payloadJson => text().withDefault(const Constant('{}'))();
+  TextColumn get status => text().withDefault(const Constant('pending'))();
+  IntColumn get sequenceNo => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get consumedAt => dateTime().nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class ExecutionLeases extends Table {
+  TextColumn get resourceKey => text()();
+  TextColumn get taskId => text()();
+  TextColumn get runId => text()();
+  TextColumn get ownerToken => text()();
+  IntColumn get generation => integer().withDefault(const Constant(0))();
+  DateTimeColumn get heartbeatAt => dateTime()();
+  DateTimeColumn get expiresAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {resourceKey};
 }
 
 /// 用户对已结束开发任务结果的最小反馈记录。每个任务最多一条，可反复修改。
@@ -287,6 +366,8 @@ class AuditLogs extends Table {
 class RunRecords extends Table {
   TextColumn get runId => text()();
   TextColumn get conversationId => text()();
+  TextColumn get taskId => text().nullable()();
+  TextColumn get projectId => text().nullable()();
   TextColumn get model => text().withDefault(const Constant('unknown'))();
   TextColumn get status => text().withDefault(const Constant('running'))();
   DateTimeColumn get startedAt => dateTime()();
@@ -425,6 +506,10 @@ class AccountMeta extends Table {
   ModelProfiles,
   Memories,
   Tasks,
+  Projects,
+  Drafts,
+  RunControls,
+  ExecutionLeases,
   TaskFeedback,
   SyncMeta,
   KnowledgeDocs,
@@ -447,11 +532,43 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        onCreate: (m) async => m.createAll(),
+        onCreate: (m) async {
+          await m.createAll();
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_active_path '
+            'ON projects (canonical_root_path) WHERE archived = 0',
+          );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_projects_updated '
+            'ON projects (archived, updated_at)',
+          );
+          await customStatement(
+            'CREATE UNIQUE INDEX IF NOT EXISTS idx_run_controls_client '
+            'ON run_controls (client_control_id)',
+          );
+          await customStatement(
+            'CREATE TABLE IF NOT EXISTS artifacts ('
+            'id TEXT NOT NULL PRIMARY KEY, '
+            'project_id TEXT NOT NULL, '
+            'task_id TEXT NOT NULL, '
+            'run_id TEXT NOT NULL, '
+            'kind TEXT NOT NULL, '
+            'relative_path TEXT NOT NULL, '
+            'hash TEXT NOT NULL, '
+            'bytes INTEGER NOT NULL DEFAULT 0, '
+            'inspection_json TEXT NOT NULL DEFAULT \'{}\', '
+            'created_at TEXT NOT NULL)',
+          );
+          await customStatement(
+            'CREATE INDEX IF NOT EXISTS idx_artifacts_project_created '
+            'ON artifacts (project_id, created_at)',
+          );
+          await _ensurePendingApprovals();
+        },
         onUpgrade: (m, from, to) async {
           Future<bool> hasTable(String tableName) async {
             final rows = await customSelect(
@@ -631,7 +748,199 @@ class AppDatabase extends _$AppDatabase {
               'updated_at TEXT NOT NULL)',
             );
           }
+          if (from < 20) {
+            if (!await hasTable('projects')) {
+              await m.createTable(projects);
+            }
+            if (!await hasTable('drafts')) {
+              await m.createTable(drafts);
+            }
+            if (await hasTable('conversations')) {
+              if (!await hasColumn('conversations', 'project_id')) {
+                await m.addColumn(conversations, conversations.projectId);
+              }
+              if (!await hasColumn('conversations', 'mode')) {
+                await m.addColumn(conversations, conversations.mode);
+              }
+              if (!await hasColumn('conversations', 'provider_profile_id')) {
+                await m.addColumn(
+                    conversations, conversations.providerProfileId);
+              }
+            }
+            if (await hasTable('tasks')) {
+              if (!await hasColumn('tasks', 'project_id')) {
+                await m.addColumn(tasks, tasks.projectId);
+              }
+              if (!await hasColumn('tasks', 'state_revision')) {
+                await m.addColumn(tasks, tasks.stateRevision);
+              }
+            }
+            await customStatement(
+              'CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_active_path '
+              'ON projects (canonical_root_path) WHERE archived = 0',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_projects_updated '
+              'ON projects (archived, updated_at)',
+            );
+            if (await hasTable('conversations')) {
+              await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_conversations_project_updated '
+                'ON conversations (project_id, updated_at)',
+              );
+            }
+            if (await hasTable('tasks')) {
+              await customStatement(
+                'CREATE INDEX IF NOT EXISTS idx_tasks_project_updated '
+                'ON tasks (project_id, updated_at)',
+              );
+            }
+          }
+          if (from < 21) {
+            if (!await hasTable('run_controls')) {
+              await m.createTable(runControls);
+            }
+            if (!await hasTable('execution_leases')) {
+              await m.createTable(executionLeases);
+            }
+            if (await hasTable('run_records')) {
+              if (!await hasColumn('run_records', 'task_id')) {
+                await m.addColumn(runRecords, runRecords.taskId);
+              }
+              if (!await hasColumn('run_records', 'project_id')) {
+                await m.addColumn(runRecords, runRecords.projectId);
+              }
+            }
+            await customStatement(
+              'CREATE UNIQUE INDEX IF NOT EXISTS idx_run_controls_client '
+              'ON run_controls (client_control_id)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_run_controls_run_sequence '
+              'ON run_controls (run_id, sequence_no)',
+            );
+          }
+          if (from < 22) {
+            await customStatement(
+              'CREATE TABLE IF NOT EXISTS artifacts ('
+              'id TEXT NOT NULL PRIMARY KEY, '
+              'project_id TEXT NOT NULL, '
+              'task_id TEXT NOT NULL, '
+              'run_id TEXT NOT NULL, '
+              'kind TEXT NOT NULL, '
+              'relative_path TEXT NOT NULL, '
+              'hash TEXT NOT NULL, '
+              'bytes INTEGER NOT NULL DEFAULT 0, '
+              'inspection_json TEXT NOT NULL DEFAULT \'{}\', '
+              'created_at TEXT NOT NULL)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_artifacts_project_created '
+              'ON artifacts (project_id, created_at)',
+            );
+          }
+          if (from < 23) {
+            await _ensurePendingApprovals();
+          }
         },
+      );
+
+  /// 建 pending_approvals 表与索引（锁屏审批的决策通道）。
+  ///
+  /// onCreate 与 onUpgrade 共用同一段 SQL，避免两条路径漂移——历史教训是
+  /// 「onCreate 建了表、onUpgrade 忘了建」，结果是全新安装正常、升级用户永远缺表。
+  ///
+  /// 用裸 SQL 而不是 Drift 表类：`artifacts` 已是同样的先例，可以避免为一张只有
+  /// 几个字段的临时表重新跑 build_runner 生成 app_database.g.dart。
+  Future<void> _ensurePendingApprovals() async {
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS pending_approvals ('
+      'request_id TEXT NOT NULL PRIMARY KEY, '
+      'tool_name TEXT NOT NULL, '
+      'summary TEXT NOT NULL DEFAULT \'\', '
+      'risk TEXT NOT NULL DEFAULT \'\', '
+      'decision TEXT, '
+      'decided_at TEXT, '
+      'created_at TEXT NOT NULL, '
+      'expires_at TEXT NOT NULL)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_pending_approvals_created '
+      'ON pending_approvals (created_at)',
+    );
+  }
+
+  // --- 锁屏审批的决策通道 ---
+  //
+  // 用途：应用不在前台（锁屏 / 切到别的应用）时，弹窗用户根本看不见，需审批的
+  // 工具会一直等下去。这条通道把审批请求落库，由带动作的通知让用户直接裁决，
+  // 后台 isolate 把结果写回同一行，前台轮询取走。
+  //
+  // ⚠️ 这些行是**一次性握手**数据（分钟级过期），刻意不进保险箱备份：把几分钟前
+  // 的审批决定恢复到新设备上是错误的。
+
+  Future<void> insertPendingApproval({
+    required String requestId,
+    required String toolName,
+    required String summary,
+    required String risk,
+    required Duration ttl,
+  }) async {
+    final now = DateTime.now();
+    await customInsert(
+      'INSERT OR REPLACE INTO pending_approvals '
+      '(request_id, tool_name, summary, risk, decision, decided_at, created_at, expires_at) '
+      'VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)',
+      variables: [
+        Variable<String>(requestId),
+        Variable<String>(toolName),
+        Variable<String>(summary),
+        Variable<String>(risk),
+        Variable<String>(now.toIso8601String()),
+        Variable<String>(now.add(ttl).toIso8601String()),
+      ],
+    );
+  }
+
+  /// 返回 'approve' / 'deny'；未决或不存在时返回 null。
+  Future<String?> findPendingApprovalDecision(String requestId) async {
+    final rows = await customSelect(
+      'SELECT decision FROM pending_approvals WHERE request_id = ?',
+      variables: [Variable<String>(requestId)],
+    ).get();
+    if (rows.isEmpty) return null;
+    return rows.first.data['decision'] as String?;
+  }
+
+  /// 写入决定，**只有第一条生效**（`decision IS NULL` 作为哨兵）。
+  /// 这样锁屏动作与前台弹窗几乎同时提交时不会互相覆盖，返回 false 表示已有决定。
+  Future<bool> decidePendingApproval(String requestId, String decision) async {
+    final affected = await customUpdate(
+      'UPDATE pending_approvals SET decision = ?, decided_at = ? '
+      'WHERE request_id = ? AND decision IS NULL',
+      variables: [
+        Variable<String>(decision),
+        Variable<String>(DateTime.now().toIso8601String()),
+        Variable<String>(requestId),
+      ],
+      updateKind: UpdateKind.update,
+    );
+    return affected > 0;
+  }
+
+  Future<void> deletePendingApproval(String requestId) async {
+    await customUpdate(
+      'DELETE FROM pending_approvals WHERE request_id = ?',
+      variables: [Variable<String>(requestId)],
+      updateKind: UpdateKind.delete,
+    );
+  }
+
+  /// 清理已过期的一次性记录（包括用户一直没处理、早已无人等待的那些）。
+  Future<int> prunePendingApprovals() => customUpdate(
+        'DELETE FROM pending_approvals WHERE expires_at < ?',
+        variables: [Variable<String>(DateTime.now().toIso8601String())],
+        updateKind: UpdateKind.delete,
       );
 
   /// [limit]/[offset] 供列表页分页（B-2）：热路径（抽屉、启动恢复）必须显式限流，
@@ -813,6 +1122,9 @@ class AppDatabase extends _$AppDatabase {
   Future<void> insertAgent(AgentsCompanion agent) =>
       into(agents).insertOnConflictUpdate(agent);
 
+  Future<void> deleteAgent(String id) =>
+      (delete(agents)..where((row) => row.id.equals(id))).go();
+
   Future<List<ModelProfile>> allModelProfiles() => select(modelProfiles).get();
 
   Future<void> saveModelProfile(ModelProfile profile) =>
@@ -913,6 +1225,166 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteMemory(String id) =>
       (delete(memories)..where((row) => row.id.equals(id))).go();
 
+  // --- 项目与草稿（开发落地方案 T01）---
+
+  Future<List<Project>> allProjects({bool includeArchived = false}) {
+    final query = select(projects)
+      ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]);
+    if (!includeArchived) {
+      query.where((row) => row.archived.equals(false));
+    }
+    return query.get();
+  }
+
+  Future<Project?> findProject(String id) =>
+      (select(projects)..where((row) => row.id.equals(id))).getSingleOrNull();
+
+  Future<Project?> findProjectByCanonicalPath(String path) =>
+      (select(projects)
+            ..where((row) =>
+                row.canonicalRootPath.equals(path) &
+                row.archived.equals(false)))
+          .getSingleOrNull();
+
+  Future<void> saveProject(Project project) =>
+      into(projects).insertOnConflictUpdate(project);
+
+  Future<void> insertProject(ProjectsCompanion project) =>
+      into(projects).insertOnConflictUpdate(project);
+
+  Future<List<Conversation>> conversationsForProject(String projectId) =>
+      (select(conversations)
+            ..where((row) => row.projectId.equals(projectId))
+            ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)]))
+          .get();
+
+  Future<List<Task>> tasksForProject(String projectId, {int limit = 50}) =>
+      (select(tasks)
+            ..where((row) => row.projectId.equals(projectId))
+            ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
+            ..limit(limit))
+          .get();
+
+  Future<void> saveRunControl(RunControl row) =>
+      into(runControls).insertOnConflictUpdate(row);
+
+  Future<RunControl?> findRunControlByClientId(String clientControlId) =>
+      (select(runControls)
+            ..where((row) => row.clientControlId.equals(clientControlId)))
+          .getSingleOrNull();
+
+  Future<List<RunControl>> pendingRunControls({
+    required String taskId,
+    String? runId,
+  }) {
+    final query = select(runControls)
+      ..where((row) =>
+          row.taskId.equals(taskId) & row.status.equals('pending'))
+      ..orderBy([(row) => OrderingTerm.asc(row.sequenceNo)]);
+    if (runId != null && runId.isNotEmpty) {
+      query.where((row) => row.runId.equals(runId) | row.runId.isNull());
+    }
+    return query.get();
+  }
+
+  Future<int> nextRunControlSequence(String taskId) async {
+    final rows = await (select(runControls)
+          ..where((row) => row.taskId.equals(taskId))
+          ..orderBy([(row) => OrderingTerm.desc(row.sequenceNo)])
+          ..limit(1))
+        .get();
+    if (rows.isEmpty) return 1;
+    return rows.first.sequenceNo + 1;
+  }
+
+  Future<void> saveExecutionLease(ExecutionLease row) =>
+      into(executionLeases).insertOnConflictUpdate(row);
+
+  Future<ExecutionLease?> findExecutionLease(String resourceKey) =>
+      (select(executionLeases)
+            ..where((row) => row.resourceKey.equals(resourceKey)))
+          .getSingleOrNull();
+
+  Future<void> deleteExecutionLease(String resourceKey) =>
+      (delete(executionLeases)
+            ..where((row) => row.resourceKey.equals(resourceKey)))
+          .go();
+
+  Future<Draft?> findDraft(String draftKey) =>
+      (select(drafts)..where((row) => row.draftKey.equals(draftKey)))
+          .getSingleOrNull();
+
+  Future<void> saveDraft(Draft draft) =>
+      into(drafts).insertOnConflictUpdate(draft);
+
+  Future<void> deleteDraft(String draftKey) =>
+      (delete(drafts)..where((row) => row.draftKey.equals(draftKey))).go();
+
+  Future<void> saveArtifactRecord(Map<String, dynamic> row) async {
+    await customStatement(
+      'INSERT OR REPLACE INTO artifacts '
+      '(id, project_id, task_id, run_id, kind, relative_path, hash, bytes, inspection_json, created_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        row['id'],
+        row['projectId'],
+        row['taskId'],
+        row['runId'],
+        row['kind'],
+        row['relativePath'],
+        row['hash'],
+        row['bytes'] ?? 0,
+        row['inspectionJson'] is String
+            ? row['inspectionJson']
+            : jsonEncode(row['inspectionJson'] ?? const {}),
+        row['createdAt'],
+      ],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> artifactsForProject(String projectId) async {
+    final rows = await customSelect(
+      'SELECT * FROM artifacts WHERE project_id = ? ORDER BY created_at DESC',
+      variables: [Variable<String>(projectId)],
+    ).get();
+    return [
+      for (final row in rows)
+        {
+          'id': row.data['id'],
+          'projectId': row.data['project_id'],
+          'taskId': row.data['task_id'],
+          'runId': row.data['run_id'],
+          'kind': row.data['kind'],
+          'relativePath': row.data['relative_path'],
+          'hash': row.data['hash'],
+          'bytes': row.data['bytes'],
+          'inspectionJson': row.data['inspection_json'],
+          'createdAt': row.data['created_at'],
+        }
+    ];
+  }
+
+  Future<List<Map<String, dynamic>>> allArtifactRecords() async {
+    final rows = await customSelect(
+      'SELECT * FROM artifacts ORDER BY created_at DESC',
+    ).get();
+    return [
+      for (final row in rows)
+        {
+          'id': row.data['id'],
+          'projectId': row.data['project_id'],
+          'taskId': row.data['task_id'],
+          'runId': row.data['run_id'],
+          'kind': row.data['kind'],
+          'relativePath': row.data['relative_path'],
+          'hash': row.data['hash'],
+          'bytes': row.data['bytes'],
+          'inspectionJson': row.data['inspection_json'],
+          'createdAt': row.data['created_at'],
+        }
+    ];
+  }
+
   // --- 后台任务（C2）---
 
   Future<List<Task>> runningTasks() => (select(tasks)
@@ -952,6 +1424,21 @@ class AppDatabase extends _$AppDatabase {
   Future<TaskFeedbackData?> feedbackForTask(String taskId) =>
       (select(taskFeedback)..where((row) => row.taskId.equals(taskId)))
           .getSingleOrNull();
+
+  Future<void> saveTaskFeedbackRow(TaskFeedbackData row) =>
+      into(taskFeedback).insertOnConflictUpdate(row);
+
+  Future<void> saveRunRecordRow(RunRecord row) =>
+      into(runRecords).insertOnConflictUpdate(row);
+
+  Future<void> saveRunEventRow(RunEvent row) =>
+      into(runEvents).insertOnConflictUpdate(row);
+
+  Future<void> saveLogRecordRow(LogRecord row) =>
+      into(logRecords).insertOnConflictUpdate(row);
+
+  Future<void> saveAuditLog(AuditLog row) =>
+      into(auditLogs).insertOnConflictUpdate(row);
 
   Future<void> saveTaskFeedback({
     required String taskId,
@@ -1024,6 +1511,51 @@ class AppDatabase extends _$AppDatabase {
       (delete(taskFeedback)..where((row) => row.taskId.equals(taskId))).go();
 
   Future<void> clearTaskFeedback() => delete(taskFeedback).go();
+
+  Future<List<TaskFeedbackData>> allTaskFeedback({int limit = 2000}) =>
+      (select(taskFeedback)
+            ..orderBy([(row) => OrderingTerm.desc(row.updatedAt)])
+            ..limit(limit))
+          .get();
+
+  Future<List<CollaborationAgentRun>> allCollaborationAgentRuns(
+          {int limit = 2000}) =>
+      (select(collaborationAgentRuns)..limit(limit)).get();
+
+  Future<List<CollaborationArtifact>> allCollaborationArtifacts(
+          {int limit = 2000}) =>
+      (select(collaborationArtifacts)..limit(limit)).get();
+
+  Future<List<CollaborationMessage>> allCollaborationMessages(
+          {int limit = 2000}) =>
+      (select(collaborationMessages)..limit(limit)).get();
+
+  Future<List<AuditLog>> allAuditLogs({int limit = 2000}) =>
+      (select(auditLogs)
+            ..orderBy([(row) => OrderingTerm.desc(row.createdAt)])
+            ..limit(limit))
+          .get();
+
+  Future<List<RunRecord>> allRunRecords({int limit = 2000}) =>
+      (select(runRecords)
+            ..orderBy([(row) => OrderingTerm.desc(row.startedAt)])
+            ..limit(limit))
+          .get();
+
+  Future<List<RunEvent>> allRunEvents({int limit = 8000}) =>
+      (select(runEvents)
+            ..orderBy([
+              (row) => OrderingTerm.asc(row.runId),
+              (row) => OrderingTerm.asc(row.sequenceNo),
+            ])
+            ..limit(limit))
+          .get();
+
+  Future<List<LogRecord>> allLogRecords({int limit = 4000}) =>
+      (select(logRecords)
+            ..orderBy([(row) => OrderingTerm.desc(row.createdAt)])
+            ..limit(limit))
+          .get();
 
   // --- v0.9 协作分析 ---
 
@@ -1454,7 +1986,9 @@ class AppDatabase extends _$AppDatabase {
   Future<void> clearMcpServers() => delete(mcpServers).go();
 
   /// 清空全部业务数据（G3 隐私保险箱导入前备份后覆盖用）。
-  /// 保留 tasks / syncMeta（运行态元数据）。
+  /// 范围必须与 [buildVaultJson] 的导出清单保持一致：导出包含而此处未清的表
+  /// 会在恢复时留下旧行，此处清掉而导出没有的表会在恢复时彻底丢失。
+  /// 保留 syncMeta（运行态元数据），tasks 属于业务数据，同样会被清空。
   Future<void> clearAllUserData() async {
     await transaction(() async {
       await delete(collaborationMessages).go();
@@ -1463,6 +1997,10 @@ class AppDatabase extends _$AppDatabase {
       await delete(collaborationRuns).go();
       await delete(tasks).go();
       await delete(taskFeedback).go();
+      await delete(drafts).go();
+      await delete(runControls).go();
+      await delete(executionLeases).go();
+      await delete(projects).go();
       await delete(messages).go();
       await delete(conversations).go();
       await delete(memories).go();
@@ -1478,6 +2016,10 @@ class AppDatabase extends _$AppDatabase {
       await delete(runEvents).go();
       await delete(runRecords).go();
       await delete(logRecords).go();
+      await customStatement('DELETE FROM artifacts');
+      // 一次性审批握手数据：不进备份，但清库时必须一并抹掉，否则残留记录会
+      // 让清库后的下一个同名请求拿到一个早已过期的决定。
+      await customStatement('DELETE FROM pending_approvals');
     });
   }
 }

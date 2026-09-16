@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../domain/models.dart';
 import '../../widgets/empty_state_view.dart';
 import '../../../infrastructure/providers/provider_config.dart';
+import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 
@@ -10,11 +11,13 @@ class ModelPickerSelection {
   const ModelPickerSelection({
     required this.profile,
     required this.reasoningEffort,
+    required this.mode,
     required this.planMode,
   });
 
   final ProviderConfig profile;
   final ReasoningEffort reasoningEffort;
+  final ChatMode mode;
   final bool planMode;
 }
 
@@ -26,6 +29,7 @@ class ModelPickerSheet extends StatefulWidget {
     required this.selectedId,
     required this.reasoningEffort,
     required this.planMode,
+    this.mode,
     this.onOpenSettings,
     this.onOpenTools,
   });
@@ -34,6 +38,7 @@ class ModelPickerSheet extends StatefulWidget {
   final String selectedId;
   final ReasoningEffort reasoningEffort;
   final bool planMode;
+  final ChatMode? mode;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenTools;
 
@@ -42,10 +47,11 @@ class ModelPickerSheet extends StatefulWidget {
 }
 
 class _ModelPickerSheetState extends State<ModelPickerSheet> {
+  static const _categories = ['全部', 'DeepSeek', 'Anthropic', 'OpenAI', '本地'];
   late final TextEditingController _searchController;
   late ReasoningEffort _reasoningEffort;
-  late bool _planMode;
-  late String _executionMode;
+  late ChatMode _mode;
+  String _selectedCategory = '全部';
   String _query = '';
 
   @override
@@ -53,8 +59,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
     super.initState();
     _searchController = TextEditingController();
     _reasoningEffort = widget.reasoningEffort;
-    _planMode = widget.planMode;
-    _executionMode = widget.planMode ? 'Agent' : 'Chat';
+    _mode = widget.mode ?? (widget.planMode ? ChatMode.plan : ChatMode.chat);
   }
 
   @override
@@ -63,15 +68,38 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
     super.dispose();
   }
 
+  bool _matchesKeyword(ProviderConfig p, List<String> keywords) {
+    final text = '${p.name} ${p.model} ${p.baseUrl}'.toLowerCase();
+    return keywords.any((kw) => text.contains(kw));
+  }
+
   List<ProviderConfig> get _filteredProfiles {
-    final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return widget.profiles;
-    return widget.profiles
-        .where((profile) =>
-            profile.name.toLowerCase().contains(query) ||
-            profile.model.toLowerCase().contains(query) ||
-            profile.baseUrl.toLowerCase().contains(query))
-        .toList();
+    return widget.profiles.where((profile) {
+      if (_selectedCategory != '全部') {
+        final matchesCat = switch (_selectedCategory) {
+          'DeepSeek' => _matchesKeyword(profile, ['deepseek']),
+          'Anthropic' => _matchesKeyword(profile, ['anthropic', 'claude']),
+          'OpenAI' => _matchesKeyword(profile, ['openai', 'gpt']),
+          '本地' => profile.id == 'local' ||
+              _matchesKeyword(profile, [
+                '本地',
+                'local',
+                'ollama',
+                '127.0.0.1',
+                'localhost',
+                'qwen',
+                'llama'
+              ]),
+          _ => true,
+        };
+        if (!matchesCat) return false;
+      }
+      final query = _query.trim().toLowerCase();
+      if (query.isEmpty) return true;
+      return profile.name.toLowerCase().contains(query) ||
+          profile.model.toLowerCase().contains(query) ||
+          profile.baseUrl.toLowerCase().contains(query);
+    }).toList();
   }
 
   void _select(ProviderConfig profile) {
@@ -80,7 +108,8 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
       ModelPickerSelection(
         profile: profile.copyWith(reasoningEffort: _reasoningEffort),
         reasoningEffort: _reasoningEffort,
-        planMode: _planMode,
+        mode: _mode,
+        planMode: _mode == ChatMode.plan,
       ),
     );
   }
@@ -88,6 +117,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final colors = AppTheme.semanticOf(context);
     final grouped = <String, List<ProviderConfig>>{};
     for (final profile in _filteredProfiles) {
@@ -97,12 +127,12 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
 
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * .86,
+        maxHeight: MediaQuery.sizeOf(context).height * .88,
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,34 +143,45 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                     child: Text(
                       '选择模型',
                       style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
                       ),
                     ),
                   ),
-                  SegmentedButton<String>(
+                  SegmentedButton<ChatMode>(
+                    style: SegmentedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                     segments: const [
-                      ButtonSegment(value: 'Chat', label: Text('Chat')),
-                      ButtonSegment(value: 'Agent', label: Text('Agent')),
+                      ButtonSegment(value: ChatMode.chat, label: Text('聊天')),
+                      ButtonSegment(
+                          value: ChatMode.agent, label: Text('Agent')),
+                      ButtonSegment(value: ChatMode.plan, label: Text('计划')),
                     ],
-                    selected: {_executionMode},
+                    selected: {_mode},
                     showSelectedIcon: false,
                     onSelectionChanged: (selection) {
-                      final mode = selection.first;
-                      setState(() {
-                        _executionMode = mode;
-                        _planMode = mode == 'Agent';
-                      });
+                      setState(() => _mode = selection.first);
                     },
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               TextField(
                 controller: _searchController,
                 onChanged: (value) => setState(() => _query = value),
+                style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? AppPalette.darkText : AppPalette.lightText),
                 decoration: InputDecoration(
                   hintText: '搜索模型…',
-                  prefixIcon: const Icon(Icons.search_rounded),
+                  hintStyle: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted),
+                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
@@ -149,24 +190,86 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                             _searchController.clear();
                             setState(() => _query = '');
                           },
-                          icon: const Icon(Icons.close_rounded),
+                          icon: const Icon(Icons.close_rounded, size: 18),
                         ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  filled: true,
+                  fillColor:
+                      isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                  border: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderSide: BorderSide(
+                      color: isDark
+                          ? AppPalette.darkHairline
+                          : AppPalette.lightHairline,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderSide: BorderSide(
+                      color: isDark
+                          ? AppPalette.darkHairline
+                          : AppPalette.lightHairline,
+                    ),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 ),
               ),
-              const SizedBox(height: 12),
-              _OptionBar(
-                reasoningEffort: _reasoningEffort,
-                planMode: _planMode,
-                onReasoningChanged: (effort) =>
-                    setState(() => _reasoningEffort = effort),
-                onPlanModeChanged: (enabled) => setState(() {
-                  _planMode = enabled;
-                  _executionMode = enabled ? 'Agent' : 'Chat';
-                }),
-                onOpenTools: widget.onOpenTools,
+              const SizedBox(height: 10),
+
+              // 厂商过滤 Tab 栏 (对标效果图 1)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _categories.map((cat) {
+                    final selected = _selectedCategory == cat;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: FilterChip(
+                        selected: selected,
+                        label: Text(cat),
+                        labelStyle: TextStyle(
+                          fontSize: 12,
+                          fontWeight:
+                              selected ? FontWeight.w600 : FontWeight.w400,
+                          color: selected
+                              ? Colors.white
+                              : (isDark
+                                  ? AppPalette.darkText
+                                  : AppPalette.lightText),
+                        ),
+                        selectedColor: AppPalette.brand,
+                        backgroundColor: isDark
+                            ? AppPalette.darkSurface
+                            : AppPalette.lightSurface,
+                        checkmarkColor: Colors.white,
+                        showCheckmark: false,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusPill),
+                          side: BorderSide(
+                            color: selected
+                                ? Colors.transparent
+                                : (isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline),
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 2),
+                        visualDensity: VisualDensity.compact,
+                        onSelected: (_) {
+                          setState(() => _selectedCategory = cat);
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
+
               Flexible(
                 child: grouped.isEmpty
                     ? _EmptyModels(
@@ -176,16 +279,18 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                         shrinkWrap: true,
                         children: [
                           for (final entry in grouped.entries) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
-                              child: Text(
-                                entry.key,
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: colors.textMuted,
-                                  fontWeight: FontWeight.w500,
+                            if (grouped.length > 1)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                                child: Text(
+                                  entry.key,
+                                  style: theme.textTheme.labelMedium?.copyWith(
+                                    color: colors.textMuted,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
-                            ),
                             ...entry.value.map(
                               (profile) => _ModelTile(
                                 profile: profile,
@@ -196,6 +301,15 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                           ],
                         ],
                       ),
+              ),
+              const SizedBox(height: 10),
+
+              // 底部：内嵌式思考强度切换栏与工具入口 (对标效果图 1)
+              _OptionBar(
+                reasoningEffort: _reasoningEffort,
+                onReasoningChanged: (effort) =>
+                    setState(() => _reasoningEffort = effort),
+                onOpenTools: widget.onOpenTools,
               ),
             ],
           ),
@@ -208,71 +322,111 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
 class _OptionBar extends StatelessWidget {
   const _OptionBar({
     required this.reasoningEffort,
-    required this.planMode,
     required this.onReasoningChanged,
-    required this.onPlanModeChanged,
     this.onOpenTools,
   });
 
   final ReasoningEffort reasoningEffort;
-  final bool planMode;
   final ValueChanged<ReasoningEffort> onReasoningChanged;
-  final ValueChanged<bool> onPlanModeChanged;
   final VoidCallback? onOpenTools;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        border: Border.all(
+          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+        ),
+      ),
       child: Row(
         children: [
-          ActionChip(
-            avatar: const Icon(Icons.language_rounded, size: 18),
-            label: const Text('联网工具'),
-            onPressed: onOpenTools,
-          ),
-          const SizedBox(width: 8),
-          PopupMenuButton<ReasoningEffort>(
-            initialValue: reasoningEffort,
-            onSelected: onReasoningChanged,
-            itemBuilder: (context) => ReasoningEffort.values
-                .map(
-                  (effort) => PopupMenuItem(
-                    value: effort,
-                    child: Text('思考 · ${_effortLabel(effort)}'),
-                  ),
-                )
-                .toList(),
-            child: Chip(
-              avatar: const Icon(Icons.psychology_outlined, size: 18),
-              label: Text('思考 · ${_effortLabel(reasoningEffort)}'),
+          const Icon(Icons.psychology_outlined, size: 17, color: AppPalette.brand),
+          const SizedBox(width: 6),
+          Text(
+            '思考',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: textMuted,
             ),
           ),
           const SizedBox(width: 8),
-          FilterChip(
-            selected: planMode,
-            onSelected: onPlanModeChanged,
-            avatar: Icon(
-              Icons.play_circle_outline_rounded,
-              size: 18,
-              color: planMode
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _effortChip('关', ReasoningEffort.off),
+                  _effortChip('低', ReasoningEffort.low),
+                  _effortChip('中', ReasoningEffort.medium),
+                  _effortChip('高', ReasoningEffort.high),
+                  _effortChip('自动', ReasoningEffort.auto),
+                ],
+              ),
             ),
-            label: const Text('执行模式'),
           ),
+          if (onOpenTools != null) ...[
+            Container(
+              height: 16,
+              width: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 6),
+              color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+            ),
+            GestureDetector(
+              onTap: onOpenTools,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  children: [
+                    Icon(Icons.language_rounded, size: 15, color: textMuted),
+                    const SizedBox(width: 3),
+                    Text(
+                      '工具',
+                      style: TextStyle(fontSize: 12, color: textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  static String _effortLabel(ReasoningEffort effort) => switch (effort) {
-        ReasoningEffort.auto => '自动',
-        ReasoningEffort.off => '关',
-        ReasoningEffort.low => '低',
-        ReasoningEffort.medium => '中',
-        ReasoningEffort.high => '高',
-      };
+  Widget _effortChip(String label, ReasoningEffort effort) {
+    final selected = reasoningEffort == effort;
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: GestureDetector(
+        onTap: () => onReasoningChanged(effort),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: selected ? AppPalette.brand : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected ? Colors.white : AppPalette.darkTextMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ModelTile extends StatelessWidget {
@@ -286,49 +440,151 @@ class _ModelTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  List<String> _extractCapabilities(String model, int contextTokens) {
+    final lower = model.toLowerCase();
+    final tags = <String>[];
+    if (lower.contains('r1') ||
+        lower.contains('reasoner') ||
+        lower.contains('o1') ||
+        lower.contains('o3') ||
+        lower.contains('thinking')) {
+      tags.add('深度推理');
+    }
+    if (contextTokens >= 64000 ||
+        lower.contains('claude') ||
+        lower.contains('gemini') ||
+        lower.contains('r1')) {
+      tags.add('64K+ 上下文');
+    }
+    if (lower.contains('flash') ||
+        lower.contains('mini') ||
+        lower.contains('turbo') ||
+        lower.contains('haiku')) {
+      tags.add('超快响应');
+    }
+    if (lower.contains('vision') ||
+        lower.contains('4o') ||
+        lower.contains('gemini') ||
+        lower.contains('claude')) {
+      tags.add('多模态');
+    }
+    return tags;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colors = AppTheme.semanticOf(context);
-    // 外壳 showImmersiveSheet 的 ultraThick 是唯一玻璃面，这里只做选中态着色，避免双层玻璃叠加发浑。
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final tags = _extractCapabilities(profile.model, profile.contextTokens);
+
+    const accentCyan = Color(0xFF00E5FF);
+    final borderColor = selected
+        ? accentCyan
+        : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline);
+    final cardBg = selected
+        ? (isDark ? const Color(0xFF10252C) : const Color(0xFFEDFCFF))
+        : (isDark ? AppPalette.darkSurface : AppPalette.lightSurface);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 4),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
-        color: selected ? colors.focusGlow : Colors.transparent,
-        border: Border.all(
-          color: selected ? colors.brandAccent : Colors.transparent,
-        ),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        border: Border.all(color: borderColor, width: selected ? 1.5 : 1.0),
+        boxShadow: selected
+            ? [
+                BoxShadow(
+                  color: accentCyan.withValues(alpha: 0.18),
+                  blurRadius: 8,
+                  spreadRadius: 0,
+                )
+              ]
+            : null,
       ),
       child: Material(
         color: Colors.transparent,
-        child: ListTile(
-          dense: true,
-          leading: CircleAvatar(
-            radius: 16,
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            child: Icon(
-              Icons.auto_awesome_rounded,
-              size: 18,
-              color: Theme.of(context).colorScheme.primary,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        profile.model,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                      ),
+                    ),
+                    if (selected)
+                      const Icon(Icons.check_circle_rounded,
+                          size: 18, color: accentCyan)
+                    else
+                      Text(
+                        profile.name,
+                        style: TextStyle(fontSize: 12, color: textMuted),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  profile.isConfigured
+                      ? profile.baseUrl
+                      : '${profile.name} · 未配置 API Key',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: textMuted),
+                ),
+                if (tags.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: tags.map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? accentCyan.withValues(alpha: 0.12)
+                              : (isDark
+                                  ? AppPalette.darkCanvas
+                                  : AppPalette.lightCanvas),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: selected
+                                ? accentCyan.withValues(alpha: 0.4)
+                                : (isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline),
+                          ),
+                        ),
+                        child: Text(
+                          tag,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w500,
+                            color: selected ? accentCyan : textMuted,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ],
             ),
           ),
-          title: Text(
-            profile.model,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          subtitle: Text(
-            profile.isConfigured ? profile.name : '${profile.name} · 未配置',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: colors.textMuted, fontSize: 12),
-          ),
-          trailing: selected
-              ? Icon(Icons.check_rounded,
-                  color: Theme.of(context).colorScheme.primary)
-              : null,
-          onTap: onTap,
         ),
       ),
     );

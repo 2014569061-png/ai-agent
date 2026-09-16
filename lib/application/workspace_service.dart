@@ -27,6 +27,12 @@ class WorkspaceService {
     return null;
   }
 
+  Future<bool> isAccessible(String? path) async {
+    if (path == null || path.trim().isEmpty) return false;
+    if (kIsWeb) return true;
+    return Directory(path).exists();
+  }
+
   /// 设置当前工作区
   Future<void> setActiveWorkspace(String? path) async {
     final prefs = await SharedPreferences.getInstance();

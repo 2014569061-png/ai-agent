@@ -91,12 +91,11 @@ void main() {
     expect(planModeCalled, isTrue);
   });
 
-  testWidgets('首页输入区只呈现「深度思考 / 智能搜索」两个能力 chip', (tester) async {
+  testWidgets('首页输入区只呈现模式入口，高级选项不再堆在输入区', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
-    bool deepToggled = false;
-    bool webToggled = false;
+    bool modeTapped = false;
     bool attachTapped = false;
 
     await tester.pumpWidget(
@@ -109,8 +108,7 @@ void main() {
             onSend: () {},
             onStop: () {},
             onAttachmentMenu: () => attachTapped = true,
-            onDeepThinkingToggle: () => deepToggled = true,
-            onWebSearchToggle: () => webToggled = true,
+            onModeTap: () => modeTapped = true,
           ),
         ),
       ),
@@ -120,19 +118,18 @@ void main() {
     // 占位符按新规范显示为「发消息」
     expect(find.text('发消息'), findsOneWidget);
 
-    // 只保留两个能力 chip，不再出现「工具 / 计划」
-    expect(find.text('深度思考'), findsOneWidget);
-    expect(find.text('智能搜索'), findsOneWidget);
+    // 只保留一个模式入口，高级选项统一放进模式面板。
+    // 入口是圆形磁贴：可读名称走语义标签（tooltip 长按可见），不再渲染长胶囊。
+    expect(find.bySemanticsLabel('聊天模式'), findsOneWidget);
+    expect(find.text('聊天模式'), findsNothing);
+    expect(find.text('深度思考'), findsNothing);
+    expect(find.text('智能搜索'), findsNothing);
     expect(find.text('工具'), findsNothing);
     expect(find.text('计划'), findsNothing);
 
-    await tester.tap(find.text('深度思考'));
+    await tester.tap(find.bySemanticsLabel('聊天模式'));
     await tester.pumpAndSettle();
-    expect(deepToggled, isTrue);
-
-    await tester.tap(find.text('智能搜索'));
-    await tester.pumpAndSettle();
-    expect(webToggled, isTrue);
+    expect(modeTapped, isTrue);
 
     // 「＋」按钮触发附件 / 更多工具菜单
     await tester.tap(find.byIcon(Icons.add_rounded));
@@ -156,8 +153,6 @@ void main() {
             onSend: () => sent = true,
             onStop: () {},
             onAttachmentMenu: () {},
-            onDeepThinkingToggle: () {},
-            onWebSearchToggle: () {},
           ),
         ),
       ),

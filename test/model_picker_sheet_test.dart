@@ -52,6 +52,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('选择模型'), findsOneWidget);
     expect(find.text('gpt-5.6-terra'), findsOneWidget);
+    expect(find.text('聊天'), findsOneWidget);
+    expect(find.text('Agent'), findsOneWidget);
+    expect(find.text('计划'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.enterText(find.byType(TextField), 'qwen');
@@ -62,6 +65,53 @@ void main() {
     await tester.tap(find.text('qwen3'));
     await tester.pumpAndSettle();
     expect(result?.profile.id, 'local');
+    expect(result?.mode, ChatMode.chat);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('model picker keeps Agent and plan as distinct modes',
+      (tester) async {
+    const profiles = [
+      ProviderConfig(
+        id: 'openai',
+        name: '常用模型',
+        baseUrl: 'https://example.com/v1',
+        model: 'gpt-5.6-terra',
+        apiKey: 'key',
+      ),
+    ];
+    ModelPickerSelection? result;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () async {
+              result = await showModalBottomSheet<ModelPickerSelection>(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => const ModelPickerSheet(
+                  profiles: profiles,
+                  selectedId: 'openai',
+                  reasoningEffort: ReasoningEffort.auto,
+                  planMode: false,
+                  mode: ChatMode.chat,
+                ),
+              );
+            },
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Agent'));
+    await tester.tap(find.text('gpt-5.6-terra'));
+    await tester.pumpAndSettle();
+
+    expect(result?.mode, ChatMode.agent);
+    expect(result?.planMode, isFalse);
   });
 }

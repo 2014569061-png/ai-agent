@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 
+import 'application/approval_bridge.dart';
 import 'application/onboarding_service.dart';
 import 'infrastructure/background/foreground_service.dart';
 import 'application/scheduled_task_runner.dart';
@@ -25,7 +26,7 @@ import 'presentation/theme/app_theme.dart';
 import 'presentation/theme/app_theme_controller.dart';
 import 'presentation/theme/app_appearance_controller.dart';
 import 'presentation/widgets/brand_mark.dart';
-import 'presentation/widgets/immersive_background.dart';
+import 'presentation/widgets/nexus_background.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,7 +57,10 @@ Future<void> _initializeServices() async {
     // Cold-start sharing is buffered; hot sharing is listened to in parallel.
     unawaited(SharingService.instance.init());
     // E3 local notifications are optional for the foreground experience.
-    unawaited(NotificationService.instance.init());
+    // 同时注册锁屏审批的后台动作入口：动作回调在独立 isolate 里按 callback handle
+    // 调用，所以这里必须传顶层函数，不能传闭包。
+    unawaited(NotificationService.instance
+        .init(onBackgroundResponse: handleApprovalNotificationAction));
 
     // C5 periodic background task registration.
     if (!kIsWeb) {
@@ -130,20 +134,34 @@ class MobileAgentApp extends StatelessWidget {
           themeMode: themeMode,
           builder: (context, child) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
-            return AnnotatedRegion<SystemUiOverlayStyle>(
-              value: SystemUiOverlayStyle(
-                statusBarColor: Colors.transparent,
-                systemNavigationBarColor: Colors.transparent,
-                statusBarIconBrightness:
-                    isDark ? Brightness.light : Brightness.dark,
-                systemNavigationBarIconBrightness:
-                    isDark ? Brightness.light : Brightness.dark,
-                systemStatusBarContrastEnforced: false,
-                systemNavigationBarContrastEnforced: false,
-              ),
-              child: ImmersiveBackground(
-                child: child ?? const SizedBox.shrink(),
-              ),
+            return ValueListenableBuilder<double>(
+              valueListenable: AppAppearanceController.fontScale,
+              builder: (context, fontScale, child) {
+                final mediaQuery = MediaQuery.of(context);
+                final systemScale = mediaQuery.textScaler.scale(1.0);
+                return MediaQuery(
+                  data: mediaQuery.copyWith(
+                    textScaler:
+                        TextScaler.linear(systemScale * fontScale),
+                  ),
+                  child: AnnotatedRegion<SystemUiOverlayStyle>(
+                    value: SystemUiOverlayStyle(
+                      statusBarColor: Colors.transparent,
+                      systemNavigationBarColor: Colors.transparent,
+                      statusBarIconBrightness:
+                          isDark ? Brightness.light : Brightness.dark,
+                      systemNavigationBarIconBrightness:
+                          isDark ? Brightness.light : Brightness.dark,
+                      systemStatusBarContrastEnforced: false,
+                      systemNavigationBarContrastEnforced: false,
+                    ),
+                    child: NexusBackground(
+                      child: child ?? const SizedBox.shrink(),
+                    ),
+                  ),
+                );
+              },
+              child: child,
             );
           },
           home: showOnboarding == null

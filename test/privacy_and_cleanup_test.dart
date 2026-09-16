@@ -77,6 +77,7 @@ void main() {
       id: 'conversation-private',
       title: 'private',
       agentId: null,
+      mode: 'chat',
       isPinned: false,
       isFavorite: false,
       tagsJson: '[]',
@@ -159,6 +160,7 @@ void main() {
     await db.saveTask(Task(
       id: 'task-private',
       conversationId: 'conversation-private',
+      stateRevision: 0,
       type: 'development:code_review',
       status: 'completed',
       requestJson: '{}',

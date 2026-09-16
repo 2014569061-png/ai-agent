@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../application/dashboard_service.dart';
 import '../../history/history_page.dart';
 import '../../l10n/app_strings.dart';
+import '../../motion/nexus_page_route_factory.dart';
 import '../../tasks/development_tasks_page.dart';
 import '../../theme/app_palette.dart';
 import '../../widgets/nexus_metric_tile.dart';
@@ -42,7 +43,7 @@ class KpiCardGrid extends StatelessWidget {
               icon: Icons.chat_bubble_outline_rounded,
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const HistoryPage()),
+                  NexusPageRoute.detail(builder: (_) => const HistoryPage()),
                 );
               },
             ),
@@ -74,7 +75,7 @@ class KpiCardGrid extends StatelessWidget {
               color: kpis.runningTasks > 0 ? AppPalette.warning : null,
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
+                  NexusPageRoute.detail(
                       builder: (_) => const DevelopmentTasksPage()),
                 );
               },
@@ -105,7 +106,7 @@ class KpiCardGrid extends StatelessWidget {
               color: kpis.weeklyHelpfulTasks > 0 ? AppPalette.success : null,
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
+                  NexusPageRoute.detail(
                       builder: (_) => const DevelopmentTasksPage()),
                 );
               },
@@ -124,7 +125,7 @@ class KpiCardGrid extends StatelessWidget {
               color: successColor,
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
+                  NexusPageRoute.detail(
                       builder: (_) => const DevelopmentTasksPage()),
                 );
               },

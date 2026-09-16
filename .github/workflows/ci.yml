@@ -34,7 +34,9 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.2'
           channel: stable
+          cache: true
 
       - name: Get dependencies
         run: flutter pub get
@@ -44,3 +46,26 @@ jobs:
 
       - name: Test
         run: flutter test
+
+  android_build:
+    name: Android debug build
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Build arm64 debug APK
+        run: flutter build apk --debug --target-platform android-arm64

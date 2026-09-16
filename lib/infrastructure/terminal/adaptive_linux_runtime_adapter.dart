@@ -1,12 +1,18 @@
+import 'dart:async';
+
 import 'linux_runtime.dart';
 
 /// Selects the first available runtime and can move to the next Adapter when
 /// a native runtime cannot start on a particular device/ROM.
 class AdaptiveLinuxRuntimeAdapter
     implements LinuxRuntimeAdapter, DetachedLinuxRuntimeAdapter {
-  AdaptiveLinuxRuntimeAdapter(this._candidates);
+  AdaptiveLinuxRuntimeAdapter(
+    this._candidates, {
+    this.inspectionTimeout = const Duration(seconds: 3),
+  });
 
   final List<LinuxRuntimeAdapter> _candidates;
+  final Duration inspectionTimeout;
   LinuxRuntimeAdapter? _selected;
   int _nextCandidate = 0;
   Future<LinuxRuntimeInfo>? _inspection;
@@ -147,18 +153,28 @@ class AdaptiveLinuxRuntimeAdapter
     while (_nextCandidate < _candidates.length) {
       final candidate = _candidates[_nextCandidate++];
       try {
-        final info = await candidate.inspect();
+        final info = await candidate.inspect().timeout(inspectionTimeout);
         last = info;
         if (info.available) {
           _selected = candidate;
           return info;
         }
+      } on TimeoutException {
+        last = LinuxRuntimeInfo(
+          kind: candidate.kind,
+          label: _labelFor(candidate.kind),
+          available: false,
+          detail: '${_labelFor(candidate.kind)} 检测超时（'
+              '${_formatTimeout(inspectionTimeout)}），继续尝试下一个运行时。',
+          requiresExternalApp: candidate.kind == LinuxRuntimeKind.termux,
+        );
       } catch (error) {
         last = LinuxRuntimeInfo(
           kind: candidate.kind,
-          label: candidate.kind.name,
+          label: _labelFor(candidate.kind),
           available: false,
           detail: 'Runtime 检测失败：$error',
+          requiresExternalApp: candidate.kind == LinuxRuntimeKind.termux,
         );
       }
     }
@@ -176,5 +192,17 @@ class AdaptiveLinuxRuntimeAdapter
     return runtime.kind == LinuxRuntimeKind.builtinProot &&
         result.exitCode == 127 &&
         result.output.startsWith('[builtin-proot]');
+  }
+
+  String _labelFor(LinuxRuntimeKind kind) => switch (kind) {
+        LinuxRuntimeKind.builtinProot => '内置 Alpine Linux',
+        LinuxRuntimeKind.termux => 'Termux Linux',
+        LinuxRuntimeKind.androidShell => 'Android Shell',
+        LinuxRuntimeKind.hostProcess => '本机进程',
+      };
+
+  String _formatTimeout(Duration timeout) {
+    if (timeout.inMilliseconds < 1000) return '${timeout.inMilliseconds}ms';
+    return '${timeout.inSeconds}s';
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
+import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/chat/widgets/capsule_top_bar.dart';
 import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.dart';
 import 'package:mobile_agent/presentation/settings/provider_list_page.dart';
@@ -210,6 +211,61 @@ void main() {
       final sendSize = tester.getSize(sendFinder);
       expect(sendSize.width, greaterThanOrEqualTo(48.0));
       expect(sendSize.height, greaterThanOrEqualTo(48.0));
+    });
+
+    testWidgets(
+        '模式与审批磁贴在左侧，附件与发送磁贴在右侧，且窄屏不溢出',
+        (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+
+      for (final width in [360.0, 320.0]) {
+        tester.view.physicalSize = Size(width * 2, 1680);
+        tester.view.devicePixelRatio = 2.0;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.bottomCenter,
+                child: FloatingCapsuleInput(
+                  controller: controller,
+                  isRunning: false,
+                  onSend: () {},
+                  onStop: () {},
+                  onAttachmentMenu: () {},
+                  modeLabel: '聊天',
+                  onModeTap: () {},
+                  approvalMode: ApprovalMode.fullAccess,
+                  onApprovalModeTap: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final card = tester.getRect(find.byType(FloatingCapsuleInput));
+        final mode = tester.getRect(find.bySemanticsLabel('聊天模式'));
+        final approval = tester.getRect(find.bySemanticsLabel('完全访问'));
+        final attach =
+            tester.getRect(find.bySemanticsLabel('添加附件或更多工具'));
+        final send = tester.getRect(find.bySemanticsLabel(RegExp('发送')));
+
+        // 左组：模式 + 审批；右组：附件 + 发送。
+        expect(mode.right, lessThan(approval.right),
+            reason: '模式磁贴在审批磁贴左侧 (w=$width)');
+        expect(attach.left, greaterThan(approval.right),
+            reason: '附件磁贴必须离开左组 (w=$width)');
+        expect(send.left, greaterThanOrEqualTo(attach.right),
+            reason: '发送磁贴在附件磁贴右侧 (w=$width)');
+        expect(send.right, lessThanOrEqualTo(card.right),
+            reason: '发送磁贴不得溢出右边界 (w=$width)');
+        expect(tester.takeException(), isNull);
+      }
+
+      tester.view.reset();
     });
   });
 }

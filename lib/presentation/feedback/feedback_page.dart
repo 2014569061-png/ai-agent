@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_dropdown.dart';
+import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 
 /// 应用内反馈渠道（F6）：内置表单 + mailto 兜底（无后端时）。
@@ -62,7 +62,7 @@ class _FeedbackPageState extends State<FeedbackPage> {
         subtitle: '问题反馈与改进建议',
       ),
       body: ListView(padding: const EdgeInsets.all(16), children: [
-        ImmersiveDropdown<String>(
+        NexusDropdown<String>(
           labelText: '问题类型',
           initialValue: _type.text,
           items: const [

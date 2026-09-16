@@ -37,7 +37,13 @@ extension ChatRunExecution on ChatController {
     final runSystemPrompt = _currentState.systemPrompt;
     final sessionSkillInstructions = _currentState.sessionSkillInstructions;
     bool ownsRun() => _runs.ownsRun(runGeneration, runConversationId);
+    bool visible() => _runs.isVisible(runConversationId);
     final runId = UniqueId.generate('run');
+    _runs.activeRunId = runId;
+    _runs.boundConversationId ??= runConversationId;
+    if (visible()) {
+      _currentState = _currentState.copyWith(currentRunId: runId);
+    }
     final logService = ref.read(logServiceProvider);
     final runStartedAt = DateTime.now();
     var eventSequence = 0;
@@ -51,6 +57,8 @@ extension ChatRunExecution on ChatController {
       await database.insertRunRecord(RunRecordsCompanion.insert(
         runId: runId,
         conversationId: runConversationId ?? 'unknown',
+        taskId: Value(taskId),
+        projectId: Value(_currentState.currentProjectId),
         model: Value(model),
         status: const Value('running'),
         startedAt: runStartedAt,
@@ -104,7 +112,7 @@ extension ChatRunExecution on ChatController {
     await logService.info('Agent 开始执行',
         runId: runId, category: 'system', detail: {'model': model});
     final provider =
-        config.isConfigured ? _buildProvider(config) : DemoProvider();
+        config.isConfigured ? createLlmProvider(config) : DemoProvider();
     final executor = AgentExecutor(provider: provider, tools: registry);
     final retrySettings = ref.read(agentRetrySettingsProvider);
     final cancellationToken = AgentCancellationToken();
@@ -141,7 +149,11 @@ extension ChatRunExecution on ChatController {
     Timer? flushTimer;
 
     void flushAnswer({bool force = false}) {
-      if (!ownsRun() || assistantIndex >= _currentState.messages.length) return;
+      if (!ownsRun() ||
+          !visible() ||
+          assistantIndex >= _currentState.messages.length) {
+        return;
+      }
       final now = DateTime.now();
       lastFlush = now;
       lastFlushedUnits = answer.length + reasoning.length;
@@ -174,7 +186,7 @@ extension ChatRunExecution on ChatController {
     }
 
     void requestFlush({bool force = false}) {
-      if (!ownsRun()) return;
+      if (!ownsRun() || !visible()) return;
       final now = DateTime.now();
       final elapsed = now.difference(lastFlush);
       final pendingUnits = answer.length + reasoning.length - lastFlushedUnits;
@@ -190,7 +202,9 @@ extension ChatRunExecution on ChatController {
           elapsed >= flushInterval ? Duration.zero : flushInterval - elapsed;
       flushTimer = Timer(remaining, () {
         flushTimer = null;
-        if (ownsRun() && answer.length + reasoning.length > lastFlushedUnits) {
+        if (ownsRun() &&
+            visible() &&
+            answer.length + reasoning.length > lastFlushedUnits) {
           flushAnswer();
         }
       });
@@ -212,8 +226,11 @@ extension ChatRunExecution on ChatController {
         final content = instruction.content.trim();
         if (content.isNotEmpty) sessionSkillTexts.add(content);
       }
-      memoryBlock = await MemoryService()
-          .buildInjectionBlock(database, contextTokens: config.contextTokens);
+      memoryBlock = await MemoryService().buildInjectionBlock(
+        database,
+        contextTokens: config.contextTokens,
+        projectId: _currentState.currentProjectId,
+      );
       knowledgeBlock = await KnowledgeService()
           .buildInjectionBlock(database, _lastUserText(assistantIndex));
     } catch (_) {}
@@ -234,12 +251,94 @@ extension ChatRunExecution on ChatController {
       terminalAvailable: registry.findRegistration('terminal') != null,
     );
 
+    var taskTemplateRules = '';
+    var projectContextBlock = '';
+    PromptBudgetPlan? budgetPlan;
+    try {
+      final requestTaskType = taskId == null
+          ? null
+          : await () async {
+              try {
+                final database = await ref.read(databaseProvider.future);
+                final task = await database.findTask(taskId);
+                if (task == null) return null;
+                return TaskService().describe(task).type;
+              } catch (_) {
+                return null;
+              }
+            }();
+      ProjectKindDetection? project;
+      final workspacePath = _currentState.currentWorkspacePath;
+      if (workspacePath != null && workspacePath.trim().isNotEmpty) {
+        project = await const ProjectKindDetector().detect(workspacePath);
+      }
+      taskTemplateRules = TaskTemplateService().promptBlock(
+        taskType: requestTaskType,
+        project: project,
+      );
+      final projectId = _currentState.currentProjectId;
+      if (projectId != null &&
+          workspacePath != null &&
+          workspacePath.trim().isNotEmpty) {
+        ProjectSettings settings = const ProjectSettings();
+        TaskSummary? summary;
+        try {
+          final database = await ref.read(databaseProvider.future);
+          final row = await database.findProject(projectId);
+          if (row != null) {
+            settings = ProjectSettings.decode(row.settingsJson);
+          }
+          if (taskId != null) {
+            final progress = await TaskService().progress(database, taskId);
+            if (progress['taskSummary'] is Map) {
+              summary = TaskSummary.fromJson(
+                  Map<String, dynamic>.from(progress['taskSummary'] as Map));
+            }
+          }
+        } catch (_) {}
+        final query = _lastUserText(assistantIndex);
+        var context = await const ProjectContextService().assemble(
+          projectId: projectId,
+          workspacePath: workspacePath,
+          settings: settings,
+          taskSummary: summary,
+          citations: _currentState.pendingCitations,
+          query: query,
+        );
+        budgetPlan = const PromptBudgetAllocator().allocate(
+          contextTokens: config.contextTokens,
+          systemPrompt: [
+            runSystemPrompt,
+            if (taskTemplateRules.isNotEmpty) taskTemplateRules,
+            workspaceRules,
+            memoryBlock,
+            knowledgeBlock,
+          ].join('\n\n'),
+          tools: registry.manifests,
+          history: _currentState.messages.take(assistantIndex).toList(),
+          projectContext: context,
+        );
+        context = budgetPlan.projectContext;
+        projectContextBlock = context.toPromptBlock();
+        if (budgetPlan.omitted.isNotEmpty && visible()) {
+          _currentState = _currentState.copyWith(
+            omittedContext: budgetPlan.omitted,
+            pendingCitations: context.citations,
+          );
+        }
+      }
+    } catch (_) {}
+
     final baseSystemPrompt = assembleAgentSystemPrompt(
-      personaPrompt: runSystemPrompt,
+      personaPrompt: [
+        runSystemPrompt,
+        if (taskTemplateRules.isNotEmpty) taskTemplateRules,
+      ].where((section) => section.trim().isNotEmpty).join('\n\n'),
       skillIndexBlock: skillIndexBlock,
       sessionSkillBlocks: sessionSkillTexts,
       delegationRules: delegationRules,
       workspaceRules: workspaceRules,
+      projectContextBlock: projectContextBlock,
       memoryBlock: memoryBlock,
       knowledgeBlock: knowledgeBlock,
     );
@@ -284,7 +383,7 @@ extension ChatRunExecution on ChatController {
             metadata: {'attempt': networkSequence},
           );
           syncEventCount();
-          if (ownsRun()) {
+          if (ownsRun() && visible()) {
             // agent 循环每迭代一步都会先进入 waitingModel，这里累计步数。
             _currentState = _currentState.copyWith(
                 totalSteps: _currentState.totalSteps + 1);
@@ -334,7 +433,9 @@ extension ChatRunExecution on ChatController {
               reasoningTokens: event.reasoningTokens,
               usageReported: event.usageReported,
               cacheStatsReported: event.cacheStatsReported);
-          if (ownsRun() && assistantIndex < _currentState.messages.length) {
+          if (ownsRun() &&
+              visible() &&
+              assistantIndex < _currentState.messages.length) {
             final current = _currentState.messages[assistantIndex];
             _currentState = _withMessageAt(
               _currentState,
@@ -454,13 +555,24 @@ extension ChatRunExecution on ChatController {
             },
           );
           syncEventCount();
-          if (ownsRun()) await _persistToolCall(event.call, risk);
-          if (!ownsRun()) continue;
+          if (ownsRun()) {
+            await _persistToolCall(event.call, risk,
+                conversationId: runConversationId);
+          }
+          if (!ownsRun() || !visible()) continue;
           _currentState = _currentState.copyWith(
             activityLog: [..._currentState.activityLog, '等待确认'],
             toolActivities: [
               ..._currentState.toolActivities,
-              ToolActivity(call: event.call, risk: risk)
+              ToolActivity(
+                call: event.call,
+                risk: risk,
+                sensitive: registry
+                        .findRegistration(event.call.name)
+                        ?.spec
+                        .sensitive ??
+                    false,
+              )
             ],
           );
         } else if (event is AgentStatusEvent &&
@@ -554,8 +666,10 @@ extension ChatRunExecution on ChatController {
                     toolCallId: event.call.id,
                     parts: [MessagePart.text(event.result.encode())]),
                 toolName: event.call.name,
-                toolResult: event.result);
+                toolResult: event.result,
+                conversationId: runConversationId);
           }
+          if (!visible()) continue;
           _currentState = _currentState.copyWith(
             toolActivities: _updateToolActivity(
               _currentState.toolActivities,
@@ -571,7 +685,9 @@ extension ChatRunExecution on ChatController {
         if (event is AgentStatusEvent) {
           if (event.status == RunStatus.paused && ownsRun()) {
             runStatus = 'paused';
-            _currentState = _currentState.copyWith(paused: true);
+            if (visible()) {
+              _currentState = _currentState.copyWith(paused: true);
+            }
           }
           if (event.status == RunStatus.cancelled) {
             runStatus = 'cancelled';
@@ -737,26 +853,31 @@ extension ChatRunExecution on ChatController {
     // 避免 plan.status 残留 executing 导致“计划一直显示正在运行”。
     // 切换会话时 planState 会被清空（newConversation / switchConversation 均带
     // clearPlanState: true），因此外提不会污染其他会话的计划状态。
-    _convergePlanToTerminal(runStatus: runStatus, cancelled: runCancelled);
+    if (visible()) {
+      _convergePlanToTerminal(runStatus: runStatus, cancelled: runCancelled);
+    }
     if (ownsRun()) {
-      if (assistantIndex < _currentState.messages.length) {
-        _currentState =
-            _withMessageAt(_currentState, assistantIndex, assistantMessage)
-                .copyWith(
-          running: false,
-          clearLiveReply: true,
-          liveContextTokens: usage.totalTokens > 0
-              ? usage.totalTokens
-              : _estimateLiveContextTokens(assistantIndex, assistantMessage),
-        );
-      } else {
-        _currentState = _currentState.copyWith(
-            running: false, paused: false, clearLiveReply: true);
-      }
       try {
-        await _persistMessage(assistantMessage);
+        await _persistMessage(assistantMessage,
+            conversationId: runConversationId);
       } catch (_) {
         // 持久化失败不阻断 UI 恢复。
+      }
+      if (visible()) {
+        if (assistantIndex < _currentState.messages.length) {
+          _currentState =
+              _withMessageAt(_currentState, assistantIndex, assistantMessage)
+                  .copyWith(
+            running: false,
+            clearLiveReply: true,
+            liveContextTokens: usage.totalTokens > 0
+                ? usage.totalTokens
+                : _estimateLiveContextTokens(assistantIndex, assistantMessage),
+          );
+        } else {
+          _currentState = _currentState.copyWith(
+              running: false, paused: false, clearLiveReply: true);
+        }
       }
     }
     if (taskId != null) {
@@ -778,6 +899,21 @@ extension ChatRunExecution on ChatController {
           runId: runId,
           checkpoint: status == 'paused' ? runCheckpoint : null,
         );
+        final workspacePath = _currentState.currentWorkspacePath;
+        if (workspacePath != null &&
+            workspacePath.trim().isNotEmpty &&
+            status != 'cancelled') {
+          try {
+            await DevelopmentLoopFinalizer().finalize(
+              db: taskDb,
+              taskId: taskId,
+              runId: runId,
+              workspacePath: workspacePath,
+              terminal: null,
+              runVerification: false,
+            );
+          } catch (_) {}
+        }
         await NotificationService.instance.init();
         await NotificationService.instance.show(
           id: taskId.hashCode & 0x7fffffff,

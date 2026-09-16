@@ -71,8 +71,6 @@ class MessageBubble extends StatelessWidget {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final brandSoft =
-        isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
 
     final imageParts =
         message.parts.where((part) => part.type == 'image').toList();
@@ -123,21 +121,35 @@ class MessageBubble extends StatelessWidget {
       fontWeight: FontWeight.w400,
     );
 
+    final userTextStyle = const TextStyle(
+      color: Colors.white,
+      height: 1.5,
+      fontSize: 14.5,
+      fontWeight: FontWeight.w400,
+    );
+
     final body = isUser
         ? Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: brandSoft,
+              color: AppPalette.brand,
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
                 bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(8),
+                bottomRight: Radius.circular(6),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppPalette.brand.withValues(alpha: isDark ? 0.35 : 0.18),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
             child: selecting
-                ? SelectableText(message.text, style: plainStyle)
-                : Text(message.text, style: plainStyle),
+                ? SelectableText(message.text, style: userTextStyle)
+                : Text(message.text, style: userTextStyle),
           )
         : selecting
             ? SelectableText(message.text, style: plainStyle)
@@ -344,12 +356,44 @@ class MessageBubble extends StatelessWidget {
                                     streaming: running,
                                     duration: message.reasoningDuration,
                                   ),
+                                if (!isTool && hasText)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 6, top: 4),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          message.modelName?.isNotEmpty == true
+                                              ? message.modelName!
+                                              : 'NEXUS AI',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: textColor,
+                                          ),
+                                        ),
+                                        if (message.elapsed != null) ...[
+                                          const SizedBox(width: 6),
+                                          Text('•', style: TextStyle(fontSize: 11, color: textMuted)),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '${(message.elapsed!.inMilliseconds / 1000).toStringAsFixed(1)}s',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: textMuted,
+                                              fontFamily: 'monospace',
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: content,
                                 ),
                                 Align(
-                                  alignment: Alignment.centerRight,
+                                  alignment: Alignment.centerLeft,
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [

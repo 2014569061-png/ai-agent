@@ -9,7 +9,7 @@ import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
-import '../widgets/immersive_dropdown.dart';
+import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import '../l10n/app_strings.dart';
@@ -210,7 +210,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                           Row(
                             children: [
                               Expanded(
-                                child: ImmersiveDropdown<int>(
+                                child: NexusDropdown<int>(
                                   labelText: '时',
                                   initialValue: hour,
                                   items: [
@@ -226,7 +226,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: ImmersiveDropdown<int>(
+                                child: NexusDropdown<int>(
                                   labelText: '分',
                                   initialValue: minute,
                                   items: [

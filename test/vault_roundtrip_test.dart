@@ -73,6 +73,7 @@ void main() {
         id: 'c1',
         title: '会话',
         agentId: null,
+        mode: 'chat',
         isPinned: false,
         isFavorite: false,
         tagsJson: '[]',
@@ -158,6 +159,76 @@ void main() {
     expect(restoreStore.restored!.single.cachedPricePerMillionCents, 5);
     expect(restoreStore.activeId, 'p1');
     expect(restoreStore.savedKeys['tavily'], 'tvly-123');
+  });
+
+  test('vault round-trips development tasks and run history', () async {
+    final dbA = AppDatabase(NativeDatabase.memory());
+    final dbB = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async {
+      await dbA.close();
+      await dbB.close();
+    });
+    final now = DateTime.now();
+    await dbA.saveTask(Task(
+      id: 'task-1',
+      conversationId: 'c1',
+      stateRevision: 0,
+      type: 'development:implement_and_verify',
+      status: 'paused',
+      requestJson: '{"prompt":"fix"}',
+      progressJson: '{"checkpoint":{"reason":"budget"}}',
+      resumeCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    ));
+    await dbA.insertRunRecord(RunRecordsCompanion.insert(
+      runId: 'run-1',
+      conversationId: 'c1',
+      startedAt: now,
+    ));
+    await dbA.insertRunEvent(RunEventsCompanion.insert(
+      eventId: 'evt-1',
+      runId: 'run-1',
+      sequenceNo: 1,
+      type: 'file_operation',
+      status: 'success',
+      name: 'edit_file',
+      startedAt: now,
+    ));
+
+    final json = await buildVaultJson(dbA, providerStore: _FakeStore(configs: const []));
+    expect(json['tasks'], isNotEmpty);
+    expect(json['runRecords'], isNotEmpty);
+    await restoreVault(dbB, json, providerStore: _RecordingStore(configs: const []));
+    expect((await dbB.findTask('task-1'))?.status, 'paused');
+    expect((await dbB.findRunRecord('run-1'))?.runId, 'run-1');
+    expect((await dbB.eventsForRun('run-1')).single.eventId, 'evt-1');
+  });
+
+  test('vault round-trips artifact records', () async {
+    final dbA = AppDatabase(NativeDatabase.memory());
+    final dbB = AppDatabase(NativeDatabase.memory());
+    addTearDown(() async {
+      await dbA.close();
+      await dbB.close();
+    });
+    await dbA.saveArtifactRecord({
+      'id': 'art-1',
+      'projectId': 'p1',
+      'taskId': 't1',
+      'runId': 'r1',
+      'kind': 'apk',
+      'relativePath': 'build/app.apk',
+      'hash': 'abc',
+      'bytes': 8,
+      'inspectionJson': {'exists': true},
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+    final json =
+        await buildVaultJson(dbA, providerStore: _FakeStore(configs: const []));
+    expect(json['artifacts'], isNotEmpty);
+    await restoreVault(dbB, json, providerStore: _RecordingStore(configs: const []));
+    expect((await dbB.artifactsForProject('p1')).single['id'], 'art-1');
   });
 
   test('restoreVault tolerates v1 backups without the secrets section',

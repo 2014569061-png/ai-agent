@@ -1,4 +1,4 @@
-import 'package:file_picker/file_picker.dart';
+﻿import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,7 +8,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -91,7 +91,7 @@ class _VaultPageState extends ConsumerState<VaultPage> {
 
   Future<String?> _askPassword(String title) async {
     final controller = TextEditingController();
-    final result = await showImmersiveDialog<String>(
+    final result = await showNexusDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),

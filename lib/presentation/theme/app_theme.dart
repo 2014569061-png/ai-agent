@@ -80,7 +80,7 @@ abstract final class AppTheme {
         'sans-serif',
       ];
 
-  // 字体收敛为 5 档，字重严格限定为 400 与 500
+  // 字体采用双轨制（Display 轨 28-34 + Body 轨 11-17）
   static TextTheme _baseTextTheme(
     TextTheme base, {
     required Color primary,
@@ -88,6 +88,34 @@ abstract final class AppTheme {
     required Color faint,
   }) =>
       base.copyWith(
+        // 显示轨（Display）：主标题 34 / 28，字距紧致 -0.025em
+        displayLarge: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: AppTokens.fontSizeDisplay1,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.025 * AppTokens.fontSizeDisplay1,
+          height: 1.2,
+          color: primary,
+        ),
+        displayMedium: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: AppTokens.fontSizeDisplay2,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.025 * AppTokens.fontSizeDisplay2,
+          height: 1.25,
+          color: primary,
+        ),
+        displaySmall: TextStyle(
+          fontFamily: 'Inter',
+          fontFamilyFallback: _fontFallback,
+          fontSize: AppTokens.fontSizeHeadline,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.015 * AppTokens.fontSizeHeadline,
+          height: 1.3,
+          color: primary,
+        ),
         // 空态主文案：22 / 500 / 1.35
         headlineLarge: TextStyle(
           fontFamily: 'Inter',

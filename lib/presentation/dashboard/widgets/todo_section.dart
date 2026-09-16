@@ -8,6 +8,7 @@ import '../../../application/task_service.dart';
 import '../../../domain/models.dart';
 import '../../../infrastructure/database/app_database.dart';
 import '../../l10n/app_strings.dart';
+import '../../motion/nexus_page_route_factory.dart';
 import '../../tasks/task_details_page.dart';
 import '../../theme/app_palette.dart';
 import '../../widgets/floating_toast.dart';
@@ -64,7 +65,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
               ? AppStrings.pendingApproval
               : (isPlan
                   ? AppStrings.pendingPlanConfirm
-                  : AppStrings.pendingResume);
+                  : item.title);
 
           final actionLabel = isApproval
               ? AppStrings.approve
@@ -167,7 +168,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
         if (task != null && context.mounted) {
           final info = DevelopmentTaskInfo.fromTask(task);
           await Navigator.of(context).push(
-            MaterialPageRoute(
+            NexusPageRoute.detail(
               builder: (_) => TaskDetailsPage(
                 task: info,
                 onConversationSelected: widget.onConversationSelected,

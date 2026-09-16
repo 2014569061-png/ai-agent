@@ -42,16 +42,22 @@ class SentryService {
             // 脱敏：只保留匿名堆栈与设备信息。
             final request = event.request;
             if (request == null) return event;
+            final sanitizedUrl = request.url == null
+                ? null
+                : (Uri.tryParse(request.url!)
+                        ?.replace(query: '', fragment: '')
+                        .toString() ??
+                    request.url!.split('?').first);
             final headers = Map<String, String>.from(request.headers)
               ..removeWhere((key, _) {
                 final normalized = key.toLowerCase();
                 return normalized == 'authorization' ||
-                    normalized == 'x-api-key';
+                    normalized == 'x-api-key' ||
+                    normalized == 'cookie';
               });
             event.request = SentryRequest(
-              url: request.url,
+              url: sanitizedUrl,
               method: request.method,
-              fragment: request.fragment,
               apiTarget: request.apiTarget,
               headers: headers,
             );

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -37,5 +39,52 @@ void main() {
         reason: 'status=${result.status} error=${result.error} '
             'text=${result.text}');
     expect(result.text, isNotEmpty);
+  });
+
+  test('implement-and-verify headless runs register write and terminal tools',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final workspace = await Directory.systemTemp.createTemp('nexus-headless-');
+    addTearDown(() => workspace.delete(recursive: true));
+
+    final assembled = await HeadlessExecutor.assembleTools(
+      db: db,
+      config: const ProviderConfig(
+          baseUrl: 'https://unused.invalid/v1',
+          model: 'demo-model',
+          apiKey: ''),
+      taskType: 'implement_and_verify',
+      workspacePath: workspace.path,
+    );
+    addTearDown(assembled.mcpProvider.dispose);
+
+    expect(assembled.registry.find('edit_file'), isNotNull);
+    expect(assembled.registry.find('write_file'), isNotNull);
+    expect(assembled.registry.find('terminal'), isNotNull);
+  });
+
+  test('read-only collaboration headless runs keep workspace tools read-only',
+      () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final workspace = await Directory.systemTemp.createTemp('nexus-headless-');
+    addTearDown(() => workspace.delete(recursive: true));
+
+    final assembled = await HeadlessExecutor.assembleTools(
+      db: db,
+      config: const ProviderConfig(
+          baseUrl: 'https://unused.invalid/v1',
+          model: 'demo-model',
+          apiKey: ''),
+      taskType: 'code_review',
+      workspacePath: workspace.path,
+      allowedToolNames: const ['read_file', 'list_directory', 'search_files'],
+    );
+    addTearDown(assembled.mcpProvider.dispose);
+
+    expect(assembled.registry.find('read_file'), isNotNull);
+    expect(assembled.registry.find('edit_file'), isNull);
+    expect(assembled.registry.find('terminal'), isNull);
   });
 }

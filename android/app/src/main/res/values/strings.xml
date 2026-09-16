@@ -2,4 +2,16 @@
 <resources>
     <string name="nexus_widget_desc">NEXUS Agent 快捷入口</string>
     <string name="nexus_notification_listener_desc">NEXUS Agent 通知读取服务</string>
+    <!-- 长按图标的应用快捷方式（App Shortcuts）标签。
+         短标签建议 ≤10 字、长标签 ≤25 字，超出会被系统截断。 -->
+    <string name="shortcut_describe_agent_short">描述建 Agent</string>
+    <string name="shortcut_describe_agent_long">说一句目标，让 AI 生成 Agent</string>
+    <string name="shortcut_new_chat_short">新对话</string>
+    <string name="shortcut_new_chat_long">开始一次新对话</string>
+    <string name="shortcut_memory_short">记忆</string>
+    <string name="shortcut_memory_long">查看长期记忆</string>
+    <string name="shortcut_disabled">该入口当前不可用</string>
+    <!-- 桌面小组件标题。三个按钮的动作标签复用上面的快捷方式标签，保证
+         「快捷方式」与「小组件」对同一入口的叫法一致。 -->
+    <string name="nexus_command_widget_title">NEXUS 指挥台</string>
 </resources>

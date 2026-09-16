@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 次级按钮背景（浅面填充，无描边）。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/nexus_widget_action_secondary"/>
+    <corners android:radius="10dp"/>
+</shape>

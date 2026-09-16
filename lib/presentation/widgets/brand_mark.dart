@@ -20,7 +20,7 @@ class BrandMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = Image.asset(
+    Widget image = Image.asset(
       assetPath,
       width: size,
       height: size,
@@ -28,6 +28,29 @@ class BrandMark extends StatelessWidget {
       filterQuality: FilterQuality.high,
       semanticLabel: 'NEXUS Agent Logo',
     );
+
+    if (withGlow) {
+      image = Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: size * 1.1,
+            height: size * 1.1,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF4F6DF5).withValues(alpha: 0.32),
+                  blurRadius: size * 0.4,
+                  spreadRadius: size * 0.02,
+                ),
+              ],
+            ),
+          ),
+          image,
+        ],
+      );
+    }
 
     return Padding(padding: EdgeInsets.all(padding), child: image);
   }

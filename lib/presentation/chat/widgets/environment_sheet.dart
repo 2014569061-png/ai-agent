@@ -3,20 +3,23 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../application/environment_service.dart';
 import '../../../infrastructure/update/update_service.dart';
+import '../../environment/environment_status_view.dart';
+import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_page_header.dart';
 
-/// G1 开发环境引导:检测 Termux / 桥授权 / Go 工具链,分步引导新设备
-/// 在无电脑的情况下完成手机端开发环境的一次性配置。
-class EnvironmentSheet extends StatefulWidget {
+/// 统一环境检测：展示四个 runtime 的真实可用性，并保留 Termux 安装引导。
+class EnvironmentSheet extends ConsumerStatefulWidget {
   const EnvironmentSheet({super.key});
 
   @override
-  State<EnvironmentSheet> createState() => _EnvironmentSheetState();
+  ConsumerState<EnvironmentSheet> createState() => _EnvironmentSheetState();
 }
 
-enum _StepState { checking, ok, action, failed }
+enum _StepState { checking, ok, action, optional, failed }
 
 class _StepView {
   final String title;
@@ -26,9 +29,11 @@ class _StepView {
   _StepView({required this.title, required this.detail});
 }
 
-class _EnvironmentSheetState extends State<EnvironmentSheet> {
+class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
   static const _bridge = MethodChannel('nexus/termux_bridge');
   static const _bridgeDir = '/sdcard/pocketforge-bridge';
+  static const _bridgeCallTimeout = Duration(seconds: 5);
+  static const _environmentCheckTimeout = Duration(seconds: 10);
   static const _termuxApkUrls = [
     'https://mirrors.tuna.tsinghua.edu.cn/fdroid/archive/com.termux_118.apk',
     'https://f-droid.org/repo/com.termux_118.apk',
@@ -47,6 +52,8 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
   late final List<_StepView> _steps;
   bool _running = false;
   String _installStatus = '';
+  String? _termuxInspectionError;
+  EnvironmentSnapshot? _snapshot;
 
   @override
   void initState() {
@@ -63,18 +70,48 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
     if (_running) return;
     setState(() => _running = true);
     try {
+      final service = ref.read(environmentServiceProvider);
+      service.invalidate();
+      final snapshot =
+          await service.inspect(force: true).timeout(_environmentCheckTimeout);
+      if (mounted) setState(() => _snapshot = snapshot);
       // Step 1: Termux 是否安装
       _set(0, _StepState.checking);
       bool installed = false;
+      _termuxInspectionError = null;
       try {
-        installed = await _bridge.invokeMethod('isTermuxInstalled') == true;
-      } catch (_) {}
+        installed = await _bridge
+                .invokeMethod('isTermuxInstalled')
+                .timeout(_bridgeCallTimeout) ==
+            true;
+      } on TimeoutException {
+        _termuxInspectionError = 'Termux 检测超时；请先打开 Termux、允许外部调用和后台运行后重试。';
+      } on MissingPluginException {
+        _termuxInspectionError = '当前平台没有注册 Termux 桥，请确认使用 Android 版本。';
+      } catch (error) {
+        _termuxInspectionError = 'Termux 检测失败：$error';
+      }
       if (!installed) {
         _set(0, _StepState.action,
-            hint: '点击下方按钮下载并安装 Termux(F-Droid 官方版,清华镜像优先)。'
-                '安装完成后回到本页点"重新检测"。');
-        _set(1, _StepState.failed, hint: '依赖上一步');
-        _set(2, _StepState.failed, hint: '依赖上一步');
+            hint: _termuxInspectionError ??
+                '点击下方按钮下载并安装 Termux(F-Droid 官方版,清华镜像优先)。'
+                    '安装完成后回到本页点"重新检测"。');
+        final alternateRuntime =
+            snapshot.alpineAvailable || snapshot.androidShellAvailable;
+        final optionalHint = alternateRuntime
+            ? '当前已有 ${snapshot.alpineAvailable ? 'Alpine' : 'Android Shell'} 可用；'
+                '此 Termux 步骤仅用于补充外部工具链，可按需配置。'
+            : '依赖上一步；安装 Termux 后再配置桥和工具链。';
+        if (alternateRuntime) {
+          _set(1, _StepState.optional, hint: optionalHint);
+          _set(2, _StepState.optional, hint: '可选：Termux 未安装，不影响当前可用运行时。');
+        } else {
+          // Preserve the dependency error when there is no alternate runtime;
+          // an installed Alpine or Android Shell makes these two Termux-only
+          // steps optional, not failed.
+          _set(1, _StepState.failed, hint: '依赖上一步');
+          _set(2, _StepState.failed, hint: '依赖上一步');
+        }
         return;
       }
       _set(0, _StepState.ok);
@@ -98,6 +135,15 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
       } else {
         _set(2, _StepState.action, hint: '桥已就绪但缺少 Go,点击下方按钮复制工具链安装命令');
       }
+    } on TimeoutException {
+      _set(0, _StepState.failed, hint: '环境检测超时；请打开 Termux、确认桥授权和后台运行设置后重试。');
+      _set(1, _StepState.action,
+          hint: '请在 Termux 执行下方 allow-external-apps 配置命令后重试。');
+      _set(2, _StepState.failed, hint: '等待环境检测完成');
+    } catch (error) {
+      _set(0, _StepState.failed, hint: '环境检测失败：$error');
+      _set(1, _StepState.action, hint: '请先打开 Termux 并检查桥授权后重试。');
+      _set(2, _StepState.failed, hint: '等待环境检测完成');
     } finally {
       if (mounted) setState(() => _running = false);
     }
@@ -119,13 +165,25 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
     } catch (_) {}
     final script = "{\n$command\n} > '$outFile' 2>&1\necho \$? > '$codeFile'";
     try {
-      await _bridge.invokeMethod('runInTermux',
-          {'command': script, 'timeoutMs': timeout.inMilliseconds});
+      await _bridge.invokeMethod('runInTermux', {
+        'command': script,
+        'timeoutMs': timeout.inMilliseconds,
+      }).timeout(_bridgeCallTimeout);
+    } on TimeoutException {
+      return (
+        false,
+        '等待 Termux 执行超时。请打开 Termux、确认 allow-external-apps=true，'
+            '并关闭电池限制后重试。',
+      );
     } on PlatformException catch (e) {
       final msg = e.code == 'PERMISSION_DENIED'
           ? '用户拒绝了 Termux 调用权限,请重试并允许'
           : '无法启动 Termux 服务:${e.message}';
       return (false, msg);
+    } on MissingPluginException {
+      return (false, '当前平台没有注册 Termux 桥，请确认使用 Android 版本。');
+    } catch (error) {
+      return (false, '无法启动 Termux 服务：$error');
     }
     final deadline = DateTime.now().add(timeout);
     while (DateTime.now().isBefore(deadline)) {
@@ -175,15 +233,12 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
 
   /// 已就绪状态下收纳命令的折叠项(重置环境/换机时展开使用)。
   Widget _collapsedCommand(BuildContext context, String label, String command) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 8),
-        childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        leading: const Icon(Icons.terminal, size: 20),
-        title: Text(label, style: Theme.of(context).textTheme.bodySmall),
-        children: [_commandBlock(context, label, command)],
-      ),
+    return NexusDisclosure(
+      headerPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      contentPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      leading: const Icon(Icons.terminal, size: 20),
+      title: Text(label, style: Theme.of(context).textTheme.bodySmall),
+      child: _commandBlock(context, label, command),
     );
   }
 
@@ -234,12 +289,19 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
     return Scaffold(
       appBar: const NexusPageHeader(
         title: '开发环境检测',
-        subtitle: 'Termux 桥与离线编译工具链',
+        subtitle: 'Alpine / Termux / Android Shell / 本机进程',
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('在手机上开发 Windows exe 需要一次性配置以下环境。',
+          Text('检测四个运行时的真实可用性，不能用“安装了 Termux”代替 Alpine 状态。',
+              style: Theme.of(context).textTheme.bodySmall),
+          if (_snapshot != null) ...[
+            const SizedBox(height: 12),
+            EnvironmentStatusCard(snapshot: _snapshot!),
+          ],
+          const SizedBox(height: 12),
+          Text('Termux 安装引导仍可用于补充工具链，但不会覆盖上面的 runtime 检测。',
               style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 12),
           for (final s in _steps) _stepCard(context, s),
@@ -272,6 +334,7 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
       _StepState.checking => (Icons.hourglass_top, Colors.grey),
       _StepState.ok => (Icons.check_circle, Colors.green),
       _StepState.action => (Icons.error_outline, Colors.orange),
+      _StepState.optional => (Icons.info_outline, Colors.blueGrey),
       _StepState.failed => (Icons.cancel, Colors.red),
     };
     return Card(
@@ -302,13 +365,13 @@ class _EnvironmentSheetState extends State<EnvironmentSheet> {
               ),
             ),
           if (s == _steps[1]) ...[
-            if (s.state == _StepState.action)
+            if (s.state == _StepState.action || s.state == _StepState.optional)
               _commandBlock(context, '配置命令(整段复制,粘贴到 Termux 回车)', _configCommand)
             else if (s.state == _StepState.ok)
               _collapsedCommand(context, '查看配置命令(重置环境/换机时使用)', _configCommand),
           ],
           if (s == _steps[2]) ...[
-            if (s.state == _StepState.action)
+            if (s.state == _StepState.action || s.state == _StepState.optional)
               _commandBlock(
                   context, '工具链安装命令(整段复制,粘贴到 Termux 回车)', _toolchainCommand)
             else if (s.state == _StepState.ok)

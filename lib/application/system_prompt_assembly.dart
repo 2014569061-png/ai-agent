@@ -19,6 +19,7 @@ String assembleAgentSystemPrompt({
   Iterable<String> sessionSkillBlocks = const [],
   String delegationRules = '',
   String workspaceRules = '',
+  String projectContextBlock = '',
   String memoryBlock = '',
   String knowledgeBlock = '',
 }) {
@@ -28,6 +29,7 @@ String assembleAgentSystemPrompt({
     ...sessionSkillBlocks,
     delegationRules,
     workspaceRules,
+    projectContextBlock,
     memoryBlock,
     knowledgeBlock,
   ].map((section) => section.trim()).where((section) => section.isNotEmpty);

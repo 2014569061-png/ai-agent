@@ -11,6 +11,7 @@ import '../../infrastructure/providers/provider_config_store.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
+import '../motion/nexus_page_route_factory.dart';
 import 'model_list_page.dart';
 import 'provider_presets.dart';
 import 'settings_components.dart';
@@ -153,7 +154,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
   Future<void> _chooseModel() async {
     final selected = await Navigator.push<String>(
         context,
-        MaterialPageRoute(
+        NexusPageRoute.settingsPage(
             builder: (_) => ModelListPage(
                 config: _config,
                 preset: widget.preset ?? presetForConfig(_config))));

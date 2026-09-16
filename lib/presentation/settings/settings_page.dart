@@ -1,42 +1,26 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../application/mcp_service.dart';
-import '../../application/providers.dart';
-import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/providers/provider_config.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
-import '../../infrastructure/system/battery_optimization.dart';
 import '../../infrastructure/update/update_service.dart';
-import '../audit/audit_log_page.dart';
 import '../feedback/feedback_page.dart';
-import '../knowledge/knowledge_page.dart';
 import '../l10n/app_strings.dart';
-import '../mcp/mcp_servers_page.dart';
-import '../memory/memory_page.dart';
-import '../onboarding/onboarding_page.dart';
-import '../plugins/plugins_page.dart';
-import '../scheduled/scheduled_tasks_page.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../theme/app_palette.dart';
-import '../theme/app_tokens.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_theme_controller.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/immersive_sheet.dart';
+import '../widgets/nexus_sheet.dart';
 import 'appearance_theme_page.dart';
-import 'data_backup_page.dart';
+import 'data_management_page.dart';
+import 'extensions_page.dart';
 import 'language_page.dart';
-import '../diagnostics/run_analysis_page.dart';
-import 'linux_environment_page.dart';
 import 'provider_list_page.dart';
-import 'settings_components.dart';
-import 'tool_list_page.dart';
 import 'update_sheet.dart';
-import 'workspace_files_page.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -45,61 +29,23 @@ class SettingsPage extends ConsumerStatefulWidget {
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
 }
 
-class _SettingsPageState extends ConsumerState<SettingsPage>
-    with WidgetsBindingObserver {
+class _SettingsPageState extends ConsumerState<SettingsPage> {
   final _providerStore = ProviderConfigStore();
-  final _mcpService = McpService();
   final _updateService = UpdateService();
-  final _searchController = TextEditingController();
 
-  String? _searchQuery;
-
-  // Provider
   ProviderConfig? _activeProvider;
-  bool _deepReasoningEnabled = true;
-
-  // Context & Extensions
-  int _memoryCount = 0;
-  int _knowledgeCount = 0;
-  int _skillCount = 0;
-  int _scheduledCount = 0;
-  List<McpServerConfig> _mcpServers = [];
-
-  // Tools
-  bool _webBrowsingEnabled = true;
-  bool _terminalFileEnabled = true;
-
-  // Permissions
-  bool _ignoringBattery = false;
-
-  // General
   String _currentLanguage = '跟随系统';
+  String _fontSizeLabel = '标准';
   String? _appVersion;
   String? _appBuildNumber;
+
+  bool get _isInTest =>
+      WidgetsBinding.instance.runtimeType.toString().contains('Test');
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _loadAll();
-    _searchController.addListener(() {
-      final q = _searchController.text.trim();
-      setState(() => _searchQuery = q.isEmpty ? null : q.toLowerCase());
-    });
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkPermissions();
-    }
   }
 
   Future<void> _loadAll() async {
@@ -107,153 +53,151 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
       final prefs = await SharedPreferences.getInstance();
 
       // Active provider
-      _activeProvider = await _providerStore.load().timeout(
-            const Duration(milliseconds: 300),
-            onTimeout: () =>
-                const ProviderConfig(baseUrl: '', model: '', apiKey: ''),
-          );
-      _deepReasoningEnabled =
-          prefs.getBool('settings.llm.deep_reasoning') ?? true;
-
-      // Memory & MCP (skipped in widget test environment if not mocked)
       if (!_isInTest) {
-        try {
-          final db = await ref
-              .read(databaseProvider.future)
-              .timeout(const Duration(milliseconds: 300));
-          final memories = await db.allMemories();
-          _memoryCount = memories.length;
-          final knowledgeDocs = await db.allKnowledgeDocs();
-          _knowledgeCount = knowledgeDocs.length;
-          final skills = await db.allSkillPacks();
-          _skillCount = skills.length;
-          final scheduledTasks = await db.allScheduledTasks();
-          _scheduledCount = scheduledTasks.length;
-        } catch (_) {}
-
-        try {
-          _mcpServers = await _mcpService
-              .loadAll()
-              .timeout(const Duration(milliseconds: 300));
-        } catch (_) {}
+        _activeProvider = await _providerStore.load().timeout(
+              const Duration(milliseconds: 300),
+              onTimeout: () => const ProviderConfig(baseUrl: '', model: '', apiKey: ''),
+            );
+      } else {
+        _activeProvider = const ProviderConfig(baseUrl: '', model: '', apiKey: '');
       }
 
-      // Tools toggles
-      _webBrowsingEnabled = prefs.getBool('settings.tool.web_browsing') ?? true;
-      _terminalFileEnabled =
-          prefs.getBool('settings.tool.terminal_file') ?? true;
-
       // Language
-      final packageInfo = await PackageInfo.fromPlatform();
-      _appVersion = 'v${packageInfo.version}';
-      _appBuildNumber = packageInfo.buildNumber;
-      final langCode = prefs.getString('settings.language') ?? 'system';
-      _currentLanguage = switch (langCode) {
-        'zh' => '简体中文',
-        'en' => 'English (部分翻译)',
+      final lang = prefs.getString('settings.language');
+      _currentLanguage = switch (lang) {
+        'zh' => '中文(简体中文)',
+        'en' => 'English',
         _ => '跟随系统',
       };
 
-      await _checkPermissions();
-    } catch (_) {
-    } finally {
-      if (mounted) setState(() {});
-    }
-  }
+      // Font size
+      final fontScale = prefs.getDouble('settings.font_scale') ?? 1.0;
+      _fontSizeLabel = fontScale <= 0.9
+          ? '较小'
+          : fontScale >= 1.25
+              ? '特大'
+              : fontScale >= 1.12
+                  ? '较大'
+                  : '标准';
 
-  Future<void> _openMcpServers() => _openSettingsPage(const McpServersPage());
-
-  Future<void> _openSettingsPage(Widget page) async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => page),
-    );
-    if (mounted) unawaited(_loadAll());
-  }
-
-  bool get _isInTest =>
-      WidgetsBinding.instance.runtimeType.toString().contains('Test');
-
-  Future<void> _checkPermissions() async {
-    if (kIsWeb || _isInTest) {
-      if (mounted) {
-        setState(() {
-          _ignoringBattery = false;
-        });
+      // App version
+      if (!_isInTest) {
+        try {
+          final info = await PackageInfo.fromPlatform()
+              .timeout(const Duration(milliseconds: 300));
+          _appVersion = info.version;
+          _appBuildNumber = info.buildNumber;
+        } catch (_) {
+          _appVersion = AppStrings.appVersionName.replaceFirst('v', '');
+          _appBuildNumber = '93';
+        }
+      } else {
+        _appVersion = AppStrings.appVersionName.replaceFirst('v', '');
+        _appBuildNumber = '93';
       }
-      return;
-    }
 
-    bool battery = false;
-    try {
-      battery = await BatteryOptimization.isIgnoring()
-          .timeout(const Duration(milliseconds: 200));
+      if (mounted) setState(() {});
     } catch (_) {}
-
-    if (mounted) {
-      setState(() {
-        _ignoringBattery = battery;
-      });
-    }
   }
 
-  bool _supportsReasoning(String? model) {
-    if (model == null || model.isEmpty) return false;
-    final lower = model.toLowerCase();
-    return lower.contains('r1') ||
-        lower.contains('reason') ||
-        lower.contains('o1') ||
-        lower.contains('o3') ||
-        lower.contains('thinking') ||
-        lower.contains('qwq') ||
-        lower.contains('claude-3-7') ||
-        lower.contains('gemini-2.0-flash-thinking');
+  void _openPage(Widget page) {
+    Navigator.of(context).push(
+      NexusPageRoute.settingsPage(builder: (_) => page),
+    );
   }
 
   Future<void> _showPrivacyNotice() async {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('数据与隐私边界'),
+        title: const Text('服务协议与隐私'),
         content: const Text(
-          '剪贴板和图片附件仅在当前回合按需使用。\n\n'
-          '敏感工具的参数、结果和运行日志在本地持久化、备份与导出时会脱敏；模型当前回合仍可看到完成任务所需的原文。\n\n'
-          '删除会话时会同时删除关联的运行事件、日志和审批轨迹。',
+          '1. NEXUS Agent 在本地沙箱中安全运行，对敏感文件和终端操作实行前置鉴权与审计。\n\n'
+          '2. API Key 和个人认证凭据经由本机硬件安全模块及安全存储加密，绝不上传至任何第三方同步服务器。\n\n'
+          '3. 剪贴板和图片附件仅在当前对话回合按需使用，且敏感参数自动在持久化与导出时脱敏。\n\n'
+          '4. 内容由 AI 生成，请仔细甄别，并在合法合规框架内使用。',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('知道了'),
+            child: const Text('我知道了'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _toggleDeepReasoning(bool val) async {
-    setState(() => _deepReasoningEnabled = val);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('settings.llm.deep_reasoning', val);
-  }
-
-  Future<void> _toggleTool(
-      String key, bool val, void Function(bool) update) async {
-    update(val);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(key, val);
-  }
-
-  Future<void> _requestBattery() async {
-    if (kIsWeb) {
-      FloatingToast.show(context, 'Web 环境不需要电池优化豁免');
-      return;
-    }
-    final launched = await BatteryOptimization.requestIgnore();
+  Future<void> _selectFontSize() async {
     if (!mounted) return;
-    if (!launched) {
-      FloatingToast.show(context, '当前系统不支持直接拉起，请手动前往电池设置');
-      unawaited(openAppSettings());
-    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? AppPalette.darkSurface
+          : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '字体大小设置',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                title: const Text('较小 (Small)'),
+                trailing: _fontSizeLabel == '较小'
+                    ? const Icon(Icons.check, color: AppPalette.brand)
+                    : null,
+                onTap: () async {
+                  await AppAppearanceController.setFontScale(0.88);
+                  setState(() => _fontSizeLabel = '较小');
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                },
+              ),
+              ListTile(
+                title: const Text('标准 (Standard)'),
+                trailing: _fontSizeLabel == '标准'
+                    ? const Icon(Icons.check, color: AppPalette.brand)
+                    : null,
+                onTap: () async {
+                  await AppAppearanceController.setFontScale(1.0);
+                  setState(() => _fontSizeLabel = '标准');
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                },
+              ),
+              ListTile(
+                title: const Text('较大 (Large)'),
+                trailing: _fontSizeLabel == '较大'
+                    ? const Icon(Icons.check, color: AppPalette.brand)
+                    : null,
+                onTap: () async {
+                  await AppAppearanceController.setFontScale(1.15);
+                  setState(() => _fontSizeLabel = '较大');
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                },
+              ),
+              ListTile(
+                title: const Text('特大 (Extra Large)'),
+                trailing: _fontSizeLabel == '特大'
+                    ? const Icon(Icons.check, color: AppPalette.brand)
+                    : null,
+                onTap: () async {
+                  await AppAppearanceController.setFontScale(1.28);
+                  setState(() => _fontSizeLabel = '特大');
+                  if (sheetContext.mounted) Navigator.pop(sheetContext);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _checkUpdate() async {
@@ -261,7 +205,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     if (!mounted) return;
     switch (result.status) {
       case UpdateCheckStatus.update:
-        unawaited(showImmersiveSheet(
+        unawaited(showNexusSheet(
           context: context,
           builder: (_) => UpdateSheet(info: result.info!),
         ));
@@ -275,437 +219,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
-
-    return Scaffold(
-      backgroundColor: canvas,
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadAll,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(0, 6, 0, 32),
-            children: [
-              _buildHeroHeader(context),
-              const SizedBox(height: 8),
-              _buildSearchBar(context),
-              const SizedBox(height: 6),
-              if (_searchQuery != null)
-                _buildSearchResults(context)
-              else ...[
-                _buildLlmSection(context),
-                _buildContextExtensionSection(context),
-                _buildToolsSection(context),
-                _buildGeneralSection(context),
-                _buildPermissionsSection(context),
-                _buildAboutSection(context),
-                const SizedBox(height: 24),
-                _buildLogoutCard(context),
-                const SizedBox(height: 24),
-                _buildFooter(context),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ------------------------------------------------------------
-  // 顶部大标题区域
-  // ------------------------------------------------------------
-  Widget _buildHeroHeader(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              InkWell(
-                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-                onTap: () => Navigator.maybePop(context),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 16,
-                        color: textMuted,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '返回',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                          color: textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            AppStrings.settings,
-            style: TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 22,
-              height: 1.35,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            AppStrings.settingsHeroSubtitle,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-              color: textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBar(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        height: 38,
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          border: Border.all(
-            color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
-            width: 0.8,
-          ),
-        ),
-        child: TextField(
-          controller: _searchController,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w400,
-            color: textColor,
-          ),
-          textAlignVertical: TextAlignVertical.center,
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: AppStrings.searchSettingsPlaceholder,
-            hintStyle: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: textMuted,
-            ),
-            prefixIcon: Icon(
-              Icons.search_rounded,
-              size: 18,
-              color: textMuted,
-            ),
-            prefixIconConstraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
-            ),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? GestureDetector(
-                    onTap: () => _searchController.clear(),
-                    child: Icon(
-                      Icons.cancel_rounded,
-                      size: 16,
-                      color: textMuted,
-                    ),
-                  )
-                : null,
-            suffixIconConstraints: const BoxConstraints(
-              minWidth: 36,
-              minHeight: 36,
-            ),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-              borderSide: const BorderSide(color: AppPalette.brand, width: 1.0),
-            ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 8),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // 分组标题 13/500 textMuted，上 24 下 8
-  Widget _buildSectionTitle(String title) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: textMuted,
-        ),
-      ),
-    );
-  }
-
-  // 分组卡片 12px 圆角、1px 描边、左右内边距 16px
-  Widget _buildGroupCard({
-    required BuildContext context,
-    required List<Widget> children,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline =
-        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-          border: Border.all(
-            color: hairline,
-            width: 1.0,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: children,
-        ),
-      ),
-    );
-  }
-
-  // 卡内行分隔线：1px hairline，从图标右侧起始（左缩进 48px）
-  Widget _buildDivider(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hairline =
-        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
-    return Divider(
-      height: 1.0,
-      thickness: 1.0,
-      indent: 48,
-      endIndent: 0,
-      color: hairline,
-    );
-  }
-
-  // 行结构：20px 图标（textMuted）+ 12px 间隙 + 15/400 标题 + 弹性空间 + 13/400 textFaint 右值 + 4px 间隙 + 16px 箭头
-  Widget _buildSettingsRow({
-    required BuildContext context,
-    required IconData icon,
-    Color? iconColor,
-    required String title,
-    Color? titleColor,
-    String? subtitle,
-    Color? subtitleColor,
-    String? trailingText,
-    Color? trailingTextColor,
-    Widget? trailingBadge,
-    Widget? trailingWidget,
-    bool showChevron = true,
-    VoidCallback? onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: ConstrainedBox(
-          constraints:
-              const BoxConstraints(minHeight: AppTokens.kListRowHeight),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              children: [
-                Icon(icon, size: 20, color: textMuted),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                          color: titleColor ?? textColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (subtitle != null && subtitle.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: subtitleColor ?? textMuted,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (trailingWidget != null) ...[
-                  trailingWidget,
-                  if (showChevron) ...[
-                    const SizedBox(width: 4),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 16,
-                      color: textMuted,
-                    ),
-                  ],
-                ] else ...[
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (trailingBadge != null) trailingBadge,
-                      if (trailingText != null && trailingText.isNotEmpty) ...[
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 150),
-                          child: Text(
-                            trailingText,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w400,
-                              color: trailingTextColor ?? textFaint,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.end,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      if (showChevron)
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 16,
-                          color: textMuted,
-                        ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSwitch({
-    required bool value,
-    required ValueChanged<bool>? onChanged,
-    Color? activeColor,
-  }) {
-    return SizedBox(
-      height: 28,
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: Switch.adaptive(
-          value: value,
-          onChanged: onChanged,
-          activeTrackColor: activeColor ?? AppPalette.brand,
-          activeThumbColor: Colors.white,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLogoutCard(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline =
-        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        height: AppTokens.kListRowHeight,
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-          border: Border.all(color: hairline, width: 1.0),
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-          onTap: () => _confirmLogout(context),
-          child: const Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.logout_rounded, size: 18, color: AppPalette.danger),
-                SizedBox(width: 8),
-                Text(
-                  '退出登录',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: AppPalette.danger,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _confirmLogout(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('确认退出登录？'),
-        content: const Text('退出后将清除本地临时会话凭证，如需使用需重新输入或配置服务商。'),
+        content: const Text('退出后将清除本地临时会话凭证，如需使用需重新进入。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppPalette.danger,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: AppPalette.danger),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('退出'),
           ),
@@ -718,684 +244,361 @@ class _SettingsPageState extends ConsumerState<SettingsPage>
     }
   }
 
-  // 页脚 11px textFaint 居中、行高 1.6，与上方卡片间距 24px
-  Widget _buildFooter(BuildContext context) {
+  @override
+  Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
+    final canvas = isDark ? AppPalette.darkCanvas : const Color(0xFFF7F8FA);
+    final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
+    final textMuted = isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
+    final cardBg = isDark ? AppPalette.darkSurface : Colors.white;
 
-    return Center(
-      child: Text(
-        '${AppStrings.appTitle} ${_appVersion ?? AppStrings.appVersionName} (+${_appBuildNumber ?? '90'})\n简洁克制 · 内容优先',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w400,
-          height: 1.6,
-          color: textFaint,
+    final themeMode = AppThemeController.mode.value;
+    final themeLabel = switch (themeMode) {
+      ThemeMode.light => '浅色',
+      ThemeMode.dark => '深色',
+      ThemeMode.system => '系统',
+    };
+
+    final providerText = (_activeProvider != null && _activeProvider!.name.isNotEmpty)
+        ? _activeProvider!.name
+        : '未配置';
+
+    return Scaffold(
+      backgroundColor: canvas,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 顶栏：微圆角后退键 + 居中标题「设置」
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isDark ? AppPalette.darkSurface : const Color(0xFFF2F3F5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      tooltip: '返回',
+                      icon: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 16,
+                        color: textColor,
+                      ),
+                      onPressed: () => Navigator.maybePop(context),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      '设置',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 36), // 保持居中对称
+                ],
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadAll,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                  children: [
+                    // 1. 账户组
+                    _buildSectionHeader('账户', textMuted),
+                    _buildCard(
+                      cardBg: cardBg,
+                      isDark: isDark,
+                      children: [
+                        _buildRow(
+                          icon: Icons.person_outline_rounded,
+                          title: '账号管理',
+                          trailing: providerText,
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: () => _openPage(const ProviderListPage()),
+                        ),
+                        _buildDivider(isDark),
+                        _buildRow(
+                          icon: Icons.storage_outlined,
+                          title: '数据管理',
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: () => _openPage(const DataManagementPage()),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // 2. 应用组
+                    _buildSectionHeader('应用', textMuted),
+                    _buildCard(
+                      cardBg: cardBg,
+                      isDark: isDark,
+                      children: [
+                        _buildRow(
+                          icon: Icons.language_rounded,
+                          title: '语言',
+                          trailing: _currentLanguage,
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: () => _openPage(const LanguagePage()),
+                        ),
+                        _buildDivider(isDark),
+                        _buildRow(
+                          icon: Icons.wb_sunny_outlined,
+                          title: '外观',
+                          trailing: themeLabel,
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: () => _openPage(const AppearanceThemePage()),
+                        ),
+                        _buildDivider(isDark),
+                        _buildRow(
+                          icon: Icons.format_size_rounded,
+                          title: '字体大小',
+                          trailing: _fontSizeLabel,
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: _selectFontSize,
+                        ),
+                        _buildDivider(isDark),
+                        _buildRow(
+                          icon: Icons.extension_outlined,
+                          title: '扩展与环境',
+                          trailing: 'MCP / 技能 / 工具',
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: () => _openPage(const ExtensionsPage()),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 18),
+
+                    // 3. 关于组
+                    _buildSectionHeader('关于', textMuted),
+                    _buildCard(
+                      cardBg: cardBg,
+                      isDark: isDark,
+                      children: [
+                        _buildRow(
+                          icon: Icons.info_outline_rounded,
+                          title: '检查更新',
+                          trailing:
+                              '${_appVersion ?? AppStrings.appVersionName.replaceFirst('v', '')}(${_appBuildNumber ?? '93'})',
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: _checkUpdate,
+                        ),
+                        _buildDivider(isDark),
+                        _buildRow(
+                          icon: Icons.article_outlined,
+                          title: '服务协议',
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: _showPrivacyNotice,
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // 4. 单卡：帮助与反馈
+                    _buildCard(
+                      cardBg: cardBg,
+                      isDark: isDark,
+                      children: [
+                        _buildRow(
+                          icon: Icons.help_outline_rounded,
+                          title: '帮助与反馈',
+                          textColor: textColor,
+                          textMuted: textMuted,
+                          onTap: () => _openPage(const FeedbackPage()),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // 5. 单卡：退出登录
+                    _buildCard(
+                      cardBg: cardBg,
+                      isDark: isDark,
+                      children: [
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _confirmLogout(context),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.logout_rounded,
+                                    size: 20,
+                                    color: textColor,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    '退出登录',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w400,
+                                      color: textColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 28),
+
+                    // 6. 底部法律与备案声明
+                    _buildFooter(textMuted),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ------------------------------------------------------------
-  // LLM 提供商
-  // ------------------------------------------------------------
-  Widget _buildLlmSection(BuildContext context) {
-    final active = _activeProvider;
-    final hasProvider = active != null && active.baseUrl.isNotEmpty;
-    final modelText =
-        (active != null && active.model.isNotEmpty) ? active.model : '未配置';
-    final providerSummary = hasProvider
-        ? '${active.name} / $modelText'
-        : AppStrings.noProviderConfiguredHint;
-    final supportsReasoning = _supportsReasoning(active?.model);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppStrings.llmProviderSection),
-        _buildGroupCard(
-          context: context,
-          children: [
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.auto_awesome_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.modelProviderEntry,
-              trailingText: providerSummary,
-              trailingTextColor: hasProvider ? null : AppPalette.warning,
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ProviderListPage(),
-                  ),
-                );
-                unawaited(_loadAll());
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.psychology_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.enableDeepReasoning,
-              subtitle:
-                  supportsReasoning ? null : '当前模型（$modelText）不支持深度推理，点此更换',
-              subtitleColor: settingsMutedColor(context),
-              trailingWidget: _buildSwitch(
-                value: supportsReasoning && _deepReasoningEnabled,
-                onChanged: supportsReasoning ? _toggleDeepReasoning : null,
-              ),
-              showChevron: !supportsReasoning,
-              onTap: supportsReasoning
-                  ? () => _toggleDeepReasoning(!_deepReasoningEnabled)
-                  : () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ProviderListPage(),
-                        ),
-                      );
-                      unawaited(_loadAll());
-                    },
-            ),
-          ],
+  Widget _buildSectionHeader(String title, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          color: color,
         ),
-      ],
+      ),
     );
   }
 
-  // ------------------------------------------------------------
-  // 上下文与扩展
-  // ------------------------------------------------------------
-  Widget _buildContextExtensionSection(BuildContext context) {
-    final mcpCount = _mcpServers.length;
-    final mcpEnabledCount = _mcpServers.where((s) => s.enabled).length;
-    final mcpSummary = mcpCount == 0
-        ? AppStrings.mcpNotConnected
-        : AppStrings.mcpConnectedCount(mcpEnabledCount);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppStrings.contextExtensionSection),
-        _buildGroupCard(
-          context: context,
-          children: [
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.psychology_alt_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.memorySectionTitle,
-              trailingText: _memoryCount > 0 ? '$_memoryCount 条' : '未建立',
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const MemoryPage()),
-                );
-                unawaited(_loadAll());
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.auto_stories_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.knowledgeSectionTitle,
-              trailingText: AppStrings.knowledgeDocsSummary(_knowledgeCount),
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const KnowledgePage()),
-                );
-                unawaited(_loadAll());
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.extension_rounded,
-              iconColor: AppPalette.warning,
-              title: AppStrings.skillsSectionTitle,
-              trailingText: _skillCount > 0 ? '$_skillCount 个已安装' : '未安装',
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PluginsPage()),
-                );
-                unawaited(_loadAll());
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.dns_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.mcpServersSectionTitle,
-              trailingText: mcpSummary,
-              onTap: _openMcpServers,
-            ),
-          ],
+  Widget _buildCard({
+    required Color cardBg,
+    required bool isDark,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
+          width: 0.8,
         ),
-      ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      ),
     );
   }
 
-  // ------------------------------------------------------------
-  // 工具
-  // ------------------------------------------------------------
-  Widget _buildToolsSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppStrings.toolsSectionTitle),
-        _buildGroupCard(
-          context: context,
-          children: [
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.build_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.toolListEntry,
-              trailingText: '清单与策略',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ToolListPage()),
-                );
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.public_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.enableWebBrowsingTool,
-              trailingWidget: _buildSwitch(
-                value: _webBrowsingEnabled,
-                onChanged: (val) => _toggleTool(
-                  'settings.tool.web_browsing',
-                  val,
-                  (v) => setState(() => _webBrowsingEnabled = v),
-                ),
-              ),
-              showChevron: false,
-              onTap: () => _toggleTool(
-                'settings.tool.web_browsing',
-                !_webBrowsingEnabled,
-                (v) => setState(() => _webBrowsingEnabled = v),
-              ),
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.terminal_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.enableTerminalFileTool,
-              trailingWidget: _buildSwitch(
-                value: _terminalFileEnabled,
-                onChanged: (val) => _toggleTool(
-                  'settings.tool.terminal_file',
-                  val,
-                  (v) => setState(() => _terminalFileEnabled = v),
-                ),
-              ),
-              showChevron: false,
-              onTap: () => _toggleTool(
-                'settings.tool.terminal_file',
-                !_terminalFileEnabled,
-                (v) => setState(() => _terminalFileEnabled = v),
-              ),
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.computer_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.linuxEnvironmentEntry,
-              trailingText: 'Termux / proot',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const LinuxEnvironmentPage(),
-                  ),
-                );
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.folder_rounded,
-              iconColor: AppPalette.warning,
-              title: AppStrings.workspaceFilesEntry,
-              trailingText: '导入与目录',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const WorkspaceFilesPage(),
-                  ),
-                );
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.privacy_tip_outlined,
-              iconColor: settingsMutedColor(context),
-              title: '数据与隐私边界',
-              trailingText: '查看说明',
-              onTap: _showPrivacyNotice,
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.fact_check_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.auditLogEntry,
-              trailingText: AppStrings.auditLogSubtitle,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AuditLogPage()),
-                );
-              },
-            ),
-          ],
-        ),
-      ],
+  Widget _buildDivider(bool isDark) {
+    return Divider(
+      height: 0.8,
+      thickness: 0.8,
+      indent: 48,
+      endIndent: 0,
+      color: isDark ? AppPalette.darkHairline : const Color(0xFFF0F2F5),
     );
   }
 
-  // ------------------------------------------------------------
-  // 通用
-  // ------------------------------------------------------------
-  Widget _buildGeneralSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppStrings.generalSection),
-        _buildGroupCard(
-          context: context,
-          children: [
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.palette_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.appearanceAndTheme,
-              trailingWidget: ValueListenableBuilder<ThemeMode>(
-                valueListenable: AppThemeController.mode,
-                builder: (_, mode, __) {
-                  final label = switch (mode) {
-                    ThemeMode.light => '浅色',
-                    ThemeMode.dark => '深色',
-                    ThemeMode.system => '跟随系统',
-                  };
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: settingsFaintColor(context),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 20,
-                        color: settingsFaintColor(context),
-                      ),
-                    ],
-                  );
-                },
-              ),
-              showChevron: false,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const AppearanceThemePage(),
-                  ),
-                );
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.translate_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.language,
-              trailingText: _currentLanguage,
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LanguagePage()),
-                );
-                unawaited(_loadAll());
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.cloud_upload_rounded,
-              iconColor: AppPalette.success,
-              title: AppStrings.dataBackup,
-              trailingText: '快照与还原',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DataBackupPage(),
-                  ),
-                );
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.schedule_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.scheduledTasksEntry,
-              trailingText: AppStrings.scheduledTasksSummary(_scheduledCount),
-              onTap: () async {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const ScheduledTasksPage()),
-                );
-                unawaited(_loadAll());
-              },
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  // ------------------------------------------------------------
-  // 权限
-  // ------------------------------------------------------------
-  Widget _buildPermissionsSection(BuildContext context) {
-    final batteryLabel = kIsWeb
-        ? AppStrings.permUnsupported
-        : (_ignoringBattery ? AppStrings.permGranted : AppStrings.permDenied);
-    final batteryColor = kIsWeb
-        ? Colors.grey
-        : (_ignoringBattery ? AppPalette.success : AppPalette.danger);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppStrings.permissionsSection),
-        _buildGroupCard(
-          context: context,
-          children: [
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.battery_charging_full_rounded,
-              iconColor: AppPalette.success,
-              title: AppStrings.batteryExemption,
-              trailingBadge: Container(
-                margin: const EdgeInsets.only(right: 4),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: batteryColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-                ),
+  Widget _buildRow({
+    required IconData icon,
+    required String title,
+    String? trailing,
+    required Color textColor,
+    required Color textMuted,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: textColor),
+              const SizedBox(width: 12),
+              Expanded(
                 child: Text(
-                  batteryLabel,
+                  title,
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: batteryColor,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                    color: textColor,
                   ),
                 ),
               ),
-              onTap: _requestBattery,
-            ),
-          ],
+              if (trailing != null && trailing.isNotEmpty) ...[
+                Text(
+                  trailing,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: textMuted,
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: textMuted.withValues(alpha: 0.6),
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 
-  // ------------------------------------------------------------
-  // 关于
-  // ------------------------------------------------------------
-  Widget _buildAboutSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionTitle(AppStrings.aboutSection),
-        _buildGroupCard(
-          context: context,
-          children: [
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.analytics_outlined,
-              iconColor: settingsMutedColor(context),
-              title: 'Token 用量与可观测性',
-              subtitle: '输入 / 输出 / 缓存命中率与上下文水位',
-              trailingText: '查看',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const RunAnalysisPage()),
-                );
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.system_update_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.checkUpdate,
-              trailingText: '检测更新',
-              onTap: _checkUpdate,
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.feedback_rounded,
-              iconColor: AppPalette.warning,
-              title: AppStrings.feedbackAndIssues,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const FeedbackPage()),
-                );
-              },
-            ),
-            _buildDivider(context),
-            _buildSettingsRow(
-              context: context,
-              icon: Icons.help_outline_rounded,
-              iconColor: settingsMutedColor(context),
-              title: AppStrings.onboardingGuide,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const OnboardingPage()),
-                );
-              },
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+  Widget _buildFooter(Color textFaint) {
+    final activeModel = _activeProvider?.model.isNotEmpty == true
+        ? _activeProvider!.model
+        : 'NEXUS Agent';
 
-  // ------------------------------------------------------------
-  // 搜索结果
-  // ------------------------------------------------------------
-  Widget _buildSearchResults(BuildContext context) {
-    final query = _searchQuery!;
-    final results = <Widget>[];
-
-    void checkItem({
-      required String title,
-      required String subtitle,
-      required IconData icon,
-      required Color iconColor,
-      required VoidCallback onTap,
-    }) {
-      if (title.toLowerCase().contains(query) ||
-          subtitle.toLowerCase().contains(query)) {
-        results.add(
-          _buildSettingsRow(
-            context: context,
-            icon: icon,
-            iconColor: iconColor,
-            title: title,
-            subtitle: subtitle,
-            onTap: onTap,
-          ),
-        );
-      }
-    }
-
-    checkItem(
-      title: '模型提供商',
-      subtitle: '配置 OpenAI, Claude, Gemini 等服务商',
-      icon: Icons.auto_awesome_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => _openSettingsPage(const ProviderListPage()),
-    );
-    checkItem(
-      title: '记忆管理',
-      subtitle: '查看与维护长期记忆事实库',
-      icon: Icons.psychology_alt_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => _openSettingsPage(const MemoryPage()),
-    );
-    checkItem(
-      title: 'Skills 技能 / 插件',
-      subtitle: '浏览与安装技能扩展包',
-      icon: Icons.extension_rounded,
-      iconColor: AppPalette.warning,
-      onTap: () => _openSettingsPage(const PluginsPage()),
-    );
-    checkItem(
-      title: AppStrings.mcpServers,
-      subtitle: AppStrings.mcpServersSearchHint,
-      icon: Icons.dns_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: _openMcpServers,
-    );
-    checkItem(
-      title: '受控工具清单',
-      subtitle: '查看全部 Agent 工具与权限策略',
-      icon: Icons.build_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const ToolListPage())),
-    );
-    checkItem(
-      title: 'Linux 工具环境',
-      subtitle: 'Termux, proot 与终端执行环境',
-      icon: Icons.computer_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => const LinuxEnvironmentPage())),
-    );
-    checkItem(
-      title: '工作区与文件',
-      subtitle: '沙箱目录切换、文件导入导出与缓存清理',
-      icon: Icons.folder_rounded,
-      iconColor: AppPalette.warning,
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => const WorkspaceFilesPage())),
-    );
-    checkItem(
-      title: '外观与主题',
-      subtitle: '深浅模式、毛玻璃强度、动效与聊天气泡宽度',
-      icon: Icons.palette_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(context,
-          MaterialPageRoute(builder: (_) => const AppearanceThemePage())),
-    );
-    checkItem(
-      title: '语言 / Language',
-      subtitle: '跟随系统、简体中文、English',
-      icon: Icons.translate_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => Navigator.push(
-          context, MaterialPageRoute(builder: (_) => const LanguagePage())),
-    );
-    checkItem(
-      title: '数据备份',
-      subtitle: '隐私保险箱加密导出、还原与清理',
-      icon: Icons.cloud_upload_rounded,
-      iconColor: AppPalette.success,
-      onTap: () => _openSettingsPage(const DataBackupPage()),
-    );
-    checkItem(
-      title: AppStrings.knowledgeSectionTitle,
-      subtitle: AppStrings.knowledgeSearchHint,
-      icon: Icons.auto_stories_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => _openSettingsPage(const KnowledgePage()),
-    );
-    checkItem(
-      title: AppStrings.scheduledTasksEntry,
-      subtitle: AppStrings.scheduledTasksSearchHint,
-      icon: Icons.schedule_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => _openSettingsPage(const ScheduledTasksPage()),
-    );
-    checkItem(
-      title: AppStrings.auditLogEntry,
-      subtitle: AppStrings.auditLogSearchHint,
-      icon: Icons.fact_check_rounded,
-      iconColor: settingsMutedColor(context),
-      onTap: () => _openSettingsPage(const AuditLogPage()),
-    );
-
-    if (results.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 40),
-        child: Center(
-          child: Text(
-            '没有找到相关的设置项',
-            style: TextStyle(color: AppPalette.lightTextMuted, fontSize: 14),
-          ),
-        ),
-      );
-    }
-
-    final cardChildren = <Widget>[];
-    for (var i = 0; i < results.length; i++) {
-      cardChildren.add(results[i]);
-      if (i < results.length - 1) {
-        cardChildren.add(_buildDivider(context));
-      }
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 12, 16, 6),
-          child: Text(
-            '搜索结果（${results.length} 项）',
+    return Center(
+      child: Column(
+        children: [
+          Text(
+            '模型名称: $activeModel\n'
+            '备案号: Beijing-NexusAgent-20260914001\n'
+            '浙ICP备2023025841号-3A\n'
+            '内容由 AI 生成，请仔细甄别，并合法使用',
+            textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? AppPalette.lightTextMuted
-                  : AppPalette.lightTextMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+              height: 1.6,
+              color: textFaint.withValues(alpha: 0.85),
             ),
           ),
-        ),
-        _buildGroupCard(
-          context: context,
-          children: cardChildren,
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
