@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../application/file_citation.dart';
 import '../../application/workspace_file_editor.dart';
-import '../theme/app_palette.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
 
@@ -107,9 +106,7 @@ class _WorkspaceEditorPageState extends State<WorkspaceEditorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: widget.relativePath,
         subtitle: _buffer == null

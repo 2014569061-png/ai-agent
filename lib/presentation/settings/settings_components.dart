@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/glass_surface.dart';
 
 /// 设置模块统一色彩入口。
 /// 全部委托给 AppPalette / AppSemanticColors，不再自带一套 iOS 色板。
 Color settingsBgColor(BuildContext context) {
   final isDark = Theme.of(context).brightness == Brightness.dark;
-  return isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
+  final isFlat =
+      AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+  return isFlat
+      ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+      : Colors.transparent;
 }
 
 Color settingsCardColor(BuildContext context) {
@@ -94,24 +100,59 @@ class SettingsGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final intensity = AppAppearanceController.resolvedGlassIntensity;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final radius = BorderRadius.circular(AppTokens.radiusCard);
+    final cardMargin = margin ?? const EdgeInsets.symmetric(horizontal: 16);
+
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
+
+    if (intensity != GlassIntensity.flat) {
+      return GlassSurface(
+        role: GlassRole.content,
+        variant: GlassVariant.regular,
+        intensity: intensity,
+        borderRadius: radius,
+        margin: cardMargin,
+        padding: padding,
+        borderColor: isDark ? const Color(0x33FFFFFF) : const Color(0x80FFFFFF),
+        tint: isDark
+            ? AppPalette.darkSurface.withValues(alpha: 0.42)
+            : AppPalette.lightCanvas.withValues(alpha: 0.46),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? const Color(0x40000000) : const Color(0x141E3A8A),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: radius,
+          clipBehavior: Clip.antiAlias,
+          child: content,
+        ),
+      );
+    }
+
     return Padding(
-      padding: margin ?? const EdgeInsets.symmetric(horizontal: 16),
+      padding: cardMargin,
       child: Container(
         padding: padding,
         decoration: BoxDecoration(
           color: settingsCardColor(context),
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+          borderRadius: radius,
           border: Border.all(
             color: settingsDividerColor(context),
             width: 1,
           ),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: children,
-        ),
+        child: content,
       ),
     );
   }

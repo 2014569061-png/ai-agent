@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../domain/models.dart';
@@ -49,9 +49,13 @@ class InputToolGridSheet extends StatelessWidget {
     required VoidCallback onApprovalModeTap,
   }) {
     HapticFeedback.mediumImpact();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: isDark
+          ? Colors.black.withValues(alpha: 0.35)
+          : Colors.black.withValues(alpha: 0.06),
       isScrollControlled: true,
       builder: (_) => InputToolGridSheet(
         onCommandMenu: onCommandMenu,
@@ -274,25 +278,37 @@ class _ToolGridCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: tool.isActive
                       ? (isDark
-                          ? AppPalette.brandSoftDark
-                          : AppPalette.brandSoftLight)
+                          ? AppPalette.brandAction.withValues(alpha: 0.22)
+                          : AppPalette.brandAction.withValues(alpha: 0.12))
                       : (isDark
-                          ? AppPalette.darkSurface
-                          : AppPalette.lightSurface),
+                          ? Colors.white.withValues(alpha: 0.05)
+                          : Colors.black.withValues(alpha: 0.03)),
                   borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                   border: Border.all(
                     color: tool.isActive
-                        ? AppPalette.brand
+                        ? AppPalette.brandAction
+                            .withValues(alpha: isDark ? 0.6 : 0.4)
                         : (isDark
-                            ? AppPalette.darkHairline
-                            : AppPalette.lightHairline),
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.05)),
                     width: 1.0,
                   ),
+                  boxShadow: tool.isActive
+                      ? [
+                          BoxShadow(
+                            color: AppPalette.brandAction
+                                .withValues(alpha: isDark ? 0.25 : 0.12),
+                            blurRadius: 8,
+                          )
+                        ]
+                      : null,
                 ),
                 child: Icon(tool.icon,
                     size: 22,
                     color: tool.isActive
-                        ? AppPalette.brand
+                        ? (isDark
+                            ? const Color(0xFF64D2FF)
+                            : AppPalette.brandAction)
                         : (isDark
                             ? AppPalette.darkText
                             : AppPalette.lightText)),

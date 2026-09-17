@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'app_appearance_controller.dart';
 import 'app_palette.dart';
 import 'app_tokens.dart';
+import '../widgets/liquid_glass.dart';
 
 abstract final class AppTheme {
   // 品牌色与主要视觉色
@@ -11,9 +13,12 @@ abstract final class AppTheme {
   static const darkBackground = AppPalette.darkCanvas;
   static const textPrimary = AppPalette.lightText;
   static const textSecondary = AppPalette.lightTextMuted;
-  static const danger = AppPalette.danger;
-  static const warning = AppPalette.warning;
-  static const success = AppPalette.success;
+  static const danger = AppPalette.lightDanger;
+  static const warning = AppPalette.lightWarning;
+  static const success = AppPalette.lightSuccess;
+  static const darkDanger = AppPalette.darkDanger;
+  static const darkWarning = AppPalette.darkWarning;
+  static const darkSuccess = AppPalette.darkSuccess;
 
   // 基础圆角常量
   static const radiusSmall = AppTokens.radiusControl;
@@ -226,6 +231,8 @@ abstract final class AppTheme {
 
   static ThemeData _build(Brightness brightness) {
     final isDark = brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final hairline =
@@ -243,7 +250,7 @@ abstract final class AppTheme {
       secondary:
           isDark ? AppPalette.darkBrandHover : AppPalette.lightBrandHover,
       onSecondary: Colors.white,
-      error: AppPalette.danger,
+      error: isDark ? AppPalette.darkDanger : AppPalette.lightDanger,
       onError: Colors.white,
       surface: surface,
       onSurface: text,
@@ -270,7 +277,7 @@ abstract final class AppTheme {
 
     return ThemeData(
       colorScheme: scheme,
-      scaffoldBackgroundColor: canvas,
+      scaffoldBackgroundColor: isFlat ? canvas : Colors.transparent,
       useMaterial3: true,
       fontFamily: 'Inter',
       fontFamilyFallback: _fontFallback,
@@ -310,20 +317,38 @@ abstract final class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: canvas,
+        fillColor: isFlat
+            ? canvas
+            : (isDark
+                ? AppPalette.darkSurface.withValues(alpha: 0.55)
+                : AppPalette.lightSurface.withValues(alpha: 0.65)),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          borderSide: BorderSide(color: hairline, width: 1.0),
+          borderSide: BorderSide(
+            color: isFlat
+                ? hairline
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.white.withValues(alpha: 0.60)),
+            width: 0.8,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          borderSide: BorderSide(color: hairline, width: 1.0),
+          borderSide: BorderSide(
+            color: isFlat
+                ? hairline
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.16)
+                    : Colors.white.withValues(alpha: 0.60)),
+            width: 0.8,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          borderSide: const BorderSide(color: AppPalette.brand, width: 1.0),
+          borderSide: const BorderSide(color: AppPalette.brand, width: 1.2),
         ),
         hintStyle: TextStyle(
           color: textFaint,
@@ -354,6 +379,26 @@ abstract final class AppTheme {
           color: text,
           fontSize: 17,
           fontWeight: FontWeight.w500,
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: isFlat
+            ? canvas
+            : (isDark
+                ? const Color(0xFF141A29).withValues(alpha: 0.90)
+                : Colors.white.withValues(alpha: 0.92)),
+        modalBackgroundColor: isFlat
+            ? canvas
+            : (isDark
+                ? const Color(0xFF141A29).withValues(alpha: 0.90)
+                : Colors.white.withValues(alpha: 0.92)),
+        modalBarrierColor:
+            Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppTokens.radiusModal),
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -543,9 +588,9 @@ class AppSemanticColors {
     brandActive: AppPalette.lightBrandActive,
     brandSoft: AppPalette.lightBrandSoft,
     brandFaint: AppPalette.lightBrandFaint,
-    danger: AppPalette.danger,
-    warning: AppPalette.warning,
-    success: AppPalette.success,
+    danger: AppPalette.lightDanger,
+    warning: AppPalette.lightWarning,
+    success: AppPalette.lightSuccess,
     floatingSurface: AppPalette.lightSurface,
     elevatedSurface: AppPalette.lightSurface,
     modalSurface: AppPalette.lightSurface,
@@ -576,9 +621,9 @@ class AppSemanticColors {
     brandActive: AppPalette.darkBrandActive,
     brandSoft: AppPalette.darkBrandSoft,
     brandFaint: AppPalette.darkBrandFaint,
-    danger: AppPalette.danger,
-    warning: AppPalette.warning,
-    success: AppPalette.success,
+    danger: AppPalette.darkDanger,
+    warning: AppPalette.darkWarning,
+    success: AppPalette.darkSuccess,
     floatingSurface: AppPalette.darkSurface,
     elevatedSurface: AppPalette.darkSurface,
     modalSurface: AppPalette.darkSurface,

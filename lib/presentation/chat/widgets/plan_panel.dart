@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
 import '../../motion/nexus_motion.dart';
+import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/glass_surface.dart';
 import '../../widgets/nexus_sheet.dart';
 import '../../widgets/nexus_surface.dart';
 import '../../widgets/nexus_status_pill.dart';
@@ -84,44 +86,66 @@ class _PlanPanelState extends State<PlanPanel> {
     final muted =
         isDark ? AppTheme.darkSemantic.mutedOnGlass : AppTheme.textSecondary;
 
+    final intensity = AppAppearanceController.resolvedGlassIntensity;
+    final cardRadius = BorderRadius.circular(AppTheme.radiusCard);
+    final isGlass = intensity != GlassIntensity.flat;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+
+    final panelContent = Material(
+      color: Colors.transparent,
+      borderRadius: cardRadius,
+      child: AnimatedSize(
+        duration: NexusMotion.durationBase(context),
+        curve: NexusMotion.curveStandard,
+        alignment: Alignment.topCenter,
+        child: _isCompleted && !_expanded
+            ? _buildCompletedCompact(muted)
+            : (_expanded
+                ? SizedBox(
+                    key: const ValueKey('plan_expanded'),
+                    height: math.min(
+                        410.0, MediaQuery.sizeOf(context).height * 0.58),
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: _buildExpanded(muted, includeActions: false),
+                          ),
+                        ),
+                        _buildPlanActions(),
+                      ],
+                    ),
+                  )
+                : KeyedSubtree(
+                    key: const ValueKey('plan_collapsed'),
+                    child: _buildCollapsed(muted),
+                  )),
+      ),
+    );
+
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 380, maxHeight: 420),
-      child: NexusSurface(
-        level: SurfaceLevel.ultraThick,
-        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
-          child: AnimatedSize(
-            duration: NexusMotion.durationBase(context),
-            curve: NexusMotion.curveStandard,
-            alignment: Alignment.topCenter,
-            child: _isCompleted && !_expanded
-                ? _buildCompletedCompact(muted)
-                : (_expanded
-                    ? SizedBox(
-                        key: const ValueKey('plan_expanded'),
-                        height: math.min(
-                            410.0, MediaQuery.sizeOf(context).height * 0.58),
-                        child: Column(
-                          children: [
-                            Expanded(
-                              child: SingleChildScrollView(
-                                child: _buildExpanded(muted,
-                                    includeActions: false),
-                              ),
-                            ),
-                            _buildPlanActions(),
-                          ],
-                        ),
-                      )
-                    : KeyedSubtree(
-                        key: const ValueKey('plan_collapsed'),
-                        child: _buildCollapsed(muted),
-                      )),
-          ),
-        ),
-      ),
+      child: isGlass
+          ? GlassSurface(
+              role: GlassRole.overlay,
+              variant: GlassVariant.regular,
+              intensity: intensity,
+              borderRadius: cardRadius,
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              tint: isDark
+                  ? AppPalette.darkSurface.withValues(alpha: 0.64)
+                  : AppPalette.lightCanvas.withValues(alpha: 0.68),
+              borderColor: hairline,
+              boxShadow: AppTheme.floatingShadow(isDark),
+              child: panelContent,
+            )
+          : NexusSurface(
+              level: SurfaceLevel.ultraThick,
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              borderRadius: cardRadius,
+              child: panelContent,
+            ),
     );
   }
 

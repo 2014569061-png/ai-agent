@@ -53,6 +53,7 @@ import '../workspace/file_tree_sheet.dart';
 import '../workspace/development_workbench_page.dart';
 import '../projects/project_home_page.dart';
 import '../projects/project_picker_page.dart';
+import '../projects/storage_access_flow.dart';
 import '../utils/keyboard_insets.dart';
 
 import 'widgets/floating_capsule_input.dart';
@@ -70,13 +71,17 @@ import 'widgets/skill_suggestion_bar.dart';
 import 'widgets/chat_catalog_drawer.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_action_sheet.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/nexus_surface.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/tool_approval_helper.dart';
 import '../theme/app_tokens.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/nexus_loading_skeleton.dart';
+import '../widgets/glass_surface_group.dart';
 import 'widgets/nexus_back_to_latest_button.dart';
+import '../theme/app_appearance_controller.dart';
+import '../widgets/liquid_glass.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -90,6 +95,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   Future<void> _pickWorkspace() async {
+    // 与项目页的「导入目录」保持一致：先拿到文件访问权限，再进目录选择器。
+    if (!await ensureAllFilesAccess(context)) return;
+    if (!mounted) return;
     await _openProjectPicker();
   }
 
@@ -213,12 +221,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
   bool _skillSuggestionsDismissed = false;
   static const _dismissedRecoveryTasksKey = 'recovery.dismissed_task_ids';
   final _attachments = <PlatformFile>[];
+  final ValueNotifier<int> _attachmentsRevision = ValueNotifier(0);
+  final ValueNotifier<bool> _hasAttachments = ValueNotifier(false);
   String? _pendingClientRequestId;
-  bool _attachmentPanelExpanded = false;
+  final ValueNotifier<bool> _attachmentPanelExpanded = ValueNotifier(false);
   final _picker = ImagePicker();
   final _scrollController = ScrollController();
   bool _showScrollToBottom = false;
   int _unreadNewMessagesCount = 0;
+  final ValueNotifier<int> _scrollIndicatorRevision = ValueNotifier(0);
   bool _followTailScheduled = false;
   bool _followTailAnimate = false;
 
@@ -237,9 +248,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   /// 处于「文本选择模式」的消息索引（null = 无）。
   /// 正文默认不可选，否则长按会被文本选择器截走、消息菜单永远打不开。
-  int? _selectingMessageIndex;
+  final ValueNotifier<int?> _selectingMessageIndex = ValueNotifier(null);
 
   ChatController get _chat => ref.read(chatControllerProvider.notifier);
+
+  void _notifyAttachmentsChanged() {
+    _hasAttachments.value = _attachments.isNotEmpty;
+    _attachmentsRevision.value++;
+  }
 
   final BackgroundService _backgroundService = BackgroundService();
 
@@ -375,8 +391,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
     // 文本选择模式是"当前这条消息"的临时态，切换会话就该退出，
     // 否则会在另一个会话里意外留下一个可选气泡。
-    if (_selectingMessageIndex != null) {
-      setState(() => _selectingMessageIndex = null);
+    if (_selectingMessageIndex.value != null) {
+      _selectingMessageIndex.value = null;
     }
   }
 
@@ -385,6 +401,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     await _chat.newConversation();
     if (!mounted) return;
     _attachments.clear();
+    _notifyAttachmentsChanged();
     await _restoreDraft(ref.read(chatControllerProvider).conversationId);
     if (initialText != null && initialText.isNotEmpty) {
       _controller.value = TextEditingValue(
@@ -400,7 +417,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
   ) async {
     await _startNewConversation();
     if (!mounted) return;
-    setState(() => _attachments.add(attachment));
+    _attachments.add(attachment);
+    _notifyAttachmentsChanged();
   }
 
   Future<void> _switchConversation(Conversation conversation) async {
@@ -411,6 +429,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
       return;
     }
     _attachments.clear();
+    _notifyAttachmentsChanged();
     await _restoreDraft(conversation.id);
     _resetSessionSkills();
   }
@@ -586,20 +605,129 @@ class _ChatPageState extends ConsumerState<ChatPage>
       FloatingToast.show(context, '运行中不能切换模式', tone: ToastTone.warning);
       return;
     }
-    final selected = await showNexusActionSheet<ChatMode>(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selected = await showNexusSheet<ChatMode>(
       context: context,
-      title: '选择当前模式',
-      subtitle: '模式会决定是否允许工具执行，以及计划是否需要确认',
-      items: [
-        for (final mode in ChatMode.values)
-          ActionSheetItem<ChatMode>(
-            icon: _chatModeIcon(mode),
-            title: mode.label,
-            subtitle: mode.description,
-            value: mode,
-            selected: mode == state.mode,
+      maxHeightRatio: 0.32,
+      builder: (sheetContext) {
+        final activeColor = AppPalette.brand;
+        final surface =
+            isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+        final hairline =
+            isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+        final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+        final textMuted =
+            isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '切换模式 (Mode)',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: activeColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    state.mode.label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: activeColor,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 24, minHeight: 24),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: textMuted,
+                    ),
+                    onPressed: () => Navigator.pop(sheetContext),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  for (final mode in ChatMode.values) ...[
+                    Expanded(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => Navigator.pop(sheetContext, mode),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 10, horizontal: 8),
+                          decoration: BoxDecoration(
+                            color: mode == state.mode
+                                ? activeColor.withValues(
+                                    alpha: isDark ? 0.2 : 0.12)
+                                : surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color:
+                                  mode == state.mode ? activeColor : hairline,
+                              width: mode == state.mode ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _chatModeIcon(mode),
+                                size: 20,
+                                color: mode == state.mode
+                                    ? activeColor
+                                    : textColor,
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                mode.label,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: mode == state.mode
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: mode == state.mode
+                                      ? activeColor
+                                      : textColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (mode != ChatMode.values.last) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+            ],
           ),
-      ],
+        );
+      },
     );
     if (!mounted || selected == null || selected == state.mode) return;
     _chat.setMode(selected);
@@ -742,17 +870,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
     // 灵敏检测：用户上滑离开底部超过 100px 立即唤出回底胶囊，避免抢屏
     final show = maxScroll - currentScroll > 100;
     if (show != _showScrollToBottom) {
-      setState(() => _showScrollToBottom = show);
+      _showScrollToBottom = show;
+      _scrollIndicatorRevision.value++;
     }
   }
 
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     HapticFeedback.lightImpact();
-    setState(() {
-      _showScrollToBottom = false;
-      _unreadNewMessagesCount = 0;
-    });
+    _showScrollToBottom = false;
+    _unreadNewMessagesCount = 0;
+    _scrollIndicatorRevision.value++;
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent,
       duration: const Duration(milliseconds: 260),
@@ -786,7 +914,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (_userDragging) return;
     if (!_isNearBottom()) {
       if (!_showScrollToBottom && mounted) {
-        setState(() => _showScrollToBottom = true);
+        _showScrollToBottom = true;
+        _scrollIndicatorRevision.value++;
       }
       return;
     }
@@ -802,7 +931,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       }
       if (!_isNearBottom()) {
         if (!_showScrollToBottom) {
-          setState(() => _showScrollToBottom = true);
+          _showScrollToBottom = true;
+          _scrollIndicatorRevision.value++;
         }
         _followTailAnimate = false;
         return;
@@ -923,10 +1053,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _shareSub?.cancel();
     _skillSuggestionDebounce?.cancel();
     _draftPersistTimer?.cancel();
+    _attachmentPanelExpanded.dispose();
     _controller.removeListener(_rememberCurrentDraft);
     _controller.removeListener(_onSkillInputChanged);
     _controller.dispose();
     _scrollController.dispose();
+    _selectingMessageIndex.dispose();
+    _scrollIndicatorRevision.dispose();
+    _attachmentsRevision.dispose();
+    _hasAttachments.dispose();
     super.dispose();
   }
 
@@ -954,24 +1089,17 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 
   Future<void> _showLockFailed(AppLockService lock) async {
-    final retry = await showNexusDialog<bool>(
-      context: context,
+    final retry = await showConfirmAction(
+      context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('身份验证失败'),
-        content: const Text('可重试，或退出应用。'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('退出')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('重试')),
-        ],
-      ),
+      title: '身份验证失败',
+      message: '可重试，或退出应用。',
+      confirmLabel: '重试',
+      cancelLabel: '退出',
+      isDanger: false,
     );
     if (!mounted) return;
-    if (retry == true) {
+    if (retry) {
       unawaited(_maybeLock());
     } else {
       unawaited(SystemNavigator.pop());
@@ -1009,25 +1137,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
     if (config.isConfigured) return true;
 
     if (!mounted) return false;
-    final gotoConfig = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('尚未配置模型服务'),
-        content: const Text('尚未配置模型服务，先去填入 API Key 或连接本地模型？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('去配置'),
-          ),
-        ],
-      ),
+    final gotoConfig = await showConfirmAction(
+      context,
+      title: '尚未配置模型服务',
+      message: '尚未配置模型服务，先去填入 API Key 或连接本地模型？',
+      confirmLabel: '去配置',
+      isDanger: false,
     );
 
-    if (gotoConfig == true && mounted) {
+    if (gotoConfig && mounted) {
       await Navigator.push(
         context,
         NexusPageRoute.settingsPage(builder: (_) => const ProviderListPage()),
@@ -1075,7 +1193,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final originalText = _controller.text;
     _controller.clear();
     _attachments.clear();
-    if (mounted) setState(() {});
+    if (mounted) _notifyAttachmentsChanged();
     final taskType = _pendingTaskType;
     final sourceType = _pendingSourceType;
     _pendingTaskType = 'general';
@@ -1099,11 +1217,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
         text: originalText,
         selection: TextSelection.collapsed(offset: originalText.length),
       );
-      setState(() {
-        _attachments
-          ..clear()
-          ..addAll(attachments);
-      });
+      _attachments
+        ..clear()
+        ..addAll(attachments);
+      _notifyAttachmentsChanged();
       FloatingToast.show(context, '发送失败，输入已保留', tone: ToastTone.warning);
     }
     if (!sendSucceeded && mounted && _controller.text.isEmpty) {
@@ -1260,11 +1377,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       restored.add(PlatformFile(name: item.name, path: item.path, size: 0));
     }
     if (!mounted) return;
-    setState(() {
-      _attachments
-        ..clear()
-        ..addAll(restored);
-    });
+    _attachments
+      ..clear()
+      ..addAll(restored);
+    _notifyAttachmentsChanged();
     if (missing > 0) {
       FloatingToast.show(context, '有 $missing 个附件失效，请重新选择',
           tone: ToastTone.warning);
@@ -1546,7 +1662,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
           'mkv'
         ]);
     if (result == null || !mounted) return;
-    setState(() => _attachments.addAll(result.files));
+    _attachments.addAll(result.files);
+    _notifyAttachmentsChanged();
   }
 
   /// 相册多选图片（A6：多图一次性发送）。
@@ -1555,12 +1672,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final files = await _picker.pickMultiImage(
           maxWidth: 1280, maxHeight: 1280, imageQuality: 80);
       if (files.isEmpty || !mounted) return;
+      final attachments = <PlatformFile>[];
       for (final xfile in files) {
         final bytes = await xfile.readAsBytes();
-        if (mounted) {
-          setState(() => _attachments.add(PlatformFile(
-              name: xfile.name, size: bytes.length, bytes: bytes)));
-        }
+        attachments.add(PlatformFile(
+            name: xfile.name, size: bytes.length, bytes: bytes));
+      }
+      if (mounted && attachments.isNotEmpty) {
+        _attachments.addAll(attachments);
+        _notifyAttachmentsChanged();
       }
     } catch (e) {
       if (mounted) {
@@ -1578,8 +1698,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final bytes = await xfile.readAsBytes();
       if (!mounted) return;
       final name = xfile.name;
-      setState(() => _attachments
-          .add(PlatformFile(name: name, size: bytes.length, bytes: bytes)));
+      _attachments.add(PlatformFile(
+        name: name,
+        size: bytes.length,
+        bytes: bytes,
+      ));
+      _notifyAttachmentsChanged();
     } catch (e) {
       if (mounted) {
         FloatingToast.error(context, '无法获取图片', rawDetail: e.toString());
@@ -1596,8 +1720,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final canSpeak = message.role == MessageRole.assistant && tts.isAvailable;
     final speaking = canSpeak && tts.isSpeaking;
     // 打开菜单即退出上一条消息的选择模式，避免两个状态并存。
-    if (_selectingMessageIndex != null) {
-      setState(() => _selectingMessageIndex = null);
+    if (_selectingMessageIndex.value != null) {
+      _selectingMessageIndex.value = null;
     }
     final action = await showNexusActionSheet<String>(
       context: context,
@@ -1654,7 +1778,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     } else if (action == 'speak') {
       await _toggleSpeak(message.text);
     } else if (action == 'select') {
-      setState(() => _selectingMessageIndex = messageIndex);
+      _selectingMessageIndex.value = messageIndex;
     } else if (action == 'copy') {
       await Clipboard.setData(ClipboardData(text: message.text));
       if (mounted) {
@@ -1703,26 +1827,66 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final controller = TextEditingController(text: message.text);
     final submitted = await showNexusDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('编辑并重发'),
-        content: TextField(
-          controller: controller,
-          maxLines: 6,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新的内容',
-            border: OutlineInputBorder(),
+      builder: (dialogContext) {
+        final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        return AlertDialog(
+          title: const Text('编辑并重发'),
+          content: TextField(
+            controller: controller,
+            maxLines: 6,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: '输入新的内容',
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('保存并重发')),
-        ],
-      ),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 42,
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.14)
+                              : Colors.black.withValues(alpha: 0.12),
+                          width: 0.8,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusControl),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('取消'),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: SizedBox(
+                    height: 42,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppPalette.brand,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusControl),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('保存并重发'),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
     );
     final newText = controller.text;
     // Dialog 路由退出动画结束前，TextField 仍可能访问 controller；延后一帧释放，
@@ -1809,50 +1973,150 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Future<void> _confirmToolRetry(ToolActivity activity) async {
     final unknownEffect = activity.effect == ToolEffect.unknown;
-    final confirmed = await showNexusDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('重试上一次任务？'),
-        content: Text(
-          unknownEffect
-              ? '该操作的副作用无法确认。请先检查目标状态，避免重复写入后再重试。'
-              : '将重新运行上一条请求和其工具步骤。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认重试'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '重试上一次任务？',
+      message: unknownEffect
+          ? '该操作的副作用无法确认。请先检查目标状态，避免重复写入后再重试。'
+          : '将重新运行上一条请求和其工具步骤。',
+      confirmLabel: '确认重试',
+      isDanger: unknownEffect,
     );
-    if (confirmed == true && mounted) _regenerate();
+    if (confirmed && mounted) _regenerate();
   }
 
   Future<void> _selectApprovalMode() async {
     final currentMode = ref.read(chatControllerProvider).approvalMode;
-    final selected = await showNexusActionSheet<ApprovalMode>(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final selected = await showNexusSheet<ApprovalMode>(
       context: context,
-      title: '操作权限',
-      items: [
-        for (final mode in ApprovalMode.values)
-          ActionSheetItem(
-            icon: mode == ApprovalMode.fullAccess
-                ? Icons.shield_outlined
-                : Icons.verified_user_outlined,
-            title: _approvalModeTitle(mode),
-            subtitle: _approvalModeDescription(mode),
-            selected: currentMode == mode,
-            value: mode,
+      maxHeightRatio: 0.32,
+      builder: (sheetContext) {
+        final activeColor = AppPalette.brand;
+        final surface =
+            isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+        final hairline =
+            isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+        final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+        final textMuted =
+            isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.shield_outlined, size: 18, color: activeColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    '操作权限与安全',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints(minWidth: 24, minHeight: 24),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: textMuted,
+                    ),
+                    onPressed: () => Navigator.pop(sheetContext),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  for (final mode in ApprovalMode.values) ...[
+                    Expanded(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => Navigator.pop(sheetContext, mode),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 10, horizontal: 6),
+                          decoration: BoxDecoration(
+                            color: mode == currentMode
+                                ? activeColor.withValues(
+                                    alpha: isDark ? 0.2 : 0.12)
+                                : surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color:
+                                  mode == currentMode ? activeColor : hairline,
+                              width: mode == currentMode ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                mode == ApprovalMode.fullAccess
+                                    ? Icons.shield_rounded
+                                    : (mode == ApprovalMode.autoSafe
+                                        ? Icons.verified_user_rounded
+                                        : Icons.help_outline_rounded),
+                                size: 20,
+                                color: mode == currentMode
+                                    ? activeColor
+                                    : (mode == ApprovalMode.autoSafe
+                                        ? AppPalette.success
+                                        : textColor),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                _approvalModeTitle(mode),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: mode == currentMode
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: mode == currentMode
+                                      ? activeColor
+                                      : textColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (mode != ApprovalMode.values.last)
+                      const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  _approvalModeDescription(currentMode),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: textMuted,
+                  ),
+                ),
+              ),
+            ],
           ),
-      ],
+        );
+      },
     );
     if (selected != null && mounted) {
       ref.read(chatControllerProvider.notifier).setApprovalMode(selected);
+      unawaited(HapticFeedback.selectionClick());
     }
   }
 
@@ -2054,11 +2318,10 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final messageAdded = next.messages.length > previous.messages.length;
       final completed = previous.running && !next.running;
       if (!_isNearBottom() && messageAdded) {
-        setState(() {
-          _unreadNewMessagesCount +=
-              next.messages.length - previous.messages.length;
-          _showScrollToBottom = true;
-        });
+        _unreadNewMessagesCount +=
+            next.messages.length - previous.messages.length;
+        _showScrollToBottom = true;
+        _scrollIndicatorRevision.value++;
       }
       if (next.running || messageAdded || completed) {
         _scheduleFollowTail(
@@ -2113,400 +2376,506 @@ class _ChatPageState extends ConsumerState<ChatPage>
         final omittedContext =
             ref.watch(chatControllerProvider.select((s) => s.omittedContext));
 
-        return Scaffold(
-          key: _scaffoldKey,
-          backgroundColor: Colors.transparent, // Background handled by stack
-          drawer: ChatCatalogDrawer(
-            currentConversationId: conversationId,
-            currentWorkspacePath: currentWorkspacePath,
-            contextTokens: contextTokens,
-            liveContextTokens: liveContextTokens,
-            activeModel: activeModel,
-            activeProviderName: activeProviderName,
-            messages: messages,
-            isRunning: running,
-            planModeEnabled: planMode,
-            approvalMode: approvalMode,
-            onApprovalModeTap: _selectApprovalMode,
-            onNewConversation: () => _startNewConversation(),
-            onSelectConversation: (conv) => _switchConversation(conv),
-            onWorkspaceTap: _handleTopBarWorkspace,
-            onModelTap: _switchProvider,
-            onMcpMenu: () => Navigator.of(context).push(
-              NexusPageRoute.detail(builder: (_) => const McpServersPage()),
-            ),
-            onPromptLibrary: _openPromptLibrary,
-            onPlanModeToggle: () => _chat.setPlanMode(!planMode),
-            onMore: _showAvatarMenu,
-            onOpenHistory: _openHistory,
-            onConversationDeleted: (id) {
-              // 删掉的若是当前会话，立即另起新会话，避免停留在已删除的会话上。
-              if (ref.read(chatControllerProvider).conversationId == id) {
-                _startNewConversation();
-              }
-            },
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
+            statusBarIconBrightness:
+                isDark ? Brightness.light : Brightness.dark,
+            systemNavigationBarIconBrightness:
+                isDark ? Brightness.light : Brightness.dark,
+            systemStatusBarContrastEnforced: false,
+            systemNavigationBarContrastEnforced: false,
           ),
-          body: Stack(
-            // 顶部悬浮层（顶栏、计划与工具面板）允许展示自身阴影，
-            // 不受页面 Stack 的默认裁剪影响。
-            clipBehavior: Clip.none,
-            children: [
-              // G1 聊天背景:自定义图 > 默认云朵图 > 渐变兜底;轻微 scrim 保消息可读。
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.dark
-                        ? AppPalette.darkCanvas
-                        : AppPalette.lightCanvas,
-                  ),
-                ),
+          child: Scaffold(
+            key: _scaffoldKey,
+            backgroundColor: Colors.transparent, // Background handled by stack
+            drawerScrimColor: isDark
+                ? Colors.black.withValues(alpha: 0.35)
+                : Colors.black.withValues(alpha: 0.05),
+            drawer: ChatCatalogDrawer(
+              currentConversationId: conversationId,
+              currentWorkspacePath: currentWorkspacePath,
+              contextTokens: contextTokens,
+              liveContextTokens: liveContextTokens,
+              activeModel: activeModel,
+              activeProviderName: activeProviderName,
+              messages: messages,
+              isRunning: running,
+              planModeEnabled: planMode,
+              approvalMode: approvalMode,
+              onApprovalModeTap: _selectApprovalMode,
+              onNewConversation: () => _startNewConversation(),
+              onSelectConversation: (conv) => _switchConversation(conv),
+              onWorkspaceTap: _handleTopBarWorkspace,
+              onModelTap: _switchProvider,
+              onMcpMenu: () => Navigator.of(context).push(
+                NexusPageRoute.detail(builder: (_) => const McpServersPage()),
               ),
-              Positioned.fill(
-                child: ValueListenableBuilder<BackgroundConfig>(
-                  valueListenable: BackgroundService.bgNotifier,
-                  builder: (context, bg, _) {
-                    final dark =
-                        Theme.of(context).brightness == Brightness.dark;
-                    final Widget? image = switch (bg.mode) {
-                      'clouds' => Image.asset(BackgroundService.cloudsAsset,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const SizedBox.shrink()),
-                      'custom' when bg.customPath != null => Image.file(
-                          File(bg.customPath!),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) =>
-                              const SizedBox.shrink()),
-                      _ => null,
-                    };
-                    if (image == null) return const SizedBox.shrink();
-                    // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
-                    final scrim = bg.mode == 'custom' || dark
-                        ? (dark
-                            ? Colors.black.withValues(alpha: .18)
-                            : Colors.white.withValues(alpha: .10))
-                        : Colors.white.withValues(alpha: .06);
-                    return Stack(fit: StackFit.expand, children: [
-                      image,
-                      Container(color: scrim),
-                    ]);
-                  },
-                ),
-              ),
-              SafeArea(
-                bottom: false,
-                child: LayoutBuilder(builder: (context, constraints) {
-                  // 横屏 / 平板等宽屏下限制正文最大宽度，避免输入框与卡片过宽（文档 9）。
-                  final wide = constraints.maxWidth > 700;
-                  Widget column = Column(children: [
-                    const SizedBox(
-                        height: kCapsuleTopBarHeight +
-                            4), // Clear the absolute positioned top bar
-                    if (activityLog.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(activityLog.last,
-                              style: Theme.of(context).textTheme.bodySmall),
+              onPromptLibrary: _openPromptLibrary,
+              onPlanModeToggle: () => _chat.setPlanMode(!planMode),
+              onMore: _showAvatarMenu,
+              onOpenHistory: _openHistory,
+              onConversationDeleted: (id) {
+                // 删掉的若是当前会话，立即另起新会话，避免停留在已删除的会话上。
+                if (ref.read(chatControllerProvider).conversationId == id) {
+                  _startNewConversation();
+                }
+              },
+            ),
+            body: ValueListenableBuilder<double>(
+              valueListenable: AppAppearanceController.glassIntensity,
+              builder: (context, _, __) {
+                final glassIntensity =
+                    AppAppearanceController.resolvedGlassIntensity;
+                return GlassSurfaceGroup(
+                  child: Stack(
+                    // 顶部悬浮层（顶栏、计划与工具面板）允许展示自身阴影，
+                    // 不受页面 Stack 的默认裁剪影响。
+                    clipBehavior: Clip.none,
+                    children: [
+                      // G1 聊天背景:自定义图 > 默认云朵图 > 渐变兜底;轻微 scrim 保消息可读。
+                      //
+                      // RepaintBoundary：这是全屏贴图，而本页没有任何分层，任何一处变化
+                      // （流式输出、指标条刷新、滚动）都会一路 markNeedsPaint 到页面的
+                      // 顶层边界层，把整张背景图跟着重画一遍。包起来后它只在自己的配置
+                      // 变化时才重绘，其余时间直接复用 layer。
+                      // 它是最底层且不含 BackdropFilter，不会干扰玻璃采样。
+                      Positioned.fill(
+                        child: RepaintBoundary(
+                          child: ValueListenableBuilder<BackgroundConfig>(
+                            valueListenable: BackgroundService.bgNotifier,
+                            builder: (context, bg, _) {
+                              final dark = Theme.of(context).brightness ==
+                                  Brightness.dark;
+                              final Widget? image = switch (bg.mode) {
+                                'clouds' => Image.asset(
+                                    BackgroundService.cloudsAsset,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox.shrink()),
+                                'custom' when bg.customPath != null =>
+                                  Image.file(
+                                    File(bg.customPath!),
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const SizedBox.shrink(),
+                                  ),
+                                _ => null,
+                              };
+                              if (image == null) {
+                                return const SizedBox.shrink();
+                              }
+                              // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
+                              final scrim = bg.mode == 'custom' || dark
+                                  ? (dark
+                                      ? Colors.black.withValues(alpha: .18)
+                                      : Colors.white.withValues(alpha: .10))
+                                  : Colors.white.withValues(alpha: .06);
+                              return Stack(fit: StackFit.expand, children: [
+                                image,
+                                Container(color: scrim),
+                              ]);
+                            },
+                          ),
                         ),
                       ),
-                    if ((planState != null &&
-                            planState.status != 'cancelled') ||
-                        toolActivities.isNotEmpty)
-                      Padding(
-                        key: const ValueKey('chat_activity_dock'),
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            if (planState != null &&
-                                planState.status != 'cancelled')
-                              PlanPanel(
-                                plan: planState,
-                                goal: planState.steps.isEmpty
-                                    ? null
-                                    : planState.steps.first.description,
-                                onApprove: () => _chat.respondToPlan(true),
-                                onCancel: () => _chat.respondToPlan(false),
-                                onResume: () => _chat.resumeFromBudgetPause(
-                                    approveTool: _approveTool),
+                      SafeArea(
+                        bottom: false,
+                        child: LayoutBuilder(builder: (context, constraints) {
+                          // 横屏 / 平板等宽屏下限制正文最大宽度，避免输入框与卡片过宽（文档 9）。
+                          final wide = constraints.maxWidth > 700;
+                          final hasTopDock = activityLog.isNotEmpty ||
+                              (planState != null &&
+                                  planState.status != 'cancelled') ||
+                              toolActivities.isNotEmpty;
+                          Widget column = Column(children: [
+                            if (hasTopDock ||
+                                glassIntensity == GlassIntensity.flat)
+                              const SizedBox(
+                                  height: kCapsuleTopBarHeight +
+                                      4), // Clear the absolute positioned top bar
+                            if (activityLog.isNotEmpty)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 12),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(activityLog.last,
+                                      style:
+                                          Theme.of(context).textTheme.bodySmall),
+                                ),
                               ),
-                            if (toolActivities.isNotEmpty)
-                              ToolActivityTimeline(
-                                activities: toolActivities,
-                                running: running,
-                                compact: true,
-                                onConfirm: _confirmToolActivity,
-                                onReject: _rejectToolActivity,
-                                onReview: _reviewToolActivity,
-                                onRetry: _retryToolActivity,
-                              ),
-                          ],
-                        ),
-                      ),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          loading
-                              ? const NexusChatMessageSkeleton()
-                              : (messages.isEmpty
-                                  ? _emptyState(context)
-                                  : NotificationListener<ScrollNotification>(
-                                      // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
-                                      onNotification: _handleScrollNotification,
-                                      child: Consumer(
-                                        builder: (context, ref, _) {
-                                          // 高频流式文本在此单独订阅：只有本子树随
-                                          // liveReply 更新而重建，页面其余部分不动。
-                                          final liveReply =
-                                              ref.watch(liveReplyProvider);
-                                          return ChatMessageList(
-                                            sessionKey: conversationId,
-                                            messages: messages,
-                                            liveReply: liveReply,
-                                            controller: _scrollController,
-                                            running: running,
-                                            onLoadOlder: () =>
-                                                _chat.loadOlderMessages(),
-                                            onLongPress: (index) {
-                                              if (!_longPressHintShown) {
-                                                _longPressHintShown = true;
-                                              }
-                                              _showMessageActions(index);
-                                            },
-                                            onRegenerate: _regenerate,
-                                            onEditPrompt: _editLatestQuestion,
-                                            onSwitchModel: _switchProvider,
-                                            onSpeak:
-                                                TtsService.instance.isAvailable
-                                                    ? _speakMessageAt
-                                                    : null,
-                                            speakingListenable: TtsService
-                                                .instance.speakingListenable,
-                                            selectionIndex:
-                                                _selectingMessageIndex,
-                                            onExitSelection: () => setState(
-                                                () => _selectingMessageIndex =
-                                                    null),
-                                            trailingWidgets: const [],
-                                          );
-                                        },
+                            if ((planState != null &&
+                                    planState.status != 'cancelled') ||
+                                toolActivities.isNotEmpty)
+                              Padding(
+                                key: const ValueKey('chat_activity_dock'),
+                                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (planState != null &&
+                                        planState.status != 'cancelled')
+                                      PlanPanel(
+                                        plan: planState,
+                                        goal: planState.steps.isEmpty
+                                            ? null
+                                            : planState.steps.first.description,
+                                        onApprove: () =>
+                                            _chat.respondToPlan(true),
+                                        onCancel: () =>
+                                            _chat.respondToPlan(false),
+                                        onResume: () =>
+                                            _chat.resumeFromBudgetPause(
+                                                approveTool: _approveTool),
                                       ),
-                                    )),
-                          if (_showScrollToBottom)
-                            Positioned(
-                              right: 16,
-                              bottom: 16,
-                              child: NexusBackToLatestButton(
-                                onTap: _scrollToBottom,
-                                unreadCount: _unreadNewMessagesCount,
-                                isRunning: running,
+                                    if (toolActivities.isNotEmpty)
+                                      ToolActivityTimeline(
+                                        activities: toolActivities,
+                                        running: running,
+                                        compact: true,
+                                        onConfirm: _confirmToolActivity,
+                                        onReject: _rejectToolActivity,
+                                        onReview: _reviewToolActivity,
+                                        onRetry: _retryToolActivity,
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (_attachments.isNotEmpty)
-                      SizedBox(
-                        height: 56,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          children: _attachments.map((file) {
-                            final name = file.name.toLowerCase();
-                            final isImage = name.endsWith('.jpg') ||
-                                name.endsWith('.png') ||
-                                name.endsWith('.jpeg') ||
-                                name.endsWith('.webp');
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
+                            Expanded(
                               child: Stack(
                                 children: [
-                                  Container(
-                                    width: 52,
-                                    height: 52,
-                                    margin:
-                                        const EdgeInsets.only(top: 4, right: 4),
-                                    child: NexusSurface(
-                                      level: SurfaceLevel.thin,
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          borderRadius:
-                                              BorderRadius.circular(8),
-                                          image: isImage && file.bytes != null
-                                              ? DecorationImage(
-                                                  image:
-                                                      MemoryImage(file.bytes!),
-                                                  fit: BoxFit.cover)
-                                              : null,
-                                        ),
-                                        child: !isImage || file.bytes == null
-                                            ? const Center(
-                                                child: Icon(
-                                                    Icons
-                                                        .insert_drive_file_outlined,
-                                                    size: 24))
-                                            : null,
-                                      ),
-                                    ),
-                                  ),
+                                  loading
+                                      ? const NexusChatMessageSkeleton()
+                                      : (messages.isEmpty
+                                          ? _emptyState(context)
+                                          : NotificationListener<
+                                              ScrollNotification>(
+                                              // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
+                                              onNotification:
+                                                  _handleScrollNotification,
+                                              child: Consumer(
+                                                builder: (context, ref, _) {
+                                                  // 高频流式文本在此单独订阅：只有本子树随
+                                                  // liveReply 更新而重建，页面其余部分不动。
+                                                  final liveReply = ref
+                                                      .watch(liveReplyProvider);
+                                                  return ValueListenableBuilder<
+                                                      int?>(
+                                                    valueListenable:
+                                                        _selectingMessageIndex,
+                                                    builder: (context,
+                                                            selectionIndex, _) =>
+                                                        ChatMessageList(
+                                                    sessionKey: conversationId,
+                                                    messages: messages,
+                                                    liveReply: liveReply,
+                                                    controller: _scrollController,
+                                                    running: running,
+                                                    padding: (hasTopDock ||
+                                                            glassIntensity ==
+                                                                GlassIntensity
+                                                                    .flat)
+                                                        ? const EdgeInsets
+                                                            .fromLTRB(
+                                                            16, 0, 16, 10)
+                                                        : const EdgeInsets
+                                                            .fromLTRB(
+                                                            16,
+                                                            kCapsuleTopBarHeight +
+                                                                12,
+                                                            16,
+                                                            10,
+                                                          ),
+                                                    onLoadOlder: () =>
+                                                        _chat.loadOlderMessages(),
+                                                    onLongPress: (index) {
+                                                      if (!_longPressHintShown) {
+                                                        _longPressHintShown =
+                                                            true;
+                                                      }
+                                                      _showMessageActions(index);
+                                                    },
+                                                    onRegenerate: _regenerate,
+                                                    onEditPrompt:
+                                                        _editLatestQuestion,
+                                                    onSwitchModel:
+                                                        _switchProvider,
+                                                    onSpeak: TtsService
+                                                            .instance.isAvailable
+                                                        ? _speakMessageAt
+                                                        : null,
+                                                    speakingListenable: TtsService
+                                                        .instance
+                                                        .speakingListenable,
+                                                          selectionIndex:
+                                                              selectionIndex,
+                                                          onExitSelection: () =>
+                                                              _selectingMessageIndex
+                                                                  .value = null,
+                                                          trailingWidgets:
+                                                              const [],
+                                                        ),
+                                                  );
+                                                },
+                                              ),
+                                            )),
                                   Positioned(
-                                    right: 0,
-                                    top: 0,
-                                    child: GestureDetector(
-                                      onTap: () => setState(
-                                          () => _attachments.remove(file)),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .error,
-                                            shape: BoxShape.circle),
-                                        child: Icon(Icons.close,
-                                            size: 12,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onError),
-                                      ),
+                                    right: 16,
+                                    bottom: 16,
+                                    child: ValueListenableBuilder<int>(
+                                      valueListenable:
+                                          _scrollIndicatorRevision,
+                                      builder: (context, _, __) {
+                                        if (!_showScrollToBottom) {
+                                          return const SizedBox.shrink();
+                                        }
+                                        return NexusBackToLatestButton(
+                                          onTap: _scrollToBottom,
+                                          unreadCount: _unreadNewMessagesCount,
+                                          isRunning: running,
+                                        );
+                                      },
                                     ),
                                   ),
                                 ],
                               ),
+                            ),
+                            ValueListenableBuilder<int>(
+                              valueListenable: _attachmentsRevision,
+                              builder: (context, _, __) {
+                                if (_attachments.isEmpty) {
+                                  return const SizedBox.shrink();
+                                }
+                                return SizedBox(
+                                height: 56,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
+                                  children: _attachments.map((file) {
+                                    final name = file.name.toLowerCase();
+                                    final isImage = name.endsWith('.jpg') ||
+                                        name.endsWith('.png') ||
+                                        name.endsWith('.jpeg') ||
+                                        name.endsWith('.webp');
+                                    return Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: Stack(
+                                        children: [
+                                          Container(
+                                            width: 52,
+                                            height: 52,
+                                            margin: const EdgeInsets.only(
+                                                top: 4, right: 4),
+                                            child: NexusSurface(
+                                              level: SurfaceLevel.thin,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              child: Container(
+                                                decoration: BoxDecoration(
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  image: isImage &&
+                                                          file.bytes != null
+                                                      ? DecorationImage(
+                                                          image: MemoryImage(
+                                                              file.bytes!),
+                                                          fit: BoxFit.cover)
+                                                      : null,
+                                                ),
+                                                child: !isImage ||
+                                                        file.bytes == null
+                                                    ? const Center(
+                                                        child: Icon(
+                                                            Icons
+                                                                .insert_drive_file_outlined,
+                                                            size: 24))
+                                                    : null,
+                                              ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            right: 0,
+                                            top: 0,
+                                            child: GestureDetector(
+                                              onTap: () {
+                                                _attachments.remove(file);
+                                                _notifyAttachmentsChanged();
+                                              },
+                                              child: Container(
+                                                padding: const EdgeInsets.all(2),
+                                                decoration: BoxDecoration(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .error,
+                                                    shape: BoxShape.circle),
+                                                child: Icon(Icons.close,
+                                                    size: 12,
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .onError),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            _buildSessionMetricsBar(
+                              messages: messages,
+                              totalSteps: totalSteps,
+                              toolActivities: toolActivities,
+                              liveContextTokens: liveContextTokens,
+                              contextTokens: contextTokens,
+                              running: running,
+                            ),
+                            _buildContextCompressionHint(
+                              liveContextTokens: liveContextTokens,
+                              contextTokens: contextTokens,
+                              running: running,
+                              omittedContext: omittedContext,
+                            ),
+                            // 技能提示只占一个槽位（/ 补全 > 自动建议 > 已加载），
+                            // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
+                            _buildSkillPromptSlot(
+                              running: running,
+                              sessionSkills: sessionSkills,
+                            ),
+                            FloatingCapsuleInput(
+                              glassIntensity: glassIntensity,
+                              controller: _controller,
+                              isRunning: running,
+                              runningStage: _currentRunningStage(
+                                toolActivities: toolActivities,
+                                running: running,
+                                paused: paused,
+                                planState: planState,
+                              ),
+                              onSend: _send,
+                              onStop: _stop,
+                              onPause: () => _chat.pause(),
+                              onResume: () => _chat.resume(),
+                              isPaused: paused,
+                              onAttachmentMenu: () {
+                                _attachmentPanelExpanded.value =
+                                    !_attachmentPanelExpanded.value;
+                              },
+                              approvalMode: approvalMode,
+                              onApprovalModeTap: _selectApprovalMode,
+                              modeLabel: chatMode.label,
+                              onModeTap: _showSessionContext,
+                              planModeEnabled: planMode,
+                              hasAttachments: _attachments.isNotEmpty,
+                              hasAttachmentsListenable: _hasAttachments,
+                              isAttachmentExpanded:
+                                  _attachmentPanelExpanded.value,
+                              attachmentExpandedListenable:
+                                  _attachmentPanelExpanded,
+                            ),
+                            ValueListenableBuilder<bool>(
+                              valueListenable: _attachmentPanelExpanded,
+                              builder: (context, expanded, _) {
+                                if (!expanded) return const SizedBox.shrink();
+                                return AttachmentDrawerPanel(
+                                  attachments: _attachments,
+                                  onCamera: () async {
+                                    _attachmentPanelExpanded.value = false;
+                                    await _pickImage(ImageSource.camera);
+                                  },
+                                  onGallery: () async {
+                                    _attachmentPanelExpanded.value = false;
+                                    await _pickMultiImage();
+                                  },
+                                  onFile: () async {
+                                    _attachmentPanelExpanded.value = false;
+                                    await _pickFiles();
+                                  },
+                                );
+                              },
+                            ),
+                          ]);
+                          if (wide) {
+                            column = Align(
+                              alignment: Alignment.topCenter,
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 700),
+                                child: column,
+                              ),
                             );
-                          }).toList(),
+                          }
+                          return column;
+                        }),
+                      ),
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          bottom: false,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+                            child: CapsuleTopBar(
+                              glassIntensity: glassIntensity,
+                              maxContextTokens: contextTokens,
+                              workspaceLabel: (currentWorkspacePath == null ||
+                                      currentWorkspacePath.isEmpty ||
+                                      currentWorkspacePath == '未选择项目')
+                                  ? null
+                                  : (ref
+                                          .read(chatControllerProvider)
+                                          .currentProjectName ??
+                                      p.basename(currentWorkspacePath)),
+                              modelLabel: activeModel.isNotEmpty
+                                  ? activeModel
+                                  : (activeProviderName.isEmpty
+                                      ? '未配置模型'
+                                      : activeProviderName),
+                              modeLabel: chatMode.label,
+                              sessionTitle:
+                                  messages.isEmpty ? null : conversationTitle,
+                              runningStage: _currentRunningStage(
+                                toolActivities: toolActivities,
+                                running: running,
+                                paused: paused,
+                                planState: planState,
+                              ),
+                              statusActive: running,
+                              currentContextTokens: liveContextTokens > 0
+                                  ? liveContextTokens
+                                  : messages.reversed
+                                          .where((m) => m.usage != null)
+                                          .map((m) =>
+                                              m.usage!.promptTokens +
+                                              m.usage!.completionTokens)
+                                          .firstOrNull ??
+                                      0,
+                              onMenu: () => _scaffoldKey.currentState?.openDrawer(),
+                              onNewChat: () => _startNewConversation(),
+                              onContextGaugeTap: () =>
+                                  _scaffoldKey.currentState?.openDrawer(),
+                              onTitleTap: _showSessionContext,
+                              onWorkspaceTap: _handleTopBarWorkspace,
+                              onModeTap: _showChatModeSheet,
+                            ),
+                          ),
                         ),
                       ),
-                    const SizedBox(height: 8),
-                    _buildSessionMetricsBar(
-                      messages: messages,
-                      totalSteps: totalSteps,
-                      toolActivities: toolActivities,
-                      liveContextTokens: liveContextTokens,
-                      contextTokens: contextTokens,
-                      running: running,
-                    ),
-                    _buildContextCompressionHint(
-                      liveContextTokens: liveContextTokens,
-                      contextTokens: contextTokens,
-                      running: running,
-                      omittedContext: omittedContext,
-                    ),
-                    // 技能提示只占一个槽位（/ 补全 > 自动建议 > 已加载），
-                    // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
-                    _buildSkillPromptSlot(
-                      running: running,
-                      sessionSkills: sessionSkills,
-                    ),
-                    FloatingCapsuleInput(
-                      controller: _controller,
-                      isRunning: running,
-                      runningStage: _currentRunningStage(
-                        toolActivities: toolActivities,
-                        running: running,
-                        paused: paused,
-                        planState: planState,
-                      ),
-                      onSend: _send,
-                      onStop: _stop,
-                      onPause: () => _chat.pause(),
-                      onResume: () => _chat.resume(),
-                      isPaused: paused,
-                      onAttachmentMenu: () {
-                        setState(() => _attachmentPanelExpanded =
-                            !_attachmentPanelExpanded);
-                      },
-                      approvalMode: approvalMode,
-                      onApprovalModeTap: _selectApprovalMode,
-                      modeLabel: chatMode.label,
-                      onModeTap: _showSessionContext,
-                      planModeEnabled: planMode,
-                      hasAttachments: _attachments.isNotEmpty,
-                      isAttachmentExpanded: _attachmentPanelExpanded,
-                    ),
-                    if (_attachmentPanelExpanded)
-                      AttachmentDrawerPanel(
-                        attachments: _attachments,
-                        onCamera: () async {
-                          setState(() => _attachmentPanelExpanded = false);
-                          await _pickImage(ImageSource.camera);
-                        },
-                        onGallery: () async {
-                          setState(() => _attachmentPanelExpanded = false);
-                          await _pickMultiImage();
-                        },
-                        onFile: () async {
-                          setState(() => _attachmentPanelExpanded = false);
-                          await _pickFiles();
-                        },
-                      ),
-                  ]);
-                  if (wide) {
-                    column = Align(
-                      alignment: Alignment.topCenter,
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 700),
-                        child: column,
-                      ),
-                    );
-                  }
-                  return column;
-                }),
-              ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: CapsuleTopBar(
-                    maxContextTokens: contextTokens,
-                    workspaceLabel: currentWorkspacePath == null ||
-                            currentWorkspacePath.isEmpty
-                        ? '未选择项目'
-                        : (ref
-                                .read(chatControllerProvider)
-                                .currentProjectName ??
-                            p.basename(currentWorkspacePath)),
-                    modelLabel: activeModel.isNotEmpty
-                        ? activeModel
-                        : (activeProviderName.isEmpty
-                            ? '未配置模型'
-                            : activeProviderName),
-                    modeLabel: chatMode.label,
-                    sessionTitle: messages.isEmpty ? null : conversationTitle,
-                    runningStage: _currentRunningStage(
-                      toolActivities: toolActivities,
-                      running: running,
-                      paused: paused,
-                      planState: planState,
-                    ),
-                    statusActive: running,
-                    currentContextTokens: liveContextTokens > 0
-                        ? liveContextTokens
-                        : messages.reversed
-                                .where((m) => m.usage != null)
-                                .map((m) =>
-                                    m.usage!.promptTokens +
-                                    m.usage!.completionTokens)
-                                .firstOrNull ??
-                            0,
-                    onMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                    onNewChat: () => _startNewConversation(),
-                    onContextGaugeTap: () =>
-                        _scaffoldKey.currentState?.openDrawer(),
-                    onTitleTap: _showSessionContext,
-                    onWorkspaceTap: _handleTopBarWorkspace,
-                    onModeTap: _showChatModeSheet,
-                  ),
-                ),
-              ),
-            ], // Stack children
-          ), // Stack
-        ); // Scaffold
+                    ], // Stack children
+                  ), // Stack
+                );
+              },
+            ), // ValueListenableBuilder
+          ), // Scaffold
+        ); // AnnotatedRegion
       },
     );
   }

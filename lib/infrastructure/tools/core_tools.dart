@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 
 import '../../domain/models.dart';
+import '../../domain/network_access_policy.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import 'tool_registry.dart';
@@ -72,13 +73,19 @@ class JsonQueryTool implements AgentTool {
 }
 
 class HttpRequestTool implements AgentTool {
-  HttpRequestTool({Dio? dio})
+  HttpRequestTool({Dio? dio, NetworkAccessPolicy? policy})
       : _dio = dio ??
             Dio(BaseOptions(
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 30),
-            ));
+              // SSRF：默认跟随重定向会让「校验原始 URL」形同虚设——
+              // 攻击者控制的公网地址返回 302 Location: http://192.168.1.1/ 即可绕过。
+              // 这里禁用自动跟随，改为下方手工逐跳校验后再请求。
+              followRedirects: false,
+            )),
+        _policy = policy ?? const NetworkAccessPolicy();
   final Dio _dio;
+  final NetworkAccessPolicy _policy;
   @override
   final manifest = const UnifiedTool(
       name: 'http_request',
@@ -105,50 +112,67 @@ class HttpRequestTool implements AgentTool {
         message: 'URL 无效：必须以 http/https 开头',
       );
     }
-    final blocked = _blockedUrl(url);
-    if (blocked != null) {
-      return ToolResult.failure(
-        code: ToolCodes.permissionRequired,
-        message: 'URL 被安全策略拒绝：$blocked',
-      );
-    }
     final method = (arguments['method'] as String? ?? 'GET').toUpperCase();
     // 只读方法可以确定“没改动世界”；其余方法一旦发出就可能已生效。
     final readOnly = method == 'GET' || method == 'HEAD';
-    try {
-      final response = await _dio.request<dynamic>(url,
-          data: arguments['body'],
-          options: Options(method: method, responseType: ResponseType.json));
-      return ToolResult.text(
-        jsonEncode({'status': response.statusCode, 'data': response.data}),
-        effect: readOnly ? ToolEffect.none : ToolEffect.applied,
-      );
-    } on DioException catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.networkUnavailable,
-        message: 'HTTP $method 请求失败：${error.message ?? error.type.name}'
-            '${readOnly ? '' : '；请求可能已送达服务端，请先确认对方状态再决定是否重试'}',
-        effect: readOnly ? ToolEffect.none : ToolEffect.unknown,
-      );
-    }
-  }
 
-  /// SSRF 防护：拒绝云元数据 / 链路本地 / 广播地址的直接访问。
-  /// 本地回环（localhost/127.0.0.1）保留（本地工具场景），但危险等级
-  /// 仍需用户审批。
-  static String? _blockedUrl(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null || !(uri.isScheme('http') || uri.isScheme('https'))) {
-      return '仅支持 http/https';
+    // SSRF：统一走 NetworkAccessPolicy（唯一权威）。此前本文件自带一套更弱的
+    // 黑名单，漏掉全部 RFC1918 私网段（10./172.16-31./192.168.），而它保护的
+    // 恰恰是全应用最高频的网络出口——同一个策略两处实现，弱的那处必然被绕过。
+    //
+    // 由于已关闭自动重定向，这里手工逐跳校验 Location，最多 5 跳，
+    // 否则「校验原始 URL」会被 302 绕开。
+    var currentUrl = url;
+    for (var hop = 0; hop <= 5; hop++) {
+      final decision = _policy.inspect(currentUrl);
+      if (!decision.allowed) {
+        return ToolResult.failure(
+          code: ToolCodes.permissionRequired,
+          message: 'URL 被安全策略拒绝：${decision.reason}',
+        );
+      }
+      final Response<dynamic> response;
+      try {
+        response = await _dio.request<dynamic>(currentUrl,
+            data: arguments['body'],
+            options: Options(
+              method: method,
+              responseType: ResponseType.json,
+              followRedirects: false,
+              validateStatus: (_) => true,
+            ));
+      } on DioException catch (error) {
+        return ToolResult.failure(
+          code: ToolCodes.networkUnavailable,
+          message: 'HTTP $method 请求失败：${error.message ?? error.type.name}'
+              '${readOnly ? '' : '；请求可能已送达服务端，请先确认对方状态再决定是否重试'}',
+          effect: readOnly ? ToolEffect.none : ToolEffect.unknown,
+        );
+      }
+      final location = response.headers.value('location');
+      final isRedirect = response.statusCode != null &&
+          response.statusCode! >= 300 &&
+          response.statusCode! < 400;
+      if (!isRedirect || location == null || location.isEmpty) {
+        return ToolResult.text(
+          jsonEncode({'status': response.statusCode, 'data': response.data}),
+          effect: readOnly ? ToolEffect.none : ToolEffect.applied,
+        );
+      }
+      // 解析相对重定向；解析失败则停止，不再继续跳转。
+      final resolved = Uri.tryParse(currentUrl)?.resolve(location);
+      if (resolved == null) {
+        return ToolResult.failure(
+          code: ToolCodes.networkUnavailable,
+          message: '重定向目标无法解析：$location',
+        );
+      }
+      currentUrl = resolved.toString();
     }
-    final host = uri.host.toLowerCase().replaceAll('[', '').replaceAll(']', '');
-    if (host == '0.0.0.0' || host == '169.254.169.254') return '云元数据/广播地址不可访问';
-    // 链路本地 169.254.0.0/16（含各大云厂商元数据服务）
-    if (host.startsWith('169.254.')) return '链路本地地址不可访问';
-    if (host.endsWith('.internal') || host.endsWith('.local')) {
-      return '内网域名不可访问';
-    }
-    return null;
+    return ToolResult.failure(
+      code: ToolCodes.networkUnavailable,
+      message: '重定向次数过多，已中止（可能存在重定向循环）',
+    );
   }
 }
 
@@ -161,8 +185,7 @@ class WebSearchTool implements AgentTool {
             ));
   final String apiKey;
   final Dio _dio;
-  @override
-  final manifest = const UnifiedTool(
+  @override  final manifest = const UnifiedTool(
       name: 'web_search',
       description: '联网搜索公开信息并返回摘要。',
       parametersSchema: {

@@ -5,11 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
-import '../infrastructure/observability/unified_diff.dart';
 import 'log_service.dart';
-import '../domain/sensitive_tool_policy.dart';
 
-/// 审计日志服务（G2）。默认关闭（隐私优先），开启后记录工具调用/审批/导出/同步等决策链路。
+/// 审计日志服务（G2）。普通诊断审计默认关闭（隐私优先），安全事件始终留痕。
 class AuditService {
   static const _prefsKeyEnabled = 'audit_enabled';
   static const _retentionDays = 90;
@@ -31,8 +29,9 @@ class AuditService {
     String? decision,
     String? risk,
     String? conversationId,
+    bool force = false,
   }) async {
-    if (!await isEnabled()) return;
+    if (!force && !await isEnabled()) return;
     try {
       final now = DateTime.now();
       await db.insertAuditLog(AuditLogsCompanion.insert(
@@ -49,32 +48,61 @@ class AuditService {
     }
   }
 
+  /// 安全事件（例如审批授予/拒绝）不依赖用户的诊断日志开关。
+  Future<void> logSecurityEvent(
+    AppDatabase db, {
+    required String type,
+    required String detail,
+    String? decision,
+    String? risk,
+    String? conversationId,
+  }) =>
+      log(
+        db,
+        type: type,
+        detail: detail,
+        decision: decision,
+        risk: risk,
+        conversationId: conversationId,
+        force: true,
+      );
+
   String _redactDetail(String value) {
     try {
       final decoded = jsonDecode(value);
       if (decoded is Map) {
-        final map = Map<String, dynamic>.from(decoded);
-        final tool = map['tool']?.toString();
-        if (tool != null && SensitiveToolPolicy.isSensitive(tool)) {
-          for (final key in const [
-            'arguments',
-            'argument',
-            'result',
-            'output',
-            'data',
-            'content',
-            'text',
-            'path',
-          ]) {
-            if (map.containsKey(key)) map[key] = '[REDACTED]';
-          }
-          return jsonEncode(map);
+        final safe = <String, dynamic>{};
+        for (final entry in decoded.entries) {
+          final key = entry.key.toString();
+          safe[key] = _safeAuditFields.contains(key.toLowerCase())
+              ? _safeAuditValue(entry.value)
+              : '[REDACTED]';
         }
+        return jsonEncode(safe);
       }
+      if (decoded is List) return '[REDACTED]';
     } catch (_) {
       // 普通文本不是 JSON，继续走通用凭证脱敏。
     }
-    return redactSensitiveText(value);
+    final token = toSafeLogToken(value);
+    return token == 'unknown' ? '[REDACTED]' : token;
+  }
+
+  static const _safeAuditFields = {
+    'tool',
+    'operation',
+    'effect',
+    'code',
+    'toolcode',
+    'decision',
+    'risk',
+  };
+
+  Object _safeAuditValue(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value;
+    final token = toSafeLogToken(value);
+    return token == 'unknown' ? '[REDACTED]' : token;
   }
 
   /// 清理超过保留期的日志（90 天）。

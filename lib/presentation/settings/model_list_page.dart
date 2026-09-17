@@ -6,6 +6,7 @@ import '../../infrastructure/providers/openai_compatible_provider.dart';
 import '../../infrastructure/providers/provider_config.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
+import '../widgets/nexus_sheet.dart';
 import 'provider_presets.dart';
 import 'settings_components.dart';
 
@@ -231,7 +232,7 @@ class _ModelListPageState extends State<ModelListPage> {
   Future<void> _addCustomModel() async {
     final idController = TextEditingController();
     final nameController = TextEditingController();
-    final result = await showDialog<String>(
+    final result = await showNexusDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('添加自定义模型'),

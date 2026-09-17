@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
@@ -310,10 +310,8 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final categories = _categories.toList()..sort();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: const NexusPageHeader(
         title: 'Prompt 模板',
         subtitle: '分类管理与快速调用常用提示词',

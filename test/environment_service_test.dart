@@ -265,6 +265,38 @@ void main() {
     expect(shell.detail, contains('超时'));
   });
 
+  test('probes tools and alternate runtimes concurrently', () async {
+    final alpine = _FakeRuntime(
+      kind: LinuxRuntimeKind.builtinProot,
+      label: 'Alpine',
+      available: true,
+    );
+    final termux = _FakeRuntime(
+      kind: LinuxRuntimeKind.termux,
+      label: 'Termux',
+      available: true,
+    );
+    final stopwatch = Stopwatch()..start();
+    final service = EnvironmentService(
+      runtime: alpine,
+      candidates: [alpine, termux],
+      runtimeCommandProbe: (_, __) async {
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        return const CommandProbeResult(available: true, detail: 'ok');
+      },
+    );
+
+    final snapshot = await service.inspect(force: true);
+    stopwatch.stop();
+
+    expect(snapshot.inspectedCandidates, hasLength(2));
+    expect(
+      stopwatch.elapsed,
+      lessThan(const Duration(milliseconds: 300)),
+      reason: 'independent probes must not consume one timeout per tool',
+    );
+  });
+
   test('does not let free-space storage reads block an environment snapshot',
       () async {
     final runtime = _FakeRuntime(

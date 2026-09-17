@@ -7,8 +7,10 @@ import '../chat/chat_page.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../settings/settings_page.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/section_card.dart';
 
 /// 首次启动的 4 步引导：填 Key / 选模型 / 用工具 / 隐私（含崩溃上报授权）。
@@ -105,9 +107,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       body: SafeArea(
         child: Column(children: [
           Align(

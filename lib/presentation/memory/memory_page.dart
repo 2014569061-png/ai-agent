@@ -1,15 +1,17 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/memory_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../l10n/app_strings.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
@@ -340,6 +342,8 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final filtered = _memories.where((m) {
       if (_searchQuery.isEmpty) return true;
       return m.content.toLowerCase().contains(_searchQuery) ||
@@ -347,7 +351,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: AppStrings.memoryEntry,
         subtitle: '跨会话事实与个性化偏好存储',
@@ -359,18 +365,38 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _addOrEdit(),
-        backgroundColor: AppPalette.brandAction,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        focusElevation: 0,
-        hoverElevation: 0,
-        highlightElevation: 0,
-        shape: RoundedRectangleBorder(
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF388BFD),
+              Color(0xFF1F6FEB),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppPalette.brand.withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        child: const Icon(Icons.add),
+        child: FloatingActionButton(
+          onPressed: () => _addOrEdit(),
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          focusElevation: 0,
+          hoverElevation: 0,
+          highlightElevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          ),
+          child: const Icon(Icons.add),
+        ),
       ),
       body: AsyncStateView(
         loading: _loading,
@@ -382,54 +408,100 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             // 搜索栏
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: SizedBox(
-                height: 40,
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (v) =>
-                      setState(() => _searchQuery = v.trim().toLowerCase()),
-                  decoration: InputDecoration(
-                    hintText: '搜索记忆内容或分类...',
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? AppPalette.darkTextMuted
-                          : AppPalette.lightTextMuted,
-                    ),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, size: 16),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                          )
-                        : null,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                    filled: true,
-                    fillColor: isDark
-                        ? AppPalette.darkSurface
-                        : AppPalette.lightSurface,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                      borderSide: BorderSide(
-                        color: isDark
-                            ? AppPalette.darkHairline
-                            : AppPalette.lightHairline,
+              child: isFlat
+                  ? SizedBox(
+                      height: 40,
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (v) => setState(
+                            () => _searchQuery = v.trim().toLowerCase()),
+                        decoration: InputDecoration(
+                          hintText: '搜索记忆内容或分类...',
+                          hintStyle: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? AppPalette.darkTextMuted
+                                : AppPalette.lightTextMuted,
+                          ),
+                          prefixIcon:
+                              const Icon(Icons.search_rounded, size: 18),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded,
+                                      size: 16),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                )
+                              : null,
+                          contentPadding:
+                              const EdgeInsets.symmetric(horizontal: 12),
+                          filled: true,
+                          fillColor: isDark
+                              ? AppPalette.darkSurface
+                              : AppPalette.lightSurface,
+                          border: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusPill),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? AppPalette.darkHairline
+                                  : AppPalette.lightHairline,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusPill),
+                            borderSide: BorderSide(
+                              color: isDark
+                                  ? AppPalette.darkHairline
+                                  : AppPalette.lightHairline,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : GlassSurface(
+                      role: GlassRole.control,
+                      variant: GlassVariant.clear,
+                      intensity: AppAppearanceController.resolvedGlassIntensity,
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusControl),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (v) => setState(
+                            () => _searchQuery = v.trim().toLowerCase()),
+                        decoration: InputDecoration(
+                          hintText: '搜索记忆内容或分类...',
+                          hintStyle: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? AppPalette.darkTextMuted
+                                : AppPalette.lightTextMuted,
+                          ),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          prefixIcon:
+                              const Icon(Icons.search_rounded, size: 18),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded,
+                                      size: 16),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
                       ),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                      borderSide: BorderSide(
-                        color: isDark
-                            ? AppPalette.darkHairline
-                            : AppPalette.lightHairline,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             ),
             SectionCard(
               child: SwitchListTile(

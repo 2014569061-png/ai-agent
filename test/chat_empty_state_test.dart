@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile_agent/presentation/chat/widgets/chat_empty_state.dart';
+import 'package:mobile_agent/presentation/theme/app_appearance_controller.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
+import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
 
 void main() {
   testWidgets('empty state provides a model setup primary action',
@@ -59,5 +61,19 @@ void main() {
     await tester.tap(find.text('分析当前项目'));
     expect(analyzed, isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('empty state action grid uses liquid glass in liquid mode',
+      (tester) async {
+    AppAppearanceController.glassIntensity.value = 0.85;
+
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(
+        body: ChatEmptyState(providerConfigured: true),
+      ),
+    ));
+
+    expect(find.byType(LiquidGlass), findsAtLeastNWidgets(4));
   });
 }

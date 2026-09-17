@@ -182,67 +182,82 @@ class ToolApprovalSheet extends StatelessWidget {
   }
 
   Widget _buildActions(BuildContext context, bool danger, Color riskColor) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final buttonPadding = const EdgeInsets.fromLTRB(20, 10, 20, 14);
-    return Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.98),
-      child: Padding(
-        padding: buttonPadding,
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    autofocus: true,
-                    onPressed: () {
-                      HapticFeedback.selectionClick();
-                      Navigator.pop(context, ToolApproval.reject);
-                    },
-                    child: const Text(AppStrings.reject),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: riskColor,
-                    ),
-                    onPressed: () {
-                      HapticFeedback.mediumImpact();
-                      Navigator.pop(context, ToolApproval.allowOnce);
-                    },
-                    child: const Text('确认执行'),
-                  ),
-                ),
-              ],
-            ),
-            if (!danger && allowPersistentTrust) ...[
-              const SizedBox(height: 10),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.02),
+        border: Border(
+          top: BorderSide(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.06),
+          ),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: buttonPadding,
+          child: Column(
+            children: [
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
+                      autofocus: true,
                       onPressed: () {
                         HapticFeedback.selectionClick();
-                        Navigator.pop(context, ToolApproval.allowSession);
+                        Navigator.pop(context, ToolApproval.reject);
                       },
-                      child: const Text('仅本次允许'),
+                      child: const Text(AppStrings.reject),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: FilledButton.tonal(
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: riskColor,
+                      ),
                       onPressed: () {
                         HapticFeedback.mediumImpact();
-                        Navigator.pop(context, ToolApproval.allowAlways);
+                        Navigator.pop(context, ToolApproval.allowOnce);
                       },
-                      child: const Text('始终允许'),
+                      child: const Text('确认执行'),
                     ),
                   ),
                 ],
               ),
+              if (!danger && allowPersistentTrust) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          Navigator.pop(context, ToolApproval.allowSession);
+                        },
+                        child: const Text('仅本次允许'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.tonal(
+                        onPressed: () {
+                          HapticFeedback.mediumImpact();
+                          Navigator.pop(context, ToolApproval.allowAlways);
+                        },
+                        child: const Text('始终允许'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

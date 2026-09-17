@@ -7,12 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/plugins/plugin_store.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import 'skill_market_page.dart';
@@ -29,12 +31,15 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor:
-            isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+        backgroundColor: isFlat
+            ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+            : Colors.transparent,
         appBar: NexusPageHeader(
           title: 'Skills 与插件',
           subtitle: '声明式工具包与 GitHub Skill 市场',

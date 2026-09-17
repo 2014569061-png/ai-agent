@@ -10,8 +10,10 @@ import '../l10n/app_strings.dart';
 import '../mcp/mcp_servers_page.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../plugins/plugins_page.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import 'linux_environment_page.dart';
 import 'tool_list_page.dart';
 
@@ -72,12 +74,14 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final canvas = isDark ? AppPalette.darkCanvas : const Color(0xFFF7F8FA);
     final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
     final textMuted = isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
 
     return Scaffold(
-      backgroundColor: canvas,
+      backgroundColor: isFlat ? canvas : Colors.transparent,
       body: SafeArea(
         child: Column(
           children: [
@@ -211,16 +215,30 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
   }
 
   Widget _buildCard({required bool isDark, required List<Widget> children}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppPalette.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
-          width: 0.8,
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    if (isFlat) {
+      return Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppPalette.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
+            width: 0.8,
+          ),
         ),
-      ),
-      clipBehavior: Clip.antiAlias,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: children,
+        ),
+      );
+    }
+    return GlassSurface(
+      role: GlassRole.content,
+      variant: GlassVariant.regular,
+      intensity: AppAppearanceController.resolvedGlassIntensity,
+      borderRadius: BorderRadius.circular(16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: children,
@@ -229,12 +247,16 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
   }
 
   Widget _buildDivider(bool isDark) {
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     return Divider(
       height: 0.8,
       thickness: 0.8,
       indent: 48,
       endIndent: 0,
-      color: isDark ? AppPalette.darkHairline : const Color(0xFFF0F2F5),
+      color: isDark
+          ? AppPalette.darkHairline
+          : (isFlat ? const Color(0xFFF0F2F5) : const Color(0x28000000)),
     );
   }
 

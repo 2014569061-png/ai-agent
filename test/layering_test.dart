@@ -48,4 +48,32 @@ void main() {
         reason: 'infrastructure → application 反向依赖已清零，请把编排逻辑'
             '搬到 application，或在 domain 定义端口');
   });
+
+  test('presentation infrastructure imports do not grow', () {
+    final imports = <String>[];
+    final databaseImports = <String>[];
+    for (final file in dartFilesUnder('$libRoot/presentation')) {
+      final lines = file.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        if (line.contains('import ') && line.contains('infrastructure/')) {
+          imports.add('${file.path}:${i + 1}');
+        }
+        if (line.contains('app_database.dart')) {
+          databaseImports.add('${file.path}:${i + 1}');
+        }
+      }
+    }
+
+    expect(
+      imports.length,
+      lessThanOrEqualTo(78),
+      reason: 'presentation → infrastructure 依赖只能减少，不能继续增加。',
+    );
+    expect(
+      databaseImports.length,
+      lessThanOrEqualTo(22),
+      reason: '数据库直连只能减少，不能继续增加。',
+    );
+  });
 }

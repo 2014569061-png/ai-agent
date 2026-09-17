@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
-/// 新视觉规范色彩定义（对标 DeepSeek App 极简风格）
-/// 全站只保留一个强调色 #4D6BFE
+/// 新视觉规范色彩定义（对标极简专业工程级风格）
+/// 全站统一强调色 #335CFF
 abstract final class AppPalette {
   // 浅色模式语义色
   static const lightCanvas = Color(0xFFFFFFFF);
-  static const lightSurface = Color(0xFFF5F7FB);
-  static const lightSurfaceHover = Color(0xFFEEF1F8);
+  static const lightSurface = Color(0xFFF7F8FA);
+  static const lightSurfaceHover = Color(0xFFEDEFF4);
   static const lightHairline = Color(0xFFE2E7F1);
   static const lightText = Color(0xFF1A1A1A);
   static const lightTextMuted = Color(0xFF6B7280);
+  // 浅色模式下次级灰与微弱灰同值（#6B7280）：
+  // 白底上为满足 WCAG AA 4.5:1 对比度，灰色亮度上限约为 #767676，
+  // #6B7280（4.83:1）已贴近极限，物理上不存在合规的第三档浅灰。
+  // 浅色下的第三层级需通过字号与字重（如 11px / 500）承担。
   static const lightTextFaint = Color(0xFF6B7280);
 
   // 深色模式语义色
@@ -63,10 +67,20 @@ abstract final class AppPalette {
   static const reasoningBorderDark = Color(0xFF1E293B);
   static const reasoningBorderLight = Color(0xFFE2E8F0);
 
-  // 状态语义色（明暗通用）
-  static const success = Color(0xFF2BA471);
-  static const warning = Color(0xFFF5A623);
-  static const danger = Color(0xFFE5484D);
+  // 浅色状态语义色（WCAG AA 实测达标：danger 5.62:1, success 5.27:1, warning 4.87:1）
+  static const lightSuccess = Color(0xFF107C41);
+  static const lightWarning = Color(0xFF9A6700);
+  static const lightDanger = Color(0xFFC62828);
+
+  // 深色状态语义色（WCAG AA 实测达标：danger 4.78:1, success 5.92:1, warning 9.22:1）
+  static const darkSuccess = Color(0xFF2BA471);
+  static const darkWarning = Color(0xFFF5A623);
+  static const darkDanger = Color(0xFFE5484D);
+
+  // 兼容别名（默认浅色实测达标值）
+  static const success = lightSuccess;
+  static const warning = lightWarning;
+  static const danger = lightDanger;
 
   // 状态语义背景色（浅色 / 深色）
   static const lightSuccessSoft = Color(0xFFEAF8F1);

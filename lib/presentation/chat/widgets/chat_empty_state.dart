@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/brand_mark.dart';
+import '../../widgets/glass_surface.dart';
+import '../../widgets/liquid_segmented_control.dart';
 
 class QuickAction {
   const QuickAction({this.id = '', required this.label, String? prompt})
@@ -46,9 +49,21 @@ class ChatEmptyState extends StatefulWidget {
 }
 
 class _ChatEmptyStateState extends State<ChatEmptyState> {
-  int _selectedCategoryIndex = 0;
+  late final ValueNotifier<int> _selectedCategoryIndex;
 
   static const List<String> _categories = ['常用', '代码', '审查', '终端'];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCategoryIndex = ValueNotifier(0);
+  }
+
+  @override
+  void dispose() {
+    _selectedCategoryIndex.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,26 +99,34 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
             ),
             if (!widget.keyboardVisible) ...[
               const SizedBox(height: 24),
-              // 横向紧凑场景分段芯片（Segmented Chips，释放纵向空间）
-              _ScenarioSegmentedBar(
-                categories: _categories,
-                selectedIndex: _selectedCategoryIndex,
-                onSelect: (index) {
-                  setState(() => _selectedCategoryIndex = index);
-                },
-              ),
-              const SizedBox(height: 16),
-              // 2x2 规整极简工程卡片网格
-              _AuthoritativeActionGrid(
-                categoryIndex: _selectedCategoryIndex,
-                providerConfigured: widget.providerConfigured,
-                hasWorkspace: widget.hasWorkspace,
-                onConfigureModel: widget.onConfigureModel,
-                onPickWorkspace: widget.onWorkspaceTap,
-                onAnalyzeWorkspace: widget.onAnalyzeWorkspace,
-                onTap: (prompt) {
-                  widget.onSuggestionTap?.call(QuickAction(label: prompt));
-                },
+              ValueListenableBuilder<int>(
+                valueListenable: _selectedCategoryIndex,
+                builder: (context, selectedIndex, _) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 横向紧凑场景分段芯片（Segmented Chips，释放纵向空间）
+                    _ScenarioSegmentedBar(
+                      categories: _categories,
+                      selectedIndex: selectedIndex,
+                      onSelect: (index) =>
+                          _selectedCategoryIndex.value = index,
+                    ),
+                    const SizedBox(height: 16),
+                    // 2x2 规整极简工程卡片网格
+                    _AuthoritativeActionGrid(
+                      categoryIndex: selectedIndex,
+                      providerConfigured: widget.providerConfigured,
+                      hasWorkspace: widget.hasWorkspace,
+                      onConfigureModel: widget.onConfigureModel,
+                      onPickWorkspace: widget.onWorkspaceTap,
+                      onAnalyzeWorkspace: widget.onAnalyzeWorkspace,
+                      onTap: (prompt) {
+                        widget.onSuggestionTap
+                            ?.call(QuickAction(label: prompt));
+                      },
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
@@ -127,59 +150,21 @@ class _ScenarioSegmentedBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       physics: const BouncingScrollPhysics(),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(categories.length, (index) {
-          final isSelected = index == selectedIndex;
-          final item = categories[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => onSelect(index),
-                borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                child: AnimatedContainer(
-                  duration: AppTokens.durationFast,
-                  curve: AppTokens.curveStandard,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isSelected ? AppPalette.brand : surface,
-                    borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                    border: Border.all(
-                      color: isSelected
-                          ? AppPalette.brand
-                          : (isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : const Color(0xFFE2E8F0)),
-                      width: 0.8,
-                    ),
-                  ),
-                  child: Text(
-                    item,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight:
-                          isSelected ? FontWeight.w600 : FontWeight.w500,
-                      color: isSelected
-                          ? Colors.white
-                          : (isDark
-                              ? AppPalette.darkText
-                              : AppPalette.lightText),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }),
+      child: SizedBox(
+        width: 296,
+        child: LiquidSegmentedControl<int>(
+          segments: [
+            for (var i = 0; i < categories.length; i++)
+              LiquidSegment(value: i, label: categories[i]),
+          ],
+          selected: selectedIndex,
+          onSelected: onSelect,
+          height: 36,
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+        ),
       ),
     );
   }
@@ -227,6 +212,7 @@ class _AuthoritativeActionGrid extends StatelessWidget {
                 ? '配置 API Key 与模型'
                 : (!hasWorkspace ? '选择当前工作目录' : '提取工程结构与依赖'),
             icon: primaryIcon,
+            prominent: true,
             onTap: primaryCallback,
           ),
           _GridCardData(
@@ -273,6 +259,7 @@ class _AuthoritativeActionGrid extends StatelessWidget {
             title: '执行全量回归',
             subtitle: '运行测试套件并输出终端摘要',
             icon: Icons.terminal_rounded,
+            prominent: true,
             onTap: () => onTap('在终端运行全量测试套件并报告失败项。'),
           ),
           _GridCardData(
@@ -299,6 +286,7 @@ class _AuthoritativeActionGrid extends StatelessWidget {
             title: !providerConfigured ? '配置模型参数' : '切换主力模型',
             subtitle: '设定 API Key、上下文限制与思考模式',
             icon: Icons.tune_rounded,
+            prominent: true,
             onTap: onConfigureModel ?? () => onTap('切换当前主力对话模型与提示词。'),
           ),
           _GridCardData(
@@ -355,12 +343,14 @@ class _GridCardData {
     required this.title,
     required this.subtitle,
     required this.icon,
+    this.prominent = false,
     this.onTap,
   });
 
   final String title;
   final String subtitle;
   final IconData icon;
+  final bool prominent;
   final VoidCallback? onTap;
 }
 
@@ -375,22 +365,95 @@ class _EngineeringActionCard extends StatelessWidget {
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final border = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFFE2E8F0);
 
+    final radius = BorderRadius.circular(AppTokens.radiusCard);
+    final content = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 68),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Row(
+              children: [
+                Icon(data.icon, size: 15, color: AppPalette.brand),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    data.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              data.subtitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                height: 1.25,
+                color: textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final intensity = AppAppearanceController.resolvedGlassIntensity;
+    if (intensity != GlassIntensity.flat) {
+      return GlassSurface(
+        role: data.prominent ? GlassRole.prominent : GlassRole.control,
+        variant: data.prominent ? GlassVariant.prominent : GlassVariant.clear,
+        intensity: intensity,
+        borderRadius: radius,
+        blurSigma: 20,
+        refraction: 16,
+        edgeWidth: 20,
+        gloss: 0.55,
+        tint: data.prominent
+            ? AppPalette.brand.withValues(alpha: isDark ? 0.30 : 0.16)
+            : (isDark
+                ? AppPalette.darkSurface.withValues(alpha: 0.38)
+                : AppPalette.lightCanvas.withValues(alpha: 0.44)),
+        borderColor: data.prominent
+            ? AppPalette.brand.withValues(alpha: isDark ? 0.72 : 0.64)
+            : (isDark ? const Color(0x33FFFFFF) : const Color(0x80FFFFFF)),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? const Color(0x40000000) : const Color(0x141E3A8A),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        onTap: data.onTap,
+        interactive: data.onTap != null,
+        child: content,
+      );
+    }
+
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final border =
+        isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: data.onTap,
-        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+        borderRadius: radius,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 64),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: surface,
-            borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+            borderRadius: radius,
             border: Border.all(color: border, width: 0.8),
             boxShadow: [
               BoxShadow(
@@ -400,44 +463,9 @@ class _EngineeringActionCard extends StatelessWidget {
               ),
             ],
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  Icon(data.icon, size: 15, color: AppPalette.brand),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      data.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                data.subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w400,
-                  color: textMuted,
-                ),
-              ),
-            ],
-          ),
+          child: content,
         ),
       ),
     );
   }
 }
-

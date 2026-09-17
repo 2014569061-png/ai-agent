@@ -514,7 +514,7 @@ class TerminalCommandService {
           return const TerminalSessionExecution(
             ok: false,
             code: ToolCodes.outcomeUnknown,
-            message: '鏃犳硶璇佹槑 daemon 灞炰簬褰撳墠 App锛屽凡鎷掔粷鍋滄浠ュ厤璇潃 PID',
+            message: '无法证明 daemon 属于当前 App，已拒绝停止以免误杀 PID',
             effect: ToolEffect.unknown,
           );
         }

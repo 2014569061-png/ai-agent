@@ -166,7 +166,8 @@ class SkillInstaller {
       throw SkillValidationException('压缩包超过 10MB 上限');
     }
     final archive = _decodeArchive(bytes);
-    final files = _extractAllowedFiles(archive, source.subPath);
+    final resolvedSource = _resolveNestedSkillSource(archive, source);
+    final files = _extractAllowedFiles(archive, resolvedSource.subPath);
     if (files.isEmpty) {
       throw SkillValidationException('未找到可安装的 SKILL.md 或白名单资源');
     }
@@ -175,7 +176,7 @@ class SkillInstaller {
     final skillBytes = files[skillPath];
     if (skillBytes == null) {
       throw SkillValidationException(
-          '缺少 SKILL.md（目标目录：${source.subPath ?? '/'}）');
+          '缺少 SKILL.md（目标目录：${resolvedSource.subPath ?? '/'}）');
     }
     final parsed = parseSkillMarkdown(utf8.decode(skillBytes));
     final totalBytes = files.values.fold<int>(0, (sum, b) => sum + b.length);
@@ -200,7 +201,7 @@ class SkillInstaller {
     });
     final checksum = sha256.convert(hashInput).toString();
     return SkillPackPreview(
-      source: source,
+      source: resolvedSource,
       metadata: parsed.metadata,
       fileContents: result,
       totalBytes: totalBytes,
@@ -389,6 +390,62 @@ class SkillInstaller {
     } catch (_) {
       throw SkillValidationException('仅支持 ZIP 或 tar.gz 格式的 Skill 压缩包');
     }
+  }
+
+  /// 根仓库可能是 Codex 插件集合，Skill 位于 `skills/name/SKILL.md`。
+  /// 用户给仓库根地址时，优先选择与仓库同名的 Skill；只有一个候选时
+  /// 才自动选择，否则要求用户显式打开对应的 /tree/分支/目录 地址。
+  GithubSkillRef _resolveNestedSkillSource(
+      Archive archive, GithubSkillRef source) {
+    if (source.isLocalArchive ||
+        (source.subPath != null && source.subPath!.isNotEmpty)) {
+      return source;
+    }
+
+    final rootPrefix = _findRootPrefix(archive);
+    final candidates = <String>{};
+    for (final file in archive) {
+      if (!file.isFile) continue;
+      final rel = _relativeArchivePath(file.name, rootPrefix);
+      const suffix = '/SKILL.md';
+      if (rel.startsWith('skills/') && rel.endsWith(suffix)) {
+        final directory = rel.substring(0, rel.length - suffix.length);
+        if (directory != 'skills' && !directory.split('/').contains('..')) {
+          candidates.add(directory);
+        }
+      }
+    }
+    if (candidates.isEmpty) return source;
+
+    final preferred = 'skills/${source.repo}';
+    final selected = candidates.contains(preferred)
+        ? preferred
+        : candidates.length == 1
+            ? candidates.single
+            : null;
+    if (selected == null) {
+      final choices = candidates.toList()..sort();
+      throw SkillValidationException(
+          '仓库包含多个 Skill，请打开对应的 /tree/${source.ref}/{目录} 地址：${choices.join('、')}');
+    }
+    return GithubSkillRef(
+      original: source.original,
+      owner: source.owner,
+      repo: source.repo,
+      ref: source.ref,
+      subPath: selected,
+    );
+  }
+
+  String _relativeArchivePath(String name, String rootPrefix) {
+    var rel = name.replaceAll('\\', '/');
+    if (rootPrefix.isNotEmpty && rel.startsWith(rootPrefix)) {
+      rel = rel.substring(rootPrefix.length);
+    }
+    while (rel.startsWith('/')) {
+      rel = rel.substring(1);
+    }
+    return rel;
   }
 
   /// 提取白名单内的文件，并统一剥离 tar 根目录第一层。

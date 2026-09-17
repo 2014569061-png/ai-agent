@@ -75,3 +75,8 @@ flutter:
     - assets/skills/android-build/references/toolchain.md
     - assets/linux/alpine-minirootfs-3.22.5-aarch64.tar.gz
     - assets/linux/libtalloc.so.2
+
+  # 液态玻璃边缘折射着色器。经 ImageFilter.shader 作用于 BackdropFilter 的背景纹理，
+  # 仅在 Impeller 后端可用；不可用时 LiquidGlass 组件自动降级为高斯模糊。
+  shaders:
+    - shaders/liquid_glass.frag

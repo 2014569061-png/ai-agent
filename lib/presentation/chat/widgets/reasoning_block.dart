@@ -60,11 +60,12 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
     final isDark = theme.brightness == Brightness.dark;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final cardBg =
-        isDark ? AppPalette.reasoningBgDark : AppPalette.reasoningBgLight;
+    final cardBg = isDark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.black.withValues(alpha: 0.035);
     final cardBorder = isDark
-        ? AppPalette.reasoningBorderDark
-        : AppPalette.reasoningBorderLight;
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
 
     final hasReasoning = widget.reasoning.trim().isNotEmpty;
     final thinking = widget.streaming && widget.duration == null;
@@ -96,7 +97,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
               borderRadius: BorderRadius.circular(10),
               child: Padding(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     // At phone widths the status metadata is optional; keeping the
@@ -104,13 +105,21 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                     final compact = constraints.maxWidth < 320;
                     return Row(
                       children: [
+                        Icon(
+                          Icons.lightbulb_outline_rounded,
+                          size: 15,
+                          color: isDark
+                              ? const Color(0xFF64D2FF)
+                              : AppPalette.brandAction,
+                        ),
+                        const SizedBox(width: 5),
                         if (thinking)
                           Container(
                             width: 6,
                             height: 6,
                             margin: const EdgeInsets.only(right: 6),
                             decoration: const BoxDecoration(
-                              color: AppPalette.brand,
+                              color: AppPalette.brandAction,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -123,7 +132,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                             letterSpacing: 0.06,
                             color: isDark
                                 ? const Color(0xFF93C5FD)
-                                : AppPalette.brand,
+                                : AppPalette.brandAction,
                           ),
                         ),
                         const SizedBox(width: 6),

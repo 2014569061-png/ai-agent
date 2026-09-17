@@ -130,7 +130,6 @@ class _CollaborationTimelinePageState
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final run = _run;
     final isAwaitingApproval =
         run?.status == CollaborationStatus.awaitingExecutionApproval;
@@ -140,7 +139,6 @@ class _CollaborationTimelinePageState
         run.status != CollaborationStatus.failed;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: '协作分析看板',
         statusPill: run != null

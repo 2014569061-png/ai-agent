@@ -48,11 +48,18 @@ class WorkspaceService {
   Future<String?> pickDirectory() async {
     try {
       if (!kIsWeb && Platform.isAndroid) {
-        // 请求所有的文件访问权限 (MANAGE_EXTERNAL_STORAGE) 和基本读写权限
-        if (await Permission.manageExternalStorage.isDenied) {
+        // Android 11+ 读写任意目录需要 MANAGE_EXTERNAL_STORAGE（「所有文件访问权限」）。
+        //
+        // 这里必须用 isGranted 取反来判断，不能用 isDenied：permission_handler 在
+        // 用户点过「拒绝」之后返回 permanentlyDenied，而对 permanentlyDenied
+        // isDenied 是 false —— 旧写法会把这种情况当成已授权直接跳过申请，
+        // 于是后续写入必然失败，外层只看到一个无解的「目录不可写」。
+        if (!await Permission.manageExternalStorage.isGranted) {
           await Permission.manageExternalStorage.request();
         }
-        if (await Permission.storage.isDenied) {
+        if (!await Permission.storage.isGranted) {
+          // Android 13+ 已把存储权限拆成媒体细分权限，这里拿不到属正常，
+          // 不影响下面的 SAF 目录选择流程。
           await Permission.storage.request();
         }
       }

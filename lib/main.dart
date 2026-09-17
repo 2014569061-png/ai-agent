@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -115,24 +115,26 @@ class MobileAgentApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: AppThemeController.mode,
-      builder: (context, themeMode, _) => ValueListenableBuilder<Locale?>(
-        valueListenable: AppLocaleController.locale,
-        builder: (context, locale, _) => MaterialApp(
-          title: 'NEXUS Agent',
-          debugShowCheckedModeBanner: false,
-          locale: locale,
-          supportedLocales: const [Locale('zh'), Locale('en')],
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          themeMode: themeMode,
-          builder: (context, child) {
+    return ValueListenableBuilder<double>(
+      valueListenable: AppAppearanceController.glassIntensity,
+      builder: (context, _, __) => ValueListenableBuilder<ThemeMode>(
+        valueListenable: AppThemeController.mode,
+        builder: (context, themeMode, _) => ValueListenableBuilder<Locale?>(
+          valueListenable: AppLocaleController.locale,
+          builder: (context, locale, _) => MaterialApp(
+            title: 'NEXUS Agent',
+            debugShowCheckedModeBanner: false,
+            locale: locale,
+            supportedLocales: const [Locale('zh'), Locale('en')],
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: themeMode,
+            builder: (context, child) {
             final isDark = Theme.of(context).brightness == Brightness.dark;
             return ValueListenableBuilder<double>(
               valueListenable: AppAppearanceController.fontScale,
@@ -169,7 +171,8 @@ class MobileAgentApp extends StatelessWidget {
               : (showOnboarding! ? const OnboardingPage() : const AppShell()),
         ),
       ),
-    );
+    ),
+  );
   }
 }
 

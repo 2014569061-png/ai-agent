@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:mcp_dart/mcp_dart.dart' as mcp;
 
 import '../../domain/models.dart';
+import '../../domain/network_access_policy.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import '../tools/tool_registry.dart';
@@ -13,14 +13,36 @@ import 'mcp_server_config.dart';
 ///
 /// 连接建立后保持复用（Map 缓存），避免每次 Agent 循环重连；
 /// 调用 [dispose] 统一关闭。
+///
+/// 两条出口各有一道闸门：
+/// * **HTTP** 走 `NetworkAccessPolicy`（唯一权威），与 `http_request` / 插件
+///   声明式工具同一条策略——私网、回环、元数据地址一律拒绝。
+/// * **stdio** 走 [McpStdioAvailability]，并且**子进程不继承父环境变量**。
 class McpToolProvider {
+  McpToolProvider({
+    NetworkAccessPolicy? policy,
+    bool? stdioEnabled,
+  })  : _policy = policy ?? const NetworkAccessPolicy(),
+        _stdioEnabledOverride = stdioEnabled;
+
+  final NetworkAccessPolicy _policy;
+
+  /// 测试注入用：覆盖真机开关的读取结果。生产环境传 null，走 SharedPreferences。
+  final bool? _stdioEnabledOverride;
+
   final Map<String, mcp.McpClient> _clients = {};
+
+  /// 读取当前生效的 stdio 真机开关。默认关闭。
+  Future<bool> _stdioEnabled() async {
+    final override = _stdioEnabledOverride;
+    if (override != null) return override;
+    return McpStdioAvailability.readEnabled();
+  }
 
   /// 连接并列出该服务器全部工具，映射为 [AgentTool]。
   /// 失败返回空列表（调用方跳过该服务器，不影响其他工具）。
   Future<List<AgentTool>> connectAndListTools(McpServerConfig server) async {
-    // Web 平台无法 spawn stdio 子进程，stdio 型服务器直接跳过。
-    if (server.kind == McpServerKind.stdio && kIsWeb) return const [];
+    if (!await _isAllowed(server)) return const [];
     try {
       final client = await _connect(server);
       final result = await client.listTools();
@@ -32,12 +54,38 @@ class McpToolProvider {
     }
   }
 
+  /// 出口准入检查。返回 false 时 [lastBlockReason] 会带上可读原因。
+  Future<bool> _isAllowed(McpServerConfig server) async {
+    switch (server.kind) {
+      case McpServerKind.http:
+        final decision = _policy.inspect(server.url?.trim() ?? '');
+        if (!decision.allowed) {
+          _lastBlockReason = decision.reason;
+          return false;
+        }
+        return true;
+      case McpServerKind.stdio:
+        final enabled = await _stdioEnabled();
+        final reason = McpStdioAvailability.blockedReason(enabled: enabled);
+        if (reason != null) {
+          _lastBlockReason = reason;
+          return false;
+        }
+        return true;
+    }
+  }
+
+  String? _lastBlockReason;
+
+  /// 最近一次被准入策略拒绝的原因（供设置页展示）。
+  String? get lastBlockReason => _lastBlockReason;
+
   /// 仅测试连接连通性与可用的工具数量，不缓存、不映射 AgentTool。
   /// 返回 null 表示连接失败，否则返回 (是否可用, 工具数量, 错误消息)。
   Future<({bool ok, int toolCount, String? error})> testConnection(
       McpServerConfig server) async {
-    if (server.kind == McpServerKind.stdio && kIsWeb) {
-      return (ok: false, toolCount: 0, error: 'Web 平台不支持 stdio 型服务器');
+    if (!await _isAllowed(server)) {
+      return (ok: false, toolCount: 0, error: _lastBlockReason);
     }
     mcp.McpClient? client;
     try {
@@ -58,7 +106,9 @@ class McpToolProvider {
             mcp.StdioServerParameters(
               command: server.command ?? 'npx',
               args: server.args,
-              includeParentEnvironment: true,
+              // 不把 App 进程的环境变量全量透传给子进程：里面可能有用户配置的
+              // Provider API Key、代理凭据。子进程按需在命令里自己声明。
+              includeParentEnvironment: false,
             ),
           );
           await client.connect(transport);
@@ -98,7 +148,7 @@ class McpToolProvider {
           mcp.StdioServerParameters(
             command: server.command ?? 'npx',
             args: server.args,
-            includeParentEnvironment: true,
+            includeParentEnvironment: false,
           ),
         );
         await client.connect(transport);

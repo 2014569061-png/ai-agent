@@ -32,6 +32,7 @@ class TokenTrendCard extends StatelessWidget {
     final hasData = maxValue > 0;
 
     return SectionCard(
+      glass: true,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

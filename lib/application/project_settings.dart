@@ -15,6 +15,7 @@ class ProjectSettings {
     this.budgetTokens,
     this.packageName,
     this.appName,
+    this.directoryWritable = true,
   });
 
   final String? goal;
@@ -28,6 +29,13 @@ class ProjectSettings {
   final int? budgetTokens;
   final String? packageName;
   final String? appName;
+
+  /// 导入的目录当前是否可写。
+  ///
+  /// Android 11+ 分区存储下，通过系统目录选择器拿到的路径即使已有 SAF 授权，
+  /// 应用也可能只能读不能写（写任意文件需要「所有文件访问权限」）。
+  /// 这种目录仍然允许导入（可浏览、可读取代码），但界面需要提示用户补权限。
+  final bool directoryWritable;
 
   static const version = 1;
 
@@ -44,6 +52,7 @@ class ProjectSettings {
         if (budgetTokens != null) 'budgetTokens': budgetTokens,
         if (packageName != null) 'packageName': packageName,
         if (appName != null) 'appName': appName,
+        'directoryWritable': directoryWritable,
       };
 
   factory ProjectSettings.fromJson(Map<String, dynamic> json) {
@@ -62,6 +71,8 @@ class ProjectSettings {
       budgetTokens: (json['budgetTokens'] as num?)?.toInt(),
       packageName: json['packageName']?.toString(),
       appName: json['appName']?.toString(),
+      // 旧记录没有这个字段：默认可写，避免历史项目被误判为只读。
+      directoryWritable: json['directoryWritable'] != false,
     );
   }
 
@@ -90,6 +101,7 @@ class ProjectSettings {
     int? budgetTokens,
     String? packageName,
     String? appName,
+    bool? directoryWritable,
   }) {
     return ProjectSettings(
       goal: goal ?? this.goal,
@@ -103,6 +115,7 @@ class ProjectSettings {
       budgetTokens: budgetTokens ?? this.budgetTokens,
       packageName: packageName ?? this.packageName,
       appName: appName ?? this.appName,
+      directoryWritable: directoryWritable ?? this.directoryWritable,
     );
   }
 
@@ -119,6 +132,7 @@ class ProjectSettings {
       budgetTokens: budgetTokens,
       packageName: packageName ?? detection.packageName,
       appName: appName,
+      directoryWritable: directoryWritable,
     );
   }
 }

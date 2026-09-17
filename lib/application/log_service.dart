@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' show Value;
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../infrastructure/database/app_database.dart';
+import '../infrastructure/observability/sentry_service.dart';
 import '../infrastructure/observability/unified_diff.dart';
 import '../domain/sensitive_tool_policy.dart';
 import '../domain/unique_id.dart';
@@ -101,27 +103,33 @@ class LogService {
           detail: detail);
 
   Future<void> error(String message,
-          {Object? error,
-          StackTrace? stackTrace,
-          String? runId,
-          String? eventId,
-          String category = 'system',
-          String? errorCode,
-          bool retryable = false,
-          Map<String, dynamic>? detail}) =>
-      _write(
-          level: 'error',
-          message: message,
-          runId: runId,
-          eventId: eventId,
-          category: category,
-          errorCode: errorCode,
-          retryable: retryable,
-          stackTrace: stackTrace?.toString(),
-          detail: {
-            ...?detail,
-            if (error != null) 'error': error.toString(),
-          });
+      {Object? error,
+      StackTrace? stackTrace,
+      String? runId,
+      String? eventId,
+      String category = 'system',
+      String? errorCode,
+      bool retryable = false,
+      Map<String, dynamic>? detail}) {
+    unawaited(SentryService.reportException(
+      error ?? message,
+      stackTrace ?? StackTrace.current,
+    ));
+    return _write(
+      level: 'error',
+      message: message,
+      runId: runId,
+      eventId: eventId,
+      category: category,
+      errorCode: errorCode,
+      retryable: retryable,
+      stackTrace: stackTrace?.toString(),
+      detail: {
+        ...?detail,
+        if (error != null) 'error': error.toString(),
+      },
+    );
+  }
 
   Future<void> _write({
     required String level,

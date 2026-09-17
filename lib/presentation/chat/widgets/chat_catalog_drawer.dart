@@ -10,13 +10,15 @@ import '../../agents/agents_page.dart';
 import '../../history/history_page.dart';
 import '../../settings/settings_page.dart';
 import '../../widgets/floating_toast.dart';
-import '../../widgets/nexus_sheet.dart';
 import '../../widgets/nexus_action_sheet.dart';
+import '../../widgets/confirm_action.dart';
 import '../../motion/nexus_page_route_factory.dart';
 import '../../widgets/nexus_loading_skeleton.dart';
+import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/empty_state_view.dart';
+import '../../widgets/glass_surface.dart';
 
 /// 侧边工作台目录抽屉 (Catalog Drawer) - 对标 DeepSeek 极简风格
 /// 1. 分组标签 11/500 textFaint，上间距 24 / 下间距 8，无背景
@@ -128,48 +130,61 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
     ];
   }
 
-  /// 长按会话：弹出操作表。
+  /// 长按或点击更多：弹出紧凑型底部操作表。
   Future<void> _showConversationActions(Conversation conversation) async {
     unawaited(HapticFeedback.mediumImpact());
     final action = await showNexusActionSheet<String>(
       context: context,
       title: conversation.title.isEmpty ? '新会话' : conversation.title,
-      items: const [
+      subtitle: conversation.updatedAt.toString().substring(0, 16),
+      maxHeightRatio: 0.35,
+      items: [
         ActionSheetItem(
+          icon: conversation.isPinned
+              ? Icons.push_pin_rounded
+              : Icons.push_pin_outlined,
+          title: conversation.isPinned ? '取消置顶' : '置顶会话',
+          value: 'pin',
+        ),
+        const ActionSheetItem(
           icon: Icons.delete_outline_rounded,
           title: '删除会话',
           subtitle: '删除后无法恢复',
+          destructive: true,
           value: 'delete',
         ),
       ],
     );
-    if (action == 'delete') await _deleteConversation(conversation);
+    if (action == 'delete') {
+      await _deleteConversation(conversation);
+    } else if (action == 'pin') {
+      await _togglePin(conversation);
+    }
+  }
+
+  Future<void> _togglePin(Conversation conversation) async {
+    try {
+      final db = await DatabaseProvider.instance.database;
+      await db.saveConversation(conversation.copyWith(
+        isPinned: !conversation.isPinned,
+        updatedAt: DateTime.now(),
+      ));
+      if (!mounted) return;
+      unawaited(HapticFeedback.selectionClick());
+      await _loadData();
+    } catch (_) {}
   }
 
   Future<void> _deleteConversation(Conversation conversation) async {
-    final confirmed = await showNexusDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('删除会话'),
-        content: Text(
-            '确定删除“${conversation.title.isEmpty ? '新会话' : conversation.title}”吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '删除会话',
+      message:
+          '确定删除“${conversation.title.isEmpty ? '新会话' : conversation.title}”吗？',
+      confirmLabel: '删除',
+      isDanger: true,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       final db = await DatabaseProvider.instance.database;
       await db.deleteConversation(conversation.id);
@@ -201,226 +216,253 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                 c.title.toLowerCase().contains(_filterQuery.toLowerCase()))
             .toList();
 
+    final intensity = AppAppearanceController.resolvedGlassIntensity;
+    final isGlass = intensity != GlassIntensity.flat;
+
+    Widget drawerContent = SafeArea(
+      child: Column(
+        children: [
+          // 1. 顶部搜索框 (对标图 3 极简风格，无多余大按钮)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: _DrawerSearchBar(
+              onChanged: (val) => setState(() => _filterQuery = val.trim()),
+            ),
+          ),
+
+          // 2. 中间滚动区域
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              children: [
+                // 按时间分组：今天 / 7 天内 / 30 天内（对标 DeepSeek，只显示对话）
+                if (_loadingHistory)
+                  const SizedBox(
+                    height: 220,
+                    child: NexusListSkeleton(itemCount: 4),
+                  )
+                else if (filteredConversations.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: EmptyStateView.compact(
+                      icon: _filterQuery.isEmpty
+                          ? Icons.history_rounded
+                          : Icons.search_off_rounded,
+                      title: _filterQuery.isEmpty ? '暂无历史会话' : '未找到匹配会话',
+                    ),
+                  )
+                else
+                  for (final group
+                      in _groupConversations(filteredConversations)) ...[
+                    _SectionHeader(title: group.label),
+                    ...group.items.map(
+                      (c) => _HistoryTile(
+                        conversation: c,
+                        isSelected: c.id == widget.currentConversationId,
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onSelectConversation(c);
+                        },
+                        onLongPress: () => _showConversationActions(c),
+                        onMoreTap: () => _showConversationActions(c),
+                      ),
+                    ),
+                  ],
+
+                // 分组之外保留一个低调入口，避免收藏 / 批量管理能力失联
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                    ),
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      if (widget.onOpenHistory != null) {
+                        widget.onOpenHistory!();
+                      } else {
+                        final selected =
+                            await Navigator.of(context).push<Conversation>(
+                          NexusPageRoute.detail(
+                              builder: (_) => const HistoryPage()),
+                        );
+                        if (selected != null) {
+                          widget.onSelectConversation(selected);
+                        }
+                      }
+                    },
+                    child: const Text('查看全部会话',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w400,
+                          color: AppPalette.brand,
+                        )),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Divider(height: 1, thickness: 0.5, color: hairline),
+                const _SectionHeader(title: '工作区与能力'),
+                _DrawerNavTile(
+                  icon: Icons.folder_open_rounded,
+                  title: '工作区',
+                  info: widget.currentWorkspacePath == null ||
+                          widget.currentWorkspacePath!.isEmpty
+                      ? '未选择'
+                      : widget.currentWorkspacePath!
+                          .split(RegExp(r'[\\/]'))
+                          .last,
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onWorkspaceTap();
+                  },
+                ),
+                _DrawerNavTile(
+                  icon: Icons.smart_toy_outlined,
+                  title: 'Agent',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(NexusPageRoute.detail(
+                        builder: (_) => const AgentsPage()));
+                  },
+                ),
+                _DrawerNavTile(
+                  icon: Icons.hub_outlined,
+                  title: 'MCP 服务',
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onMcpMenu();
+                  },
+                ),
+                _DrawerNavTile(
+                  icon: Icons.notes_rounded,
+                  title: '提示词',
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onPromptLibrary();
+                  },
+                ),
+                const _SectionHeader(title: '系统与设置'),
+                _DrawerNavTile(
+                  icon: Icons.model_training_outlined,
+                  title: '模型与模式',
+                  info: widget.activeModel.isEmpty ? null : widget.activeModel,
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onModelTap();
+                  },
+                ),
+                _DrawerNavTile(
+                  icon: Icons.settings_outlined,
+                  title: '设置',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(NexusPageRoute.settingsPage(
+                        builder: (_) => const SettingsPage()));
+                  },
+                ),
+                _DrawerNavTile(
+                  icon: Icons.grid_view_rounded,
+                  title: '更多工作台',
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onMore?.call();
+                  },
+                ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+
+          // 3. 底部身份区 (对标图 3)：圆形头像 + 用户名「浅陌」+ 右侧「···」设置入口
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: hairline, width: 0.8),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF4F6DF5), Color(0xFF6366F1)],
+                    ),
+                  ),
+                  alignment: Alignment.center,
+                  child: const Icon(
+                    Icons.person_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '浅陌',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '更多与设置',
+                  icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                  color: textMuted,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.of(context).push(NexusPageRoute.settingsPage(
+                        builder: (_) => const SettingsPage()));
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (isGlass) {
+      drawerContent = Container(
+        decoration: BoxDecoration(
+          border: Border(
+            right: BorderSide(color: hairline, width: 1.0),
+          ),
+        ),
+        child: GlassSurface(
+          role: GlassRole.overlay,
+          variant: GlassVariant.regular,
+          intensity: intensity,
+          borderRadius: BorderRadius.zero,
+          outlined: false,
+          blurSigma: 26,
+          refraction: 18,
+          edgeWidth: 20,
+          gloss: 0.45,
+          tint: isDark
+              ? AppPalette.darkCanvas.withValues(alpha: 0.48)
+              : AppPalette.lightCanvas.withValues(alpha: 0.52),
+          child: drawerContent,
+        ),
+      );
+    }
+
     return Drawer(
       width: width,
-      backgroundColor: canvas,
+      backgroundColor: isGlass ? Colors.transparent : canvas,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
       ),
-      child: SafeArea(
-        child: Column(
-          children: [
-            // 1. 顶部搜索框 (对标图 3 极简风格，无多余大按钮)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: _DrawerSearchBar(
-                onChanged: (val) =>
-                    setState(() => _filterQuery = val.trim()),
-              ),
-            ),
-
-            // 2. 中间滚动区域
-            Expanded(
-              child: ListView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                children: [
-                  // 按时间分组：今天 / 7 天内 / 30 天内（对标 DeepSeek，只显示对话）
-                  if (_loadingHistory)
-                    const SizedBox(
-                      height: 220,
-                      child: NexusListSkeleton(itemCount: 4),
-                    )
-                  else if (filteredConversations.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: EmptyStateView.compact(
-                        icon: _filterQuery.isEmpty
-                            ? Icons.history_rounded
-                            : Icons.search_off_rounded,
-                        title: _filterQuery.isEmpty ? '暂无历史会话' : '未找到匹配会话',
-                      ),
-                    )
-                  else
-                    for (final group
-                        in _groupConversations(filteredConversations)) ...[
-                      _SectionHeader(title: group.label),
-                      ...group.items.map(
-                        (c) => _HistoryTile(
-                          conversation: c,
-                          isSelected: c.id == widget.currentConversationId,
-                          onTap: () {
-                            Navigator.pop(context);
-                            widget.onSelectConversation(c);
-                          },
-                          onLongPress: () => _showConversationActions(c),
-                        ),
-                      ),
-                    ],
-
-                  // 分组之外保留一个低调入口，避免收藏 / 批量管理能力失联
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: EdgeInsets.zero,
-                      ),
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        if (widget.onOpenHistory != null) {
-                          widget.onOpenHistory!();
-                        } else {
-                          final selected =
-                              await Navigator.of(context).push<Conversation>(
-                            NexusPageRoute.detail(
-                                builder: (_) => const HistoryPage()),
-                          );
-                          if (selected != null) {
-                            widget.onSelectConversation(selected);
-                          }
-                        }
-                      },
-                      child: const Text('查看全部会话',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                            color: AppPalette.brand,
-                          )),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Divider(height: 1, thickness: 0.5, color: hairline),
-                  const _SectionHeader(title: '工作区与能力'),
-                  _DrawerNavTile(
-                    icon: Icons.folder_open_rounded,
-                    title: '工作区',
-                    info: widget.currentWorkspacePath == null ||
-                            widget.currentWorkspacePath!.isEmpty
-                        ? '未选择'
-                        : widget.currentWorkspacePath!
-                            .split(RegExp(r'[\\/]'))
-                            .last,
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onWorkspaceTap();
-                    },
-                  ),
-                  _DrawerNavTile(
-                    icon: Icons.smart_toy_outlined,
-                    title: 'Agent',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(NexusPageRoute.detail(
-                          builder: (_) => const AgentsPage()));
-                    },
-                  ),
-                  _DrawerNavTile(
-                    icon: Icons.hub_outlined,
-                    title: 'MCP 服务',
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onMcpMenu();
-                    },
-                  ),
-                  _DrawerNavTile(
-                    icon: Icons.notes_rounded,
-                    title: '提示词',
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onPromptLibrary();
-                    },
-                  ),
-                  const _SectionHeader(title: '系统与设置'),
-                  _DrawerNavTile(
-                    icon: Icons.model_training_outlined,
-                    title: '模型与模式',
-                    info: widget.activeModel.isEmpty
-                        ? null
-                        : widget.activeModel,
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onModelTap();
-                    },
-                  ),
-                  _DrawerNavTile(
-                    icon: Icons.settings_outlined,
-                    title: '设置',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(NexusPageRoute.settingsPage(
-                          builder: (_) => const SettingsPage()));
-                    },
-                  ),
-                  _DrawerNavTile(
-                    icon: Icons.grid_view_rounded,
-                    title: '更多工作台',
-                    onTap: () {
-                      Navigator.pop(context);
-                      widget.onMore?.call();
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ),
-
-            // 3. 底部身份区 (对标图 3)：圆形头像 + 用户名「浅陌」+ 右侧「···」设置入口
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                border: Border(
-                  top: BorderSide(color: hairline, width: 0.8),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: [Color(0xFF4F6DF5), Color(0xFF6366F1)],
-                      ),
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.person_rounded,
-                      size: 20,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '浅陌',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: textColor,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: '更多与设置',
-                    icon: const Icon(Icons.more_horiz_rounded, size: 20),
-                    color: textMuted,
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(NexusPageRoute.settingsPage(
-                          builder: (_) => const SettingsPage()));
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+      child: drawerContent,
     );
   }
 }
@@ -541,7 +583,6 @@ class _DrawerSearchBarState extends State<_DrawerSearchBar> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textFaint =
         isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
@@ -549,10 +590,16 @@ class _DrawerSearchBarState extends State<_DrawerSearchBar> {
     return Container(
       height: AppTokens.kSearchBoxHeight,
       decoration: BoxDecoration(
-        color: surface,
+        color: (isDark ? Colors.white : Colors.black)
+            .withValues(alpha: isDark ? 0.08 : 0.04),
         borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-        border:
-            _focused ? Border.all(color: AppPalette.brand, width: 1.0) : null,
+        border: _focused
+            ? Border.all(color: AppPalette.brand, width: 1.0)
+            : Border.all(
+                color: (isDark ? Colors.white : Colors.black)
+                    .withValues(alpha: isDark ? 0.12 : 0.07),
+                width: 0.8,
+              ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       alignment: Alignment.center,
@@ -636,12 +683,14 @@ class _HistoryTile extends StatefulWidget {
   final bool isSelected;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final VoidCallback? onMoreTap;
 
   const _HistoryTile({
     required this.conversation,
     this.isSelected = false,
     required this.onTap,
     this.onLongPress,
+    this.onMoreTap,
   });
 
   @override
@@ -654,7 +703,6 @@ class _HistoryTileState extends State<_HistoryTile> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final brandSoft =
         isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
@@ -662,8 +710,14 @@ class _HistoryTileState extends State<_HistoryTile> {
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     final bgColor = widget.isSelected
-        ? brandSoft
-        : (_isHovered ? surface : Colors.transparent);
+        ? (isDark
+            ? brandSoft.withValues(alpha: 0.85)
+            : brandSoft.withValues(alpha: 0.90))
+        : (_isHovered
+            ? (isDark
+                ? Colors.white.withValues(alpha: 0.07)
+                : Colors.black.withValues(alpha: 0.04))
+            : Colors.transparent);
 
     final showMore = _isHovered || widget.isSelected;
 
@@ -709,10 +763,23 @@ class _HistoryTileState extends State<_HistoryTile> {
                   ),
                 ),
                 if (showMore)
-                  Icon(
-                    Icons.more_horiz_rounded,
-                    size: 16,
-                    color: textMuted,
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      if (widget.onMoreTap != null) {
+                        widget.onMoreTap!();
+                      } else {
+                        widget.onLongPress?.call();
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.more_horiz_rounded,
+                        size: 18,
+                        color: textMuted,
+                      ),
+                    ),
                   ),
               ],
             ),

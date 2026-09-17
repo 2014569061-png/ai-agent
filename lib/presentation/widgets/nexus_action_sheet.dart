@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
@@ -60,6 +60,7 @@ Future<T?> showNexusActionSheet<T>({
 }) {
   return showNexusSheet<T>(
     context: context,
+    maxHeightRatio: maxHeightRatio ?? 0.55,
     builder: (sheetContext) {
       final theme = Theme.of(context);
       final semantic = AppTheme.semanticOf(context);
@@ -71,7 +72,7 @@ Future<T?> showNexusActionSheet<T>({
         children: [
           if (hasHeader) ...[
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 10),
+              padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
               child: header ??
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,12 +82,12 @@ Future<T?> showNexusActionSheet<T>({
                         Text(
                           title,
                           style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
                           ),
                         ),
                       if (subtitle != null) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 3),
                         Text(
                           subtitle,
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -101,21 +102,21 @@ Future<T?> showNexusActionSheet<T>({
             Divider(
               height: 1,
               thickness: 0.8,
-              color: semantic.border.withValues(alpha: 0.5),
+              color: semantic.border.withValues(alpha: 0.4),
             ),
           ],
           Flexible(
             child: ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.sizeOf(sheetContext).height *
-                    (maxHeightRatio ?? 0.72),
+                    (maxHeightRatio ?? 0.55),
               ),
               child: ListView.separated(
                 shrinkWrap: true,
                 physics: scrollable
                     ? const ClampingScrollPhysics()
                     : const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                 itemCount: items.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 2),
                 itemBuilder: (itemCtx, index) {

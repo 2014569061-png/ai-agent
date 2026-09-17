@@ -7,11 +7,13 @@ import '../../application/project_kind.dart';
 import '../../application/providers.dart';
 import '../../application/task_service.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
@@ -128,11 +130,15 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final tasks = _filtered;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: '开发任务中心',
         actions: [
@@ -167,29 +173,70 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
             if (_showSearch)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: '搜索任务标题、工作区路径或指令…',
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear_rounded, size: 18),
-                            onPressed: () {
-                              setState(() {
-                                _searchQuery = '';
-                                _searchController.clear();
-                              });
-                            },
-                          )
-                        : null,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                  ),
-                  onChanged: (val) => setState(() => _searchQuery = val),
-                ),
+                child: isFlat
+                    ? TextField(
+                        controller: _searchController,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: '搜索任务标题、工作区路径或指令…',
+                          prefixIcon:
+                              const Icon(Icons.search_rounded, size: 20),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear_rounded,
+                                      size: 18),
+                                  onPressed: () {
+                                    setState(() {
+                                      _searchQuery = '';
+                                      _searchController.clear();
+                                    });
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 10),
+                        ),
+                        onChanged: (val) => setState(() => _searchQuery = val),
+                      )
+                    : GlassSurface(
+                        role: GlassRole.control,
+                        variant: GlassVariant.clear,
+                        intensity:
+                            AppAppearanceController.resolvedGlassIntensity,
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusControl),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: TextField(
+                          controller: _searchController,
+                          autofocus: true,
+                          decoration: InputDecoration(
+                            hintText: '搜索任务标题、工作区路径或指令…',
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            prefixIcon:
+                                const Icon(Icons.search_rounded, size: 20),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded,
+                                        size: 18),
+                                    onPressed: () {
+                                      setState(() {
+                                        _searchQuery = '';
+                                        _searchController.clear();
+                                      });
+                                    },
+                                  )
+                                : null,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                          ),
+                          onChanged: (val) =>
+                              setState(() => _searchQuery = val),
+                        ),
+                      ),
               ),
 
             // 统计与筛选胶囊标签行

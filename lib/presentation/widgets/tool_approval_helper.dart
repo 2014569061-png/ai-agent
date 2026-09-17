@@ -1,5 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'dart:async';
 
 import '../../application/approval_bridge.dart';
 import '../../application/approval_notification_text.dart';
@@ -36,11 +38,10 @@ Future<ToolApproval> promptToolApproval(
       risk: risk.name,
       database: await ref.read(databaseProvider.future),
     );
-    if (approved == true && context.mounted) {
-      _recordToolGrant(ref, call, risk, ToolApproval.allowOnce);
-      return ToolApproval.allowOnce;
-    }
-    return ToolApproval.reject;
+    final decision =
+        approved == true ? ToolApproval.allowOnce : ToolApproval.reject;
+    _recordToolDecision(ref, call, risk, decision);
+    return decision;
   }
 
   final trust = await ref.read(toolTrustStoreProvider.future);
@@ -58,20 +59,21 @@ Future<ToolApproval> promptToolApproval(
     ),
   );
 
+  final resolvedDecision = decision ?? ToolApproval.reject;
+  _recordToolDecision(ref, call, risk, resolvedDecision);
   if (allowPersistentTrust &&
-      (decision == ToolApproval.allowAlways ||
-          decision == ToolApproval.allowSession)) {
-    if (decision == ToolApproval.allowAlways) {
+      (resolvedDecision == ToolApproval.allowAlways ||
+          resolvedDecision == ToolApproval.allowSession)) {
+    if (resolvedDecision == ToolApproval.allowAlways) {
       await trust.allowAlways(call.name);
     } else {
       trust.allowSession(call.name);
     }
-    _recordToolGrant(ref, call, risk, decision!);
   }
-  return decision ?? ToolApproval.reject;
+  return resolvedDecision;
 }
 
-void _recordToolGrant(
+void _recordToolDecision(
   WidgetRef ref,
   ToolCall call,
   ToolRisk risk,
@@ -79,16 +81,18 @@ void _recordToolGrant(
 ) {
   final audit = ref.read(auditServiceProvider);
   final db = ref.read(databaseProvider.future);
-  db.then((database) {
-    audit.log(
-      database,
-      type: 'tool_grant',
-      detail: call.name,
-      decision: decision.name,
-      risk: risk.name,
-      conversationId: ref.read(chatControllerProvider).conversationId,
-    );
-  });
+  unawaited(
+    db
+        .then((database) => audit.logSecurityEvent(
+              database,
+              type: 'tool_grant',
+              detail: call.name,
+              decision: decision.name,
+              risk: risk.name,
+              conversationId: ref.read(chatControllerProvider).conversationId,
+            ))
+        .catchError((_) {}),
+  );
 }
 
 /// 应用是否处于用户可见的前台状态。

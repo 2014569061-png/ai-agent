@@ -30,6 +30,8 @@ set "EXIT_CODE=1"
 set "BUILD_MODE=incremental"
 set "DEPENDENCY_MODE=auto"
 set "NO_PAUSE=0"
+set "INSTALL_AFTER_BUILD=0"
+set "ADB_CMD="
 
 :parse_args
 if "%~1"=="" goto :args_done
@@ -59,6 +61,11 @@ if /i "%~1"=="--offline" (
 if /i "%~1"=="--online" (
   if /i "!DEPENDENCY_MODE!"=="offline" goto :conflicting_dependency_modes
   set "DEPENDENCY_MODE=online"
+  shift
+  goto :parse_args
+)
+if /i "%~1"=="--install" (
+  set "INSTALL_AFTER_BUILD=1"
   shift
   goto :parse_args
 )
@@ -311,6 +318,8 @@ for /f "delims=" %%A in ('powershell.exe -NoProfile -ExecutionPolicy Bypass -Com
 set "DIST_DIR=!PROJECT_ROOT!\dist"
 set "DIST_APK_PATH=!DIST_DIR!\nexus-agent-!APP_VERSION_FILE!-!BUILD_STAMP!.apk"
 set "DIST_CHECKSUM_PATH=!DIST_APK_PATH!.sha256"
+set "LATEST_APK_PATH=!DIST_DIR!\nexus-agent-latest.apk"
+set "LATEST_CHECKSUM_PATH=!LATEST_APK_PATH!.sha256"
 if not defined APP_VERSION (
   echo [ERROR] Could not read the project version from pubspec.yaml.
   goto :fail
@@ -336,6 +345,29 @@ if errorlevel 1 (
   goto :fail
 )
 
+rem Keep one deterministic path for installation and manual testing. The
+rem timestamped artifact remains available for release archival.
+copy /y "!APK_PATH!" "!LATEST_APK_PATH!" >nul
+if errorlevel 1 (
+  echo [ERROR] Could not update the stable latest APK path.
+  goto :fail
+)
+copy /y "!CHECKSUM_PATH!" "!LATEST_CHECKSUM_PATH!" >nul
+if errorlevel 1 (
+  echo [ERROR] Could not update the stable latest SHA-256 path.
+  goto :fail
+)
+
+rem Verify the copied artifact, not only the intermediate build output.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$expected=(Get-Content -Raw -LiteralPath '!LATEST_CHECKSUM_PATH!').Trim(); $actual=(Get-FileHash -LiteralPath '!LATEST_APK_PATH!' -Algorithm SHA256).Hash.ToLowerInvariant(); if ($actual -ne $expected) { Write-Error ('Latest APK checksum mismatch: ' + $actual + ' != ' + $expected); exit 1 }"
+if errorlevel 1 (
+  echo [ERROR] The stable latest APK failed checksum verification.
+  goto :fail
+)
+
+if "!INSTALL_AFTER_BUILD!"=="1" call :install_latest_apk
+if errorlevel 1 goto :fail
+
 echo.
 echo [5/5] Release artifact checks complete.
 echo.
@@ -343,14 +375,16 @@ echo ========================================
 echo [SUCCESS] Fresh signed ARM64 release APK is ready:
 echo !APK_PATH!
 echo Shareable APK: !DIST_APK_PATH!
+echo Stable latest APK: !LATEST_APK_PATH!
 echo Pubspec version: !APP_VERSION!
 echo Android version: !ANDROID_VERSION!
 echo Build time: !BUILD_SECONDS! seconds
 echo SHA-256: !APK_HASH!
 echo Checksum: !CHECKSUM_PATH!
 echo Shareable checksum: !DIST_CHECKSUM_PATH!
+echo Stable checksum: !LATEST_CHECKSUM_PATH!
 echo ========================================
-if /i not "%CI%"=="true" explorer "!DIST_DIR!"
+if /i not "%CI%"=="true" explorer.exe /select,"!LATEST_APK_PATH!"
 set "EXIT_CODE=0"
 goto :finish
 
@@ -372,7 +406,7 @@ exit /b !EXIT_CODE!
 
 :print_help
 echo.
-echo Usage: build-apk.bat [--offline ^| --online] [--clean]
+echo Usage: build-apk.bat [--offline ^| --online] [--clean] [--install]
 echo.
 echo Default:
 echo   Reuse incremental Flutter and Gradle outputs. If pubspec files changed,
@@ -382,8 +416,48 @@ echo --offline  Always run flutter pub get --offline and require a cached sqlite
 echo --online   Explicitly allow network access for dependency and native-asset restore.
 echo --clean    Remove Flutter/Gradle outputs before building. Combine with --online
  echo            for a cold build when local caches were removed.
+echo --install  Install and launch the stable latest APK on the only connected
+echo            Android device. Set ADB_SERIAL when multiple devices are connected.
 echo --help     Show this message.
 echo.
+exit /b 0
+
+:install_latest_apk
+set "ADB_CMD="
+if defined ADB_BIN if exist "!ADB_BIN!" set "ADB_CMD=!ADB_BIN!"
+if not defined ADB_CMD for /f "delims=" %%F in ('where.exe adb.exe 2^>nul') do if not defined ADB_CMD set "ADB_CMD=%%F"
+if not defined ADB_CMD (
+  echo [ERROR] --install was requested but adb.exe was not found.
+  exit /b 1
+)
+
+set "ADB_DEVICE_COUNT=0"
+for /f "skip=1 tokens=1,2" %%A in ('"!ADB_CMD!" devices 2^>nul') do if /i "%%B"=="device" set /a ADB_DEVICE_COUNT+=1
+if "!ADB_DEVICE_COUNT!"=="0" (
+  echo [ERROR] --install was requested but no authorized Android device is connected.
+  exit /b 1
+)
+if !ADB_DEVICE_COUNT! GTR 1 if not defined ADB_SERIAL (
+  echo [ERROR] Multiple Android devices are connected. Set ADB_SERIAL and retry.
+  exit /b 1
+)
+
+set "ADB_TARGET_ARGS="
+if defined ADB_SERIAL set "ADB_TARGET_ARGS=-s !ADB_SERIAL!"
+echo.
+echo [install] Installing !LATEST_APK_PATH!
+call "!ADB_CMD!" !ADB_TARGET_ARGS! install -r "!LATEST_APK_PATH!"
+if errorlevel 1 (
+  echo [ERROR] APK installation failed. The existing app may use a different signature or version.
+  exit /b 1
+)
+call "!ADB_CMD!" !ADB_TARGET_ARGS! shell am force-stop com.nexusagent.app >nul 2>&1
+call "!ADB_CMD!" !ADB_TARGET_ARGS! shell monkey -p com.nexusagent.app 1 >nul 2>&1
+if errorlevel 1 (
+  echo [ERROR] APK installed, but launching com.nexusagent.app failed.
+  exit /b 1
+)
+echo [install] Latest APK installed and launched.
 exit /b 0
 
 :measure_build_seconds

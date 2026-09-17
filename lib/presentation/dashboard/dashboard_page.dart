@@ -9,9 +9,12 @@ import '../../application/error_humanizer.dart';
 import '../history/history_page.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/glass_scroll_edge.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
 import '../widgets/section_card.dart';
@@ -120,90 +123,84 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
     final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
     final summaryAsync = ref.watch(dashboardSummaryProvider);
 
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+
     return Scaffold(
-      backgroundColor: canvas,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 顶栏 Header
-            NexusPageHeader(
-              title: AppStrings.dashboard,
-              subtitle: AppStrings.dashboardSubtitle,
-              onBack: () => Navigator.of(context).pop(),
-              actions: [
-                IconButton(
-                  tooltip: AppStrings.refreshDashboard,
-                  icon: const Icon(Icons.refresh_rounded, size: 20),
-                  onPressed: _refresh,
+      backgroundColor: isFlat ? canvas : Colors.transparent,
+      appBar: NexusPageHeader(
+        title: AppStrings.dashboard,
+        subtitle: AppStrings.dashboardSubtitle,
+        onBack: () => Navigator.of(context).pop(),
+        actions: [
+          IconButton(
+            tooltip: AppStrings.refreshDashboard,
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            onPressed: _refresh,
+          ),
+          IconButton(
+            tooltip: _developerMode ? '切换到简洁模式' : '切换到开发者模式',
+            icon: Icon(_developerMode
+                ? Icons.visibility_outlined
+                : Icons.terminal_rounded),
+            onPressed: _togglePresentationMode,
+          ),
+        ],
+      ),
+      body: summaryAsync.when(
+        loading: () => const _DashboardSkeleton(),
+        error: (err, stack) {
+          final humanized = humanizeError(err.toString());
+          return EmptyStateView(
+            icon: Icons.error_outline_rounded,
+            title: humanized.summary,
+            actionLabel: AppStrings.retry,
+            onAction: _refresh,
+          );
+        },
+        data: (summary) => GlassScrollEdge(
+          child: RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+              children: [
+                // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
+                TodoSection(
+                  todos: summary.todos,
+                  onConversationSelected: widget.onConversationSelected,
                 ),
-                IconButton(
-                  tooltip: _developerMode ? '切换到简洁模式' : '切换到开发者模式',
-                  icon: Icon(_developerMode
-                      ? Icons.visibility_outlined
-                      : Icons.terminal_rounded),
-                  onPressed: _togglePresentationMode,
+                const SizedBox(height: 16),
+                if (_developerMode) ...[
+                  TokenUsageHero(days: summary.weeklyUsage),
+                  const SizedBox(height: 16),
+                  KpiCardGrid(kpis: summary.kpis),
+                  const SizedBox(height: 16),
+                  RunStatusList(
+                    runs: summary.recentRuns,
+                    onConversationSelected: widget.onConversationSelected,
+                  ),
+                  const SizedBox(height: 16),
+                  TokenTrendCard(days: summary.weeklyUsage),
+                  const SizedBox(height: 16),
+                ] else
+                  SectionCard(
+                    child: ListTile(
+                      leading: const Icon(Icons.insights_rounded,
+                          color: AppPalette.brand),
+                      title: const Text('性能详情'),
+                      subtitle: const Text('Token、费用、运行指标与趋势'),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: _togglePresentationMode,
+                    ),
+                  ),
+                if (!_developerMode) const SizedBox(height: 16),
+                _RecentConversationsSection(
+                  conversations: summary.recentConversations,
+                  onConversationSelected: widget.onConversationSelected,
                 ),
               ],
             ),
-
-            // 主内容区
-            Expanded(
-              child: summaryAsync.when(
-                loading: () => const _DashboardSkeleton(),
-                error: (err, stack) {
-                  final humanized = humanizeError(err.toString());
-                  return EmptyStateView(
-                    icon: Icons.error_outline_rounded,
-                    title: humanized.summary,
-                    actionLabel: AppStrings.retry,
-                    onAction: _refresh,
-                  );
-                },
-                data: (summary) => RefreshIndicator(
-                  onRefresh: _refresh,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-                    children: [
-                      // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
-                      TodoSection(
-                        todos: summary.todos,
-                        onConversationSelected: widget.onConversationSelected,
-                      ),
-                      const SizedBox(height: 16),
-                      if (_developerMode) ...[
-                        TokenUsageHero(days: summary.weeklyUsage),
-                        const SizedBox(height: 16),
-                        KpiCardGrid(kpis: summary.kpis),
-                        const SizedBox(height: 16),
-                        RunStatusList(
-                          runs: summary.recentRuns,
-                          onConversationSelected: widget.onConversationSelected,
-                        ),
-                        const SizedBox(height: 16),
-                        TokenTrendCard(days: summary.weeklyUsage),
-                        const SizedBox(height: 16),
-                      ] else
-                        SectionCard(
-                          child: ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.insights_outlined),
-                            title: const Text('性能详情'),
-                            subtitle: const Text('Token、费用、运行指标与趋势'),
-                            trailing: const Icon(Icons.chevron_right_rounded),
-                            onTap: _togglePresentationMode,
-                          ),
-                        ),
-                      if (!_developerMode) const SizedBox(height: 16),
-                      _RecentConversationsSection(
-                        conversations: summary.recentConversations,
-                        onConversationSelected: widget.onConversationSelected,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

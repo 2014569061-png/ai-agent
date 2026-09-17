@@ -53,29 +53,38 @@ class EmptyStateView extends StatelessWidget {
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final hairline =
-        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     final resolvedAction = action ??
         (actionLabel != null && onAction != null
-            ? OutlinedButton(
+            ? FilledButton.tonal(
                 onPressed: onAction,
-                style: OutlinedButton.styleFrom(
+                style: FilledButton.styleFrom(
+                  backgroundColor: isDark
+                      ? AppPalette.brandSoftDark
+                      : AppPalette.brandSoftLight,
+                  foregroundColor: AppPalette.brand,
                   shape: RoundedRectangleBorder(
                     borderRadius:
                         BorderRadius.circular(AppTokens.radiusControl),
-                    side: BorderSide(color: hairline, width: 1.0),
+                    side: BorderSide(
+                      color: isDark
+                          ? AppPalette.brand.withValues(alpha: 0.24)
+                          : AppPalette.brand.withValues(alpha: 0.18),
+                      width: 0.8,
+                    ),
                   ),
                   minimumSize: const Size(0, AppTokens.kControlHeight),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
                 ),
                 child: Text(
                   actionLabel!,
                   style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w500),
+                      fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               )
             : null);
+
+    final discSize = compact ? 52.0 : 64.0;
 
     return Center(
       child: Padding(
@@ -84,12 +93,30 @@ class EmptyStateView extends StatelessWidget {
           mainAxisAlignment: mainAxisAlignment,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: iconSize,
-              color: iconColor ?? textMuted,
+            Container(
+              width: discSize,
+              height: discSize,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppPalette.brandSoftDark
+                    : AppPalette.brandSoftLight,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: isDark
+                      ? AppPalette.brand.withValues(alpha: 0.20)
+                      : AppPalette.brand.withValues(alpha: 0.16),
+                  width: 0.8,
+                ),
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  size: iconSize,
+                  color: iconColor ?? AppPalette.brand,
+                ),
+              ),
             ),
-            SizedBox(height: compact ? 10 : 16),
+            SizedBox(height: compact ? 12 : 18),
             Text(
               title,
               style: TextStyle(

@@ -7,12 +7,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
+import '../theme/app_appearance_controller.dart';
+import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
+import '../widgets/section_card.dart';
 
 class LogViewerPage extends ConsumerStatefulWidget {
   const LogViewerPage({super.key, this.runId});
@@ -280,7 +284,14 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+
     return Scaffold(
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: widget.runId == null ? '诊断日志' : '任务日志',
         subtitle: widget.runId == null ? '运行追踪与错误排查' : 'Run: ${widget.runId}',
@@ -361,8 +372,11 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
                       }
                       final log = _logs[index];
                       final detail = _decodeDetail(log.detailJson)?.toString();
-                      return Card(
+                      return SectionCard(
+                        margin: EdgeInsets.zero,
                         child: ExpansionTile(
+                          shape: const Border(),
+                          collapsedShape: const Border(),
                           leading: Icon(Icons.circle,
                               size: 11, color: _levelColor(context, log.level)),
                           title: Text(log.message),

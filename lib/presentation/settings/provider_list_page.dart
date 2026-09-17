@@ -7,6 +7,7 @@ import '../../infrastructure/providers/provider_config_store.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import 'provider_detail_page.dart';
@@ -79,33 +80,17 @@ class _ProviderListPageState extends State<ProviderListPage> {
     final isActive = config.id == _active?.id;
     final otherExists = _profiles.length > 1;
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('删除服务商“${config.name}”？'),
-        content: Text(
-          isActive && otherExists
-              ? '该服务商当前处于激活状态。删除后，系统将自动切换到其他可用服务商。确定删除吗？'
-              : '删除后该服务商配置与本地保存的密钥将被移除，确定删除吗？',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '删除服务商“${config.name}”？',
+      message: isActive && otherExists
+          ? '该服务商当前处于激活状态。删除后，系统将自动切换到其他可用服务商。确定删除吗？'
+          : '删除后该服务商配置与本地保存的密钥将被移除，确定删除吗？',
+      confirmLabel: '删除',
+      isDanger: true,
     );
 
-    if (confirmed == true) {
+    if (confirmed) {
       await _store.deleteProfile(config.id);
       if (mounted) {
         FloatingToast.show(context, '已删除服务商 ${config.name}');

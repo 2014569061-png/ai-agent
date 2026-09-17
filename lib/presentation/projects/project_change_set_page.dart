@@ -5,7 +5,6 @@ import '../../application/change_review.dart';
 import '../../application/change_set_service.dart';
 import '../../application/providers.dart';
 import '../../application/task_service.dart';
-import '../theme/app_palette.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
@@ -99,10 +98,8 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final set = _set;
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: const NexusPageHeader(
         title: '任务变更集',
         subtitle: '回退前检查当前版本，人工修改不会被覆盖',

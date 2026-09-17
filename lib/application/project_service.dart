@@ -128,18 +128,41 @@ class ProjectService {
     } on FileSystemException {
       throw const ProjectException('目录不可读，请重新授权或选择其他位置');
     }
-    final probe = File(p.join(directory.path, '.nexus-write-probe'));
-    try {
-      await probe.writeAsString('ok');
-      await probe.delete();
-    } catch (_) {
-      throw const ProjectException('目录不可写');
+
+    // 写入探测只是「能写就更好」，不应该成为导入的闸门。
+    //
+    // Android 11+ 分区存储下，通过系统目录选择器拿到的路径即使已经有 SAF 授权，
+    // 应用也可能只具备读取权限（写入任意位置需要 MANAGE_EXTERNAL_STORAGE，
+    // 即「所有文件访问权限」）。旧实现直接抛「目录不可写」把导入整个打断，
+    // 于是用户在完全正常的目录上也无法导入。现在改为：能读就允许导入，
+    // 并把可写性记进设置，由界面提示用户补齐权限。
+    var writable = await probeWritable(directory);
+    if (!writable && !kIsWeb && Platform.isAndroid) {
+      // 权限刚授予时系统可能还没同步，稍等再试一次。
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      writable = await probeWritable(directory);
     }
     return registerExistingDirectory(
       directoryPath: directory.path,
       name: request.name,
       sourceKind: 'directory',
+      settings: ProjectSettings(directoryWritable: writable),
     );
+  }
+
+  /// 尝试在目录里建一个临时文件来判定可写性。
+  ///
+  /// Web 上没有本地目录概念，直接视为可写。
+  static Future<bool> probeWritable(Directory directory) async {
+    if (kIsWeb) return true;
+    final probe = File(p.join(directory.path, '.nexus-write-probe'));
+    try {
+      await probe.writeAsString('ok');
+      await probe.delete();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Project> importArchive(ImportArchiveRequest request) async {

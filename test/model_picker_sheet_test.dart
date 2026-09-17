@@ -52,9 +52,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('选择模型'), findsOneWidget);
     expect(find.text('gpt-5.6-terra'), findsOneWidget);
-    expect(find.text('聊天'), findsOneWidget);
-    expect(find.text('Agent'), findsOneWidget);
-    expect(find.text('计划'), findsOneWidget);
+    expect(find.text('聊天'), findsAtLeastNWidgets(1));
+    expect(find.text('Agent'), findsAtLeastNWidgets(1));
+    expect(find.text('计划'), findsAtLeastNWidgets(1));
     expect(tester.takeException(), isNull);
 
     await tester.enterText(find.byType(TextField), 'qwen');

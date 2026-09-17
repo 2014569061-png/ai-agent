@@ -130,19 +130,36 @@ class MessageBubble extends StatelessWidget {
 
     final body = isUser
         ? Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
             decoration: BoxDecoration(
-              color: AppPalette.brand,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [
+                        const Color(0xD01E40AF),
+                        const Color(0xB81D4ED8),
+                      ]
+                    : [
+                        const Color(0xCC2563EB),
+                        const Color(0xDD1D4ED8),
+                      ],
+              ),
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(6),
+                topLeft: Radius.circular(18),
+                topRight: Radius.circular(18),
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(5),
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: isDark ? 0.35 : 0.50),
+                width: 0.9,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppPalette.brand.withValues(alpha: isDark ? 0.35 : 0.18),
-                  blurRadius: 10,
+                  color: const Color(0xFF1D4ED8)
+                      .withValues(alpha: isDark ? 0.35 : 0.16),
+                  blurRadius: 12,
                   offset: const Offset(0, 3),
                 ),
               ],
@@ -340,25 +357,35 @@ class MessageBubble extends StatelessWidget {
                               ],
                             ),
                           )
-                        : Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
+                        : Container(
+                            margin: const EdgeInsets.symmetric(vertical: 2),
+                            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.045)
+                                  : Colors.white.withValues(alpha: 0.60),
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.10)
+                                    : Colors.white.withValues(alpha: 0.75),
+                                width: 0.9,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(
+                                      alpha: isDark ? 0.22 : 0.04),
+                                  blurRadius: 14,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // 只在确实有思考内容（或正在思考）时才出现这一行。
-                                // 原先只要消息带 elapsed/usage 就渲染一行指标，与底部会话指标条重复，已移除。
-                                if (!isTool &&
-                                    ((reasoningText?.trim().isNotEmpty ??
-                                            false) ||
-                                        (running && !isUser && !hasText)))
-                                  ReasoningCompactBlock(
-                                    reasoning: reasoningText ?? '',
-                                    streaming: running,
-                                    duration: message.reasoningDuration,
-                                  ),
                                 if (!isTool && hasText)
                                   Padding(
-                                    padding: const EdgeInsets.only(bottom: 6, top: 4),
+                                    padding: const EdgeInsets.only(bottom: 6),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
@@ -374,7 +401,10 @@ class MessageBubble extends StatelessWidget {
                                         ),
                                         if (message.elapsed != null) ...[
                                           const SizedBox(width: 6),
-                                          Text('•', style: TextStyle(fontSize: 11, color: textMuted)),
+                                          Text('•',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: textMuted)),
                                           const SizedBox(width: 6),
                                           Text(
                                             '${(message.elapsed!.inMilliseconds / 1000).toStringAsFixed(1)}s',
@@ -387,6 +417,15 @@ class MessageBubble extends StatelessWidget {
                                         ],
                                       ],
                                     ),
+                                  ),
+                                if (!isTool &&
+                                    ((reasoningText?.trim().isNotEmpty ??
+                                            false) ||
+                                        (running && !isUser && !hasText)))
+                                  ReasoningCompactBlock(
+                                    reasoning: reasoningText ?? '',
+                                    streaming: running,
+                                    duration: message.reasoningDuration,
                                   ),
                                 Align(
                                   alignment: Alignment.centerLeft,

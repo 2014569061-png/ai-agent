@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_execution_status.dart';
+import '../../widgets/glass_surface.dart';
 
 /// 顶栏统一高度常量 (56px)
 const double kCapsuleTopBarHeight = AppTokens.kTopBarHeight;
@@ -32,6 +33,7 @@ class CapsuleTopBar extends StatelessWidget {
     this.currentContextTokens = 0,
     this.maxContextTokens = 128000,
     this.statusActive = false,
+    this.glassIntensity = GlassIntensity.liquid,
   });
 
   final String? workspaceLabel;
@@ -49,6 +51,7 @@ class CapsuleTopBar extends StatelessWidget {
   final int currentContextTokens;
   final int maxContextTokens;
   final bool statusActive;
+  final GlassIntensity glassIntensity;
 
   @override
   Widget build(BuildContext context) {
@@ -59,16 +62,18 @@ class CapsuleTopBar extends StatelessWidget {
     // 新会话不再回填「新会话」占位文案，保持首页中间留空。
     final title = (sessionTitle ?? '').trim();
     final model = (modelLabel ?? '').trim();
-    final workspace = (workspaceLabel ?? '').trim();
+    final rawWorkspace = (workspaceLabel ?? '').trim();
+    final workspace = rawWorkspace == '未选择项目' ? '' : rawWorkspace;
     final mode = (modeLabel ?? '').trim();
     final contextUsage = maxContextTokens > 0
         ? '上下文 ${_formatTokens(currentContextTokens)} / ${_formatTokens(maxContextTokens)}'
         : '';
-    final contextLabel = [
+    final metaParts = [
       if (model.isNotEmpty) model,
       if (workspace.isNotEmpty) workspace,
       if (contextUsage.isNotEmpty) contextUsage,
-    ].join(' · ');
+    ];
+    final contextLabel = metaParts.join(' · ');
     final metaColor =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
@@ -81,214 +86,299 @@ class CapsuleTopBar extends StatelessWidget {
             ? AppPalette.warning
             : (isDark ? AppPalette.brand : AppPalette.brandAction);
 
-    return Container(
+    final content = SizedBox(
       height: kCapsuleTopBarHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      color: canvas,
-      child: Row(
-        children: [
-          // 左侧：至少 48px 触控区，两段式抽屉图标
-          SizedBox(
-            width: 48,
-            height: 48,
-            child: Semantics(
-              label: '打开会话列表',
-              button: true,
-              child: Material(
-                color: Colors.transparent,
-                child: InkResponse(
-                  onTap: onMenu,
-                  radius: 24,
-                  child: Center(
-                    child: CustomPaint(
-                      size: const Size(22, 14),
-                      painter: _DrawerGlyphPainter(color: textColor),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Row(
+          children: [
+            // 左侧：48x48 触控区，内部 36x36 微晶磨砂圆形抽屉按钮
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: Semantics(
+                label: '打开会话列表',
+                button: true,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onMenu,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Center(
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.white.withValues(alpha: 0.65),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.16)
+                                : Colors.white.withValues(alpha: 0.90),
+                            width: 1.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: CustomPaint(
+                            size: const Size(18, 12),
+                            painter: _DrawerGlyphPainter(color: textColor),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // 中间：标题 + 始终可见的模型 / 工作区 / 模式信息。
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (title.isNotEmpty)
-                  GestureDetector(
-                    onTap: onTitleTap ?? onModelTap,
-                    behavior: HitTestBehavior.opaque,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (statusActive) ...[
-                          Container(
-                            width: 6,
-                            height: 6,
-                            margin: const EdgeInsets.only(right: 6),
-                            decoration: const BoxDecoration(
-                              color: AppPalette.brand,
-                              shape: BoxShape.circle,
+            // 中间：标题 + 始终可见的模型 / 模式微晶胶囊
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (title.isNotEmpty)
+                    GestureDetector(
+                      onTap: onTitleTap ?? onModelTap,
+                      behavior: HitTestBehavior.opaque,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (statusActive) ...[
+                            Container(
+                              width: 6,
+                              height: 6,
+                              margin: const EdgeInsets.only(right: 6),
+                              decoration: const BoxDecoration(
+                                color: AppPalette.brand,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ],
+                          Flexible(
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w600,
+                                height: 1.25,
+                                color: textColor,
+                              ),
                             ),
                           ),
                         ],
-                        Flexible(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w500,
-                              height: 1.4,
-                              color: textColor,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                if (contextLabel.isNotEmpty ||
-                    mode.isNotEmpty ||
-                    (runningStage != null && runningStage!.isNotEmpty)) ...[
-                  if (title.isNotEmpty) const SizedBox(height: 1),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 20,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (runningStage != null &&
-                            runningStage!.isNotEmpty) ...[
-                          Flexible(
-                            child: NexusExecutionStatus(
-                              compact: true,
-                              state: _mapRunningStage(runningStage),
-                              label: runningStage!,
+                  if (contextLabel.isNotEmpty ||
+                      mode.isNotEmpty ||
+                      (runningStage != null && runningStage!.isNotEmpty)) ...[
+                    if (title.isNotEmpty) const SizedBox(height: 2),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.white.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : Colors.white.withValues(alpha: 0.65),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (runningStage != null &&
+                              runningStage!.isNotEmpty) ...[
+                            Flexible(
+                              child: NexusExecutionStatus(
+                                compact: true,
+                                state: _mapRunningStage(runningStage),
+                                label: runningStage!,
+                              ),
                             ),
-                          ),
-                          if (contextLabel.isNotEmpty || mode.isNotEmpty)
+                            if (contextLabel.isNotEmpty || mode.isNotEmpty)
+                              Text(
+                                ' · ',
+                                style: TextStyle(fontSize: 11, color: metaColor),
+                              ),
+                          ],
+                          if (contextLabel.isNotEmpty)
+                            Flexible(
+                              child: GestureDetector(
+                                onTap: onContextGaugeTap ??
+                                    onTitleTap ??
+                                    onModelTap ??
+                                    onWorkspaceTap,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    if (maxContextTokens > 0)
+                                      Container(
+                                        width: 5,
+                                        height: 5,
+                                        margin: const EdgeInsets.only(right: 4),
+                                        decoration: BoxDecoration(
+                                          color: gaugeDotColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    Flexible(
+                                      child: Text(
+                                        contextLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w400,
+                                          height: 1.25,
+                                          color: metaColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          if (contextLabel.isNotEmpty && mode.isNotEmpty)
                             Text(
                               ' · ',
                               style: TextStyle(fontSize: 11, color: metaColor),
                             ),
-                        ],
-                        if (contextLabel.isNotEmpty)
-                          Flexible(
-                            child: GestureDetector(
-                              onTap: onContextGaugeTap ??
-                                  onTitleTap ??
-                                  onModelTap ??
-                                  onWorkspaceTap,
-                              behavior: HitTestBehavior.opaque,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (maxContextTokens > 0)
-                                    Container(
-                                      width: 5,
-                                      height: 5,
-                                      margin: const EdgeInsets.only(right: 4),
-                                      decoration: BoxDecoration(
-                                        color: gaugeDotColor,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                  Flexible(
+                          if (mode.isNotEmpty)
+                            Semantics(
+                              button: onModeTap != null,
+                              label: '当前模式：$mode',
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: onModeTap,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 2),
                                     child: Text(
-                                      contextLabel,
+                                      mode,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: 11,
-                                        height: 1.35,
-                                        color: metaColor,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.25,
+                                        color: onModeTap == null
+                                            ? metaColor
+                                            : (isDark
+                                                ? AppPalette.brand
+                                                : AppPalette.brandAction),
                                       ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        if (contextLabel.isNotEmpty && mode.isNotEmpty)
-                          Text(
-                            ' · ',
-                            style: TextStyle(fontSize: 11, color: metaColor),
-                          ),
-                        if (mode.isNotEmpty)
-                          Semantics(
-                            button: onModeTap != null,
-                            label: '当前模式：$mode',
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: onModeTap,
-                                borderRadius: BorderRadius.circular(8),
-                                child: Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 3),
-                                  child: Text(
-                                    mode,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.35,
-                                      color: onModeTap == null
-                                          ? metaColor
-                                          : AppPalette.brand,
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // 右侧：至少 48px 触控区，圆圈加号
-          SizedBox(
-            width: 48,
-            height: 48,
-            child: Semantics(
-              label: '新建对话',
-              button: true,
-              child: Material(
-                color: Colors.transparent,
-                child: InkResponse(
-                  onTap: onNewChat,
-                  radius: 24,
-                  child: Center(
-                    child: Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: textColor, width: 1.5),
+                        ],
                       ),
-                      alignment: Alignment.center,
-                      child:
-                          Icon(Icons.add_rounded, size: 16, color: textColor),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // 右侧：48x48 触控区，内部 36x36 微晶磨砂圆形加号按钮
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: Semantics(
+                label: '新建对话',
+                button: true,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: onNewChat,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Center(
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : Colors.white.withValues(alpha: 0.65),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.16)
+                                : Colors.white.withValues(alpha: 0.90),
+                            width: 1.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child:
+                            Icon(Icons.add_rounded, size: 20, color: textColor),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+
+    if (glassIntensity == GlassIntensity.flat) {
+      return Container(
+        height: kCapsuleTopBarHeight,
+        decoration: BoxDecoration(
+          color: canvas,
+          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+        ),
+        child: content,
+      );
+    }
+
+    return GlassSurface(
+      role: GlassRole.navigation,
+      variant: GlassVariant.regular,
+      intensity: glassIntensity,
+      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+      blurSigma: 24,
+      refraction: 16,
+      edgeWidth: 16,
+      gloss: 0.42,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
+          blurRadius: 14,
+          offset: const Offset(0, 4),
+        ),
+      ],
+      child: content,
     );
   }
 

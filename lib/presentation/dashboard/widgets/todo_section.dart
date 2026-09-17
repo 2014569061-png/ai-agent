@@ -63,9 +63,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
 
           final badgeText = isApproval
               ? AppStrings.pendingApproval
-              : (isPlan
-                  ? AppStrings.pendingPlanConfirm
-                  : item.title);
+              : (isPlan ? AppStrings.pendingPlanConfirm : item.title);
 
           final actionLabel = isApproval
               ? AppStrings.approve
@@ -77,6 +75,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
             padding: const EdgeInsets.only(bottom: 8),
             child: SectionCard(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              glass: true,
               child: Row(
                 children: [
                   Container(

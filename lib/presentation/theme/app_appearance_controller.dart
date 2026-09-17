@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../widgets/liquid_glass.dart';
+
 abstract final class AppAppearanceController {
   static const glassKey = 'settings.theme.glass_intensity';
   static const effectsKey = 'settings.theme.immersive_effects';
@@ -8,6 +10,13 @@ abstract final class AppAppearanceController {
   static final glassIntensity = ValueNotifier<double>(.8);
   static final effects = ValueNotifier<String>('full');
   static final fontScale = ValueNotifier<double>(1.0);
+
+  static GlassIntensity get resolvedGlassIntensity {
+    final v = glassIntensity.value;
+    if (v <= 0.1) return GlassIntensity.flat;
+    if (v <= 0.5) return GlassIntensity.frosted;
+    return GlassIntensity.liquid;
+  }
 
   static Future<void> load([SharedPreferences? shared]) async {
     final prefs = shared ?? await SharedPreferences.getInstance();
@@ -20,6 +29,15 @@ abstract final class AppAppearanceController {
     glassIntensity.value = value.clamp(0.0, 1.0);
     await (await SharedPreferences.getInstance())
         .setDouble(glassKey, glassIntensity.value);
+  }
+
+  static Future<void> setGlassIntensityMode(GlassIntensity mode) async {
+    final val = switch (mode) {
+      GlassIntensity.flat => 0.0,
+      GlassIntensity.frosted => 0.45,
+      GlassIntensity.liquid => 0.85,
+    };
+    await setGlass(val);
   }
 
   static Future<void> setEffects(String value) async {

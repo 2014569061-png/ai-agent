@@ -13,8 +13,12 @@ import '../motion/nexus_page_route_factory.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_theme_controller.dart';
+import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
+import '../widgets/nexus_async_content.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/confirm_action.dart';
 import 'appearance_theme_page.dart';
 import 'data_management_page.dart';
 import 'extensions_page.dart';
@@ -22,8 +26,42 @@ import 'language_page.dart';
 import 'provider_list_page.dart';
 import 'update_sheet.dart';
 
+typedef SettingsLoader = Future<SettingsSnapshot> Function();
+
+/// Values loaded before the settings menu is rendered.
+class SettingsSnapshot {
+  const SettingsSnapshot({
+    this.activeProvider,
+    this.currentLanguage = '跟随系统',
+    this.fontSizeLabel = '标准',
+    this.appVersion,
+    this.appBuildNumber,
+    this.isEmpty = false,
+  });
+
+  const SettingsSnapshot.empty()
+      : activeProvider = null,
+        currentLanguage = '跟随系统',
+        fontSizeLabel = '标准',
+        appVersion = null,
+        appBuildNumber = null,
+        isEmpty = true;
+
+  final ProviderConfig? activeProvider;
+  final String currentLanguage;
+  final String fontSizeLabel;
+  final String? appVersion;
+  final String? appBuildNumber;
+  final bool isEmpty;
+}
+
+enum _SettingsLoadState { loading, ready, empty, error }
+
 class SettingsPage extends ConsumerStatefulWidget {
-  const SettingsPage({super.key});
+  const SettingsPage({super.key, this.loadSettings});
+
+  /// Optional loader seam used by embedders and widget tests.
+  final SettingsLoader? loadSettings;
 
   @override
   ConsumerState<SettingsPage> createState() => _SettingsPageState();
@@ -38,6 +76,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   String _fontSizeLabel = '标准';
   String? _appVersion;
   String? _appBuildNumber;
+  _SettingsLoadState _loadState = _SettingsLoadState.loading;
+  Object? _loadError;
 
   bool get _isInTest =>
       WidgetsBinding.instance.runtimeType.toString().contains('Test');
@@ -49,55 +89,119 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _loadAll() async {
+    if (mounted && _loadState != _SettingsLoadState.loading) {
+      setState(() {
+        _loadState = _SettingsLoadState.loading;
+        _loadError = null;
+      });
+    }
+
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final snapshot = widget.loadSettings != null
+          ? await widget.loadSettings!()
+          : await _loadFromPlatform();
 
-      // Active provider
-      if (!_isInTest) {
-        _activeProvider = await _providerStore.load().timeout(
-              const Duration(milliseconds: 300),
-              onTimeout: () => const ProviderConfig(baseUrl: '', model: '', apiKey: ''),
-            );
-      } else {
-        _activeProvider = const ProviderConfig(baseUrl: '', model: '', apiKey: '');
+      if (!mounted) return;
+      setState(() {
+        _activeProvider = snapshot.activeProvider;
+        _currentLanguage = snapshot.currentLanguage;
+        _fontSizeLabel = snapshot.fontSizeLabel;
+        _appVersion = snapshot.appVersion;
+        _appBuildNumber = snapshot.appBuildNumber;
+        _loadState = snapshot.isEmpty
+            ? _SettingsLoadState.empty
+            : _SettingsLoadState.ready;
+        _loadError = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadState = _SettingsLoadState.error;
+        _loadError = error;
+      });
+    }
+  }
+
+  Future<SettingsSnapshot> _loadFromPlatform() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    // Active provider
+    ProviderConfig? activeProvider;
+    if (!_isInTest) {
+      activeProvider = await _providerStore.load().timeout(
+            const Duration(milliseconds: 300),
+            onTimeout: () =>
+                const ProviderConfig(baseUrl: '', model: '', apiKey: ''),
+          );
+    } else {
+      activeProvider = const ProviderConfig(baseUrl: '', model: '', apiKey: '');
+    }
+
+    // Language
+    final lang = prefs.getString('settings.language');
+    _currentLanguage = switch (lang) {
+      'zh' => '中文(简体中文)',
+      'en' => 'English',
+      _ => '跟随系统',
+    };
+
+    // Font size
+    final fontScale = prefs.getDouble('settings.font_scale') ?? 1.0;
+    _fontSizeLabel = fontScale <= 0.9
+        ? '较小'
+        : fontScale >= 1.25
+            ? '特大'
+            : fontScale >= 1.12
+                ? '较大'
+                : '标准';
+
+    // App version
+    if (!_isInTest) {
+      try {
+        final info = await PackageInfo.fromPlatform()
+            .timeout(const Duration(milliseconds: 300));
+        final appVersion = info.version;
+        final appBuildNumber = info.buildNumber;
+        return SettingsSnapshot(
+          activeProvider: activeProvider,
+          currentLanguage: _currentLanguage,
+          fontSizeLabel: _fontSizeLabel,
+          appVersion: appVersion,
+          appBuildNumber: appBuildNumber,
+          isEmpty: _isEmptySettings(prefs, activeProvider),
+        );
+      } catch (_) {
+        return SettingsSnapshot(
+          activeProvider: activeProvider,
+          currentLanguage: _currentLanguage,
+          fontSizeLabel: _fontSizeLabel,
+          appVersion: AppStrings.appVersionName.replaceFirst('v', ''),
+          appBuildNumber: '93',
+          isEmpty: _isEmptySettings(prefs, activeProvider),
+        );
       }
+    } else {
+      return SettingsSnapshot(
+        activeProvider: activeProvider,
+        currentLanguage: _currentLanguage,
+        fontSizeLabel: _fontSizeLabel,
+        appVersion: AppStrings.appVersionName.replaceFirst('v', ''),
+        appBuildNumber: '93',
+        isEmpty: _isEmptySettings(prefs, activeProvider),
+      );
+    }
+  }
 
-      // Language
-      final lang = prefs.getString('settings.language');
-      _currentLanguage = switch (lang) {
-        'zh' => '中文(简体中文)',
-        'en' => 'English',
-        _ => '跟随系统',
-      };
-
-      // Font size
-      final fontScale = prefs.getDouble('settings.font_scale') ?? 1.0;
-      _fontSizeLabel = fontScale <= 0.9
-          ? '较小'
-          : fontScale >= 1.25
-              ? '特大'
-              : fontScale >= 1.12
-                  ? '较大'
-                  : '标准';
-
-      // App version
-      if (!_isInTest) {
-        try {
-          final info = await PackageInfo.fromPlatform()
-              .timeout(const Duration(milliseconds: 300));
-          _appVersion = info.version;
-          _appBuildNumber = info.buildNumber;
-        } catch (_) {
-          _appVersion = AppStrings.appVersionName.replaceFirst('v', '');
-          _appBuildNumber = '93';
-        }
-      } else {
-        _appVersion = AppStrings.appVersionName.replaceFirst('v', '');
-        _appBuildNumber = '93';
-      }
-
-      if (mounted) setState(() {});
-    } catch (_) {}
+  bool _isEmptySettings(
+    SharedPreferences prefs,
+    ProviderConfig? activeProvider,
+  ) {
+    final hasStoredSettings = prefs.getKeys().any(
+              (key) =>
+                  key.startsWith('settings.') || key.startsWith('provider.'),
+            ) ||
+        activeProvider?.isConfigured == true;
+    return !hasStoredSettings;
   }
 
   void _openPage(Widget page) {
@@ -107,7 +211,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _showPrivacyNotice() async {
-    await showDialog<void>(
+    await showNexusDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('服务协议与隐私'),
@@ -130,71 +234,63 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _selectFontSize() async {
     if (!mounted) return;
 
-    await showModalBottomSheet<void>(
+    await showNexusSheet<void>(
       context: context,
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? AppPalette.darkSurface
-          : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                '字体大小设置',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                title: const Text('较小 (Small)'),
-                trailing: _fontSizeLabel == '较小'
-                    ? const Icon(Icons.check, color: AppPalette.brand)
-                    : null,
-                onTap: () async {
-                  await AppAppearanceController.setFontScale(0.88);
-                  setState(() => _fontSizeLabel = '较小');
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                },
-              ),
-              ListTile(
-                title: const Text('标准 (Standard)'),
-                trailing: _fontSizeLabel == '标准'
-                    ? const Icon(Icons.check, color: AppPalette.brand)
-                    : null,
-                onTap: () async {
-                  await AppAppearanceController.setFontScale(1.0);
-                  setState(() => _fontSizeLabel = '标准');
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                },
-              ),
-              ListTile(
-                title: const Text('较大 (Large)'),
-                trailing: _fontSizeLabel == '较大'
-                    ? const Icon(Icons.check, color: AppPalette.brand)
-                    : null,
-                onTap: () async {
-                  await AppAppearanceController.setFontScale(1.15);
-                  setState(() => _fontSizeLabel = '较大');
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                },
-              ),
-              ListTile(
-                title: const Text('特大 (Extra Large)'),
-                trailing: _fontSizeLabel == '特大'
-                    ? const Icon(Icons.check, color: AppPalette.brand)
-                    : null,
-                onTap: () async {
-                  await AppAppearanceController.setFontScale(1.28);
-                  setState(() => _fontSizeLabel = '特大');
-                  if (sheetContext.mounted) Navigator.pop(sheetContext);
-                },
-              ),
-            ],
-          ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '字体大小设置',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 12),
+            ListTile(
+              title: const Text('较小 (Small)'),
+              trailing: _fontSizeLabel == '较小'
+                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  : null,
+              onTap: () async {
+                await AppAppearanceController.setFontScale(0.88);
+                setState(() => _fontSizeLabel = '较小');
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+              },
+            ),
+            ListTile(
+              title: const Text('标准 (Standard)'),
+              trailing: _fontSizeLabel == '标准'
+                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  : null,
+              onTap: () async {
+                await AppAppearanceController.setFontScale(1.0);
+                setState(() => _fontSizeLabel = '标准');
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+              },
+            ),
+            ListTile(
+              title: const Text('较大 (Large)'),
+              trailing: _fontSizeLabel == '较大'
+                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  : null,
+              onTap: () async {
+                await AppAppearanceController.setFontScale(1.15);
+                setState(() => _fontSizeLabel = '较大');
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+              },
+            ),
+            ListTile(
+              title: const Text('特大 (Extra Large)'),
+              trailing: _fontSizeLabel == '特大'
+                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  : null,
+              onTap: () async {
+                await AppAppearanceController.setFontScale(1.28);
+                setState(() => _fontSizeLabel = '特大');
+                if (sheetContext.mounted) Navigator.pop(sheetContext);
+              },
+            ),
+          ],
         ),
       ),
     );
@@ -220,26 +316,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _confirmLogout(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('确认退出登录？'),
-        content: const Text('退出后将清除本地临时会话凭证，如需使用需重新进入。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppPalette.danger),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('退出'),
-          ),
-        ],
-      ),
+    final confirmed = await showConfirmAction(
+      context,
+      title: '确认退出登录？',
+      message: '退出后将清除本地临时会话凭证，如需使用需重新进入。',
+      confirmLabel: '退出',
+      isDanger: true,
     );
 
-    if (confirmed == true && context.mounted) {
+    if (confirmed && context.mounted) {
       FloatingToast.show(context, '已退出登录');
     }
   }
@@ -249,7 +334,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final canvas = isDark ? AppPalette.darkCanvas : const Color(0xFFF7F8FA);
     final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
-    final textMuted = isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
     final cardBg = isDark ? AppPalette.darkSurface : Colors.white;
 
     final themeMode = AppThemeController.mode.value;
@@ -259,12 +345,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ThemeMode.system => '系统',
     };
 
-    final providerText = (_activeProvider != null && _activeProvider!.name.isNotEmpty)
-        ? _activeProvider!.name
-        : '未配置';
+    final providerText =
+        (_activeProvider != null && _activeProvider!.name.isNotEmpty)
+            ? _activeProvider!.name
+            : '未配置';
+
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: canvas,
+      backgroundColor: isFlat ? canvas : Colors.transparent,
       body: SafeArea(
         child: Column(
           children: [
@@ -277,7 +367,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: isDark ? AppPalette.darkSurface : const Color(0xFFF2F3F5),
+                      color: isDark
+                          ? AppPalette.darkSurface
+                          : const Color(0xFFF2F3F5),
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
@@ -307,169 +399,184 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
             Expanded(
-              child: RefreshIndicator(
-                onRefresh: _loadAll,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                  children: [
-                    // 1. 账户组
-                    _buildSectionHeader('账户', textMuted),
-                    _buildCard(
-                      cardBg: cardBg,
-                      isDark: isDark,
-                      children: [
-                        _buildRow(
-                          icon: Icons.person_outline_rounded,
-                          title: '账号管理',
-                          trailing: providerText,
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: () => _openPage(const ProviderListPage()),
+              child: NexusAsyncContent(
+                loading: _loadState == _SettingsLoadState.loading,
+                error:
+                    _loadState == _SettingsLoadState.error ? _loadError : null,
+                onRetry: _loadAll,
+                child: RefreshIndicator(
+                  onRefresh: _loadAll,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                    children: [
+                      if (_loadState == _SettingsLoadState.empty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 18),
+                          child: EmptyStateView.compact(
+                            icon: Icons.settings_outlined,
+                            title: '尚未配置服务商',
+                            message: '可以先配置一个服务商，其他设置仍可继续使用。',
+                            actionLabel: '配置服务商',
+                            onAction: () => _openPage(const ProviderListPage()),
+                          ),
                         ),
-                        _buildDivider(isDark),
-                        _buildRow(
-                          icon: Icons.storage_outlined,
-                          title: '数据管理',
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: () => _openPage(const DataManagementPage()),
-                        ),
-                      ],
-                    ),
+                      // 1. 账户组
+                      _buildSectionHeader('账户', textMuted),
+                      _buildCard(
+                        cardBg: cardBg,
+                        isDark: isDark,
+                        children: [
+                          _buildRow(
+                            icon: Icons.person_outline_rounded,
+                            title: '账号管理',
+                            trailing: providerText,
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: () => _openPage(const ProviderListPage()),
+                          ),
+                          _buildDivider(isDark),
+                          _buildRow(
+                            icon: Icons.storage_outlined,
+                            title: '数据管理',
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: () => _openPage(const DataManagementPage()),
+                          ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 18),
 
-                    // 2. 应用组
-                    _buildSectionHeader('应用', textMuted),
-                    _buildCard(
-                      cardBg: cardBg,
-                      isDark: isDark,
-                      children: [
-                        _buildRow(
-                          icon: Icons.language_rounded,
-                          title: '语言',
-                          trailing: _currentLanguage,
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: () => _openPage(const LanguagePage()),
-                        ),
-                        _buildDivider(isDark),
-                        _buildRow(
-                          icon: Icons.wb_sunny_outlined,
-                          title: '外观',
-                          trailing: themeLabel,
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: () => _openPage(const AppearanceThemePage()),
-                        ),
-                        _buildDivider(isDark),
-                        _buildRow(
-                          icon: Icons.format_size_rounded,
-                          title: '字体大小',
-                          trailing: _fontSizeLabel,
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: _selectFontSize,
-                        ),
-                        _buildDivider(isDark),
-                        _buildRow(
-                          icon: Icons.extension_outlined,
-                          title: '扩展与环境',
-                          trailing: 'MCP / 技能 / 工具',
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: () => _openPage(const ExtensionsPage()),
-                        ),
-                      ],
-                    ),
+                      // 2. 应用组
+                      _buildSectionHeader('应用', textMuted),
+                      _buildCard(
+                        cardBg: cardBg,
+                        isDark: isDark,
+                        children: [
+                          _buildRow(
+                            icon: Icons.language_rounded,
+                            title: '语言',
+                            trailing: _currentLanguage,
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: () => _openPage(const LanguagePage()),
+                          ),
+                          _buildDivider(isDark),
+                          _buildRow(
+                            icon: Icons.wb_sunny_outlined,
+                            title: '外观',
+                            trailing: themeLabel,
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: () => _openPage(const AppearanceThemePage()),
+                          ),
+                          _buildDivider(isDark),
+                          _buildRow(
+                            icon: Icons.format_size_rounded,
+                            title: '字体大小',
+                            trailing: _fontSizeLabel,
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: _selectFontSize,
+                          ),
+                          _buildDivider(isDark),
+                          _buildRow(
+                            icon: Icons.extension_outlined,
+                            title: '扩展与环境',
+                            trailing: 'MCP / 技能 / 工具',
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: () => _openPage(const ExtensionsPage()),
+                          ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 18),
+                      const SizedBox(height: 18),
 
-                    // 3. 关于组
-                    _buildSectionHeader('关于', textMuted),
-                    _buildCard(
-                      cardBg: cardBg,
-                      isDark: isDark,
-                      children: [
-                        _buildRow(
-                          icon: Icons.info_outline_rounded,
-                          title: '检查更新',
-                          trailing:
-                              '${_appVersion ?? AppStrings.appVersionName.replaceFirst('v', '')}(${_appBuildNumber ?? '93'})',
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: _checkUpdate,
-                        ),
-                        _buildDivider(isDark),
-                        _buildRow(
-                          icon: Icons.article_outlined,
-                          title: '服务协议',
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: _showPrivacyNotice,
-                        ),
-                      ],
-                    ),
+                      // 3. 关于组
+                      _buildSectionHeader('关于', textMuted),
+                      _buildCard(
+                        cardBg: cardBg,
+                        isDark: isDark,
+                        children: [
+                          _buildRow(
+                            icon: Icons.info_outline_rounded,
+                            title: '检查更新',
+                            trailing:
+                                '${_appVersion ?? AppStrings.appVersionName.replaceFirst('v', '')}(${_appBuildNumber ?? '93'})',
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: _checkUpdate,
+                          ),
+                          _buildDivider(isDark),
+                          _buildRow(
+                            icon: Icons.article_outlined,
+                            title: '服务协议',
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: _showPrivacyNotice,
+                          ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 14),
+                      const SizedBox(height: 14),
 
-                    // 4. 单卡：帮助与反馈
-                    _buildCard(
-                      cardBg: cardBg,
-                      isDark: isDark,
-                      children: [
-                        _buildRow(
-                          icon: Icons.help_outline_rounded,
-                          title: '帮助与反馈',
-                          textColor: textColor,
-                          textMuted: textMuted,
-                          onTap: () => _openPage(const FeedbackPage()),
-                        ),
-                      ],
-                    ),
+                      // 4. 单卡：帮助与反馈
+                      _buildCard(
+                        cardBg: cardBg,
+                        isDark: isDark,
+                        children: [
+                          _buildRow(
+                            icon: Icons.help_outline_rounded,
+                            title: '帮助与反馈',
+                            textColor: textColor,
+                            textMuted: textMuted,
+                            onTap: () => _openPage(const FeedbackPage()),
+                          ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 14),
+                      const SizedBox(height: 14),
 
-                    // 5. 单卡：退出登录
-                    _buildCard(
-                      cardBg: cardBg,
-                      isDark: isDark,
-                      children: [
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _confirmLogout(context),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.logout_rounded,
-                                    size: 20,
-                                    color: textColor,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    '退出登录',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w400,
+                      // 5. 单卡：退出登录
+                      _buildCard(
+                        cardBg: cardBg,
+                        isDark: isDark,
+                        children: [
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => _confirmLogout(context),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.logout_rounded,
+                                      size: 20,
                                       color: textColor,
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      '退出登录',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w400,
+                                        color: textColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
 
-                    const SizedBox(height: 28),
-
-                    // 6. 底部法律与备案声明
-                    _buildFooter(textMuted),
-                  ],
+                      const SizedBox(height: 28),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -498,6 +605,38 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     required bool isDark,
     required List<Widget> children,
   }) {
+    final intensity = AppAppearanceController.resolvedGlassIntensity;
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+
+    if (intensity != GlassIntensity.flat) {
+      return GlassSurface(
+        role: GlassRole.content,
+        variant: GlassVariant.regular,
+        intensity: intensity,
+        borderRadius: BorderRadius.circular(16),
+        borderColor: isDark ? const Color(0x33FFFFFF) : const Color(0x80FFFFFF),
+        tint: isDark
+            ? AppPalette.darkSurface.withValues(alpha: 0.42)
+            : AppPalette.lightCanvas.withValues(alpha: 0.46),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? const Color(0x40000000) : const Color(0x141E3A8A),
+            blurRadius: 16,
+            offset: const Offset(0, 5),
+          ),
+        ],
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
+          child: content,
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
@@ -508,20 +647,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         ),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      ),
+      child: content,
     );
   }
 
   Widget _buildDivider(bool isDark) {
+    final isGlass =
+        AppAppearanceController.resolvedGlassIntensity != GlassIntensity.flat;
     return Divider(
       height: 0.8,
       thickness: 0.8,
       indent: 48,
       endIndent: 0,
-      color: isDark ? AppPalette.darkHairline : const Color(0xFFF0F2F5),
+      color: isGlass
+          ? (isDark ? const Color(0x1AFFFFFF) : const Color(0x22000000))
+          : (isDark ? AppPalette.darkHairline : const Color(0xFFF0F2F5)),
     );
   }
 
@@ -572,32 +712,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildFooter(Color textFaint) {
-    final activeModel = _activeProvider?.model.isNotEmpty == true
-        ? _activeProvider!.model
-        : 'NEXUS Agent';
-
-    return Center(
-      child: Column(
-        children: [
-          Text(
-            '模型名称: $activeModel\n'
-            '备案号: Beijing-NexusAgent-20260914001\n'
-            '浙ICP备2023025841号-3A\n'
-            '内容由 AI 生成，请仔细甄别，并合法使用',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-              height: 1.6,
-              color: textFaint.withValues(alpha: 0.85),
-            ),
-          ),
-        ],
       ),
     );
   }

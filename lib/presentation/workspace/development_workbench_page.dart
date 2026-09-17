@@ -162,7 +162,6 @@ class _DevelopmentWorkbenchPageState
                 .steps);
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: const NexusPageHeader(
         title: '开发工作台',
         subtitle: '识别项目、执行验证并检查真实产物',

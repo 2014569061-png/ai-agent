@@ -20,7 +20,6 @@ import '../../infrastructure/database/app_database.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../tasks/task_details_page.dart';
 import '../terminal/terminal_page.dart';
-import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
@@ -225,10 +224,8 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final project = _project;
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: NexusPageHeader(
         title: project?.name ?? '项目',
         subtitle: project == null

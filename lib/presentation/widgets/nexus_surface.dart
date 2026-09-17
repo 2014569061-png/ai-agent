@@ -41,20 +41,20 @@ class NexusSurface extends StatelessWidget {
     switch (level) {
       case SurfaceLevel.ultraThin:
       case SurfaceLevel.thin:
-        // 内嵌的次要面：浅灰底、无描边（聊天页输入区、工具活动条）
+        // 内嵌的次要面：L1 色阶填充、无描边（聊天页输入区、工具活动条）
         fill = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
         outlined = false;
         shadows = const [];
       case SurfaceLevel.regular:
-        // 卡片：纯白底 + hairline 描边
-        fill = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
-        outlined = true;
+        // 卡片：L1 色阶填充、无描边、零阴影（靠表面色阶与画布自然分层）
+        fill = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+        outlined = false;
         shadows = const [];
       case SurfaceLevel.thick:
       case SurfaceLevel.ultraThick:
-        // 浮起面：白底 + 描边 + 浮层阴影（顶栏胶囊、Toast、底部弹层）
+        // 浮起面：白底/深底 + 浮层阴影、无描边（顶栏胶囊、Toast、底部弹层）
         fill = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
-        outlined = true;
+        outlined = false;
         shadows = AppTheme.floatingShadow(isDark);
     }
 

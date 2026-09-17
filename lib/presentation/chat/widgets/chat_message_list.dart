@@ -24,6 +24,7 @@ class ChatMessageList extends StatefulWidget {
     this.sessionKey,
     this.liveReply,
     this.onLoadOlder,
+    this.padding,
   });
 
   final List<ChatMessage> messages;
@@ -48,6 +49,8 @@ class ChatMessageList extends StatefulWidget {
   /// 内存窗口耗尽（_start 到 0）后向 DB 拉更早一页的回调（B-2 键集分页）。
   /// 返回 true 表示有新页已前插进 [messages]；null/false 表示无更早或未接线。
   final Future<bool> Function()? onLoadOlder;
+
+  final EdgeInsetsGeometry? padding;
 
   @override
   State<ChatMessageList> createState() => _ChatMessageListState();
@@ -166,7 +169,7 @@ class _ChatMessageListState extends State<ChatMessageList> {
     final totalCount = count + widget.trailingWidgets.length;
     return ListView.builder(
       controller: widget.controller,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: widget.padding ?? const EdgeInsets.fromLTRB(16, 0, 16, 10),
       itemCount: totalCount,
       // F-4：预渲染视口外 400px，快速滚动时不露白；消息气泡自带独立状态，
       // 关闭自动 KeepAlive 省下不可见子树的存活开销。

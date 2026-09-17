@@ -75,11 +75,14 @@ void main() {
     // 这条断言验证的是「允许的命令能在工作区内跑通」，不是产品的默认超时常量。
     // 并发跑全套测试时 Windows 上出现过 cmd.exe 启动被拖慢、偶发触到默认 30s
     // 超时（适配器用 124 表示超时）的情况，因此这里显式放宽单条命令的预算。
+    //
+    // 2026-09-17 补充：`flutter test --coverage` 插桩会让整棵进程都变慢，1 分钟
+    // 预算同样会被突破。窗口按 3 分钟给，与下方 test 级 timeout 对齐。
     final result =
-        await service.run(command, timeout: const Duration(minutes: 1));
+        await service.run(command, timeout: const Duration(minutes: 3));
     expect(result.exitCode, 0);
     expect(result.output, isNotEmpty);
-  }, timeout: const Timeout(Duration(minutes: 3)));
+  }, timeout: const Timeout(Duration(minutes: 6)));
 
   test('terminal tool requires confirmation', () {
     final tool = TerminalCommandTool(

@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/audit_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -77,9 +79,13 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: '审计日志',
         subtitle: '工具调用与审批追踪记录',

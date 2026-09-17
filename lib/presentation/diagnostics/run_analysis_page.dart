@@ -10,8 +10,10 @@ import '../../application/run_audit_report.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/liquid_glass.dart';
 import '../markdown/markdown_render_metrics.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
@@ -96,8 +98,13 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final chatState = ref.watch(chatControllerProvider);
 
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: '运行分析与观测',
         bottom: TabBar(
@@ -681,8 +688,12 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
         ? '暂无数据'
         : '${(_run.cachedTokens / _run.inputTokens * 100).toStringAsFixed(1)}%';
     final savedCost = _savedCostCents();
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: '任务详情',
         subtitle: 'Run: ${_run.runId}',

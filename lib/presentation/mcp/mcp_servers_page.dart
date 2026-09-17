@@ -7,11 +7,13 @@ import '../../domain/unique_id.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/mcp/mcp_tool_provider.dart';
 import '../l10n/app_strings.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/liquid_glass.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_status_badge.dart';
@@ -32,6 +34,12 @@ class _McpServersPageState extends State<McpServersPage> {
   List<McpServerConfig> _servers = const [];
   final Map<String, bool> _testing = {};
 
+  /// stdio 真机开关（默认关闭）。开启前页面完全不暴露本地进程模式。
+  bool _stdioEnabled = false;
+
+  /// 连点标题解锁真机开关的计数。
+  int _tapCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -40,11 +48,54 @@ class _McpServersPageState extends State<McpServersPage> {
 
   Future<void> _reload() async {
     final servers = await _service.loadAll();
+    final stdioEnabled = await McpStdioAvailability.readEnabled();
     if (mounted) {
       setState(() {
         _servers = servers;
+        _stdioEnabled = stdioEnabled;
         _loading = false;
       });
+    }
+  }
+
+  /// 连点标题 5 次切换 stdio 真机开关。开启时给出明确的风险确认。
+  Future<void> _handleTitleTap() async {
+    _tapCount++;
+    if (_tapCount < 5) return;
+    _tapCount = 0;
+    if (!McpStdioAvailability.supportedByPlatform) {
+      FloatingToast.show(context, '当前平台不支持本地进程模式',
+          tone: ToastTone.danger);
+      return;
+    }
+    if (_stdioEnabled) {
+      await McpStdioAvailability.writeEnabled(false);
+      await _reload();
+      if (mounted) {
+        FloatingToast.show(context, '已关闭本地进程模式（STDIO）');
+      }
+      return;
+    }
+    final confirmed = await showConfirmAction(
+      context,
+      title: '开启本地进程模式（STDIO）',
+      message: 'STDIO 型 MCP 服务器会以你的身份在本机启动任意可执行文件，'
+          '拥有与 App 相同的文件与网络权限，且不受网络访问策略保护。'
+          '仅在你完全信任该服务器来源时开启。',
+      confirmLabel: '我已了解风险，开启',
+      isDanger: true,
+      bulletItems: const [
+        '启动的进程拥有 App 的全部本地权限',
+        '每个 STDIO 服务器保存前仍需再次确认',
+        '子进程不会继承 App 的环境变量',
+      ],
+    );
+    if (!confirmed) return;
+    await McpStdioAvailability.writeEnabled(true);
+    await _reload();
+    if (mounted) {
+      FloatingToast.show(context, '本地进程模式已开启',
+          tone: ToastTone.success);
     }
   }
 
@@ -61,6 +112,11 @@ class _McpServersPageState extends State<McpServersPage> {
   Future<void> _openServerConfigSheet(McpServerConfig? server) async {
     final isEdit = server != null;
     var kind = server?.kind ?? McpServerKind.http;
+    // 编辑历史遗留的 stdio 配置时，若真机开关已关，回落到 HTTP 模式，
+    // 避免在一个被禁用的模式上停留。
+    if (kind == McpServerKind.stdio && !_stdioEnabled) {
+      kind = McpServerKind.http;
+    }
     final nameCtrl = TextEditingController(text: server?.name ?? '');
     final urlCtrl = TextEditingController(text: server?.url ?? '');
     final cmdCtrl = TextEditingController(text: server?.command ?? '');
@@ -72,6 +128,9 @@ class _McpServersPageState extends State<McpServersPage> {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+
+    // 在 builder 外捕获：builder 闭包里拿不到 State 字段，且开表期间不应变化。
+    final stdioEnabled = _stdioEnabled;
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -155,42 +214,49 @@ class _McpServersPageState extends State<McpServersPage> {
                             onPressed: () => applyPreset(
                               '远程 HTTP 服务',
                               McpServerKind.http,
-                              'http://127.0.0.1:8000/mcp',
+                              // 不要用 127.0.0.1：MCP HTTP 出口走 NetworkAccessPolicy，
+                              // 本机 / 内网地址会被直接拒绝，预设必须是公网示例。
+                              'https://mcp.example.com/mcp',
                             ),
                           ),
-                          ActionChip(
-                            avatar: const Icon(Icons.table_chart_outlined, size: 14),
-                            label: const Text('SQLite 数据库'),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            onPressed: () => applyPreset(
-                              'SQLite 数据库',
-                              McpServerKind.stdio,
-                              'uvx',
-                              'mcp-server-sqlite --db-path ./workspace.db',
+                          if (stdioEnabled) ...[
+                            ActionChip(
+                              avatar: const Icon(Icons.table_chart_outlined,
+                                  size: 14),
+                              label: const Text('SQLite 数据库'),
+                              labelStyle: const TextStyle(fontSize: 12),
+                              onPressed: () => applyPreset(
+                                'SQLite 数据库',
+                                McpServerKind.stdio,
+                                'uvx',
+                                'mcp-server-sqlite --db-path ./workspace.db',
+                              ),
                             ),
-                          ),
-                          ActionChip(
-                            avatar: const Icon(Icons.folder_outlined, size: 14),
-                            label: const Text('文件系统'),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            onPressed: () => applyPreset(
-                              '本地文件系统',
-                              McpServerKind.stdio,
-                              'npx',
-                              '-y @modelcontextprotocol/server-filesystem .',
+                            ActionChip(
+                              avatar:
+                                  const Icon(Icons.folder_outlined, size: 14),
+                              label: const Text('文件系统'),
+                              labelStyle: const TextStyle(fontSize: 12),
+                              onPressed: () => applyPreset(
+                                '本地文件系统',
+                                McpServerKind.stdio,
+                                'npx',
+                                '-y @modelcontextprotocol/server-filesystem .',
+                              ),
                             ),
-                          ),
-                          ActionChip(
-                            avatar: const Icon(Icons.terminal_rounded, size: 14),
-                            label: const Text('自定义 STDIO'),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            onPressed: () => applyPreset(
-                              'STDIO 进程',
-                              McpServerKind.stdio,
-                              'python',
-                              'server.py',
+                            ActionChip(
+                              avatar:
+                                  const Icon(Icons.terminal_rounded, size: 14),
+                              label: const Text('自定义 STDIO'),
+                              labelStyle: const TextStyle(fontSize: 12),
+                              onPressed: () => applyPreset(
+                                'STDIO 进程',
+                                McpServerKind.stdio,
+                                'python',
+                                'server.py',
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -199,17 +265,20 @@ class _McpServersPageState extends State<McpServersPage> {
                     // 模式选择 SegmentedButton
                     Center(
                       child: SegmentedButton<McpServerKind>(
-                        segments: const [
-                          ButtonSegment(
+                        segments: [
+                          const ButtonSegment(
                             value: McpServerKind.http,
                             label: Text('HTTP 远程'),
                             icon: Icon(Icons.cloud_outlined, size: 16),
                           ),
-                          ButtonSegment(
-                            value: McpServerKind.stdio,
-                            label: Text('STDIO 进程'),
-                            icon: Icon(Icons.terminal_rounded, size: 16),
-                          ),
+                          // stdio 型在移动端默认隐藏：它会 spawn 任意本地可执行
+                          // 文件，属于高权限本地执行面。需连点标题 5 次打开开关。
+                          if (stdioEnabled)
+                            const ButtonSegment(
+                              value: McpServerKind.stdio,
+                              label: Text('STDIO 进程'),
+                              icon: Icon(Icons.terminal_rounded, size: 16),
+                            ),
                         ],
                         selected: {kind},
                         onSelectionChanged: (val) {
@@ -228,16 +297,21 @@ class _McpServersPageState extends State<McpServersPage> {
                     ),
                     const SizedBox(height: 12),
 
-                    if (isHttp)
+                    if (isHttp) ...[
                       TextField(
                         controller: urlCtrl,
                         keyboardType: TextInputType.url,
                         decoration: const InputDecoration(
                           labelText: 'HTTP URL *',
-                          hintText: 'http://127.0.0.1:8000/mcp',
+                          hintText: 'https://mcp.example.com/mcp',
                         ),
-                      )
-                    else ...[
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '仅支持公网地址；本机（127.0.0.1）与内网地址会被安全策略拒绝。',
+                        style: TextStyle(fontSize: 11, color: textMuted),
+                      ),
+                    ] else ...[
                       TextField(
                         controller: cmdCtrl,
                         decoration: const InputDecoration(
@@ -303,19 +377,44 @@ class _McpServersPageState extends State<McpServersPage> {
 
     final isHttp = kind == McpServerKind.http;
     final name = nameCtrl.text.trim().isEmpty ? 'MCP Server' : nameCtrl.text.trim();
+    final command = isHttp ? '' : cmdCtrl.text.trim();
+    final args = isHttp
+        ? const <String>[]
+        : argsCtrl.text
+            .split(RegExp(r'\s+'))
+            .where((arg) => arg.isNotEmpty)
+            .toList();
+
+    // stdio 型保存前必须过一道高危确认：它等于把本地命令执行权交给了这个配置。
+    if (!isHttp) {
+      if (!_stdioEnabled) {
+        FloatingToast.show(context, '本地进程模式未开启，无法保存 STDIO 服务器',
+            tone: ToastTone.danger);
+        return;
+      }
+      final confirmed = await showConfirmAction(
+        context,
+        title: '保存本地进程服务器',
+        message: '该配置会在每次连接时以你的身份启动下列命令。'
+            '请确认来源可信、参数无误。',
+        confirmLabel: '确认保存',
+        isDanger: true,
+        bulletItems: [
+          '服务名称：$name',
+          '启动命令：$command',
+          if (args.isNotEmpty) '参数：${args.join(' ')}',
+        ],
+      );
+      if (!confirmed) return;
+    }
 
     if (isEdit) {
       await _service.save(server.copyWith(
         name: name,
         kind: kind,
         url: isHttp ? urlCtrl.text.trim() : null,
-        command: isHttp ? null : cmdCtrl.text.trim(),
-        args: isHttp
-            ? server.args
-            : argsCtrl.text
-                .split(RegExp(r'\s+'))
-                .where((arg) => arg.isNotEmpty)
-                .toList(),
+        command: isHttp ? null : command,
+        args: isHttp ? server.args : args,
       ));
       unawaited(HapticFeedback.mediumImpact());
       await _reload();
@@ -329,13 +428,8 @@ class _McpServersPageState extends State<McpServersPage> {
         name: name,
         kind: kind,
         url: isHttp ? urlCtrl.text.trim() : null,
-        command: isHttp ? null : cmdCtrl.text.trim(),
-        args: isHttp
-            ? const []
-            : argsCtrl.text
-                .split(RegExp(r'\s+'))
-                .where((arg) => arg.isNotEmpty)
-                .toList(),
+        command: isHttp ? null : command,
+        args: args,
       ));
       unawaited(HapticFeedback.mediumImpact());
       await _reload();
@@ -389,12 +483,18 @@ class _McpServersPageState extends State<McpServersPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: AppStrings.mcpServers,
         subtitle: AppStrings.mcpServersHint,
+        // 连点标题右侧 5 次解锁 stdio 真机开关（无可见入口，避免误触）。
+        onTitleTap: _handleTitleTap,
         actions: [
           IconButton(
             icon: const Icon(Icons.add_rounded),
@@ -425,6 +525,7 @@ class _McpServersPageState extends State<McpServersPage> {
                     final isStdio = server.kind != McpServerKind.http;
 
                     return SectionCard(
+                      glass: true,
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(

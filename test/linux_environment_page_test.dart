@@ -64,6 +64,21 @@ void main() {
     expect(find.textContaining('环境检测超时'), findsOneWidget);
     expect(find.byTooltip('重新检测'), findsOneWidget);
   });
+
+  testWidgets('missing common tools exposes the one-click setup guide',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: LinuxEnvironmentPage(
+          environmentService: _FixedEnvironmentService(),
+          preferencesLoader: SharedPreferences.getInstance,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('一键补齐常用开发工具'), findsOneWidget);
+  });
 }
 
 class _ThrowingEnvironmentService extends EnvironmentService {
@@ -81,4 +96,42 @@ class _HangingEnvironmentService extends EnvironmentService {
   @override
   Future<EnvironmentSnapshot> inspect({bool force = false}) =>
       Completer<EnvironmentSnapshot>().future;
+}
+
+class _FixedEnvironmentService extends EnvironmentService {
+  _FixedEnvironmentService() : super(candidates: <LinuxRuntimeAdapter>[]);
+
+  @override
+  Future<EnvironmentSnapshot> inspect({bool force = false}) async {
+    const alpine = LinuxRuntimeInfo(
+      kind: LinuxRuntimeKind.builtinProot,
+      label: '内置 Alpine',
+      available: true,
+      detail: '已就绪',
+      supportsShellSyntax: true,
+    );
+    const termux = LinuxRuntimeInfo(
+      kind: LinuxRuntimeKind.termux,
+      label: 'Termux',
+      available: true,
+      detail: '已就绪',
+      supportsShellSyntax: true,
+    );
+    return EnvironmentSnapshot(
+      selected: alpine,
+      candidates: const [alpine, termux],
+      architecture: 'arm64',
+      freeBytes: null,
+      checkedAt: DateTime.now(),
+      tools: const [
+        EnvironmentToolStatus(
+          id: 'node',
+          label: 'Node.js',
+          available: false,
+          detail: 'missing',
+        ),
+      ],
+      templates: const [],
+    );
+  }
 }

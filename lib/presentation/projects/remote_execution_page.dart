@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../application/remote_execution_probe.dart';
-import '../theme/app_palette.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -42,10 +41,8 @@ class _RemoteExecutionPageState extends State<RemoteExecutionPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final handshake = _handshake;
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: const NexusPageHeader(
         title: '远程执行验证',
         subtitle: '先确认架构、工具链和协议版本，再决定是否同步代码',

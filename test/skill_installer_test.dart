@@ -16,6 +16,17 @@ version: 0.0.1
 按步骤执行任务。
 ''';
 
+const _pluginSkillMd = '''
+---
+name: ponytail
+description: >
+  Forces the laziest solution that actually works.
+  Use the standard library before custom code.
+---
+
+# Ponytail
+''';
+
 Archive _archive() {
   final archive = Archive();
   archive
@@ -63,6 +74,35 @@ void main() {
 
     expect(preview.source.isLocalArchive, isTrue);
     expect(preview.fileList, ['SKILL.md', 'assets/guide.txt']);
+  });
+
+  test('imports a Codex plugin repository with a nested primary skill',
+      () async {
+    final archive = Archive()
+      ..addFile(ArchiveFile.bytes(
+        'ponytail-main/.codex-plugin/plugin.json',
+        utf8.encode('{"skills":"./skills/"}'),
+      ))
+      ..addFile(ArchiveFile.bytes(
+        'ponytail-main/skills/ponytail/SKILL.md',
+        utf8.encode(_pluginSkillMd),
+      ))
+      ..addFile(ArchiveFile.bytes(
+        'ponytail-main/skills/ponytail/examples/guide.md',
+        utf8.encode('guide'),
+      ));
+
+    final preview = await installer.previewFromArchiveBytes(
+      _tarGz(archive),
+      installer
+          .parseInput('https://github.com/DietrichGebert/ponytail/tree/main'),
+    );
+
+    expect(preview.metadata.name, 'ponytail');
+    expect(preview.metadata.description,
+        'Forces the laziest solution that actually works. Use the standard library before custom code.');
+    expect(preview.source.subPath, 'skills/ponytail');
+    expect(preview.fileList, ['SKILL.md', 'examples/guide.md']);
   });
 
   test('rejects path traversal entries', () async {

@@ -9,10 +9,16 @@ import 'package:mobile_agent/presentation/dashboard/dashboard_provider.dart';
 import 'package:mobile_agent/presentation/dashboard/widgets/kpi_card_grid.dart';
 import 'package:mobile_agent/presentation/dashboard/widgets/token_trend_card.dart';
 import 'package:mobile_agent/presentation/dashboard/widgets/token_usage_hero.dart';
+import 'package:mobile_agent/presentation/theme/app_appearance_controller.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
+import 'package:mobile_agent/presentation/widgets/glass_scroll_edge.dart';
+import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() async {
+    SharedPreferences.setMockInitialValues({});
+    AppAppearanceController.glassIntensity.value = 0.85;
+  });
 
   testWidgets('dashboard defaults to a simple view and can reveal diagnostics',
       (tester) async {
@@ -60,11 +66,14 @@ void main() {
 
     expect(find.text('性能详情'), findsOneWidget);
     expect(find.byType(TokenUsageHero), findsNothing);
+    expect(find.byType(LiquidGlass), findsAtLeastNWidgets(1));
+    expect(find.byType(GlassScrollEdge), findsOneWidget);
 
     await tester.tap(find.text('性能详情'));
     await tester.pumpAndSettle();
     expect(find.byType(TokenUsageHero), findsOneWidget);
     expect(find.byType(KpiCardGrid), findsOneWidget);
+    expect(find.byType(LiquidGlass), findsAtLeastNWidgets(7));
     await tester.scrollUntilVisible(
       find.byType(TokenTrendCard),
       240,

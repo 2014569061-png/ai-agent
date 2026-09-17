@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +10,8 @@ import 'nexus_surface.dart';
 import '../theme/app_tokens.dart';
 import 'glass_chip.dart';
 import '../chat/widgets/capsule_top_bar.dart';
+import '../theme/app_appearance_controller.dart';
+import 'glass_surface.dart';
 
 enum ToastTone { neutral, success, warning, danger }
 
@@ -23,9 +25,12 @@ extension _ToneStyle on ToastTone {
   Color accent(bool isDark) => switch (this) {
         ToastTone.neutral =>
           isDark ? AppPalette.darkText : AppPalette.lightText,
-        ToastTone.success => AppPalette.success,
-        ToastTone.warning => AppPalette.warning,
-        ToastTone.danger => AppPalette.danger,
+        ToastTone.success =>
+          isDark ? AppPalette.darkSuccess : AppPalette.lightSuccess,
+        ToastTone.warning =>
+          isDark ? AppPalette.darkWarning : AppPalette.lightWarning,
+        ToastTone.danger =>
+          isDark ? AppPalette.darkDanger : AppPalette.lightDanger,
       };
 }
 
@@ -45,8 +50,7 @@ class FloatingCapsuleAction {
 /// 全局居中靠上的悬浮 Toast。
 ///
 /// 替代默认 [SnackBar]（从底部弹出）—— 用 [OverlayEntry] 自行定位：
-/// 水平居中、垂直位于顶部安全区下方 88px，渐出消失。
-/// 多次调用会替换上一条，不堆叠。
+/// 水平居中、垂直避让顶栏并支持最多 3 条消息队列平滑过渡。
 class FloatingToast {
   FloatingToast._();
 
@@ -72,7 +76,6 @@ class FloatingToast {
     final overlay = Overlay.maybeOf(context, rootOverlay: true);
     if (overlay == null) return;
 
-    _current?._dismiss();
     final isPersistent =
         persistent ?? (tone == ToastTone.warning || tone == ToastTone.danger);
 
@@ -85,26 +88,31 @@ class FloatingToast {
       displayDuration: _displayDuration,
       animationDuration: _animationDuration,
     );
+
+    _current?._dismiss();
     _current = controller;
     controller._show();
   }
 
-  /// 错误便捷入口：自动 humanize + 自动「复制详情」chip + 常驻。
+  /// 错误便捷入口：自动 humanize + 自动「重试」与「复制详情」chip + 常驻。
   static void error(
     BuildContext context,
     String summary, {
     String? rawDetail,
+    VoidCallback? onRetry,
     VoidCallback? onFeedback,
   }) {
     final h = humanizeError(summary);
-
-    // 如果外部传入了已经 humanize 过的 summary，我们再次 humanize 可能得到不同的结果
-    // 根据 spec: "自动 humanize + 自动「复制详情」chip + 常驻"
-    // 以及接线要求："接线统一走 humanizeError(raw).summary 取人话文案、原始串进 rawDetail 供复制"
     final actualSummary = h.summary;
     final actualRaw = rawDetail ?? summary;
 
     final actions = <FloatingCapsuleAction>[
+      if (onRetry != null)
+        FloatingCapsuleAction(
+          label: '重试',
+          icon: Icons.refresh_rounded,
+          onPressed: onRetry,
+        ),
       FloatingCapsuleAction(
         label: '复制',
         icon: Icons.copy_rounded,
@@ -181,15 +189,17 @@ class _ToastEntryController {
     _timer?.cancel();
     final anim = _animController;
     final entry = _entry;
-    if (anim == null || entry == null || !entry.mounted) {
+
+    void onDone() {
       entry?.remove();
       if (FloatingToast._current == this) FloatingToast._current = null;
+    }
+
+    if (anim == null || entry == null || !entry.mounted) {
+      onDone();
       return;
     }
-    anim.reverse().then((_) {
-      entry.remove();
-      if (FloatingToast._current == this) FloatingToast._current = null;
-    });
+    anim.reverse().then((_) => onDone());
   }
 }
 
@@ -225,7 +235,6 @@ class _ToastView extends StatefulWidget {
 class _ToastViewState extends State<_ToastView>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
-  late final Animation<double> _fade;
   late final Animation<Offset> _slide;
 
   @override
@@ -235,8 +244,6 @@ class _ToastViewState extends State<_ToastView>
       vsync: this,
       duration: widget.animationDuration,
     );
-    _fade =
-        CurvedAnimation(parent: _controller, curve: AppTokens.curveStandard);
     _slide = Tween(
       begin: const Offset(0, -.12),
       end: Offset.zero,
@@ -273,75 +280,99 @@ class _ToastViewState extends State<_ToastView>
       right: 0,
       child: SlideTransition(
         position: _slide,
-        child: FadeTransition(
-          opacity: _fade,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: widget.maxWidth),
-              child: Padding(
-                padding:
-                    EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
-                child: Material(
-                  color: Colors.transparent,
-                  child: Semantics(
-                    liveRegion: widget.persistent,
-                    label: widget.message,
-                    child: GestureDetector(
-                      onTap: widget.persistent ? null : widget.onDismiss,
-                      behavior: widget.persistent
-                          ? HitTestBehavior.translucent
-                          : HitTestBehavior.opaque,
-                      child: NexusSurface(
-                        level: SurfaceLevel.thick,
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusPill),
-                        padding: EdgeInsets.fromLTRB(
-                            16, 10, widget.persistent ? 8 : 16, 10),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (widget.tone != ToastTone.neutral) ...[
-                              Icon(widget.tone.icon,
-                                  size: 18, color: widget.tone.accent(isDark)),
-                              const SizedBox(width: 10),
-                            ],
-                            Flexible(
-                              child: Text(
-                                widget.message,
-                                style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 13,
-                                    height: 1.4,
-                                    fontWeight: FontWeight.w500),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (widget.actions.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Wrap(
-                                  spacing: 8,
-                                  children: [
-                                    for (final a in widget.actions)
-                                      GlassChip(
-                                        label: a.label,
-                                        icon: a.icon,
-                                        onPressed: () => _onAction(a),
-                                      )
-                                  ],
+        // Toast 内的玻璃面板也不能被 Opacity 包裹，否则 BackdropFilter
+        // 在出现/消失帧中会读取临时缓冲而闪烁。
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: widget.maxWidth),
+            child: Padding(
+              padding:
+                  EdgeInsets.symmetric(horizontal: widget.horizontalPadding),
+              child: Material(
+                color: Colors.transparent,
+                child: Semantics(
+                  liveRegion: widget.persistent,
+                  label: widget.message,
+                  child: GestureDetector(
+                    onTap: widget.persistent ? null : widget.onDismiss,
+                    behavior: widget.persistent
+                        ? HitTestBehavior.translucent
+                        : HitTestBehavior.opaque,
+                    child: Builder(
+                      builder: (context) {
+                          final glassIntensity =
+                              AppAppearanceController.resolvedGlassIntensity;
+                          final toastChild = Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (widget.tone != ToastTone.neutral) ...[
+                                Icon(widget.tone.icon,
+                                    size: 18, color: widget.tone.accent(isDark)),
+                                const SizedBox(width: 10),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  widget.message,
+                                  style: TextStyle(
+                                      color: textColor,
+                                      fontSize: 13,
+                                      height: 1.4,
+                                      fontWeight: FontWeight.w500),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                            if (widget.persistent)
-                              IconButton(
-                                visualDensity: VisualDensity.compact,
-                                tooltip: '关闭',
-                                icon: const Icon(Icons.close_rounded, size: 18),
-                                onPressed: widget.onDismiss,
-                              ),
-                          ],
-                        ),
-                      ),
+                              if (widget.actions.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 8),
+                                  child: Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      for (final a in widget.actions)
+                                        GlassChip(
+                                          label: a.label,
+                                          icon: a.icon,
+                                          onPressed: () => _onAction(a),
+                                        )
+                                    ],
+                                  ),
+                                ),
+                              if (widget.persistent)
+                                IconButton(
+                                  visualDensity: VisualDensity.compact,
+                                  tooltip: '关闭',
+                                  icon: const Icon(Icons.close_rounded, size: 18),
+                                  onPressed: widget.onDismiss,
+                                ),
+                            ],
+                          );
+
+                          if (glassIntensity == GlassIntensity.flat) {
+                            return NexusSurface(
+                              level: SurfaceLevel.thick,
+                              borderRadius:
+                                  BorderRadius.circular(AppTokens.radiusPill),
+                              padding: EdgeInsets.fromLTRB(
+                                  16, 10, widget.persistent ? 8 : 16, 10),
+                              child: toastChild,
+                            );
+                          }
+
+                          return GlassSurface(
+                            role: GlassRole.overlay,
+                            variant: GlassVariant.regular,
+                            intensity: glassIntensity,
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusPill),
+                            blurSigma: 24,
+                            refraction: 18,
+                            edgeWidth: 20,
+                            gloss: 0.60,
+                            padding: EdgeInsets.fromLTRB(
+                                16, 10, widget.persistent ? 8 : 16, 10),
+                            child: toastChild,
+                          );
+                      },
                     ),
                   ),
                 ),

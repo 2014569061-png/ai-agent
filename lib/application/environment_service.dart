@@ -349,8 +349,10 @@ class EnvironmentService {
       return const [];
     }
 
-    final results = <EnvironmentToolStatus>[];
-    for (final requirement in requirements) {
+    // Tool checks are independent. Running them serially made a full Android
+    // inspection consume one timeout per tool and often exceed the page's
+    // overall deadline even when a runtime was healthy.
+    return Future.wait(requirements.map((requirement) async {
       try {
         final runtimeProbe = _runtimeCommandProbe;
         final legacyProbe = _commandProbe;
@@ -361,7 +363,7 @@ class EnvironmentService {
           runtimeProbe: runtimeProbe,
           legacyProbe: legacyProbe,
         ).timeout(commandProbeTimeout);
-        results.add(EnvironmentToolStatus(
+        return EnvironmentToolStatus(
           id: requirement.id,
           label: requirement.label,
           // A callback may return a skipped result for a runtime it cannot
@@ -371,9 +373,9 @@ class EnvironmentService {
           required: requirement.required,
           installHint: requirement.installHint,
           probed: probe.probed,
-        ));
+        );
       } on TimeoutException {
-        results.add(EnvironmentToolStatus(
+        return EnvironmentToolStatus(
           id: requirement.id,
           label: requirement.label,
           available: false,
@@ -382,22 +384,21 @@ class EnvironmentService {
           required: requirement.required,
           installHint: requirement.installHint,
           probed: false,
-        ));
+        );
       } catch (error) {
         // An exception means a probe was attempted but failed. It must not be
         // mistaken for an unprobed candidate, while it also must never make a
         // tool appear available.
-        results.add(EnvironmentToolStatus(
+        return EnvironmentToolStatus(
           id: requirement.id,
           label: requirement.label,
           available: false,
           detail: '$error',
           required: requirement.required,
           installHint: requirement.installHint,
-        ));
+        );
       }
-    }
-    return results;
+    }));
   }
 
   Future<CommandProbeResult> _runCommandProbe({
@@ -485,12 +486,10 @@ class EnvironmentService {
     required LinuxRuntimeInfo selected,
     required List<EnvironmentToolStatus> selectedTools,
   }) async {
-    final results = <EnvironmentCandidateStatus>[];
     var reusedSelected = false;
-    for (final candidate in candidates) {
+    final pending = candidates.map((candidate) async {
       if (!candidate.available) {
-        results.add(EnvironmentCandidateStatus(runtime: candidate));
-        continue;
+        return EnvironmentCandidateStatus(runtime: candidate);
       }
 
       // With the legacy one-argument callback, only the selected runtime has
@@ -506,12 +505,13 @@ class EnvironmentService {
               useLegacyProbe: false,
             );
       if (canReuseSelected) reusedSelected = true;
-      results.add(EnvironmentCandidateStatus(
+      return EnvironmentCandidateStatus(
         runtime: candidate,
         tools: tools,
         probeCompleted: _probeCompleted(tools),
-      ));
-    }
+      );
+    }).toList(growable: false);
+    final results = await Future.wait(pending);
 
     // Custom callers sometimes provide a selected adapter that is not present
     // in the candidate list. It is still an available runtime and must count

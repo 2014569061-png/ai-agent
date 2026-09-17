@@ -6,14 +6,27 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../application/environment_service.dart';
+import '../../../application/development_tool_installer.dart';
 import '../../../infrastructure/update/update_service.dart';
 import '../../environment/environment_status_view.dart';
 import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_page_header.dart';
 
+/// Replaces every existing value (including `false` and commented examples)
+/// while preserving unrelated Termux settings.
+const termuxExternalAppsConfigCommand = 'mkdir -p ~/.termux && '
+    'properties=~/.termux/termux.properties && tmp="\$properties.nexus-tmp" && '
+    '{ [ ! -f "\$properties" ] || sed \'/^[[:space:]]*#\\?[[:space:]]*allow-external-apps[[:space:]]*=/d\' "\$properties"; '
+    'printf \'%s\\n\' \'allow-external-apps = true\'; } > "\$tmp" && '
+    'mv "\$tmp" "\$properties" && '
+    '{ termux-reload-settings 2>/dev/null || true; } && '
+    'echo 配置完成，请从最近任务中彻底关闭 Termux 后重新打开';
+
 /// 统一环境检测：展示四个 runtime 的真实可用性，并保留 Termux 安装引导。
 class EnvironmentSheet extends ConsumerStatefulWidget {
-  const EnvironmentSheet({super.key});
+  const EnvironmentSheet({super.key, this.toolInstaller});
+
+  final DevelopmentToolInstaller? toolInstaller;
 
   @override
   ConsumerState<EnvironmentSheet> createState() => _EnvironmentSheetState();
@@ -38,13 +51,7 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
     'https://mirrors.tuna.tsinghua.edu.cn/fdroid/archive/com.termux_118.apk',
     'https://f-droid.org/repo/com.termux_118.apk',
   ];
-  static const _configCommand =
-      'mkdir -p ~/.termux && sed -i "s/^#[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps = true/" '
-      '~/.termux/termux.properties 2>/dev/null; '
-      'grep -q "^allow-external-apps" ~/.termux/termux.properties 2>/dev/null || '
-      'echo "allow-external-apps = true" >> ~/.termux/termux.properties; '
-      'termux-reload-settings 2>/dev/null; '
-      'echo 配置完成,请完全退出Termux(通知栏滑掉或系统里强行停止)后重新打开';
+  static const _configCommand = termuxExternalAppsConfigCommand;
   static const _toolchainCommand = 'pkg install -y golang git curl jq && '
       'go env -w GOPROXY=https://goproxy.cn,direct && go env -w GOTOOLCHAIN=local && '
       'termux-wake-lock && echo 工具链就绪,可回到NEXUS点重新检测';
@@ -52,6 +59,8 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
   late final List<_StepView> _steps;
   bool _running = false;
   String _installStatus = '';
+  String _commonToolsStatus = '';
+  bool _installingCommonTools = false;
   String? _termuxInspectionError;
   EnvironmentSnapshot? _snapshot;
 
@@ -69,12 +78,11 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
   Future<void> _detect() async {
     if (_running) return;
     setState(() => _running = true);
+    // The full runtime/tool inventory is intentionally independent from the
+    // Termux setup steps. A slow optional compiler probe must never turn
+    // "Termux installed" into a red installation failure.
+    unawaited(_refreshSnapshot());
     try {
-      final service = ref.read(environmentServiceProvider);
-      service.invalidate();
-      final snapshot =
-          await service.inspect(force: true).timeout(_environmentCheckTimeout);
-      if (mounted) setState(() => _snapshot = snapshot);
       // Step 1: Termux 是否安装
       _set(0, _StepState.checking);
       bool installed = false;
@@ -96,22 +104,9 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
             hint: _termuxInspectionError ??
                 '点击下方按钮下载并安装 Termux(F-Droid 官方版,清华镜像优先)。'
                     '安装完成后回到本页点"重新检测"。');
-        final alternateRuntime =
-            snapshot.alpineAvailable || snapshot.androidShellAvailable;
-        final optionalHint = alternateRuntime
-            ? '当前已有 ${snapshot.alpineAvailable ? 'Alpine' : 'Android Shell'} 可用；'
-                '此 Termux 步骤仅用于补充外部工具链，可按需配置。'
-            : '依赖上一步；安装 Termux 后再配置桥和工具链。';
-        if (alternateRuntime) {
-          _set(1, _StepState.optional, hint: optionalHint);
-          _set(2, _StepState.optional, hint: '可选：Termux 未安装，不影响当前可用运行时。');
-        } else {
-          // Preserve the dependency error when there is no alternate runtime;
-          // an installed Alpine or Android Shell makes these two Termux-only
-          // steps optional, not failed.
-          _set(1, _StepState.failed, hint: '依赖上一步');
-          _set(2, _StepState.failed, hint: '依赖上一步');
-        }
+        _set(1, _StepState.optional,
+            hint: 'Termux 是外部工具链，可按需安装；内置 Alpine/Android Shell 的状态见上方检测结果。');
+        _set(2, _StepState.optional, hint: '可选：仅在需要 Termux Go 工具链时安装。');
         return;
       }
       _set(0, _StepState.ok);
@@ -146,6 +141,19 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
       _set(2, _StepState.failed, hint: '等待环境检测完成');
     } finally {
       if (mounted) setState(() => _running = false);
+    }
+  }
+
+  Future<void> _refreshSnapshot() async {
+    try {
+      final service = ref.read(environmentServiceProvider);
+      service.invalidate();
+      final snapshot =
+          await service.inspect(force: true).timeout(_environmentCheckTimeout);
+      if (mounted) setState(() => _snapshot = snapshot);
+    } catch (_) {
+      // Candidate-level timeouts are rendered by the environment status view.
+      // The setup steps below have their own, more specific diagnostics.
     }
   }
 
@@ -224,6 +232,32 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
     }
   }
 
+  Future<void> _installCommonTools() async {
+    if (_installingCommonTools) return;
+    setState(() {
+      _installingCommonTools = true;
+      _commonToolsStatus = '正在下载并安装，首次配置通常需要几分钟，请保持应用在前台…';
+    });
+    DevelopmentToolInstallResult result;
+    try {
+      result = await (widget.toolInstaller ?? DevelopmentToolInstaller())
+          .installCommonTools();
+    } catch (error) {
+      result = DevelopmentToolInstallResult(
+        succeeded: false,
+        message: '安装未完成：$error。请检查网络和剩余空间后重试。',
+      );
+    }
+    if (!mounted) return;
+    setState(() {
+      _installingCommonTools = false;
+      _commonToolsStatus = result.message;
+    });
+    if (result.succeeded) {
+      await _detect();
+    }
+  }
+
   void _copy(String label, String command) {
     Clipboard.setData(ClipboardData(text: command));
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
@@ -296,6 +330,8 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
         children: [
           Text('检测四个运行时的真实可用性，不能用“安装了 Termux”代替 Alpine 状态。',
               style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 12),
+          _commonToolsCard(context),
           if (_snapshot != null) ...[
             const SizedBox(height: 12),
             EnvironmentStatusCard(snapshot: _snapshot!),
@@ -325,6 +361,60 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
               '若长期未打开 Termux 被系统冻结,执行会超时,打开一次 Termux 即可恢复。',
               style: Theme.of(context).textTheme.bodySmall),
         ],
+      ),
+    );
+  }
+
+  Widget _commonToolsCard(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_fix_high_rounded),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text('新手一键配置', style: theme.textTheme.titleMedium),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text('自动安装 Node.js、npm、Python、pip、Go、Git、curl 和 jq；'
+                '优先安装到内置 Alpine，无需复制命令。'),
+            const SizedBox(height: 6),
+            Text(
+              '建议预留数百 MB 空间并连接 Wi-Fi。Flutter SDK、Android SDK、aapt2 和 d8 '
+              '体积大且手机兼容性有限，不会自动安装。',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: _running || _installingCommonTools
+                    ? null
+                    : _installCommonTools,
+                icon: _installingCommonTools
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_done_rounded),
+                label: Text(
+                  _installingCommonTools ? '正在配置，请勿退出' : '一键安装常用开发工具',
+                ),
+              ),
+            ),
+            if (_commonToolsStatus.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(_commonToolsStatus, style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
       ),
     );
   }

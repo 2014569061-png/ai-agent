@@ -8,8 +8,56 @@ enum McpServerKind {
   /// Streamable HTTP（浏览器 / 移动端均可）。
   http,
 
-  /// stdio 子进程（仅桌面 / 命令行，Web 不支持）。
+  /// stdio 子进程（桌面 / 命令行）。
+  ///
+  /// ⚠️ 移动端（Android）默认**不暴露**该选项：它会 spawn 任意本地可执行文件，
+  /// 属于「高权限本地执行」面。要启用需在 MCP 页面连点标题 5 次打开真机开关，
+  /// 且每个 stdio 服务器保存前都必须过一次高危确认。
   stdio,
+}
+
+/// stdio 型 MCP 的可用性判定（唯一权威，UI 与运行时共用）。
+class McpStdioAvailability {
+  const McpStdioAvailability._();
+
+  /// 移动端真机开关的持久化键。默认关闭。
+  static const preferenceKey = 'mcp.stdio_experimental';
+
+  /// 当前平台是否原生支持 stdio。
+  ///
+  /// Web 没有子进程能力；Android 出于权限面考虑默认关闭，
+  /// 需要用户显式打开真机开关。
+  static bool get supportedByPlatform => !kIsWeb;
+
+  /// 在 [enabled] 前提下，当前是否允许使用 stdio 型服务器。
+  static bool isUsable({required bool enabled}) =>
+      supportedByPlatform && enabled;
+
+  /// 不可用时给用户看的解释（可用时返回 null）。
+  static String? blockedReason({required bool enabled}) {
+    if (kIsWeb) return 'Web 平台不支持 stdio 型服务器';
+    if (!enabled) return '移动端默认关闭本地进程模式，需在 MCP 页面开启真机开关';
+    return null;
+  }
+
+  /// 读取持久化的真机开关（默认 false）。
+  static Future<bool> readEnabled() async {
+    if (!supportedByPlatform) return false;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      return preferences.getBool(preferenceKey) ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 写入真机开关。
+  static Future<void> writeEnabled(bool value) async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool(preferenceKey, value);
+    } catch (_) {}
+  }
 }
 
 /// 一个 MCP 服务器配置。

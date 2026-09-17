@@ -1,11 +1,14 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
-import 'nexus_surface.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import 'glass_surface.dart';
+import 'nexus_surface.dart';
 
 /// 统一的内容分段卡片 (SectionCard)
-/// 遵循极简表面策略：实色 surface 与 1px hairline 边框，0 模糊。
+/// 遵循极简表面策略：实色 surface 与 1px hairline 边框。
+/// 当指定 [glass: true] 时，在非 flat 质感模式下平滑升级为液态玻璃卡片。
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -13,6 +16,9 @@ class SectionCard extends StatelessWidget {
     this.margin = EdgeInsets.zero,
     this.padding,
     this.solid = true,
+    this.glass,
+    this.role = GlassRole.content,
+    this.variant = GlassVariant.regular,
     this.borderRadius,
   });
 
@@ -20,11 +26,33 @@ class SectionCard extends StatelessWidget {
   final EdgeInsetsGeometry margin;
   final EdgeInsetsGeometry? padding;
   final bool solid;
+  final bool? glass;
+  final GlassRole role;
+  final GlassVariant variant;
   final BorderRadius? borderRadius;
 
   @override
   Widget build(BuildContext context) {
     final radius = borderRadius ?? BorderRadius.circular(AppTokens.radiusCard);
+    final intensity = AppAppearanceController.resolvedGlassIntensity;
+    final shouldUseGlass = (glass ?? true) && intensity != GlassIntensity.flat;
+
+    if (shouldUseGlass) {
+      return GlassSurface(
+        role: role,
+        variant: variant,
+        intensity: intensity,
+        borderRadius: radius,
+        margin: margin,
+        padding: padding,
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: radius,
+          clipBehavior: Clip.antiAlias,
+          child: child,
+        ),
+      );
+    }
 
     if (solid) {
       final theme = Theme.of(context);

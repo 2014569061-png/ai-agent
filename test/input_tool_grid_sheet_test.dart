@@ -6,6 +6,7 @@ import 'package:mobile_agent/presentation/chat/widgets/input_tool_grid_sheet.dar
 import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.dart';
 import 'package:mobile_agent/presentation/theme/app_palette.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
+import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
 
 void main() {
   testWidgets('InputToolGridSheet renders all tools and triggers callbacks',
@@ -178,6 +179,62 @@ void main() {
     await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
     await tester.pumpAndSettle();
     expect(sent, isTrue);
+  });
+
+  testWidgets('输入文字只更新发送按钮，不重建玻璃输入层', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: FloatingCapsuleInput(
+            controller: controller,
+            isRunning: false,
+            onSend: () {},
+            onStop: () {},
+            onAttachmentMenu: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final before = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+    controller.text = 'hello';
+    await tester.pump();
+    final after = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+
+    expect(identical(before, after), isTrue);
+  });
+
+  testWidgets('输入框获得焦点时不重建玻璃输入层', (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: FloatingCapsuleInput(
+            controller: controller,
+            isRunning: false,
+            onSend: () {},
+            onStop: () {},
+            onAttachmentMenu: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final before = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    final after = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+
+    expect(identical(before, after), isTrue);
   });
 }
 

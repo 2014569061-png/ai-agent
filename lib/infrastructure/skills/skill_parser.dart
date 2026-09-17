@@ -30,6 +30,9 @@ const int kSkillMaxBytes = 5 * 1024 * 1024;
 /// 最大文件数。
 const int kSkillMaxFiles = 200;
 
+/// 外部 Skill 的描述可能使用 YAML 折叠多行文本。
+const int kSkillMaxDescriptionChars = 1024;
+
 class SkillMetadata {
   const SkillMetadata({
     required this.name,
@@ -86,7 +89,9 @@ SkillParseResult parseSkillMarkdown(String text) {
   final header = normalized.substring(4, end);
   final body = normalized.substring(end + 4).trim();
   final map = <String, String>{};
-  for (final raw in header.split('\n')) {
+  final headerLines = header.split('\n');
+  for (var index = 0; index < headerLines.length; index++) {
+    final raw = headerLines[index];
     final line = raw.trim();
     if (line.isEmpty) continue;
     final idx = line.indexOf(':');
@@ -94,6 +99,26 @@ SkillParseResult parseSkillMarkdown(String text) {
       final key = line.substring(0, idx).trim().toLowerCase();
       if (_allowedKeys.contains(key)) {
         var value = line.substring(idx + 1).trim();
+        if (key == 'description' &&
+            (value.startsWith('>') || value.startsWith('|'))) {
+          final continuation = <String>[];
+          var nextIndex = index + 1;
+          while (nextIndex < headerLines.length) {
+            final next = headerLines[nextIndex];
+            if (next.trim().isEmpty) {
+              continuation.add('');
+              nextIndex++;
+              continue;
+            }
+            if (!next.startsWith(' ') && !next.startsWith('\t')) break;
+            continuation.add(next.trim());
+            nextIndex++;
+          }
+          value = value.startsWith('>')
+              ? continuation.where((line) => line.isNotEmpty).join(' ')
+              : continuation.join('\n').trim();
+          index = nextIndex - 1;
+        }
         if (key == 'tags') {
           value = value.replaceFirst(RegExp(r'^\['), '');
           value = value.replaceFirst(RegExp(r'\]$'), '');
@@ -113,8 +138,9 @@ SkillParseResult parseSkillMarkdown(String text) {
   if (!RegExp(r'^[a-z0-9_-]{1,64}$').hasMatch(name)) {
     throw SkillValidationException('name 必须为 1~64 位小写字母/数字/下划线/连字符');
   }
-  if (description.isEmpty || description.length > 200) {
-    throw SkillValidationException('description 必填且长度不超过 200 字符');
+  if (description.isEmpty || description.length > kSkillMaxDescriptionChars) {
+    throw SkillValidationException(
+        'description 必填且长度不超过 $kSkillMaxDescriptionChars 字符');
   }
   final author = map['author']?.trim();
   if (author != null && author.length > 100) {

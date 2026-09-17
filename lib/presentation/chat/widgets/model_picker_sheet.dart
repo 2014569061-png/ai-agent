@@ -6,6 +6,7 @@ import '../../../infrastructure/providers/provider_config.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/liquid_segmented_control.dart';
 
 class ModelPickerSelection {
   const ModelPickerSelection({
@@ -127,12 +128,12 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
 
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * .88,
+        maxHeight: MediaQuery.sizeOf(context).height * .52,
       ),
       child: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 2, 16, 10),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,22 +149,20 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                       ),
                     ),
                   ),
-                  SegmentedButton<ChatMode>(
-                    style: SegmentedButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  SizedBox(
+                    width: 215,
+                    child: LiquidSegmentedControl<ChatMode>(
+                      height: 32,
+                      segments: const [
+                        LiquidSegment(value: ChatMode.chat, label: '聊天'),
+                        LiquidSegment(value: ChatMode.agent, label: 'Agent'),
+                        LiquidSegment(value: ChatMode.plan, label: '计划'),
+                      ],
+                      selected: _mode,
+                      onSelected: (selection) {
+                        setState(() => _mode = selection);
+                      },
                     ),
-                    segments: const [
-                      ButtonSegment(value: ChatMode.chat, label: Text('聊天')),
-                      ButtonSegment(
-                          value: ChatMode.agent, label: Text('Agent')),
-                      ButtonSegment(value: ChatMode.plan, label: Text('计划')),
-                    ],
-                    selected: {_mode},
-                    showSelectedIcon: false,
-                    onSelectionChanged: (selection) {
-                      setState(() => _mode = selection.first);
-                    },
                   ),
                 ],
               ),
@@ -172,16 +171,24 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                 controller: _searchController,
                 onChanged: (value) => setState(() => _query = value),
                 style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? AppPalette.darkText : AppPalette.lightText),
+                  fontSize: 14,
+                  color: isDark ? AppPalette.darkText : AppPalette.lightText,
+                ),
                 decoration: InputDecoration(
                   hintText: '搜索模型…',
                   hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? AppPalette.darkTextMuted
-                          : AppPalette.lightTextMuted),
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    fontSize: 13,
+                    color: isDark
+                        ? AppPalette.darkTextMuted
+                        : AppPalette.lightTextMuted,
+                  ),
+                  prefixIcon: Icon(
+                    Icons.search_rounded,
+                    size: 20,
+                    color: isDark
+                        ? AppPalette.darkTextMuted
+                        : AppPalette.lightTextMuted,
+                  ),
                   suffixIcon: _query.isEmpty
                       ? null
                       : IconButton(
@@ -193,15 +200,16 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                           icon: const Icon(Icons.close_rounded, size: 18),
                         ),
                   filled: true,
-                  fillColor:
-                      isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                  fillColor: isDark
+                      ? Colors.white.withValues(alpha: 0.05)
+                      : Colors.black.withValues(alpha: 0.035),
                   border: OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(AppTokens.radiusControl),
                     borderSide: BorderSide(
                       color: isDark
-                          ? AppPalette.darkHairline
-                          : AppPalette.lightHairline,
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
@@ -209,8 +217,15 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                         BorderRadius.circular(AppTokens.radiusControl),
                     borderSide: BorderSide(
                       color: isDark
-                          ? AppPalette.darkHairline
-                          : AppPalette.lightHairline,
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderSide: BorderSide(
+                      color: AppPalette.brandAction.withValues(alpha: 0.5),
                     ),
                   ),
                   contentPadding:
@@ -219,7 +234,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
               ),
               const SizedBox(height: 10),
 
-              // 厂商过滤 Tab 栏 (对标效果图 1)
+              // 厂商过滤 Tab 栏 (对标液态玻璃胶囊规范)
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
@@ -227,42 +242,60 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                     final selected = _selectedCategory == cat;
                     return Padding(
                       padding: const EdgeInsets.only(right: 6),
-                      child: FilterChip(
-                        selected: selected,
-                        label: Text(cat),
-                        labelStyle: TextStyle(
-                          fontSize: 12,
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.w400,
-                          color: selected
-                              ? Colors.white
-                              : (isDark
-                                  ? AppPalette.darkText
-                                  : AppPalette.lightText),
-                        ),
-                        selectedColor: AppPalette.brand,
-                        backgroundColor: isDark
-                            ? AppPalette.darkSurface
-                            : AppPalette.lightSurface,
-                        checkmarkColor: Colors.white,
-                        showCheckmark: false,
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusPill),
-                          side: BorderSide(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _selectedCategory = cat),
+                        behavior: HitTestBehavior.opaque,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 11, vertical: 5),
+                          decoration: BoxDecoration(
                             color: selected
-                                ? Colors.transparent
+                                ? (isDark
+                                    ? AppPalette.brandAction
+                                        .withValues(alpha: 0.22)
+                                    : AppPalette.brandAction
+                                        .withValues(alpha: 0.12))
                                 : (isDark
-                                    ? AppPalette.darkHairline
-                                    : AppPalette.lightHairline),
+                                    ? Colors.white.withValues(alpha: 0.04)
+                                    : Colors.black.withValues(alpha: 0.025)),
+                            borderRadius:
+                                BorderRadius.circular(AppTokens.radiusPill),
+                            border: Border.all(
+                              color: selected
+                                  ? AppPalette.brandAction
+                                      .withValues(alpha: isDark ? 0.55 : 0.40)
+                                  : (isDark
+                                      ? Colors.white.withValues(alpha: 0.07)
+                                      : Colors.black.withValues(alpha: 0.05)),
+                              width: 1.0,
+                            ),
+                            boxShadow: selected
+                                ? [
+                                    BoxShadow(
+                                      color: AppPalette.brandAction.withValues(
+                                          alpha: isDark ? 0.22 : 0.10),
+                                      blurRadius: 6,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Text(
+                            cat,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight:
+                                  selected ? FontWeight.w600 : FontWeight.w400,
+                              color: selected
+                                  ? (isDark
+                                      ? const Color(0xFF64D2FF)
+                                      : AppPalette.brandAction)
+                                  : (isDark
+                                      ? AppPalette.darkText
+                                      : AppPalette.lightText),
+                            ),
                           ),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 2),
-                        visualDensity: VisualDensity.compact,
-                        onSelected: (_) {
-                          setState(() => _selectedCategory = cat);
-                        },
                       ),
                     );
                   }).toList(),
@@ -337,17 +370,22 @@ class _OptionBar extends StatelessWidget {
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.045)
+            : Colors.black.withValues(alpha: 0.025),
         borderRadius: BorderRadius.circular(AppTokens.radiusControl),
         border: Border.all(
-          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.psychology_outlined, size: 17, color: AppPalette.brand),
+          const Icon(Icons.psychology_outlined,
+              size: 17, color: AppPalette.brandAction),
           const SizedBox(width: 6),
           Text(
             '思考',
@@ -363,11 +401,11 @@ class _OptionBar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _effortChip('关', ReasoningEffort.off),
-                  _effortChip('低', ReasoningEffort.low),
-                  _effortChip('中', ReasoningEffort.medium),
-                  _effortChip('高', ReasoningEffort.high),
-                  _effortChip('自动', ReasoningEffort.auto),
+                  _effortChip(context, '关', ReasoningEffort.off),
+                  _effortChip(context, '低', ReasoningEffort.low),
+                  _effortChip(context, '中', ReasoningEffort.medium),
+                  _effortChip(context, '高', ReasoningEffort.high),
+                  _effortChip(context, '自动', ReasoningEffort.auto),
                 ],
               ),
             ),
@@ -377,7 +415,9 @@ class _OptionBar extends StatelessWidget {
               height: 16,
               width: 1,
               margin: const EdgeInsets.symmetric(horizontal: 6),
-              color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.black.withValues(alpha: 0.08),
             ),
             GestureDetector(
               onTap: onOpenTools,
@@ -402,25 +442,40 @@ class _OptionBar extends StatelessWidget {
     );
   }
 
-  Widget _effortChip(String label, ReasoningEffort effort) {
+  Widget _effortChip(BuildContext context, String label, ReasoningEffort effort) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = reasoningEffort == effort;
     return Padding(
       padding: const EdgeInsets.only(right: 4),
       child: GestureDetector(
         onTap: () => onReasoningChanged(effort),
         behavior: HitTestBehavior.opaque,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: selected ? AppPalette.brand : Colors.transparent,
+            color: selected
+                ? (isDark
+                    ? AppPalette.brandAction.withValues(alpha: 0.25)
+                    : AppPalette.brandAction.withValues(alpha: 0.12))
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+            border: Border.all(
+              color: selected
+                  ? AppPalette.brandAction.withValues(alpha: isDark ? 0.6 : 0.4)
+                  : Colors.transparent,
+            ),
           ),
           child: Text(
             label,
             style: TextStyle(
               fontSize: 11.5,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-              color: selected ? Colors.white : AppPalette.darkTextMuted,
+              color: selected
+                  ? (isDark ? const Color(0xFF64D2FF) : AppPalette.brandAction)
+                  : (isDark
+                      ? AppPalette.darkTextMuted
+                      : AppPalette.lightTextMuted),
             ),
           ),
         ),
@@ -479,25 +534,32 @@ class _ModelTile extends StatelessWidget {
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final tags = _extractCapabilities(profile.model, profile.contextTokens);
 
-    const accentCyan = Color(0xFF00E5FF);
     final borderColor = selected
-        ? accentCyan
-        : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline);
+        ? AppPalette.brandAction.withValues(alpha: isDark ? 0.65 : 0.45)
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06));
+
     final cardBg = selected
-        ? (isDark ? const Color(0xFF10252C) : const Color(0xFFEDFCFF))
-        : (isDark ? AppPalette.darkSurface : AppPalette.lightSurface);
+        ? (isDark
+            ? AppPalette.brandAction.withValues(alpha: 0.15)
+            : AppPalette.brandAction.withValues(alpha: 0.07))
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.035)
+            : Colors.black.withValues(alpha: 0.02));
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 7),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-        border: Border.all(color: borderColor, width: selected ? 1.5 : 1.0),
+        border: Border.all(color: borderColor, width: selected ? 1.2 : 1.0),
         boxShadow: selected
             ? [
                 BoxShadow(
-                  color: accentCyan.withValues(alpha: 0.18),
-                  blurRadius: 8,
+                  color: AppPalette.brandAction
+                      .withValues(alpha: isDark ? 0.22 : 0.10),
+                  blurRadius: 10,
                   spreadRadius: 0,
                 )
               ]
@@ -509,7 +571,7 @@ class _ModelTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -521,15 +583,20 @@ class _ModelTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: 14.5,
                           fontWeight: FontWeight.w600,
                           color: textColor,
                         ),
                       ),
                     ),
                     if (selected)
-                      const Icon(Icons.check_circle_rounded,
-                          size: 18, color: accentCyan)
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 18,
+                        color: isDark
+                            ? const Color(0xFF64D2FF)
+                            : AppPalette.brandAction,
+                      )
                     else
                       Text(
                         profile.name,
@@ -537,7 +604,7 @@ class _ModelTile extends StatelessWidget {
                       ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 Text(
                   profile.isConfigured
                       ? profile.baseUrl
@@ -547,7 +614,7 @@ class _ModelTile extends StatelessWidget {
                   style: TextStyle(fontSize: 11.5, color: textMuted),
                 ),
                 if (tags.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 7),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
@@ -557,17 +624,21 @@ class _ModelTile extends StatelessWidget {
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: selected
-                              ? accentCyan.withValues(alpha: 0.12)
+                              ? (isDark
+                                  ? AppPalette.brandAction
+                                      .withValues(alpha: 0.20)
+                                  : AppPalette.brandAction
+                                      .withValues(alpha: 0.09))
                               : (isDark
-                                  ? AppPalette.darkCanvas
-                                  : AppPalette.lightCanvas),
+                                  ? Colors.white.withValues(alpha: 0.05)
+                                  : Colors.black.withValues(alpha: 0.03)),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: selected
-                                ? accentCyan.withValues(alpha: 0.4)
+                                ? AppPalette.brandAction.withValues(alpha: 0.4)
                                 : (isDark
-                                    ? AppPalette.darkHairline
-                                    : AppPalette.lightHairline),
+                                    ? Colors.white.withValues(alpha: 0.07)
+                                    : Colors.black.withValues(alpha: 0.05)),
                           ),
                         ),
                         child: Text(
@@ -575,7 +646,11 @@ class _ModelTile extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w500,
-                            color: selected ? accentCyan : textMuted,
+                            color: selected
+                                ? (isDark
+                                    ? const Color(0xFF64D2FF)
+                                    : AppPalette.brandAction)
+                                : textMuted,
                           ),
                         ),
                       );

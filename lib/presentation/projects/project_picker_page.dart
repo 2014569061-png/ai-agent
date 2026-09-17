@@ -7,18 +7,20 @@ import 'package:path/path.dart' as p;
 import '../../application/chat_controller.dart';
 import '../../application/project_kind.dart';
 import '../../application/project_service.dart';
+import '../../application/project_settings.dart';
 import '../../application/project_template_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../motion/nexus_page_route_factory.dart';
-import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_sheet.dart';
 import 'project_home_page.dart';
+import 'storage_access_flow.dart';
 
 class ProjectPickerPage extends ConsumerStatefulWidget {
   const ProjectPickerPage({super.key});
@@ -127,15 +129,47 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
       FloatingToast.show(context, 'Web 暂不支持导入本地目录');
       return;
     }
-    final path = await FilePicker.platform.getDirectoryPath(dialogTitle: '导入项目目录');
-    if (path == null || path.isEmpty) return;
     try {
-      await ref.read(chatControllerProvider.notifier).bindDirectoryAsProject(path);
-      if (mounted) Navigator.of(context).pop(true);
+      // 先完成授权，再执行导入：没有「所有文件访问权限」时，用户选中的目录
+      // 对 dart:io 往往只读，导入会退化成一个改不了文件的项目。
+      if (!await ensureAllFilesAccess(context)) return;
+      if (!mounted) return;
+      // 统一走 WorkspaceService：Android 的目录授权与最近目录记录都在这里处理。
+      final path =
+          await ref.read(chatControllerProvider.notifier).pickWorkspace();
+      if (!mounted || path == null || path.isEmpty) return;
+      await _warnIfDirectoryReadOnly();
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
     } catch (error) {
       if (mounted) {
         FloatingToast.show(context, '$error', tone: ToastTone.danger);
       }
+    }
+  }
+
+  /// 目录可读但不可写时给出可操作的提示。
+  ///
+  /// Android 11+ 分区存储下，系统目录选择器给出的路径可能只具备读取权限；
+  /// 这种目录允许导入（可浏览、可让模型读取代码），但改文件会失败，
+  /// 所以必须明确告诉用户去哪里补权限，而不是留一个无解的「目录不可写」。
+  Future<void> _warnIfDirectoryReadOnly() async {
+    try {
+      final projectId = ref.read(chatControllerProvider).currentProjectId;
+      if (projectId == null) return;
+      final db = await ref.read(databaseProvider.future);
+      final project = await db.findProject(projectId);
+      if (project == null) return;
+      final settings = ProjectSettings.decode(project.settingsJson);
+      if (settings.directoryWritable || !mounted) return;
+      FloatingToast.show(
+        context,
+        '目录已导入，但当前只能读取。需要修改文件时，请在系统设置里为 NEXUS Agent '
+        '开启「所有文件访问权限」。',
+        tone: ToastTone.warning,
+      );
+    } catch (_) {
+      // 提示失败不应影响导入结果。
     }
   }
 
@@ -169,7 +203,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
     final packageController =
         TextEditingController(text: 'com.nexus.starter');
     final appController = TextEditingController(text: 'NexusStarter');
-    return showDialog<(String, String)>(
+    final result = await showNexusDialog<(String, String)>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('小型 Java APK 配置'),
@@ -202,11 +236,16 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
         ],
       ),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      packageController.dispose();
+      appController.dispose();
+    });
+    return result;
   }
 
   Future<String?> _askName(String title, String initial) async {
     final controller = TextEditingController(text: initial);
-    return showDialog<String>(
+    final result = await showNexusDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text(title),
@@ -227,15 +266,15 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
         ],
       ),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+    return result;
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final currentId = ref.watch(
         chatControllerProvider.select((state) => state.currentProjectId));
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: const NexusPageHeader(
         title: '项目',
         subtitle: '选择、新建或导入开发项目',

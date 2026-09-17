@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../application/git_service.dart';
-import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
@@ -81,9 +80,7 @@ class _ProjectGitPageState extends State<ProjectGitPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
       appBar: const NexusPageHeader(
         title: 'Git',
         subtitle: '查看状态、按文件暂存并提交',

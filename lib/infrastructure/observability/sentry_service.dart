@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SentryService {
   static const _prefsKey = 'crash_report_enabled';
   static const _dsn = String.fromEnvironment('SENTRY_DSN');
+  static bool _initialized = false;
 
   static bool get hasDsn => _dsn.isNotEmpty;
 
@@ -26,10 +27,12 @@ class SentryService {
   /// 按授权情况初始化并启动应用。未授权 / 无 DSN / Web 时直接启动，不加载 SDK。
   static Future<void> init(void Function() appRunner) async {
     if (!hasDsn || kIsWeb) {
+      _initialized = false;
       appRunner();
       return;
     }
     if (!await isEnabled()) {
+      _initialized = false;
       appRunner();
       return;
     }
@@ -37,7 +40,9 @@ class SentryService {
       (options) {
         options
           ..dsn = _dsn
-          ..tracesSampleRate = 0.1
+          // The product promise is "no analytics"; crash reporting does not
+          // need performance tracing data.
+          ..tracesSampleRate = 0
           ..beforeSend = (event, hint) {
             // 脱敏：只保留匿名堆栈与设备信息。
             final request = event.request;
@@ -66,5 +71,23 @@ class SentryService {
       },
       appRunner: appRunner,
     );
+    // SentryFlutter.init installs the FlutterError and PlatformDispatcher
+    // integrations. Keep the flag separate so best-effort reports from
+    // intentional fallbacks do not touch the SDK before initialization.
+    _initialized = true;
+  }
+
+  /// Reports an intentional fallback without changing the caller's control
+  /// flow. Sentry itself remains opt-in and no-ops when it is not initialized.
+  static Future<void> reportException(
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    if (!_initialized) return;
+    try {
+      await Sentry.captureException(error, stackTrace: stackTrace);
+    } catch (_) {
+      // Telemetry must never become a second failure path.
+    }
   }
 }

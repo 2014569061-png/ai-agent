@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import 'nexus_sheet.dart';
 
 Future<bool> showConfirmAction(
@@ -9,11 +10,13 @@ Future<bool> showConfirmAction(
   String confirmLabel = '确认',
   String cancelLabel = '取消',
   bool isDanger = true,
+  bool barrierDismissible = true,
   String? requiredKeyword,
   List<String>? bulletItems,
 }) async {
   final result = await showNexusDialog<bool>(
     context: context,
+    barrierDismissible: barrierDismissible,
     builder: (dialogContext) {
       final isDark = Theme.of(dialogContext).brightness == Brightness.dark;
       final textMuted =
@@ -81,11 +84,24 @@ class _ConfirmActionDialogState extends State<_ConfirmActionDialog> {
       title: Row(
         children: [
           if (widget.isDanger) ...[
-            const Icon(Icons.warning_amber_rounded,
-                color: AppPalette.danger, size: 22),
-            const SizedBox(width: 8),
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: AppPalette.danger.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.warning_amber_rounded,
+                  color: AppPalette.danger, size: 18),
+            ),
+            const SizedBox(width: 10),
           ],
-          Expanded(child: Text(widget.title)),
+          Expanded(
+            child: Text(
+              widget.title,
+              style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
       content: SingleChildScrollView(
@@ -130,24 +146,49 @@ class _ConfirmActionDialogState extends State<_ConfirmActionDialog> {
                 decoration: InputDecoration(
                   hintText: widget.requiredKeyword,
                   isDense: true,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 ),
               ),
             ],
           ],
         ),
       ),
+      actionsPadding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(widget.cancelLabel),
-        ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: confirmColor,
-            foregroundColor: Colors.white,
-          ),
-          onPressed: keywordMatches ? () => Navigator.pop(context, true) : null,
-          child: Text(widget.confirmLabel),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(0, 42),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(widget.cancelLabel),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: confirmColor,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(0, 42),
+                  shape: RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                  ),
+                ),
+                onPressed:
+                    keywordMatches ? () => Navigator.pop(context, true) : null,
+                child: Text(widget.confirmLabel),
+              ),
+            ),
+          ],
         ),
       ],
     );

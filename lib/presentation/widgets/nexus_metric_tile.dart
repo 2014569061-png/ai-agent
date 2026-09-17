@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import 'glass_surface.dart';
 
 /// 统一的指标展示卡片 (NexusMetricTile)
 /// 用于 Token、耗时、缓存命中率、重试次数、预计费用等指标的统一排版与可读性解释。
@@ -53,83 +55,105 @@ class NexusMetricTile extends StatelessWidget {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final valueColor = color ?? textColor;
+    final intensity = AppAppearanceController.resolvedGlassIntensity;
+    final isGlass = intensity != GlassIntensity.flat;
+    final cardRadius = BorderRadius.circular(AppTokens.radiusCard);
 
-    final content = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-          border: Border.all(color: hairline, width: 1.0),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 13, color: color ?? textMuted),
-                  const SizedBox(width: 4),
-                ],
-                Text(
-                  label,
-                  style: TextStyle(
+    final cardBody = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: color ?? textMuted),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (explanation != null) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: explanation!,
+                  triggerMode: TooltipTriggerMode.tap,
+                  child: Icon(
+                    Icons.info_outline_rounded,
+                    size: 12,
                     color: textMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (explanation != null) ...[
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: explanation!,
-                    triggerMode: TooltipTriggerMode.tap,
-                    child: Icon(
-                      Icons.info_outline_rounded,
-                      size: 12,
-                      color: textMuted,
-                    ),
-                  ),
-                ],
               ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: valueColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              if (unit != null && unit!.isNotEmpty) ...[
+                const SizedBox(width: 3),
                 Text(
-                  value,
+                  unit!,
                   style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: valueColor,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                    color: textMuted,
                   ),
                 ),
-                if (unit != null && unit!.isNotEmpty) ...[
-                  const SizedBox(width: 3),
-                  Text(
-                    unit!,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w400,
-                      color: textMuted,
-                    ),
-                  ),
-                ],
               ],
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
 
-    return content;
+    if (isGlass) {
+      return GlassSurface(
+        role: GlassRole.content,
+        // KPI tiles are short data surfaces; clear glass keeps the ambient
+        // canvas visible instead of turning every tile into a white card.
+        variant: GlassVariant.clear,
+        intensity: intensity,
+        borderRadius: cardRadius,
+        onTap: onTap,
+        interactive: onTap != null,
+        child: cardBody,
+      );
+    }
+
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: cardRadius,
+        child: Container(
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: cardRadius,
+            border: Border.all(color: hairline, width: 1.0),
+          ),
+          child: cardBody,
+        ),
+      ),
+    );
   }
 }

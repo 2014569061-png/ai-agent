@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../../../domain/models.dart';
@@ -6,6 +7,7 @@ import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_execution_status.dart';
+import '../../widgets/glass_surface.dart';
 
 /// 首页输入区（对标 DeepSeek App）。
 ///
@@ -36,8 +38,11 @@ class FloatingCapsuleInput extends StatefulWidget {
     this.onApprovalModeTap,
     this.planModeEnabled = false,
     this.hasAttachments = false,
+    this.hasAttachmentsListenable,
     this.isAttachmentExpanded = false,
+    this.attachmentExpandedListenable,
     this.isPaused = false,
+    this.glassIntensity = GlassIntensity.liquid,
   });
 
   final TextEditingController controller;
@@ -58,19 +63,19 @@ class FloatingCapsuleInput extends StatefulWidget {
 
   final bool planModeEnabled;
   final bool hasAttachments;
+  final ValueListenable<bool>? hasAttachmentsListenable;
   final bool isAttachmentExpanded;
+  final ValueListenable<bool>? attachmentExpandedListenable;
   final bool isPaused;
+  final GlassIntensity glassIntensity;
 
   @override
   State<FloatingCapsuleInput> createState() => _FloatingCapsuleInputState();
 }
 
 class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
-  bool _focused = false;
+  late final ValueNotifier<bool> _focused;
   final FocusNode _focusNode = FocusNode();
-
-  bool get _canSend =>
-      widget.controller.text.trim().isNotEmpty || widget.hasAttachments;
 
   String _approvalModeLabel(ApprovalMode mode) => switch (mode) {
         ApprovalMode.ask => '每次询问',
@@ -81,8 +86,8 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
   @override
   void initState() {
     super.initState();
+    _focused = ValueNotifier(false);
     _focusNode.addListener(_onFocusChange);
-    widget.controller.addListener(_onTextChange);
   }
 
   @override
@@ -102,18 +107,14 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
   @override
   void dispose() {
     _focusNode.removeListener(_onFocusChange);
-    widget.controller.removeListener(_onTextChange);
     _focusNode.dispose();
+    _focused.dispose();
     super.dispose();
   }
 
   void _onFocusChange() {
     final now = _focusNode.hasFocus;
-    if (now != _focused) setState(() => _focused = now);
-  }
-
-  void _onTextChange() {
-    if (mounted) setState(() {});
+    if (now != _focused.value) _focused.value = now;
   }
 
   @override
@@ -143,152 +144,185 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
             // 运行状态提示（仅生成 / 计划模式时出现，首页态不显示）
             _buildStatusLine(textMuted),
 
-            // 外层容器：20px 圆角 + surface 底色，聚焦时描边转 brand，常态带微环境光遮蔽阴影 + 微边框
-            Container(
-              padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
-              decoration: BoxDecoration(
-                color: surface,
-                borderRadius: BorderRadius.circular(AppTokens.radiusComposer),
-                border: Border.all(
-                  color: _focused
-                      ? AppPalette.brand
-                      : (isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : const Color(0xFFE2E8F0)),
-                  width: 0.8,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isDark
-                        ? AppPalette.darkShadowAmbient
-                        : AppPalette.lightShadowAmbient,
-                    blurRadius: AppTokens.shadowFloatingBlur,
-                    offset: AppTokens.shadowFloatingOffset,
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 输入行：最小高 44px
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(
-                        minHeight: AppTokens.kControlHeight),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextField(
-                        focusNode: _focusNode,
-                        controller: widget.controller,
-                        minLines: 1,
-                        maxLines: 5,
-                        textInputAction: TextInputAction.newline,
-                        onTapOutside: (_) => _focusNode.unfocus(),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                          height: 1.6,
-                          color: textColor,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: widget.isRunning
-                              ? (widget.isPaused ? '补充要求后继续' : '补充要求')
-                              : '发消息',
-                          hintStyle: TextStyle(
+            // 外层容器：20px 圆角，聚焦时描边转 brand
+            Builder(
+              builder: (context) {
+                final inputCard = Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 输入行：最小高 44px
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(
+                          minHeight: AppTokens.kControlHeight),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextField(
+                          focusNode: _focusNode,
+                          controller: widget.controller,
+                          minLines: 1,
+                          maxLines: 5,
+                          textInputAction: TextInputAction.newline,
+                          onTapOutside: (_) => _focusNode.unfocus(),
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
-                            color: textFaint,
+                            height: 1.6,
+                            color: textColor,
                           ),
-                          isDense: true,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          contentPadding: EdgeInsets.zero,
+                          decoration: InputDecoration(
+                            hintText: widget.isRunning
+                                ? (widget.isPaused ? '补充要求后继续' : '补充要求')
+                                : '发消息',
+                            hintStyle: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                              color: textFaint,
+                            ),
+                            isDense: true,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 6),
+                    const SizedBox(height: 6),
 
-                  // 操作行：高 48px，左右两端对齐（左2靠左，右3靠右）
-                  SizedBox(
-                    height: 48,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // 左：模式 + 审批策略（圆形磁贴，靠左）
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _ModeTile(
-                              icon: Icons.tune_rounded,
-                              semanticLabel: '${widget.modeLabel}模式',
-                              selected: true,
-                              onTap: widget.onModeTap,
-                            ),
-                            if (widget.onApprovalModeTap != null)
+                    // 操作行：高 48px，左右两端对齐（左2靠左，右3靠右）
+                    SizedBox(
+                      height: 48,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          // 左：模式 + 审批策略（圆形磁贴，靠左）
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
                               _ModeTile(
-                                icon: widget.approvalMode == ApprovalMode.fullAccess
-                                    ? Icons.shield_outlined
-                                    : Icons.verified_user_outlined,
-                                semanticLabel:
-                                    _approvalModeLabel(widget.approvalMode),
-                                selected:
-                                    widget.approvalMode == ApprovalMode.fullAccess,
-                                onTap: widget.onApprovalModeTap,
+                                icon: Icons.tune_rounded,
+                                semanticLabel: '${widget.modeLabel}模式',
+                                selected: true,
+                                onTap: widget.onModeTap,
                               ),
-                          ],
-                        ),
-                        // 右：代码块快捷 +「＋」附件 + 尾键（发送/停止/置灰发送，靠右）
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _CircleIconButton(
-                              icon: Icons.code_rounded,
-                              iconSize: 15,
-                              tooltip: '插入代码块',
-                              semanticLabel: '插入代码块',
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                final text = widget.controller.text;
-                                final sel = widget.controller.selection;
-                                const snippet = '```\n\n```';
-                                if (sel.isValid && sel.start >= 0) {
-                                  final newText = text.replaceRange(
-                                      sel.start, sel.end, snippet);
-                                  widget.controller.value = TextEditingValue(
-                                    text: newText,
-                                    selection: TextSelection.collapsed(
-                                        offset: sel.start + 4),
-                                  );
-                                } else {
-                                  widget.controller.text = '$text\n$snippet';
-                                }
-                              },
-                            ),
-                            _CircleIconButton(
-                              icon: widget.isAttachmentExpanded
-                                  ? Icons.close_rounded
-                                  : Icons.add_rounded,
-                              iconSize: 16,
-                              tooltip: widget.isAttachmentExpanded
-                                  ? '收起附件面板'
-                                  : '添加附件或更多工具',
-                              semanticLabel: widget.isAttachmentExpanded
-                                  ? '收起附件面板'
-                                  : '添加附件或更多工具',
-                              onTap: widget.onAttachmentMenu,
-                            ),
-                            _buildTrailingAction(textFaint, isDark),
-                          ],
-                        ),
-                      ],
+                              if (widget.onApprovalModeTap != null)
+                                _ModeTile(
+                                  icon: widget.approvalMode ==
+                                          ApprovalMode.fullAccess
+                                      ? Icons.shield_outlined
+                                      : Icons.verified_user_outlined,
+                                  semanticLabel:
+                                      _approvalModeLabel(widget.approvalMode),
+                                  selected: widget.approvalMode ==
+                                      ApprovalMode.fullAccess,
+                                  onTap: widget.onApprovalModeTap,
+                                ),
+                            ],
+                          ),
+                          // 右：代码块快捷 +「＋」附件 + 尾键（发送/停止/置灰发送，靠右）
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _CircleIconButton(
+                                icon: Icons.code_rounded,
+                                iconSize: 15,
+                                tooltip: '插入代码块',
+                                semanticLabel: '插入代码块',
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  final text = widget.controller.text;
+                                  final sel = widget.controller.selection;
+                                  const snippet = '```\n\n```';
+                                  if (sel.isValid && sel.start >= 0) {
+                                    final newText = text.replaceRange(
+                                        sel.start, sel.end, snippet);
+                                    widget.controller.value = TextEditingValue(
+                                      text: newText,
+                                      selection: TextSelection.collapsed(
+                                          offset: sel.start + 4),
+                                    );
+                                  } else {
+                                    widget.controller.text = '$text\n$snippet';
+                                  }
+                                },
+                              ),
+                              _buildAttachmentButton(),
+                              _buildTrailingActionListenable(
+                                  textFaint, isDark),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
+                );
+
+                if (widget.glassIntensity == GlassIntensity.flat) {
+                  return _withFocusRing(
+                    radius: BorderRadius.circular(AppTokens.radiusComposer),
+                    child: Container(
+                      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+                      decoration: BoxDecoration(
+                        color: surface,
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusComposer),
+                        border: Border.all(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.08)
+                              : const Color(0xFFE2E8F0),
+                          width: 0.8,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isDark
+                                ? AppPalette.darkShadowAmbient
+                                : AppPalette.lightShadowAmbient,
+                            blurRadius: AppTokens.shadowFloatingBlur,
+                            offset: AppTokens.shadowFloatingOffset,
+                          ),
+                        ],
+                      ),
+                      child: inputCard,
+                    ),
+                  );
+                }
+
+                return _withFocusRing(
+                  radius: BorderRadius.circular(AppTokens.radiusComposer),
+                  child: GlassSurface(
+                    role: GlassRole.control,
+                    variant: GlassVariant.regular,
+                    intensity: widget.glassIntensity,
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusComposer),
+                    blurSigma: 28,
+                    refraction: 20,
+                    edgeWidth: 24,
+                    gloss: 0.55,
+                    borderColor: isDark
+                        ? const Color(0x38FFFFFF)
+                        : const Color(0x90FFFFFF),
+                    borderWidth: 1.0,
+                    tint: isDark
+                        ? AppPalette.darkSurface.withValues(alpha: 0.36)
+                        : AppPalette.lightCanvas.withValues(alpha: 0.32),
+                    padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDark
+                            ? const Color(0x60000000)
+                            : const Color(0x1A1E3A8A),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                    child: inputCard,
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ],
         ),
@@ -296,11 +330,82 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
     );
   }
 
+  Widget _withFocusRing({
+    required BorderRadius radius,
+    required Widget child,
+  }) {
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _focused,
+              builder: (context, focused, _) => DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  border: focused
+                      ? Border.all(color: AppPalette.brand, width: 1.4)
+                      : null,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAttachmentButton() {
+    Widget buildButton(bool expanded) => _CircleIconButton(
+          icon: expanded ? Icons.close_rounded : Icons.add_rounded,
+          iconSize: 16,
+          tooltip: expanded ? '收起附件面板' : '添加附件或更多工具',
+          semanticLabel: expanded ? '收起附件面板' : '添加附件或更多工具',
+          onTap: widget.onAttachmentMenu,
+        );
+
+    final listenable = widget.attachmentExpandedListenable;
+    if (listenable == null) return buildButton(widget.isAttachmentExpanded);
+    return ValueListenableBuilder<bool>(
+      valueListenable: listenable,
+      builder: (context, expanded, _) => buildButton(expanded),
+    );
+  }
+
   /// 生成中 → 停止键；有内容 → 发送键；空输入 → 置灰的发送键（不可点）。
   /// 使用 AnimatedSwitcher 进行 150ms 状态平滑过渡。
   Widget _buildTrailingAction(Color textFaint, bool isDark) {
+    return _buildTrailingActionForAttachments(
+        textFaint, isDark, widget.hasAttachments);
+  }
+
+  Widget _buildTrailingActionListenable(Color textFaint, bool isDark) {
+    final listenable = widget.hasAttachmentsListenable;
+    if (listenable == null) {
+      return ValueListenableBuilder<TextEditingValue>(
+        valueListenable: widget.controller,
+        builder: (context, _, __) => _buildTrailingAction(textFaint, isDark),
+      );
+    }
+    return ValueListenableBuilder<bool>(
+      valueListenable: listenable,
+      builder: (context, hasAttachments, _) =>
+          ValueListenableBuilder<TextEditingValue>(
+        valueListenable: widget.controller,
+        builder: (context, _, __) =>
+            _buildTrailingActionForAttachments(
+                textFaint, isDark, hasAttachments),
+      ),
+    );
+  }
+
+  Widget _buildTrailingActionForAttachments(
+      Color textFaint, bool isDark, bool hasAttachments) {
+    final canSend = widget.controller.text.trim().isNotEmpty || hasAttachments;
     final Widget button;
-    if (widget.isRunning && _canSend) {
+    if (widget.isRunning && canSend) {
       button = _FilledCircleButton(
         key: const ValueKey('trailing_action_follow_up'),
         color: AppPalette.brand,
@@ -336,7 +441,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
           (widget.onPause ?? widget.onStop)();
         },
       );
-    } else if (_canSend) {
+    } else if (canSend) {
       button = _FilledCircleButton(
         key: const ValueKey('trailing_action_send_active'),
         color: AppPalette.brand,
@@ -445,14 +550,21 @@ class _ModeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final hairline =
-        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
-    final brandSoft =
-        isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
-    final bg = selected ? brandSoft : Colors.transparent;
+    final bg = selected
+        ? (isDark
+            ? AppPalette.darkBrandSoft.withValues(alpha: 0.85)
+            : AppPalette.lightBrandSoft.withValues(alpha: 0.90))
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.035));
+    final border = selected
+        ? AppPalette.brandAction.withValues(alpha: isDark ? 0.65 : 0.50)
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.14)
+            : Colors.black.withValues(alpha: 0.08));
     final color = selected ? AppPalette.brandAction : textMuted;
 
     return Semantics(
@@ -480,10 +592,8 @@ class _ModeTile extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: bg,
                     border: Border.all(
-                      color: selected
-                          ? AppPalette.brandAction.withValues(alpha: 0.45)
-                          : hairline,
-                      width: 1.2,
+                      color: border,
+                      width: 1.0,
                     ),
                   ),
                   alignment: Alignment.center,
@@ -532,8 +642,16 @@ class _CircleIconButton extends StatelessWidget {
               width: AppTokens.composerCircleButton,
               height: AppTokens.composerCircleButton,
               decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.black.withValues(alpha: 0.035),
                 shape: BoxShape.circle,
-                border: Border.all(color: resolved, width: 1.2),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.black.withValues(alpha: 0.08),
+                  width: 1.0,
+                ),
               ),
               alignment: Alignment.center,
               child: Icon(icon, size: iconSize, color: resolved),

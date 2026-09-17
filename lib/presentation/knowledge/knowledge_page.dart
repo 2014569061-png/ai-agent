@@ -1,4 +1,4 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,12 +6,14 @@ import '../../application/knowledge_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/document_extractor.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/liquid_glass.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
@@ -191,6 +193,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: SectionCard(
+        glass: true,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -200,18 +203,19 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: 38,
+                    height: 38,
                     decoration: BoxDecoration(
                       color: isDark
-                          ? AppPalette.darkSurface
-                          : AppPalette.lightSurface,
+                          ? AppPalette.brandSoftDark
+                          : AppPalette.brandSoftLight,
                       borderRadius:
                           BorderRadius.circular(AppTokens.radiusControl),
                       border: Border.all(
                         color: isDark
-                            ? AppPalette.darkHairline
-                            : AppPalette.lightHairline,
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : AppPalette.brand.withValues(alpha: 0.15),
+                        width: 0.8,
                       ),
                     ),
                     child: Icon(
@@ -228,14 +232,14 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                       doc.name,
                       style: const TextStyle(
                         fontSize: 15,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 18),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
                     tooltip: '删除文档',
                     constraints:
                         const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -248,16 +252,17 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 children: [
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? AppPalette.darkSurface
-                          : AppPalette.lightSurface,
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : Colors.white.withValues(alpha: 0.50),
                       borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                       border: Border.all(
                         color: isDark
-                            ? AppPalette.darkHairline
-                            : AppPalette.lightHairline,
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : Colors.white.withValues(alpha: 0.70),
+                        width: 0.8,
                       ),
                     ),
                     child: Text(
@@ -274,10 +279,18 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   const SizedBox(width: 8),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppPalette.brand.withValues(alpha: 0.1),
+                      color: isDark
+                          ? AppPalette.brandSoftDark
+                          : AppPalette.brandSoftLight,
                       borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : AppPalette.brand.withValues(alpha: 0.20),
+                        width: 0.8,
+                      ),
                     ),
                     child: Text(
                       '${doc.chunkCount} 分块',
@@ -291,10 +304,18 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   const SizedBox(width: 8),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: AppPalette.success.withValues(alpha: 0.1),
+                      color: isDark
+                          ? AppPalette.darkSuccessSoft
+                          : AppPalette.lightSuccessSoft,
                       borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      border: Border.all(
+                        color: isDark
+                            ? AppPalette.success.withValues(alpha: 0.25)
+                            : AppPalette.success.withValues(alpha: 0.20),
+                        width: 0.8,
+                      ),
                     ),
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
@@ -345,6 +366,8 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final filtered = _docs.where((d) {
       if (_searchQuery.isEmpty) return true;
       return d.name.toLowerCase().contains(_searchQuery) ||
@@ -352,7 +375,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     }).toList();
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: '知识库',
         subtitle: '文档切片检索与 RAG 管理',
@@ -413,14 +438,21 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                       : null,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                   filled: true,
-                  fillColor:
-                      isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                  fillColor: isDark
+                      ? (isFlat
+                          ? AppPalette.darkSurface
+                          : AppPalette.darkSurface.withValues(alpha: 0.55))
+                      : (isFlat
+                          ? AppPalette.lightSurface
+                          : AppPalette.lightSurface.withValues(alpha: 0.65)),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                     borderSide: BorderSide(
                       color: isDark
                           ? AppPalette.darkHairline
-                          : AppPalette.lightHairline,
+                          : (isFlat
+                              ? AppPalette.lightHairline
+                              : const Color(0x80FFFFFF)),
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
@@ -428,7 +460,9 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                     borderSide: BorderSide(
                       color: isDark
                           ? AppPalette.darkHairline
-                          : AppPalette.lightHairline,
+                          : (isFlat
+                              ? AppPalette.lightHairline
+                              : const Color(0x80FFFFFF)),
                     ),
                   ),
                 ),

@@ -1,13 +1,15 @@
-﻿import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
 import '../../infrastructure/files/vault_exporter.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
@@ -126,9 +128,13 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: const NexusPageHeader(
         title: '隐私保险箱',
         subtitle: '全量加密导出与备份恢复',

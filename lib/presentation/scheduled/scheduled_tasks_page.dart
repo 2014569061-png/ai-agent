@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/providers.dart';
 import '../../application/scheduled_task_service.dart';
 import '../../infrastructure/database/app_database.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
@@ -355,9 +357,13 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: const NexusPageHeader(
         title: '定时任务',
         subtitle: '自动化循环计划与后台执行',
@@ -491,19 +497,39 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                 },
               ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _create,
-        tooltip: '新建定时任务',
-        backgroundColor: AppPalette.brandAction,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        focusElevation: 0,
-        hoverElevation: 0,
-        highlightElevation: 0,
-        shape: RoundedRectangleBorder(
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF388BFD),
+              Color(0xFF1F6FEB),
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppPalette.brand.withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        child: const Icon(Icons.add),
+        child: FloatingActionButton(
+          onPressed: _create,
+          tooltip: '新建定时任务',
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          focusElevation: 0,
+          hoverElevation: 0,
+          highlightElevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          ),
+          child: const Icon(Icons.add),
+        ),
       ),
     );
   }

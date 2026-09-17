@@ -12,7 +12,7 @@ import 'skill_parser.dart';
 
 class SkillStore {
   static const int _defaultInjectionBudget = 2000;
-  // 闄愬埗鍖呭惈鎴柇鏍囪鍚庣殑鎬婚暱搴︼紝閬垮厤绱㈠紩琛屾湇缁嗛檺銆?
+  // 限制包含截断标记后的总长度，避免索引行超出预算。
   static const int _maxDescriptionChars = 79;
 
   Future<List<SkillPack>> all(AppDatabase db) => db.allSkillPacks();

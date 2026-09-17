@@ -3,13 +3,30 @@ import 'dart:io';
 
 import 'linux_runtime.dart';
 
+typedef AndroidShellProcessStarter = Future<Process> Function(
+  String executable,
+  List<String> arguments, {
+  String? workingDirectory,
+  Map<String, String>? environment,
+  bool includeParentEnvironment,
+  bool runInShell,
+  ProcessStartMode mode,
+});
+
 /// Last-resort Android system shell. It has no bundled Linux toolchain, but
 /// keeps basic shell commands usable when neither PRoot nor Termux is ready.
 class AndroidShellRuntimeAdapter
     implements LinuxRuntimeAdapter, DetachedLinuxRuntimeAdapter {
-  AndroidShellRuntimeAdapter({this.maxOutputBytes = 128 * 1024});
+  AndroidShellRuntimeAdapter({
+    this.maxOutputBytes = 128 * 1024,
+    bool? isAndroid,
+    AndroidShellProcessStarter? processStarter,
+  })  : _isAndroid = isAndroid ?? Platform.isAndroid,
+        _processStarter = processStarter ?? Process.start;
 
   final int maxOutputBytes;
+  final bool _isAndroid;
+  final AndroidShellProcessStarter _processStarter;
   Process? _process;
 
   @override
@@ -28,8 +45,8 @@ class AndroidShellRuntimeAdapter
   Future<LinuxRuntimeInfo> inspect() async => LinuxRuntimeInfo(
         kind: kind,
         label: 'Android Shell',
-        available: Platform.isAndroid,
-        detail: Platform.isAndroid
+        available: _isAndroid,
+        detail: _isAndroid
             ? '系统自带 shell 可用，但不包含 Alpine/Termux 的完整开发工具链。'
             : 'Android Shell 仅支持 Android。',
         supportsInteractive: false,
@@ -42,7 +59,7 @@ class AndroidShellRuntimeAdapter
     required String workingDirectory,
     required Duration timeout,
   }) async {
-    if (!Platform.isAndroid) {
+    if (!_isAndroid) {
       return const CommandResult(
         output: '[android-shell] 该运行时仅支持 Android。',
         exitCode: 127,
@@ -53,7 +70,7 @@ class AndroidShellRuntimeAdapter
     var timedOut = false;
     try {
       final shellBinary = _shellBinary(request.shell);
-      final process = await Process.start(
+      final process = await _processStarter(
         shellBinary,
         ['-c', request.commandLine],
         workingDirectory: workingDirectory,
@@ -96,18 +113,18 @@ class AndroidShellRuntimeAdapter
     required String ownerToken,
     required String logPath,
   }) async {
-    if (!Platform.isAndroid) return null;
+    if (!_isAndroid) return null;
     final log = File(logPath);
     await log.parent.create(recursive: true);
     if (await log.exists()) await log.delete();
     try {
-      final process = await Process.start(
+      final process = await _processStarter(
         _shellBinary(request.shell),
         ['-c', request.commandLine],
         workingDirectory: workingDirectory,
         runInShell: false,
         environment: {'NEXUS_DAEMON_OWNER': ownerToken},
-        includeParentEnvironment: true,
+        includeParentEnvironment: false,
       );
       final sink = log.openWrite(mode: FileMode.writeOnlyAppend);
       final stdoutDone = _pipeToFile(process.stdout, sink);

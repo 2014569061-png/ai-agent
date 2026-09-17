@@ -9,6 +9,7 @@ import 'package:mobile_agent/presentation/widgets/nexus_disclosure.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_execution_status.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_loading_skeleton.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_status_badge.dart';
+import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
 
 void main() {
   group('NexusMotion & MotionPreferences Tests', () {
@@ -73,13 +74,50 @@ void main() {
       final detailRoute = NexusPageRoute.detail(
         builder: (_) => const SizedBox(),
       );
-      expect(detailRoute.transitionDuration, const Duration(milliseconds: 220));
+      expect(detailRoute.transitionDuration, const Duration(milliseconds: 150));
       expect(detailRoute.reverseTransitionDuration, const Duration(milliseconds: 150));
 
       final fadeRoute = NexusPageRoute.fade(
         builder: (_) => const SizedBox(),
       );
       expect(fadeRoute.transitionDuration, const Duration(milliseconds: 150));
+    });
+
+    testWidgets('glass page routes do not fade or snapshot backdrop filters',
+        (tester) async {
+      for (final presentation in [
+        RoutePresentation.detail,
+        RoutePresentation.settings,
+        RoutePresentation.workspace,
+      ]) {
+        late NexusPageRoute<void> route;
+        await tester.pumpWidget(
+          Theme(
+            data: ThemeData.light(),
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Builder(
+                builder: (context) {
+                  route = NexusPageRoute<void>(
+                    builder: (_) =>
+                        const LiquidGlass(child: Text('Glass page')),
+                    presentation: presentation,
+                  );
+                  return route.transitionsBuilder(
+                    context,
+                    const AlwaysStoppedAnimation<double>(0.5),
+                    const AlwaysStoppedAnimation<double>(0.0),
+                    const LiquidGlass(child: Text('Glass page')),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+
+        expect(route.allowSnapshotting, isFalse);
+        expect(find.byType(FadeTransition), findsNothing);
+      }
     });
   });
 

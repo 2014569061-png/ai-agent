@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../../../application/dashboard_service.dart';
 import '../../l10n/app_strings.dart';
+import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/glass_surface.dart';
 import '../../widgets/section_card.dart';
 import 'token_numbers.dart';
 
@@ -45,6 +47,7 @@ class TokenUsageHero extends StatelessWidget {
     final progress = (total / maxBudget).clamp(0.0, 1.0);
 
     return SectionCard(
+      glass: true,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,8 +68,7 @@ class TokenUsageHero extends StatelessWidget {
               ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: const Color(0xFF00E676).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(AppTokens.radiusPill),
@@ -178,104 +180,28 @@ class TokenUsageHero extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppPalette.darkSurface
-                        : AppPalette.lightSurface,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.smallControlRadius),
-                    border: Border.all(
-                      color: isDark
-                          ? AppPalette.darkHairline
-                          : AppPalette.lightHairline,
+                child: _TelemetryStatCard(
+                  label: '活跃 Agent',
+                  value: calls > 0 ? '$calls 任务' : '就绪',
+                  icon: Icons.sensors_rounded,
+                  iconColor: const Color(0xFF00E676),
+                  trailing: Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF00E676),
+                      shape: BoxShape.circle,
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.sensors_rounded,
-                              size: 13, color: Color(0xFF00E676)),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              '活跃 Agent',
-                              style: TextStyle(fontSize: 10.5, color: muted),
-                            ),
-                          ),
-                          Container(
-                            width: 5,
-                            height: 5,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF00E676),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        calls > 0 ? '$calls 任务' : '就绪',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: text,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppPalette.darkSurface
-                        : AppPalette.lightSurface,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.smallControlRadius),
-                    border: Border.all(
-                      color: isDark
-                          ? AppPalette.darkHairline
-                          : AppPalette.lightHairline,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.bolt_rounded,
-                              size: 13, color: Color(0xFF00E5FF)),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              '缓存命中率',
-                              style: TextStyle(fontSize: 10.5, color: muted),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        cacheRate != null
-                            ? formatPercent(cacheRate)
-                            : '--',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: text,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: _TelemetryStatCard(
+                  label: '缓存命中率',
+                  value: cacheRate != null ? formatPercent(cacheRate) : '--',
+                  icon: Icons.bolt_rounded,
+                  iconColor: const Color(0xFF00E5FF),
                 ),
               ),
             ],
@@ -356,6 +282,68 @@ class TokenUsageHero extends StatelessWidget {
   }
 }
 
+/// Hero 内部的次级指标使用 clear glass，避免在主玻璃面板中嵌套不透明色块。
+class _TelemetryStatCard extends StatelessWidget {
+  const _TelemetryStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.iconColor,
+    this.trailing,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color iconColor;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final text = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+
+    return GlassSurface(
+      role: GlassRole.control,
+      variant: GlassVariant.clear,
+      intensity: AppAppearanceController.resolvedGlassIntensity,
+      borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      boxShadow: const [],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 13, color: iconColor),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10.5, color: muted),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: text,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 渐变能量环画笔（对标效果图 2）
 class _TelemetryGaugePainter extends CustomPainter {
   _TelemetryGaugePainter({
@@ -398,8 +386,8 @@ class _TelemetryGaugePainter extends CustomPainter {
       );
 
       final progressPaint = Paint()
-        ..shader = gradient.createShader(
-            Rect.fromCircle(center: center, radius: radius))
+        ..shader = gradient
+            .createShader(Rect.fromCircle(center: center, radius: radius))
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
         ..strokeCap = StrokeCap.round;

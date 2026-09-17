@@ -118,10 +118,14 @@ class SessionMetricsBar extends StatelessWidget {
 
     final bg = onImage
         ? AppPalette.darkCanvas.withValues(alpha: 0.72)
-        : (isDark ? AppPalette.darkSurface : AppPalette.lightSurface);
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.white.withValues(alpha: 0.65));
     final border = onImage
         ? Colors.transparent
-        : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline);
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.10)
+            : Colors.white.withValues(alpha: 0.75));
     final labelColor = onImage
         ? AppPalette.darkTextFaint
         : (isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted);
@@ -137,15 +141,22 @@ class SessionMetricsBar extends StatelessWidget {
         final hidden = groups.length - visible.length;
 
         final content = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+            borderRadius: BorderRadius.circular(AppTokens.radiusPill),
             border: Border.all(color: border, width: 1.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Wrap(
             spacing: 14,
-            runSpacing: 5,
+            runSpacing: 4,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               for (final group in visible)
@@ -166,7 +177,7 @@ class SessionMetricsBar extends StatelessWidget {
         if (onTap == null) return content;
         return InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
           child: content,
         );
       },

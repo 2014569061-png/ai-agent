@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,9 +92,54 @@ void main() {
     expect(find.text('帮助与反馈'), findsOneWidget);
     expect(find.text('退出登录'), findsOneWidget);
 
-    // 4. Footer备案与合规声明
-    expect(find.textContaining('备案号'), findsOneWidget);
-    expect(find.textContaining('内容由 AI 生成'), findsOneWidget);
+    // 4. 设置页不再显示底部备案与合规声明块
+    expect(find.textContaining('备案号'), findsNothing);
+    expect(find.textContaining('内容由 AI 生成'), findsNothing);
+  });
+
+  testWidgets('SettingsPage exposes loading state while settings are loading',
+      (tester) async {
+    final loading = Completer<SettingsSnapshot>();
+    await tester.pumpWidget(
+      createWidgetUnderTest(
+        SettingsPage(loadSettings: () => loading.future),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    loading.complete(const SettingsSnapshot.empty());
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets(
+      'SettingsPage shows an empty provider state without hiding actions',
+      (tester) async {
+    await tester.pumpWidget(
+      createWidgetUnderTest(
+        SettingsPage(loadSettings: () async => const SettingsSnapshot.empty()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('尚未配置服务商'), findsOneWidget);
+    expect(find.text('账号管理'), findsOneWidget);
+    expect(find.text('语言'), findsOneWidget);
+  });
+
+  testWidgets('SettingsPage exposes a retryable error state', (tester) async {
+    await tester.pumpWidget(
+      createWidgetUnderTest(
+        SettingsPage(
+          loadSettings: () async => throw StateError('settings unavailable'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('加载未成功'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
   });
 
   testWidgets('ToolListPage renders filter chips and list of tools',

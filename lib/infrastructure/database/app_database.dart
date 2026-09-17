@@ -202,7 +202,7 @@ class TaskFeedback extends Table {
   Set<Column<Object>> get primaryKey => {taskId};
 }
 
-/// v0.9 鍗忎綔鍒嗘瀽杩愯鐘舵€併€佽鍒掍笌鎬荤粨銆?
+/// v0.9 协作分析运行状态、计划与总结。
 @TableIndex(
     name: 'idx_collaboration_runs_task_updated', columns: {#taskId, #updatedAt})
 class CollaborationRuns extends Table {

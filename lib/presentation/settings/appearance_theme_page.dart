@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +9,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_theme_controller.dart';
 import '../theme/app_appearance_controller.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/liquid_segmented_control.dart';
 import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
@@ -172,15 +173,14 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                             ],
                           );
                         }
-                        return SegmentedButton<String>(
+                        return LiquidSegmentedControl<String>(
                           segments: const [
-                            ButtonSegment(value: 'full', label: Text('完整动效')),
-                            ButtonSegment(
-                                value: 'reduced', label: Text('节能平滑')),
-                            ButtonSegment(value: 'off', label: Text('关闭动效')),
+                            LiquidSegment(value: 'full', label: '完整动效'),
+                            LiquidSegment(value: 'reduced', label: '节能平滑'),
+                            LiquidSegment(value: 'off', label: '关闭动效'),
                           ],
-                          selected: {_effectMode},
-                          onSelectionChanged: (s) => _updateEffects(s.first),
+                          selected: _effectMode,
+                          onSelected: _updateEffects,
                         );
                       },
                     ),
@@ -262,6 +262,37 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                           ],
                         ),
                       ),
+                    ),
+                  ],
+                ),
+                const SettingsSectionTitle('界面质感与液态玻璃'),
+                SettingsGroupCard(
+                  children: [
+                    SettingsTile(
+                      icon: Icons.blur_on_rounded,
+                      iconColor: settingsMutedColor(context),
+                      title: '液态玻璃 (Liquid Glass)',
+                      subtitle: 'SDF 边缘折射 + 镜面高光 + 磨砂（遇不支持设备自动降级）',
+                      selected: _glassIntensity >= 0.6,
+                      onTap: () => _updateGlass(0.85),
+                    ),
+                    const SettingsDivider(),
+                    SettingsTile(
+                      icon: Icons.opacity_rounded,
+                      iconColor: settingsMutedColor(context),
+                      title: '经典磨砂 (Frosted Glass)',
+                      subtitle: '纯高斯背景模糊，平滑省电，全平台兼容',
+                      selected: _glassIntensity > 0.1 && _glassIntensity < 0.6,
+                      onTap: () => _updateGlass(0.45),
+                    ),
+                    const SettingsDivider(),
+                    SettingsTile(
+                      icon: Icons.crop_square_rounded,
+                      iconColor: settingsMutedColor(context),
+                      title: '纯扁平 (Flat v2)',
+                      subtitle: '零阴影、零模糊、零折射，遵循 v2 极简省电规范',
+                      selected: _glassIntensity <= 0.1,
+                      onTap: () => _updateGlass(0.0),
                     ),
                   ],
                 ),

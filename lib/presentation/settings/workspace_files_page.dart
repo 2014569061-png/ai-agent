@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import '../theme/app_palette.dart';
 import 'dart:io';
 
@@ -16,6 +16,7 @@ import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/confirm_action.dart';
 
 class WorkspaceFilesPage extends ConsumerStatefulWidget {
   const WorkspaceFilesPage({super.key});
@@ -131,31 +132,16 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
   }
 
   Future<void> _cleanTempFiles() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('清理临时缓存文件？'),
-        content: const Text(
+    final confirmed = await showConfirmAction(
+      context,
+      title: '清理临时缓存文件？',
+      message:
           '此操作将清理应用下载缓存、临时渲染图与临时转换文件。不会影响你的工作区文件与会话记录。\n\n确定清理吗？',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确定清理'),
-          ),
-        ],
-      ),
+      confirmLabel: '确定清理',
+      isDanger: true,
     );
 
-    if (confirmed == true && !kIsWeb) {
+    if (confirmed && !kIsWeb) {
       try {
         final tempDir = await getTemporaryDirectory();
         if (tempDir.existsSync()) {

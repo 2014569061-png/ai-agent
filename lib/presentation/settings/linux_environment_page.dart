@@ -15,6 +15,7 @@ import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/confirm_action.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
 
@@ -119,7 +120,7 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
 
   Future<void> _editWorkDir() async {
     final controller = TextEditingController(text: _defaultWorkDir);
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showNexusDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('修改默认工作目录'),
@@ -142,6 +143,7 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
         ],
       ),
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
 
     if (confirmed == true && mounted) {
       final text = controller.text.trim();
@@ -156,7 +158,7 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
   }
 
   Future<void> _chooseShell() async {
-    final chosen = await showDialog<String>(
+    final chosen = await showNexusDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
         title: const Text('选择 Shell 类型'),
@@ -187,24 +189,14 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
   }
 
   Future<void> _reinitialize() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('重新初始化环境？'),
-        content: const Text('将清空环境缓存并重新检查四个运行时。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确认重置'),
-          ),
-        ],
-      ),
+    final ok = await showConfirmAction(
+      context,
+      title: '重新初始化环境？',
+      message: '将清空环境缓存并重新检查四个运行时。',
+      confirmLabel: '确认重置',
+      isDanger: true,
     );
-    if (ok == true) {
+    if (ok) {
       await _checkEnvironment();
       if (mounted) FloatingToast.show(context, '环境检测与握手已重新执行');
     }
@@ -221,6 +213,11 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
   Widget build(BuildContext context) {
     final snapshot = _snapshot;
     final ready = snapshot?.selected.available == true;
+    const commonToolIds = {'node', 'npm', 'python', 'go'};
+    final needsCommonTools = snapshot?.tools.any(
+          (tool) => commonToolIds.contains(tool.id) && !tool.available,
+        ) ==
+        true;
     final bridgeColor = kIsWeb
         ? AppPalette.lightTextMuted
         : (ready ? AppPalette.success : AppPalette.warning);
@@ -300,7 +297,9 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
                           'allow-external-apps，并允许后台运行后重试。',
                         ),
                       ),
-                    if (!kIsWeb && snapshot?.termuxAvailable != true) ...[
+                    if (!kIsWeb &&
+                        (needsCommonTools ||
+                            snapshot?.termuxAvailable != true)) ...[
                       const SettingsDivider(),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -310,9 +309,11 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
                             onPressed: _openSetupGuide,
                             icon: const Icon(Icons.settings_suggest_rounded,
                                 size: 18),
-                            label: Text(snapshot?.alpineAvailable == true
-                                ? '去补充 Termux 工具链'
-                                : '去配置运行环境'),
+                            label: Text(needsCommonTools
+                                ? '一键补齐常用开发工具'
+                                : snapshot?.alpineAvailable == true
+                                    ? '去补充 Termux 工具链'
+                                    : '去配置运行环境'),
                           ),
                         ),
                       ),

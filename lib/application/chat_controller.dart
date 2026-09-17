@@ -1619,12 +1619,13 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  Future<void> pickWorkspace() async {
+  Future<String?> pickWorkspace() async {
     final service = ref.read(workspaceServiceProvider);
     final path = await service.pickDirectory();
     if (path != null) {
       await bindDirectoryAsProject(path);
     }
+    return path;
   }
 
   Future<void> setWorkspace(String? path) async {

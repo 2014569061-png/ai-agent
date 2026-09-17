@@ -14,6 +14,7 @@ import '../../application/workspace_service.dart';
 import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
@@ -22,6 +23,7 @@ import '../diagnostics/run_analysis_page.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_disclosure.dart';
 import '../widgets/nexus_execution_status.dart';
 import '../widgets/nexus_loading_skeleton.dart';
@@ -142,23 +144,24 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   Future<void> _exportAuditJson() async {
     final report = _auditReport;
     final runId = _task.runId;
+    final run = _run;
     if (report == null || runId == null || runId.isEmpty) return;
     final payload = {
       'taskId': _task.id,
       'runId': runId,
       'task': _task.title,
-      'run': _run == null
+      'run': run == null
           ? null
           : {
-              'status': _run!.status,
-              'model': _run!.model,
-              'startedAt': _run!.startedAt.toIso8601String(),
-              'endedAt': _run!.endedAt?.toIso8601String(),
-              'retryCount': _run!.retryCount,
-              'inputTokens': _run!.inputTokens,
-              'outputTokens': _run!.outputTokens,
-              'cachedTokens': _run!.cachedTokens,
-              'estimatedCostCents': _run!.estimatedCostCents,
+              'status': run.status,
+              'model': run.model,
+              'startedAt': run.startedAt.toIso8601String(),
+              'endedAt': run.endedAt?.toIso8601String(),
+              'retryCount': run.retryCount,
+              'inputTokens': run.inputTokens,
+              'outputTokens': run.outputTokens,
+              'cachedTokens': run.cachedTokens,
+              'estimatedCostCents': run.estimatedCostCents,
             },
       'audit': report.toJson(),
     };
@@ -215,6 +218,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   }
 
   String _taskMarkdownReport() {
+    final summary = _task.summary;
+    final structured = _task.structuredResult;
     final buffer = StringBuffer()
       ..writeln('# 任务详情：${_task.title}')
       ..writeln()
@@ -228,34 +233,33 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
       ..writeln(_task.prompt.isEmpty ? '（无输入）' : _task.prompt)
       ..writeln();
 
-    if (_task.summary != null && _task.summary!.isNotEmpty) {
+    if (summary != null && summary.isNotEmpty) {
       buffer
         ..writeln('## 结果摘要')
-        ..writeln(_task.summary!)
+        ..writeln(summary)
         ..writeln();
     }
 
-    if (_task.structuredResult != null) {
-      final res = _task.structuredResult!;
-      if (res.findings.isNotEmpty) {
+    if (structured != null) {
+      if (structured.findings.isNotEmpty) {
         buffer.writeln('## 关键发现');
-        for (final f in res.findings) {
+        for (final f in structured.findings) {
           final title = f['title']?.toString() ?? '';
           final detail = f['detail']?.toString() ?? '';
           buffer.writeln('- ${detail.isEmpty ? title : '$title: $detail'}');
         }
         buffer.writeln();
       }
-      if (res.actions.isNotEmpty) {
+      if (structured.actions.isNotEmpty) {
         buffer.writeln('## 建议动作');
-        for (final a in res.actions) {
+        for (final a in structured.actions) {
           buffer.writeln('- $a');
         }
         buffer.writeln();
       }
-      if (res.nextSteps.isNotEmpty) {
+      if (structured.nextSteps.isNotEmpty) {
         buffer.writeln('## 下一步计划');
-        for (final s in res.nextSteps) {
+        for (final s in structured.nextSteps) {
           buffer.writeln('- $s');
         }
         buffer.writeln();
@@ -307,9 +311,18 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    final taskModel = _task.model;
+    final workspacePath = _task.workspacePath;
+    final summary = _task.summary;
+    final structured = _task.structuredResult;
+    final runId = _task.runId;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: NexusPageHeader(
         title: _task.title,
         statusPill: NexusStatusPill.fromString(_task.status, isCompact: true),
@@ -412,8 +425,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                               ),
                               NexusMetricTile(
                                 label: '指定模型',
-                                value: _task.model?.isNotEmpty == true
-                                    ? _task.model!
+                                value: taskModel != null && taskModel.isNotEmpty
+                                    ? taskModel
                                     : '默认配置',
                                 icon: Icons.psychology_outlined,
                               ),
@@ -429,8 +442,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                           const SizedBox(height: 12),
                           const Divider(height: 1),
                           const SizedBox(height: 10),
-                          if (_task.workspacePath != null &&
-                              _task.workspacePath!.isNotEmpty) ...[
+                          if (workspacePath != null &&
+                              workspacePath.isNotEmpty) ...[
                             Row(
                               children: [
                                 const Icon(Icons.folder_outlined,
@@ -442,7 +455,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                         fontWeight: FontWeight.w500)),
                                 Expanded(
                                   child: SelectableText(
-                                    _task.workspacePath!,
+                                    workspacePath,
                                     style: const TextStyle(
                                         fontSize: 12,
                                         color: AppTheme.textSecondary),
@@ -517,20 +530,20 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                   // ==========================================
                   // 3. 执行结果与结构化产物卡 (Results Card)
                   // ==========================================
-                  if (_task.summary != null && _task.summary!.isNotEmpty) ...[
+                  if (summary != null && summary.isNotEmpty) ...[
                     NexusSection(
                       title: '结果摘要',
                       child: SectionCard(
                         padding: const EdgeInsets.all(16),
                         child: SelectableText(
-                          _task.summary!,
+                          summary,
                           style: const TextStyle(fontSize: 14, height: 1.45),
                         ),
                       ),
                     ),
                   ],
 
-                  if (_task.structuredResult != null) ...[
+                  if (structured != null) ...[
                     NexusSection(
                       title: '结构化产物',
                       child: SectionCard(
@@ -538,8 +551,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (_task
-                                .structuredResult!.findings.isNotEmpty) ...[
+                            if (structured.findings.isNotEmpty) ...[
                               const Row(
                                 children: [
                                   Icon(Icons.lightbulb_outline_rounded,
@@ -552,7 +564,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              ..._task.structuredResult!.findings.map((f) {
+                              ...structured.findings.map((f) {
                                 final title = f['title']?.toString() ?? '';
                                 final detail = f['detail']?.toString() ?? '';
                                 final text =
@@ -577,7 +589,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                               }),
                               const SizedBox(height: 12),
                             ],
-                            if (_task.structuredResult!.actions.isNotEmpty) ...[
+                            if (structured.actions.isNotEmpty) ...[
                               const Row(
                                 children: [
                                   Icon(Icons.check_circle_outline_rounded,
@@ -590,29 +602,26 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              ..._task.structuredResult!.actions
-                                  .map((a) => Padding(
-                                        padding: const EdgeInsets.only(
-                                            left: 8, bottom: 4),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            const Text('• ',
-                                                style: TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                            Expanded(
-                                                child: SelectableText(a,
-                                                    style: const TextStyle(
-                                                        fontSize: 13))),
-                                          ],
-                                        ),
-                                      )),
+                              ...structured.actions.map((a) => Padding(
+                                    padding: const EdgeInsets.only(
+                                        left: 8, bottom: 4),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('• ',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w500)),
+                                        Expanded(
+                                            child: SelectableText(a,
+                                                style: const TextStyle(
+                                                    fontSize: 13))),
+                                      ],
+                                    ),
+                                  )),
                               const SizedBox(height: 12),
                             ],
-                            if (_task
-                                .structuredResult!.nextSteps.isNotEmpty) ...[
+                            if (structured.nextSteps.isNotEmpty) ...[
                               const Row(
                                 children: [
                                   Icon(Icons.arrow_forward_rounded,
@@ -625,25 +634,23 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              ..._task.structuredResult!.nextSteps
-                                  .map((s) => Padding(
-                                        padding: const EdgeInsets.only(
-                                            left: 8, bottom: 4),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            const Text('• ',
-                                                style: TextStyle(
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                            Expanded(
-                                                child: SelectableText(s,
-                                                    style: const TextStyle(
-                                                        fontSize: 13))),
-                                          ],
-                                        ),
-                                      )),
+                              ...structured.nextSteps.map((s) => Padding(
+                                    padding: const EdgeInsets.only(
+                                        left: 8, bottom: 4),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        const Text('• ',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.w500)),
+                                        Expanded(
+                                            child: SelectableText(s,
+                                                style: const TextStyle(
+                                                    fontSize: 13))),
+                                      ],
+                                    ),
+                                  )),
                             ],
                           ],
                         ),
@@ -688,7 +695,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     ),
                   ],
 
-                  if (_task.runId != null && _task.runId!.isNotEmpty) ...[
+                  if (runId != null && runId.isNotEmpty) ...[
                     const SizedBox(height: 4),
                     _buildAuditSection(),
                   ],
@@ -697,79 +704,150 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
             ),
 
             // ==========================================
-            // 底部固定操作栏
+            // 底部固定操作栏 (Scheme A Liquid Crystal)
             // ==========================================
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-              decoration: BoxDecoration(
-                color:
-                    isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-                border: Border(
-                  top: BorderSide(
-                    color: isDark
-                        ? AppPalette.darkHairline
-                        : AppPalette.lightHairline,
-                  ),
-                ),
-              ),
-              child: Column(
-                children: [
-                  if (_needsImmediateAction) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(0, 44),
-                          shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusControl),
-                          ),
+            isFlat
+                ? Container(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppPalette.darkSurface
+                          : AppPalette.lightSurface,
+                      border: Border(
+                        top: BorderSide(
+                          color: isDark
+                              ? AppPalette.darkHairline
+                              : AppPalette.lightHairline,
                         ),
-                        onPressed: _openConversation,
-                        icon: const Icon(Icons.play_arrow_rounded, size: 18),
-                        label: const Text('立即处理'),
                       ),
                     ),
-                    const SizedBox(height: 10),
-                  ],
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 44),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusControl),
+                    child: Column(
+                      children: [
+                        if (_needsImmediateAction) ...[
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      AppTokens.radiusControl),
+                                ),
+                              ),
+                              onPressed: _openConversation,
+                              icon: const Icon(Icons.play_arrow_rounded,
+                                  size: 18),
+                              label: const Text('立即处理'),
                             ),
                           ),
-                          onPressed: _startCollaboration,
-                          icon: const Icon(Icons.hub_outlined, size: 18),
-                          label: const Text('发起协作分析'),
+                          const SizedBox(height: 10),
+                        ],
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 44),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppTokens.radiusControl),
+                                  ),
+                                ),
+                                onPressed: _startCollaboration,
+                                icon: const Icon(Icons.hub_outlined, size: 18),
+                                label: const Text('发起协作分析'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 44),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppTokens.radiusControl),
+                                  ),
+                                ),
+                                onPressed: _task.conversationId.isEmpty
+                                    ? null
+                                    : _openConversation,
+                                icon:
+                                    const Icon(Icons.forum_outlined, size: 18),
+                                label: const Text('打开关联会话'),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 44),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusControl),
+                      ],
+                    ),
+                  )
+                : GlassSurface(
+                    role: GlassRole.overlay,
+                    variant: GlassVariant.regular,
+                    intensity: AppAppearanceController.resolvedGlassIntensity,
+                    borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(AppTokens.radiusModal)),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                    child: Column(
+                      children: [
+                        if (_needsImmediateAction) ...[
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 44),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      AppTokens.radiusControl),
+                                ),
+                              ),
+                              onPressed: _openConversation,
+                              icon: const Icon(Icons.play_arrow_rounded,
+                                  size: 18),
+                              label: const Text('立即处理'),
                             ),
                           ),
-                          onPressed: _task.conversationId.isEmpty
-                              ? null
-                              : _openConversation,
-                          icon: const Icon(Icons.forum_outlined, size: 18),
-                          label: const Text('打开关联会话'),
+                          const SizedBox(height: 10),
+                        ],
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size(0, 44),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppTokens.radiusControl),
+                                  ),
+                                ),
+                                onPressed: _startCollaboration,
+                                icon: const Icon(Icons.hub_outlined, size: 18),
+                                label: const Text('发起协作分析'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size(0, 44),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        AppTokens.radiusControl),
+                                  ),
+                                ),
+                                onPressed: _task.conversationId.isEmpty
+                                    ? null
+                                    : _openConversation,
+                                icon:
+                                    const Icon(Icons.forum_outlined, size: 18),
+                                label: const Text('打开关联会话'),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -881,15 +959,17 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   }
 
   Widget _auditEntry(RunAuditEntry entry) {
+    final path = entry.path;
+    final evidence = entry.evidence;
     final color = switch (entry.effect) {
       'applied' => AppPalette.success,
       'unknown' => AppPalette.warning,
       _ => AppTheme.textSecondary,
     };
     final details = <String>[
-      if (entry.path != null && entry.path!.isNotEmpty) entry.path!,
+      if (path != null && path.isNotEmpty) path,
       if (entry.code.isNotEmpty) entry.code,
-      if (entry.evidence != null && entry.evidence!.isNotEmpty) entry.evidence!,
+      if (evidence != null && evidence.isNotEmpty) evidence,
     ].join(' · ');
     final diff = entry.metadata['diff']?.toString();
     final hasDiff = diff != null && diff.trim().isNotEmpty;
@@ -978,6 +1058,8 @@ class _PipelineTimelineCard extends StatelessWidget {
     final isCompleted = task.status.toLowerCase() == 'completed';
     final isRunning = task.status.toLowerCase() == 'running';
     final isWaiting = task.status.toLowerCase().contains('approval');
+    final workspacePath = task.workspacePath;
+    final summary = task.summary;
 
     final diffEntries = auditReport?.entries.where((e) {
           final diff = e.metadata['diff']?.toString();
@@ -997,11 +1079,11 @@ class _PipelineTimelineCard extends StatelessWidget {
             title: '解析任务意图与工作区环境',
             status: _StepStatus.done,
             isLast: false,
-            content: task.workspacePath != null && task.workspacePath!.isNotEmpty
+            content: workspacePath != null && workspacePath.isNotEmpty
                 ? Padding(
                     padding: const EdgeInsets.only(top: 4, bottom: 4),
                     child: Text(
-                      '工作区：${task.workspacePath}',
+                      '工作区：$workspacePath',
                       style: TextStyle(
                         fontSize: 12,
                         color: isDark
@@ -1035,7 +1117,7 @@ class _PipelineTimelineCard extends StatelessWidget {
                       );
                     }).toList(),
                   )
-                : (task.summary != null && task.summary!.isNotEmpty
+                : (summary != null && summary.isNotEmpty
                     ? null
                     : Padding(
                         padding: const EdgeInsets.only(top: 4, bottom: 4),
@@ -1140,7 +1222,8 @@ class _PipelineTimelineCard extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+              color:
+                  isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
               width: 2,
             ),
           ),
@@ -1244,7 +1327,8 @@ class _CodeDiffCard extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: isDark ? const Color(0xFF1E2330) : const Color(0xFFEDF2F7),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(8)),
             ),
             child: Row(
               children: [
@@ -1340,6 +1424,8 @@ class _ChangeReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final review = this.review;
+    final plan = this.plan;
     return SectionCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1347,11 +1433,11 @@ class _ChangeReviewCard extends StatelessWidget {
         children: [
           if (review != null) ...[
             Text(
-              '本次修改 ${review!.files.length} 个文件（+${review!.linesAdded} / -${review!.linesRemoved}）· ${review!.mark.label}',
+              '本次修改 ${review.files.length} 个文件（+${review.linesAdded} / -${review.linesRemoved}）· ${review.mark.label}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            for (final file in review!.files) ...[
+            for (final file in review.files) ...[
               Row(
                 children: [
                   Expanded(
@@ -1373,10 +1459,9 @@ class _ChangeReviewCard extends StatelessWidget {
             ],
           ],
           if (plan != null) ...[
-            const Text('验证步骤',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('验证步骤', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
-            for (final step in plan!.steps)
+            for (final step in plan.steps)
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
@@ -1391,4 +1476,3 @@ class _ChangeReviewCard extends StatelessWidget {
     );
   }
 }
-

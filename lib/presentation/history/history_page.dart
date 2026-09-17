@@ -6,12 +6,15 @@ import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/nexus_action_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -201,6 +204,8 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget _filterChip(String label, String value, IconData icon) {
     final selected = _filterType == value;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return InkWell(
       onTap: () {
@@ -214,12 +219,22 @@ class _HistoryPageState extends State<HistoryPage> {
         decoration: BoxDecoration(
           color: selected
               ? (isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight)
-              : (isDark ? AppPalette.darkSurface : AppPalette.lightSurface),
+              : (isDark
+                  ? (isFlat
+                      ? AppPalette.darkSurface
+                      : AppPalette.darkSurface.withValues(alpha: 0.55))
+                  : (isFlat
+                      ? AppPalette.lightSurface
+                      : AppPalette.lightSurface.withValues(alpha: 0.65))),
           borderRadius: BorderRadius.circular(AppTokens.radiusPill),
           border: Border.all(
             color: selected
                 ? AppPalette.brand
-                : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
+                : (isDark
+                    ? AppPalette.darkHairline
+                    : (isFlat
+                        ? AppPalette.lightHairline
+                        : const Color(0x80FFFFFF))),
           ),
         ),
         child: Row(
@@ -258,9 +273,13 @@ class _HistoryPageState extends State<HistoryPage> {
     final filtered = _filtered;
     final grouped = _groupConversations(filtered);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+      backgroundColor: isFlat
+          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
+          : Colors.transparent,
       appBar: const NexusPageHeader(
         title: '历史会话',
         subtitle: '搜索、置顶与管理历史记录',
@@ -269,25 +288,56 @@ class _HistoryPageState extends State<HistoryPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) => setState(() => _query = value),
-              decoration: InputDecoration(
-                hintText: '搜索会话标题',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        tooltip: '清空',
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _query = '');
-                        },
-                      )
-                    : null,
-                isDense: true,
-              ),
-            ),
+            child: isFlat
+                ? TextField(
+                    controller: _searchController,
+                    onChanged: (value) => setState(() => _query = value),
+                    decoration: InputDecoration(
+                      hintText: '搜索会话标题',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _query.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 18),
+                              tooltip: '清空',
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _query = '');
+                              },
+                            )
+                          : null,
+                      isDense: true,
+                    ),
+                  )
+                : GlassSurface(
+                    role: GlassRole.control,
+                    variant: GlassVariant.clear,
+                    intensity: AppAppearanceController.resolvedGlassIntensity,
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (value) => setState(() => _query = value),
+                      decoration: InputDecoration(
+                        hintText: '搜索会话标题',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _query.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 18),
+                                tooltip: '清空',
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _query = '');
+                                },
+                              )
+                            : null,
+                        isDense: true,
+                      ),
+                    ),
+                  ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -438,37 +488,40 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  /// 会话行操作菜单：与全应用一致的沉浸式毛玻璃面板。
+  /// 会话行操作菜单：紧凑型底部操作表。
   Future<void> _showConversationActions(Conversation conversation) async {
-    final action = await showNexusSheet<String>(
+    final action = await showNexusActionSheet<String>(
       context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.push_pin_outlined),
-              title: Text(conversation.isPinned ? '取消置顶' : '置顶'),
-              onTap: () => Navigator.pop(sheetContext, 'pin'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.star_outline),
-              title: Text(conversation.isFavorite ? '取消收藏' : '收藏'),
-              onTap: () => Navigator.pop(sheetContext, 'favorite'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('重命名'),
-              onTap: () => Navigator.pop(sheetContext, 'rename'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline),
-              title: const Text('删除'),
-              onTap: () => Navigator.pop(sheetContext, 'delete'),
-            ),
-          ],
+      title: conversation.title.isEmpty ? '新会话' : conversation.title,
+      subtitle: _relativeTime(conversation.updatedAt),
+      maxHeightRatio: 0.42,
+      items: [
+        ActionSheetItem(
+          icon: conversation.isPinned
+              ? Icons.push_pin_rounded
+              : Icons.push_pin_outlined,
+          title: conversation.isPinned ? '取消置顶' : '置顶会话',
+          value: 'pin',
         ),
-      ),
+        ActionSheetItem(
+          icon: conversation.isFavorite
+              ? Icons.star_rounded
+              : Icons.star_outline_rounded,
+          title: conversation.isFavorite ? '取消收藏' : '收藏会话',
+          value: 'favorite',
+        ),
+        const ActionSheetItem(
+          icon: Icons.edit_outlined,
+          title: '重命名',
+          value: 'rename',
+        ),
+        const ActionSheetItem(
+          icon: Icons.delete_outline_rounded,
+          title: '删除会话',
+          destructive: true,
+          value: 'delete',
+        ),
+      ],
     );
     switch (action) {
       case 'pin':

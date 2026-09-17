@@ -8,7 +8,10 @@ import '../l10n/app_strings.dart';
 import '../memory/memory_page.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../scheduled/scheduled_tasks_page.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
+import '../widgets/glass_surface.dart';
+import '../widgets/nexus_page_header.dart';
 import 'data_backup_page.dart';
 import 'workspace_files_page.dart';
 
@@ -56,57 +59,21 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final canvas = isDark ? AppPalette.darkCanvas : const Color(0xFFF7F8FA);
-    final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
-    final textMuted = isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
 
     return Scaffold(
-      backgroundColor: canvas,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 顶栏
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: isDark ? AppPalette.darkSurface : const Color(0xFFF2F3F5),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      tooltip: '返回',
-                      icon: Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 16,
-                        color: textColor,
-                      ),
-                      onPressed: () => Navigator.maybePop(context),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '数据管理',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 36), // 占位对称
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                children: [
+      backgroundColor: isFlat ? canvas : Colors.transparent,
+      appBar: const NexusPageHeader(
+        title: '数据管理',
+        subtitle: '知识库、沙箱工作区与数据备份',
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+        children: [
                   _buildSectionHeader('上下文与知识库', textMuted),
                   _buildCard(
                     isDark: isDark,
@@ -174,10 +141,6 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -196,16 +159,30 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   }
 
   Widget _buildCard({required bool isDark, required List<Widget> children}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppPalette.darkSurface : Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
-          width: 0.8,
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    if (isFlat) {
+      return Container(
+        decoration: BoxDecoration(
+          color: isDark ? AppPalette.darkSurface : Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
+            width: 0.8,
+          ),
         ),
-      ),
-      clipBehavior: Clip.antiAlias,
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: children,
+        ),
+      );
+    }
+    return GlassSurface(
+      role: GlassRole.content,
+      variant: GlassVariant.regular,
+      intensity: AppAppearanceController.resolvedGlassIntensity,
+      borderRadius: BorderRadius.circular(16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: children,
@@ -214,12 +191,16 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
   }
 
   Widget _buildDivider(bool isDark) {
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     return Divider(
       height: 0.8,
       thickness: 0.8,
       indent: 48,
       endIndent: 0,
-      color: isDark ? AppPalette.darkHairline : const Color(0xFFF0F2F5),
+      color: isDark
+          ? AppPalette.darkHairline
+          : (isFlat ? const Color(0xFFF0F2F5) : const Color(0x28000000)),
     );
   }
 

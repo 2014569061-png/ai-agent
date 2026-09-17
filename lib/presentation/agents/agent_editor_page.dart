@@ -14,10 +14,12 @@ import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/tools/tool_registry.dart';
 import '../l10n/app_strings.dart';
+import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/glass_surface.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_undo_toast.dart';
@@ -227,6 +229,8 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isFlat =
+        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
     final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
@@ -244,7 +248,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
         }
       },
       child: Scaffold(
-        backgroundColor: canvas,
+        backgroundColor: isFlat ? canvas : Colors.transparent,
         appBar: NexusPageHeader(
           title: widget.agent == null ? '新建智能体' : '编辑智能体',
           subtitle: widget.agent == null ? '定制专属角色的系统指令与能力' : '调整配置与工具箱授权',

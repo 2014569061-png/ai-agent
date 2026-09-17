@@ -108,6 +108,45 @@ void main() {
         '消息列表重建 1 次/帧（共 $frames 次）。');
   });
 
+  testWidgets('附件面板点击不应重建聊天顶栏和输入玻璃层', (tester) async {
+    late _TestChatController controller;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          chatControllerProvider.overrideWith(_TestChatController.new),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Consumer(
+            builder: (context, ref, _) {
+              controller = ref.read(chatControllerProvider.notifier)
+                  as _TestChatController;
+              return const ChatPage();
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 32));
+
+    final topBefore = tester.widget<CapsuleTopBar>(find.byType(CapsuleTopBar));
+    final inputBefore =
+        tester.widget<FloatingCapsuleInput>(find.byType(FloatingCapsuleInput));
+
+    await tester.tap(find.byTooltip('添加附件或更多工具'));
+    await tester.pump();
+
+    final topAfter = tester.widget<CapsuleTopBar>(find.byType(CapsuleTopBar));
+    final inputAfter =
+        tester.widget<FloatingCapsuleInput>(find.byType(FloatingCapsuleInput));
+
+    expect(identical(topBefore, topAfter), isTrue);
+    expect(identical(inputBefore, inputAfter), isTrue);
+    expect(controller.state.loading, isFalse);
+  });
+
   testWidgets('F-1: 页面级字段（activityLog）变化时仍会重建 ChatPage，验证 select 生效',
       (tester) async {
     late _TestChatController controller;

@@ -15,6 +15,7 @@ class TermuxRuntimeAdapter
   TermuxRuntimeAdapter({
     this.maxOutputBytes = 128 * 1024,
     MethodChannel? bridge,
+    this.bridgeDirectory = bridgeDir,
     this.inspectTimeout = const Duration(seconds: 3),
     this.bridgeCallTimeout = const Duration(seconds: 5),
     bool? isAndroid,
@@ -26,6 +27,7 @@ class TermuxRuntimeAdapter
 
   final int maxOutputBytes;
   final MethodChannel _bridge;
+  final String bridgeDirectory;
   final Duration inspectTimeout;
   final Duration bridgeCallTimeout;
   final bool _isAndroid;
@@ -147,7 +149,7 @@ class TermuxRuntimeAdapter
       ownerToken,
       paths,
     );
-    // 鍦ㄥ惎鍔ㄦ椂灏嗘墍鏈夋潈 token 娉ㄥ叆杩涚▼鍒濆鐜锛屽惁鍒欐敼鍙樼幆澧冨悗
+    // 在启动时把所有权 token 注入进程初始环境：若等到环境变更后再读，
     // /proc/<pid>/environ 可能不可读，状态校验失败时宁可拒绝认领，避免误杀正常进程。
     final launch = 'env NEXUS_DAEMON_OWNER=${_shellQuote(ownerToken)} '
         'nohup setsid bash -lc ${_shellQuote(inner)} '
@@ -270,7 +272,7 @@ class TermuxRuntimeAdapter
 
   Map<String, String> _detachedPaths(String ownerToken) {
     final safe = ownerToken.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-    final base = '$bridgeDir/nexus-daemon-$safe';
+    final base = '$bridgeDirectory/nexus-daemon-$safe';
     return {
       'log': '$base.log',
       'pid': '$base.pid',
@@ -341,7 +343,7 @@ class TermuxRuntimeAdapter
     final completionPart = _shellQuote('${paths['exit']!}.part');
     return '''
 umask 077
-mkdir -p ${_shellQuote(bridgeDir)}
+mkdir -p ${_shellQuote(bridgeDirectory)}
 printf '%s' $token > $owner
 echo \$\$ > $pid
 finish() {
@@ -431,10 +433,10 @@ $commandLine
     Duration timeout,
   ) async {
     final id = DateTime.now().microsecondsSinceEpoch.toString();
-    final outFile = '$bridgeDir/out-$id.txt';
-    final codeFile = '$bridgeDir/code-$id.txt';
+    final outFile = '$bridgeDirectory/out-$id.txt';
+    final codeFile = '$bridgeDirectory/code-$id.txt';
     try {
-      Directory(bridgeDir).createSync(recursive: true);
+      Directory(bridgeDirectory).createSync(recursive: true);
       final oldOut = File(outFile);
       if (oldOut.existsSync()) oldOut.deleteSync();
       final oldCode = File(codeFile);
