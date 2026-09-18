@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../application/remote_execution_probe.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
@@ -47,25 +48,27 @@ class _RemoteExecutionPageState extends State<RemoteExecutionPage> {
         title: '远程执行验证',
         subtitle: '先确认架构、工具链和协议版本，再决定是否同步代码',
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-              children: [
-                SectionCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    _error ??
-                        '协议 ${handshake?.protocolVersion}\n'
-                            '架构 ${handshake?.arch}\n'
-                            '并发 ${handshake?.maxConcurrency}\n'
-                            '可用空间 ${handshake?.freeBytes} bytes\n'
-                            '工具链 ${(handshake?.toolchain ?? const []).join(', ')}\n\n'
-                            '重连后只查询既有 runId/jobId，不重复启动构建。',
-                  ),
-                ),
-              ],
+      body: AsyncStateView(
+        loading: _loading,
+        error: _error,
+        onRetry: _probe,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          children: [
+            SectionCard(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '协议 ${handshake?.protocolVersion}\n'
+                '架构 ${handshake?.arch}\n'
+                '并发 ${handshake?.maxConcurrency}\n'
+                '可用空间 ${handshake?.freeBytes} bytes\n'
+                '工具链 ${(handshake?.toolchain ?? const []).join(', ')}\n\n'
+                '重连后只查询既有 runId/jobId，不重复启动构建。',
+              ),
             ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -9,6 +9,7 @@ import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/database/database_provider.dart';
 import '../infrastructure/notifications/notification_service.dart';
+import '../infrastructure/observability/sentry_service.dart';
 
 /// 锁屏 / 通知栏审批通道。
 ///
@@ -54,20 +55,31 @@ class ApprovalBridge {
     );
 
     final deadline = DateTime.now().add(timeout);
+    var timedOut = false;
     try {
       while (DateTime.now().isBefore(deadline)) {
         final decision = await db.findPendingApprovalDecision(requestId);
         if (decision != null) return decision == approvalApproveAction;
         await Future<void>.delayed(pollInterval);
       }
+      timedOut = true;
       return null;
     } finally {
       // 无论走到哪条出口都收起通知并清掉握手行：留下的通知会指向一个已经
       // 无人等待的请求，用户之后再点就毫无效果，比不显示更糟。
       await NotificationService.instance.cancel(notificationId);
       try {
-        await db.deletePendingApproval(requestId);
-      } catch (_) {}
+        if (timedOut) {
+          await db.decidePendingApproval(requestId, approvalExpiredAction);
+        } else {
+          await db.deletePendingApproval(requestId);
+        }
+      } catch (error, stackTrace) {
+        // 可忽略：握手行清理失败不影响本次裁决结果（返回值已确定）。
+        // 残留行由下方 prunePendingApprovals 的 TTL 兜底回收，不会累积。
+        // 仍上报以统计清理失败率——如果它持续升高，说明库写路径有问题。
+        unawaited(SentryService.reportException(error, stackTrace));
+      }
       unawaited(db.prunePendingApprovals().catchError((_) => 0));
     }
   }
@@ -79,7 +91,8 @@ class ApprovalBridge {
 /// 因此这里必须自己注册插件、自己打开数据库，不能依赖主 isolate 的任何状态。
 /// （与 `scheduledTaskCallbackDispatcher` 是同一套约束。）
 @pragma('vm:entry-point')
-Future<void> handleApprovalNotificationAction(NotificationResponse response) async {
+Future<void> handleApprovalNotificationAction(
+    NotificationResponse response) async {
   final request = parseApprovalActionId(response.actionId);
   if (request == null) return;
 
@@ -96,10 +109,20 @@ Future<void> handleApprovalNotificationAction(NotificationResponse response) asy
       debugPrint('审批请求 ${request.requestId} 已有决定，忽略后到的动作');
     }
   } catch (error, stack) {
-    debugPrint('锁屏审批写入失败: $error\n$stack');
+    // 影响用户：锁屏审批写入失败会让用户在通知栏的裁决**静默丢失**，
+    // 前台会一直等到 TTL 超时并保守拒绝。必须留下可诊断的记录。
+    // 只记录 error type 与 requestId：summary 可能含用户内容，不能进日志。
+    unawaited(SentryService.reportException(error, stack));
+    debugPrint(
+      '锁屏审批写入失败: phase=notification-decision '
+      'errorType=${error.runtimeType} requestId=${request.requestId}',
+    );
   } finally {
     try {
       await db?.close();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      // 可忽略：后台 isolate 结束前关闭失败会被系统回收，不影响裁决结果。
+      unawaited(SentryService.reportException(error, stackTrace));
+    }
   }
 }

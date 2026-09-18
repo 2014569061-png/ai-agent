@@ -4,39 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/chat/widgets/chat_empty_state.dart';
 import 'package:mobile_agent/presentation/chat/widgets/message_bubble.dart';
-import 'package:mobile_agent/presentation/navigation/nexus_navigation_bar.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 import 'package:mobile_agent/presentation/widgets/brand_mark.dart';
 
 void main() {
-  testWidgets(
-      'immersive navigation renders four destinations and selected glow',
-      (tester) async {
-    var selected = 0;
-    await tester.pumpWidget(MaterialApp(
-      theme: AppTheme.light(),
-      home: Scaffold(
-        body: NexusNavigationBar(
-          selectedIndex: selected,
-          onDestinationSelected: (value) => selected = value,
-          destinations: const [
-            NexusNavigationDestination(icon: Icons.chat, label: '对话'),
-            NexusNavigationDestination(icon: Icons.smart_toy, label: '智能体'),
-            NexusNavigationDestination(icon: Icons.history, label: '历史'),
-            NexusNavigationDestination(icon: Icons.settings, label: '设置'),
-          ],
-        ),
-      ),
-    ));
-    expect(find.text('对话'), findsOneWidget);
-    expect(find.text('智能体'), findsOneWidget);
-    expect(find.text('历史'), findsOneWidget);
-    expect(find.text('设置'), findsOneWidget);
-    await tester.tap(find.text('设置'));
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('chat empty state renders only brand mark and greeting',
       (tester) async {
     await tester.pumpWidget(MaterialApp(

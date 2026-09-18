@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../../domain/model_failure.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_execution_status.dart';
 import '../../widgets/glass_surface.dart';
+import 'chat_execution_stage.dart';
 
 /// 顶栏统一高度常量 (56px)
 const double kCapsuleTopBarHeight = AppTokens.kTopBarHeight;
@@ -22,6 +24,8 @@ class CapsuleTopBar extends StatelessWidget {
     this.modelLabel,
     this.sessionTitle,
     this.runningStage,
+    this.runningStageKind,
+    this.modelServiceStatus = ModelServiceStatus.online,
     required this.onMenu,
     required this.onNewChat,
     this.onContextGaugeTap,
@@ -40,6 +44,8 @@ class CapsuleTopBar extends StatelessWidget {
   final String? modelLabel;
   final String? sessionTitle;
   final String? runningStage;
+  final ChatExecutionStage? runningStageKind;
+  final ModelServiceStatus modelServiceStatus;
   final VoidCallback onMenu;
   final VoidCallback onNewChat;
   final VoidCallback? onContextGaugeTap;
@@ -65,6 +71,8 @@ class CapsuleTopBar extends StatelessWidget {
     final rawWorkspace = (workspaceLabel ?? '').trim();
     final workspace = rawWorkspace == '未选择项目' ? '' : rawWorkspace;
     final mode = (modeLabel ?? '').trim();
+    final serviceStatusLabel = _serviceStatusLabel(modelServiceStatus);
+    final effectiveStage = runningStageKind == null ? serviceStatusLabel : null;
     final contextUsage = maxContextTokens > 0
         ? '上下文 ${_formatTokens(currentContextTokens)} / ${_formatTokens(maxContextTokens)}'
         : '';
@@ -121,7 +129,8 @@ class CapsuleTopBar extends StatelessWidget {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                              color: Colors.black
+                                  .withValues(alpha: isDark ? 0.15 : 0.04),
                               blurRadius: 4,
                               offset: const Offset(0, 1.5),
                             ),
@@ -184,15 +193,18 @@ class CapsuleTopBar extends StatelessWidget {
                     ),
                   if (contextLabel.isNotEmpty ||
                       mode.isNotEmpty ||
-                      (runningStage != null && runningStage!.isNotEmpty)) ...[
+                      (runningStage != null && runningStage!.isNotEmpty) ||
+                      effectiveStage != null) ...[
                     if (title.isNotEmpty) const SizedBox(height: 2),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 1.5),
                       decoration: BoxDecoration(
                         color: isDark
                             ? Colors.white.withValues(alpha: 0.06)
                             : Colors.white.withValues(alpha: 0.45),
-                        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusPill),
                         border: Border.all(
                           color: isDark
                               ? Colors.white.withValues(alpha: 0.10)
@@ -209,14 +221,29 @@ class CapsuleTopBar extends StatelessWidget {
                             Flexible(
                               child: NexusExecutionStatus(
                                 compact: true,
-                                state: _mapRunningStage(runningStage),
+                                state: _mapRunningStage(runningStageKind),
                                 label: runningStage!,
                               ),
                             ),
                             if (contextLabel.isNotEmpty || mode.isNotEmpty)
                               Text(
                                 ' · ',
-                                style: TextStyle(fontSize: 11, color: metaColor),
+                                style:
+                                    TextStyle(fontSize: 11, color: metaColor),
+                              ),
+                          ] else if (effectiveStage != null) ...[
+                            Flexible(
+                              child: NexusExecutionStatus(
+                                compact: true,
+                                state: NexusExecutionState.failed,
+                                label: effectiveStage,
+                              ),
+                            ),
+                            if (contextLabel.isNotEmpty || mode.isNotEmpty)
+                              Text(
+                                ' · ',
+                                style:
+                                    TextStyle(fontSize: 11, color: metaColor),
                               ),
                           ],
                           if (contextLabel.isNotEmpty)
@@ -274,7 +301,8 @@ class CapsuleTopBar extends StatelessWidget {
                                   onTap: onModeTap,
                                   borderRadius: BorderRadius.circular(8),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 2),
                                     child: Text(
                                       mode,
                                       maxLines: 1,
@@ -331,7 +359,8 @@ class CapsuleTopBar extends StatelessWidget {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: isDark ? 0.15 : 0.04),
+                              color: Colors.black
+                                  .withValues(alpha: isDark ? 0.15 : 0.04),
                               blurRadius: 4,
                               offset: const Offset(0, 1.5),
                             ),
@@ -382,24 +411,26 @@ class CapsuleTopBar extends StatelessWidget {
     );
   }
 
-  static NexusExecutionState _mapRunningStage(String? stage) {
-    if (stage == null) return NexusExecutionState.idle;
-    if (stage.contains('等待') || stage.contains('确认') || stage.contains('授权')) {
-      return NexusExecutionState.waitingForUser;
-    }
-    if (stage.contains('准备') || stage.contains('思考')) {
-      return NexusExecutionState.preparing;
-    }
-    if (stage.contains('完成') || stage.contains('成功')) {
-      return NexusExecutionState.succeeded;
-    }
-    if (stage.contains('失败') || stage.contains('错误')) {
-      return NexusExecutionState.failed;
-    }
-    if (stage.contains('取消') || stage.contains('停止')) {
-      return NexusExecutionState.cancelled;
-    }
-    return NexusExecutionState.running;
+  static String? _serviceStatusLabel(ModelServiceStatus status) =>
+      switch (status) {
+        ModelServiceStatus.offline => '模型服务连接失败',
+        ModelServiceStatus.authRequired => '需要配置模型凭证',
+        ModelServiceStatus.rateLimited => '模型服务限流',
+        ModelServiceStatus.serverError => '模型服务异常',
+        ModelServiceStatus.billing => '模型额度不足',
+        ModelServiceStatus.online || ModelServiceStatus.unknown => null,
+      };
+
+  static NexusExecutionState _mapRunningStage(ChatExecutionStage? stage) {
+    return switch (stage) {
+      null => NexusExecutionState.idle,
+      ChatExecutionStage.waitingForUser => NexusExecutionState.waitingForUser,
+      ChatExecutionStage.preparing => NexusExecutionState.preparing,
+      ChatExecutionStage.running => NexusExecutionState.running,
+      ChatExecutionStage.succeeded => NexusExecutionState.succeeded,
+      ChatExecutionStage.failed => NexusExecutionState.failed,
+      ChatExecutionStage.cancelled => NexusExecutionState.cancelled,
+    };
   }
 
   static String _formatTokens(int value) {

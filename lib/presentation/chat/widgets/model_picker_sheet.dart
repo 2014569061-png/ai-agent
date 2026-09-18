@@ -6,6 +6,7 @@ import '../../../infrastructure/providers/provider_config.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
+import '../../motion/nexus_motion.dart';
 import '../../widgets/liquid_segmented_control.dart';
 
 class ModelPickerSelection {
@@ -171,7 +172,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                 controller: _searchController,
                 onChanged: (value) => setState(() => _query = value),
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTokens.fontSizeSubhead,
                   color: isDark ? AppPalette.darkText : AppPalette.lightText,
                 ),
                 decoration: InputDecoration(
@@ -246,7 +247,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                         onTap: () => setState(() => _selectedCategory = cat),
                         behavior: HitTestBehavior.opaque,
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: NexusMotion.durationFast(context),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 11, vertical: 5),
                           decoration: BoxDecoration(
@@ -283,12 +284,12 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                           child: Text(
                             cat,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: AppTokens.fontSizeFootnote,
                               fontWeight:
                                   selected ? FontWeight.w600 : FontWeight.w400,
                               color: selected
                                   ? (isDark
-                                      ? const Color(0xFF64D2FF)
+                                      ? AppPalette.darkBrandHover
                                       : AppPalette.brandAction)
                                   : (isDark
                                       ? AppPalette.darkText
@@ -390,7 +391,7 @@ class _OptionBar extends StatelessWidget {
           Text(
             '思考',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: AppTokens.fontSizeFootnote,
               fontWeight: FontWeight.w500,
               color: textMuted,
             ),
@@ -430,7 +431,9 @@ class _OptionBar extends StatelessWidget {
                     const SizedBox(width: 3),
                     Text(
                       '工具',
-                      style: TextStyle(fontSize: 12, color: textMuted),
+                      style: TextStyle(
+                          fontSize: AppTokens.fontSizeFootnote,
+                          color: textMuted),
                     ),
                   ],
                 ),
@@ -451,7 +454,7 @@ class _OptionBar extends StatelessWidget {
         onTap: () => onReasoningChanged(effort),
         behavior: HitTestBehavior.opaque,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+          duration: NexusMotion.durationFast(context),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: selected
@@ -459,7 +462,7 @@ class _OptionBar extends StatelessWidget {
                     ? AppPalette.brandAction.withValues(alpha: 0.25)
                     : AppPalette.brandAction.withValues(alpha: 0.12))
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
             border: Border.all(
               color: selected
                   ? AppPalette.brandAction.withValues(alpha: isDark ? 0.6 : 0.4)
@@ -472,7 +475,7 @@ class _OptionBar extends StatelessWidget {
               fontSize: 11.5,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               color: selected
-                  ? (isDark ? const Color(0xFF64D2FF) : AppPalette.brandAction)
+                  ? (isDark ? AppPalette.darkBrandHover : AppPalette.brandAction)
                   : (isDark
                       ? AppPalette.darkTextMuted
                       : AppPalette.lightTextMuted),
@@ -594,13 +597,15 @@ class _ModelTile extends StatelessWidget {
                         Icons.check_circle_rounded,
                         size: 18,
                         color: isDark
-                            ? const Color(0xFF64D2FF)
+                            ? AppPalette.darkBrandHover
                             : AppPalette.brandAction,
                       )
                     else
                       Text(
                         profile.name,
-                        style: TextStyle(fontSize: 12, color: textMuted),
+                        style: TextStyle(
+                            fontSize: AppTokens.fontSizeFootnote,
+                            color: textMuted),
                       ),
                   ],
                 ),
@@ -648,7 +653,7 @@ class _ModelTile extends StatelessWidget {
                             fontWeight: FontWeight.w500,
                             color: selected
                                 ? (isDark
-                                    ? const Color(0xFF64D2FF)
+                                    ? AppPalette.darkBrandHover
                                     : AppPalette.brandAction)
                                 : textMuted,
                           ),

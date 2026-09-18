@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
+import '../motion/motion_preferences.dart';
+import '../motion/nexus_motion.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -25,7 +27,7 @@ Future<T?> showNexusSheet<T>({
     barrierLabel: AppStrings.closeApprovalSheet,
     barrierColor: barrierColor ??
         Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.06),
-    transitionDuration: const Duration(milliseconds: 240),
+    transitionDuration: NexusMotion.base,
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       final media = MediaQuery.sizeOf(dialogContext);
       final insetsBottom = MediaQuery.viewInsetsOf(dialogContext).bottom;
@@ -130,6 +132,9 @@ Future<T?> showNexusSheet<T>({
       );
     },
     transitionBuilder: (context, anim, secAnim, child) {
+      if (MotionPreferences.shouldReduceMotion(context)) {
+        return child;
+      }
       final curve = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
       if (isBottomDocked) {
         // 不把包含 BackdropFilter 的玻璃面板放进 Opacity 临时缓冲区，
@@ -179,14 +184,14 @@ Future<T?> showNexusDialog<T>({
     barrierLabel: AppStrings.closeDialog,
     barrierColor: barrierColor ??
         Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.40 : 0.08),
-    transitionDuration: const Duration(milliseconds: 220),
+    transitionDuration: NexusMotion.base,
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       final baseTheme = Theme.of(dialogContext);
       final isDark = baseTheme.brightness == Brightness.dark;
       final highContrast = MediaQuery.highContrastOf(dialogContext);
       final intensity = AppAppearanceController.resolvedGlassIntensity;
       final useGlass = intensity != GlassIntensity.flat;
-      final dialogRadius = BorderRadius.circular(AppTokens.modalRadius);
+      final dialogRadius = BorderRadius.circular(AppTokens.radiusModal);
       final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
 
       // 膜层：玻璃档留出透明度让背后极光透出来，平面档用实心画布色。
@@ -275,6 +280,9 @@ Future<T?> showNexusDialog<T>({
       );
     },
     transitionBuilder: (context, anim, secAnim, child) {
+      if (MotionPreferences.shouldReduceMotion(context)) {
+        return child;
+      }
       final curve = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
       return ScaleTransition(
         scale: Tween<double>(begin: 0.92, end: 1.0).animate(curve),

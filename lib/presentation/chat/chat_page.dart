@@ -43,6 +43,7 @@ import '../history/history_page.dart';
 import '../tasks/development_tasks_page.dart';
 import '../memory/memory_page.dart';
 import '../mcp/mcp_servers_page.dart';
+import '../widgets/image_cache_policy.dart';
 import '../prompts/prompt_library_page.dart';
 import 'widgets/plan_panel.dart';
 import '../settings/provider_list_page.dart';
@@ -57,6 +58,7 @@ import '../projects/storage_access_flow.dart';
 import '../utils/keyboard_insets.dart';
 
 import 'widgets/floating_capsule_input.dart';
+import 'widgets/chat_execution_stage.dart';
 import 'widgets/attachment_drawer_panel.dart';
 import 'widgets/session_metrics_bar.dart';
 import 'widgets/session_metrics_sheet.dart';
@@ -76,6 +78,7 @@ import '../widgets/nexus_surface.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/tool_approval_helper.dart';
 import '../theme/app_tokens.dart';
+import '../motion/nexus_motion.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/glass_surface_group.dart';
@@ -677,7 +680,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         borderRadius: BorderRadius.circular(14),
                         onTap: () => Navigator.pop(sheetContext, mode),
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: NexusMotion.durationFast(sheetContext),
                           padding: const EdgeInsets.symmetric(
                               vertical: 10, horizontal: 8),
                           decoration: BoxDecoration(
@@ -1675,8 +1678,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
       final attachments = <PlatformFile>[];
       for (final xfile in files) {
         final bytes = await xfile.readAsBytes();
-        attachments.add(PlatformFile(
-            name: xfile.name, size: bytes.length, bytes: bytes));
+        attachments.add(
+            PlatformFile(name: xfile.name, size: bytes.length, bytes: bytes));
       }
       if (mounted && attachments.isNotEmpty) {
         _attachments.addAll(attachments);
@@ -2043,7 +2046,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
                         borderRadius: BorderRadius.circular(14),
                         onTap: () => Navigator.pop(sheetContext, mode),
                         child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 180),
+                          duration: NexusMotion.durationFast(sheetContext),
                           padding: const EdgeInsets.symmetric(
                               vertical: 10, horizontal: 6),
                           decoration: BoxDecoration(
@@ -2139,7 +2142,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   Future<void> _selectAgent() async {
     final state = ref.read(chatControllerProvider);
     final database = await ref.read(databaseProvider.future);
-    final agents = await database.allAgents();
+    final agents = await database.allAgents(limit: 200);
     if (!mounted) return;
     final selected = await showNexusSheet<Agent>(
       context: context,
@@ -2288,7 +2291,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
     );
   }
 
-  String? _currentRunningStage({
+  ({ChatExecutionStage stage, String label})? _currentRunningStage({
     required List<ToolActivity> toolActivities,
     required bool running,
     required bool paused,
@@ -2296,19 +2299,30 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }) {
     if (!running) {
       if (planState != null && !planState.isConfirmed) {
-        return '等待确认计划';
+        return (stage: ChatExecutionStage.waitingForUser, label: '等待确认计划');
       }
       return null;
     }
-    if (paused) return '已暂停，可继续或追加指令';
+    if (paused) {
+      return (
+        stage: ChatExecutionStage.waitingForUser,
+        label: '已暂停，可继续或追加指令',
+      );
+    }
     final current = toolActivities.lastOrNull;
     if (current?.status == '等待确认') {
-      return '等待确认：${current!.call.name}';
+      return (
+        stage: ChatExecutionStage.waitingForUser,
+        label: '等待确认：${current!.call.name}',
+      );
     }
     if (current?.status == '执行中') {
-      return '正在执行：${current!.call.name}';
+      return (
+        stage: ChatExecutionStage.running,
+        label: '正在执行：${current!.call.name}',
+      );
     }
-    return '生成中…';
+    return (stage: ChatExecutionStage.running, label: '生成中…');
   }
 
   @override
@@ -2363,8 +2377,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
             ref.watch(chatControllerProvider.select((s) => s.approvalMode));
         final planState =
             ref.watch(chatControllerProvider.select((s) => s.planState));
-        final activityLog =
-            ref.watch(chatControllerProvider.select((s) => s.activityLog));
+        final activityLog = ref.watch(chatControllerProvider.select(
+          (s) => s.activityLog.isEmpty ? null : s.activityLog.last,
+        ));
         final toolActivities =
             ref.watch(chatControllerProvider.select((s) => s.toolActivities));
         final conversationTitle = ref
@@ -2375,6 +2390,12 @@ class _ChatPageState extends ConsumerState<ChatPage>
             chatControllerProvider.select((s) => s.sessionSkillInstructions));
         final omittedContext =
             ref.watch(chatControllerProvider.select((s) => s.omittedContext));
+        final executionStage = _currentRunningStage(
+          toolActivities: toolActivities,
+          running: running,
+          paused: paused,
+          planState: planState,
+        );
 
         final isDark = Theme.of(context).brightness == Brightness.dark;
         return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -2424,456 +2445,494 @@ class _ChatPageState extends ConsumerState<ChatPage>
                 }
               },
             ),
-            body: ValueListenableBuilder<double>(
-              valueListenable: AppAppearanceController.glassIntensity,
-              builder: (context, _, __) {
-                final glassIntensity =
-                    AppAppearanceController.resolvedGlassIntensity;
-                return GlassSurfaceGroup(
-                  child: Stack(
-                    // 顶部悬浮层（顶栏、计划与工具面板）允许展示自身阴影，
-                    // 不受页面 Stack 的默认裁剪影响。
-                    clipBehavior: Clip.none,
-                    children: [
-                      // G1 聊天背景:自定义图 > 默认云朵图 > 渐变兜底;轻微 scrim 保消息可读。
-                      //
-                      // RepaintBoundary：这是全屏贴图，而本页没有任何分层，任何一处变化
-                      // （流式输出、指标条刷新、滚动）都会一路 markNeedsPaint 到页面的
-                      // 顶层边界层，把整张背景图跟着重画一遍。包起来后它只在自己的配置
-                      // 变化时才重绘，其余时间直接复用 layer。
-                      // 它是最底层且不含 BackdropFilter，不会干扰玻璃采样。
-                      Positioned.fill(
-                        child: RepaintBoundary(
-                          child: ValueListenableBuilder<BackgroundConfig>(
-                            valueListenable: BackgroundService.bgNotifier,
-                            builder: (context, bg, _) {
-                              final dark = Theme.of(context).brightness ==
-                                  Brightness.dark;
-                              final Widget? image = switch (bg.mode) {
-                                'clouds' => Image.asset(
-                                    BackgroundService.cloudsAsset,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
-                                        const SizedBox.shrink()),
-                                'custom' when bg.customPath != null =>
-                                  Image.file(
-                                    File(bg.customPath!),
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
-                                        const SizedBox.shrink(),
-                                  ),
-                                _ => null,
-                              };
-                              if (image == null) {
-                                return const SizedBox.shrink();
-                              }
-                              // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
-                              final scrim = bg.mode == 'custom' || dark
-                                  ? (dark
-                                      ? Colors.black.withValues(alpha: .18)
-                                      : Colors.white.withValues(alpha: .10))
-                                  : Colors.white.withValues(alpha: .06);
-                              return Stack(fit: StackFit.expand, children: [
-                                image,
-                                Container(color: scrim),
-                              ]);
-                            },
+            body: Semantics(
+              namesRoute: true,
+              label: '对话',
+              child: ValueListenableBuilder<double>(
+                valueListenable: AppAppearanceController.glassIntensity,
+                builder: (context, _, __) {
+                  final glassIntensity =
+                      AppAppearanceController.resolvedGlassIntensity;
+                  return GlassSurfaceGroup(
+                    child: Stack(
+                      // 顶部悬浮层（顶栏、计划与工具面板）允许展示自身阴影，
+                      // 不受页面 Stack 的默认裁剪影响。
+                      clipBehavior: Clip.none,
+                      children: [
+                        // G1 聊天背景:自定义图 > 默认云朵图 > 渐变兜底;轻微 scrim 保消息可读。
+                        //
+                        // RepaintBoundary：这是全屏贴图，而本页没有任何分层，任何一处变化
+                        // （流式输出、指标条刷新、滚动）都会一路 markNeedsPaint 到页面的
+                        // 顶层边界层，把整张背景图跟着重画一遍。包起来后它只在自己的配置
+                        // 变化时才重绘，其余时间直接复用 layer。
+                        // 它是最底层且不含 BackdropFilter，不会干扰玻璃采样。
+                        Positioned.fill(
+                          child: RepaintBoundary(
+                            child: ValueListenableBuilder<BackgroundConfig>(
+                              valueListenable: BackgroundService.bgNotifier,
+                              builder: (context, bg, _) {
+                                final dark = Theme.of(context).brightness ==
+                                    Brightness.dark;
+                                final Widget? image = switch (bg.mode) {
+                                  'clouds' => Image.asset(
+                                      BackgroundService.cloudsAsset,
+                                      fit: BoxFit.cover,
+                                      cacheWidth: imageCacheWidth(context),
+                                      errorBuilder: (_, __, ___) =>
+                                          const SizedBox.shrink()),
+                                  'custom' when bg.customPath != null =>
+                                    Image.file(
+                                      File(bg.customPath!),
+                                      fit: BoxFit.cover,
+                                      cacheWidth: imageCacheWidth(context),
+                                      errorBuilder: (_, __, ___) =>
+                                          const SizedBox.shrink(),
+                                    ),
+                                  _ => null,
+                                };
+                                if (image == null) {
+                                  return const SizedBox.shrink();
+                                }
+                                // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
+                                final scrim = bg.mode == 'custom' || dark
+                                    ? (dark
+                                        ? Colors.black.withValues(alpha: .18)
+                                        : Colors.white.withValues(alpha: .10))
+                                    : Colors.white.withValues(alpha: .06);
+                                return Stack(fit: StackFit.expand, children: [
+                                  image,
+                                  Container(color: scrim),
+                                ]);
+                              },
+                            ),
                           ),
                         ),
-                      ),
-                      SafeArea(
-                        bottom: false,
-                        child: LayoutBuilder(builder: (context, constraints) {
-                          // 横屏 / 平板等宽屏下限制正文最大宽度，避免输入框与卡片过宽（文档 9）。
-                          final wide = constraints.maxWidth > 700;
-                          final hasTopDock = activityLog.isNotEmpty ||
-                              (planState != null &&
-                                  planState.status != 'cancelled') ||
-                              toolActivities.isNotEmpty;
-                          Widget column = Column(children: [
-                            if (hasTopDock ||
-                                glassIntensity == GlassIntensity.flat)
-                              const SizedBox(
-                                  height: kCapsuleTopBarHeight +
-                                      4), // Clear the absolute positioned top bar
-                            if (activityLog.isNotEmpty)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 12),
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Text(activityLog.last,
-                                      style:
-                                          Theme.of(context).textTheme.bodySmall),
-                                ),
-                              ),
-                            if ((planState != null &&
+                        SafeArea(
+                          bottom: false,
+                          child: LayoutBuilder(builder: (context, constraints) {
+                            // 横屏 / 平板等宽屏下限制正文最大宽度，避免输入框与卡片过宽（文档 9）。
+                            final wide = constraints.maxWidth > 700;
+                            final hasTopDock = activityLog != null ||
+                                (planState != null &&
                                     planState.status != 'cancelled') ||
-                                toolActivities.isNotEmpty)
-                              Padding(
-                                key: const ValueKey('chat_activity_dock'),
-                                padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (planState != null &&
-                                        planState.status != 'cancelled')
-                                      PlanPanel(
-                                        plan: planState,
-                                        goal: planState.steps.isEmpty
-                                            ? null
-                                            : planState.steps.first.description,
-                                        onApprove: () =>
-                                            _chat.respondToPlan(true),
-                                        onCancel: () =>
-                                            _chat.respondToPlan(false),
-                                        onResume: () =>
-                                            _chat.resumeFromBudgetPause(
-                                                approveTool: _approveTool),
-                                      ),
-                                    if (toolActivities.isNotEmpty)
-                                      ToolActivityTimeline(
-                                        activities: toolActivities,
-                                        running: running,
-                                        compact: true,
-                                        onConfirm: _confirmToolActivity,
-                                        onReject: _rejectToolActivity,
-                                        onReview: _reviewToolActivity,
-                                        onRetry: _retryToolActivity,
-                                      ),
-                                  ],
+                                toolActivities.isNotEmpty;
+                            Widget column = Column(children: [
+                              if (hasTopDock ||
+                                  glassIntensity == GlassIntensity.flat)
+                                const SizedBox(
+                                    height: kCapsuleTopBarHeight +
+                                        4), // Clear the absolute positioned top bar
+                              if (activityLog != null)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(activityLog,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall),
+                                  ),
                                 ),
-                              ),
-                            Expanded(
-                              child: Stack(
-                                children: [
-                                  loading
-                                      ? const NexusChatMessageSkeleton()
-                                      : (messages.isEmpty
-                                          ? _emptyState(context)
-                                          : NotificationListener<
-                                              ScrollNotification>(
-                                              // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
-                                              onNotification:
-                                                  _handleScrollNotification,
-                                              child: Consumer(
-                                                builder: (context, ref, _) {
-                                                  // 高频流式文本在此单独订阅：只有本子树随
-                                                  // liveReply 更新而重建，页面其余部分不动。
-                                                  final liveReply = ref
-                                                      .watch(liveReplyProvider);
-                                                  return ValueListenableBuilder<
-                                                      int?>(
-                                                    valueListenable:
-                                                        _selectingMessageIndex,
-                                                    builder: (context,
-                                                            selectionIndex, _) =>
-                                                        ChatMessageList(
-                                                    sessionKey: conversationId,
-                                                    messages: messages,
-                                                    liveReply: liveReply,
-                                                    controller: _scrollController,
-                                                    running: running,
-                                                    padding: (hasTopDock ||
-                                                            glassIntensity ==
-                                                                GlassIntensity
-                                                                    .flat)
-                                                        ? const EdgeInsets
-                                                            .fromLTRB(
-                                                            16, 0, 16, 10)
-                                                        : const EdgeInsets
-                                                            .fromLTRB(
-                                                            16,
-                                                            kCapsuleTopBarHeight +
-                                                                12,
-                                                            16,
-                                                            10,
-                                                          ),
-                                                    onLoadOlder: () =>
-                                                        _chat.loadOlderMessages(),
-                                                    onLongPress: (index) {
-                                                      if (!_longPressHintShown) {
-                                                        _longPressHintShown =
-                                                            true;
-                                                      }
-                                                      _showMessageActions(index);
-                                                    },
-                                                    onRegenerate: _regenerate,
-                                                    onEditPrompt:
-                                                        _editLatestQuestion,
-                                                    onSwitchModel:
-                                                        _switchProvider,
-                                                    onSpeak: TtsService
-                                                            .instance.isAvailable
-                                                        ? _speakMessageAt
-                                                        : null,
-                                                    speakingListenable: TtsService
-                                                        .instance
-                                                        .speakingListenable,
+                              if ((planState != null &&
+                                      planState.status != 'cancelled') ||
+                                  toolActivities.isNotEmpty)
+                                Padding(
+                                  key: const ValueKey('chat_activity_dock'),
+                                  padding:
+                                      const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (planState != null &&
+                                          planState.status != 'cancelled')
+                                        PlanPanel(
+                                          plan: planState,
+                                          goal: planState.steps.isEmpty
+                                              ? null
+                                              : planState
+                                                  .steps.first.description,
+                                          onApprove: () =>
+                                              _chat.respondToPlan(true),
+                                          onCancel: () =>
+                                              _chat.respondToPlan(false),
+                                          onResume: () =>
+                                              _chat.resumeFromBudgetPause(
+                                                  approveTool: _approveTool),
+                                        ),
+                                      if (toolActivities.isNotEmpty)
+                                        ToolActivityTimeline(
+                                          activities: toolActivities,
+                                          running: running,
+                                          compact: true,
+                                          onConfirm: _confirmToolActivity,
+                                          onReject: _rejectToolActivity,
+                                          onReview: _reviewToolActivity,
+                                          onRetry: _retryToolActivity,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              Expanded(
+                                child: Stack(
+                                  children: [
+                                    loading
+                                        ? const NexusChatMessageSkeleton()
+                                        : (messages.isEmpty
+                                            ? _emptyState(context)
+                                            : NotificationListener<
+                                                ScrollNotification>(
+                                                // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
+                                                onNotification:
+                                                    _handleScrollNotification,
+                                                child: Consumer(
+                                                  builder: (context, ref, _) {
+                                                    // 高频流式文本在此单独订阅：只有本子树随
+                                                    // liveReply 更新而重建，页面其余部分不动。
+                                                    final liveReply = ref.watch(
+                                                        liveReplyProvider);
+                                                    return ValueListenableBuilder<
+                                                        int?>(
+                                                      valueListenable:
+                                                          _selectingMessageIndex,
+                                                      builder: (context,
+                                                              selectionIndex,
+                                                              _) =>
+                                                          RepaintBoundary(
+                                                        // Streaming tokens rebuild this subtree frequently. Isolate
+                                                        // its raster work from the backdrop and glass controls.
+                                                        child: ChatMessageList(
+                                                          sessionKey:
+                                                              conversationId,
+                                                          messages: messages,
+                                                          liveReply: liveReply,
+                                                          controller:
+                                                              _scrollController,
+                                                          running: running,
+                                                          padding: (hasTopDock ||
+                                                                  glassIntensity ==
+                                                                      GlassIntensity
+                                                                          .flat)
+                                                              ? const EdgeInsets
+                                                                  .fromLTRB(
+                                                                  16, 0, 16, 10)
+                                                              : const EdgeInsets
+                                                                  .fromLTRB(
+                                                                  16,
+                                                                  kCapsuleTopBarHeight +
+                                                                      12,
+                                                                  16,
+                                                                  10,
+                                                                ),
+                                                          onLoadOlder: () => _chat
+                                                              .loadOlderMessages(),
+                                                          onLongPress: (index) {
+                                                            if (!_longPressHintShown) {
+                                                              _longPressHintShown =
+                                                                  true;
+                                                            }
+                                                            _showMessageActions(
+                                                                index);
+                                                          },
+                                                          onRegenerate:
+                                                              _regenerate,
+                                                          onEditPrompt:
+                                                              _editLatestQuestion,
+                                                          onSwitchModel:
+                                                              _switchProvider,
+                                                          onSpeak: TtsService
+                                                                  .instance
+                                                                  .isAvailable
+                                                              ? _speakMessageAt
+                                                              : null,
+                                                          speakingListenable:
+                                                              TtsService
+                                                                  .instance
+                                                                  .speakingListenable,
                                                           selectionIndex:
                                                               selectionIndex,
                                                           onExitSelection: () =>
                                                               _selectingMessageIndex
                                                                   .value = null,
-                                                          trailingWidgets:
-                                                              const [],
+                                                          trailingWidgets: const [],
                                                         ),
-                                                  );
-                                                },
-                                              ),
-                                            )),
-                                  Positioned(
-                                    right: 16,
-                                    bottom: 16,
-                                    child: ValueListenableBuilder<int>(
-                                      valueListenable:
-                                          _scrollIndicatorRevision,
-                                      builder: (context, _, __) {
-                                        if (!_showScrollToBottom) {
-                                          return const SizedBox.shrink();
-                                        }
-                                        return NexusBackToLatestButton(
-                                          onTap: _scrollToBottom,
-                                          unreadCount: _unreadNewMessagesCount,
-                                          isRunning: running,
-                                        );
-                                      },
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              )),
+                                    Positioned(
+                                      right: 16,
+                                      bottom: 16,
+                                      child: ValueListenableBuilder<int>(
+                                        valueListenable:
+                                            _scrollIndicatorRevision,
+                                        builder: (context, _, __) {
+                                          if (!_showScrollToBottom) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return NexusBackToLatestButton(
+                                            onTap: _scrollToBottom,
+                                            unreadCount:
+                                                _unreadNewMessagesCount,
+                                            isRunning: running,
+                                          );
+                                        },
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                            ValueListenableBuilder<int>(
-                              valueListenable: _attachmentsRevision,
-                              builder: (context, _, __) {
-                                if (_attachments.isEmpty) {
-                                  return const SizedBox.shrink();
-                                }
-                                return SizedBox(
-                                height: 56,
-                                child: ListView(
-                                  scrollDirection: Axis.horizontal,
-                                  padding:
-                                      const EdgeInsets.symmetric(horizontal: 8),
-                                  children: _attachments.map((file) {
-                                    final name = file.name.toLowerCase();
-                                    final isImage = name.endsWith('.jpg') ||
-                                        name.endsWith('.png') ||
-                                        name.endsWith('.jpeg') ||
-                                        name.endsWith('.webp');
-                                    return Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: Stack(
-                                        children: [
-                                          Container(
-                                            width: 52,
-                                            height: 52,
-                                            margin: const EdgeInsets.only(
-                                                top: 4, right: 4),
-                                            child: NexusSurface(
-                                              level: SurfaceLevel.thin,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              child: Container(
-                                                decoration: BoxDecoration(
+                              ValueListenableBuilder<int>(
+                                valueListenable: _attachmentsRevision,
+                                builder: (context, _, __) {
+                                  if (_attachments.isEmpty) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return SizedBox(
+                                    height: 56,
+                                    child: ListView(
+                                      scrollDirection: Axis.horizontal,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                      children: _attachments.map((file) {
+                                        final name = file.name.toLowerCase();
+                                        final isImage = name.endsWith('.jpg') ||
+                                            name.endsWith('.png') ||
+                                            name.endsWith('.jpeg') ||
+                                            name.endsWith('.webp');
+                                        return Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 8),
+                                          child: Stack(
+                                            children: [
+                                              Container(
+                                                width: 52,
+                                                height: 52,
+                                                margin: const EdgeInsets.only(
+                                                    top: 4, right: 4),
+                                                child: NexusSurface(
+                                                  level: SurfaceLevel.thin,
                                                   borderRadius:
                                                       BorderRadius.circular(8),
-                                                  image: isImage &&
-                                                          file.bytes != null
-                                                      ? DecorationImage(
-                                                          image: MemoryImage(
-                                                              file.bytes!),
-                                                          fit: BoxFit.cover)
-                                                      : null,
+                                                  child: Container(
+                                                    decoration: BoxDecoration(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                      image: isImage &&
+                                                              file.bytes != null
+                                                          ? DecorationImage(
+                                                              image: MemoryImage(
+                                                                  file.bytes!),
+                                                              fit: BoxFit.cover)
+                                                          : null,
+                                                    ),
+                                                    child: !isImage ||
+                                                            file.bytes == null
+                                                        ? const Center(
+                                                            child: Icon(
+                                                                Icons
+                                                                    .insert_drive_file_outlined,
+                                                                size: 24))
+                                                        : null,
+                                                  ),
                                                 ),
-                                                child: !isImage ||
-                                                        file.bytes == null
-                                                    ? const Center(
+                                              ),
+                                              Positioned(
+                                                right: -4,
+                                                top: -4,
+                                                child: Semantics(
+                                                  button: true,
+                                                  label: '移除附件 ${file.name}',
+                                                  child: SizedBox(
+                                                    width: 48,
+                                                    height: 48,
+                                                    child: IconButton(
+                                                      padding: EdgeInsets.zero,
+                                                      tooltip:
+                                                          '移除附件 ${file.name}',
+                                                      onPressed: () {
+                                                        _attachments
+                                                            .remove(file);
+                                                        _notifyAttachmentsChanged();
+                                                      },
+                                                      icon: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(2),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .error,
+                                                          shape:
+                                                              BoxShape.circle,
+                                                        ),
                                                         child: Icon(
-                                                            Icons
-                                                                .insert_drive_file_outlined,
-                                                            size: 24))
-                                                    : null,
+                                                          Icons.close,
+                                                          size: 12,
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .onError,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
                                               ),
-                                            ),
+                                            ],
                                           ),
-                                          Positioned(
-                                            right: 0,
-                                            top: 0,
-                                            child: GestureDetector(
-                                              onTap: () {
-                                                _attachments.remove(file);
-                                                _notifyAttachmentsChanged();
-                                              },
-                                              child: Container(
-                                                padding: const EdgeInsets.all(2),
-                                                decoration: BoxDecoration(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .error,
-                                                    shape: BoxShape.circle),
-                                                child: Icon(Icons.close,
-                                                    size: 12,
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .onError),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }).toList(),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              _buildSessionMetricsBar(
+                                messages: messages,
+                                totalSteps: totalSteps,
+                                toolActivities: toolActivities,
+                                liveContextTokens: liveContextTokens,
+                                contextTokens: contextTokens,
+                                running: running,
+                              ),
+                              _buildContextCompressionHint(
+                                liveContextTokens: liveContextTokens,
+                                contextTokens: contextTokens,
+                                running: running,
+                                omittedContext: omittedContext,
+                              ),
+                              // 技能提示只占一个槽位（/ 补全 > 自动建议 > 已加载），
+                              // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
+                              _buildSkillPromptSlot(
+                                running: running,
+                                sessionSkills: sessionSkills,
+                              ),
+                              FloatingCapsuleInput(
+                                glassIntensity: glassIntensity,
+                                controller: _controller,
+                                isRunning: running,
+                                runningStage: executionStage?.label,
+                                runningStageKind: executionStage?.stage,
+                                onSend: _send,
+                                onStop: _stop,
+                                onPause: () => _chat.pause(),
+                                onResume: () => _chat.resume(),
+                                isPaused: paused,
+                                onAttachmentMenu: () {
+                                  _attachmentPanelExpanded.value =
+                                      !_attachmentPanelExpanded.value;
+                                },
+                                approvalMode: approvalMode,
+                                onApprovalModeTap: _selectApprovalMode,
+                                modeLabel: chatMode.label,
+                                onModeTap: _showSessionContext,
+                                planModeEnabled: planMode,
+                                hasAttachments: _attachments.isNotEmpty,
+                                hasAttachmentsListenable: _hasAttachments,
+                                isAttachmentExpanded:
+                                    _attachmentPanelExpanded.value,
+                                attachmentExpandedListenable:
+                                    _attachmentPanelExpanded,
+                              ),
+                              ValueListenableBuilder<bool>(
+                                valueListenable: _attachmentPanelExpanded,
+                                builder: (context, expanded, _) {
+                                  if (!expanded) return const SizedBox.shrink();
+                                  return AttachmentDrawerPanel(
+                                    attachments: _attachments,
+                                    onCamera: () async {
+                                      _attachmentPanelExpanded.value = false;
+                                      await _pickImage(ImageSource.camera);
+                                    },
+                                    onGallery: () async {
+                                      _attachmentPanelExpanded.value = false;
+                                      await _pickMultiImage();
+                                    },
+                                    onFile: () async {
+                                      _attachmentPanelExpanded.value = false;
+                                      await _pickFiles();
+                                    },
+                                  );
+                                },
+                              ),
+                            ]);
+                            if (wide) {
+                              column = Align(
+                                alignment: Alignment.topCenter,
+                                child: ConstrainedBox(
+                                  constraints:
+                                      const BoxConstraints(maxWidth: 700),
+                                  child: column,
                                 ),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 8),
-                            _buildSessionMetricsBar(
-                              messages: messages,
-                              totalSteps: totalSteps,
-                              toolActivities: toolActivities,
-                              liveContextTokens: liveContextTokens,
-                              contextTokens: contextTokens,
-                              running: running,
-                            ),
-                            _buildContextCompressionHint(
-                              liveContextTokens: liveContextTokens,
-                              contextTokens: contextTokens,
-                              running: running,
-                              omittedContext: omittedContext,
-                            ),
-                            // 技能提示只占一个槽位（/ 补全 > 自动建议 > 已加载），
-                            // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
-                            _buildSkillPromptSlot(
-                              running: running,
-                              sessionSkills: sessionSkills,
-                            ),
-                            FloatingCapsuleInput(
-                              glassIntensity: glassIntensity,
-                              controller: _controller,
-                              isRunning: running,
-                              runningStage: _currentRunningStage(
-                                toolActivities: toolActivities,
-                                running: running,
-                                paused: paused,
-                                planState: planState,
+                              );
+                            }
+                            return column;
+                          }),
+                        ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: SafeArea(
+                            bottom: false,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+                              child: CapsuleTopBar(
+                                glassIntensity: glassIntensity,
+                                maxContextTokens: contextTokens,
+                                workspaceLabel: (currentWorkspacePath == null ||
+                                        currentWorkspacePath.isEmpty ||
+                                        currentWorkspacePath == '未选择项目')
+                                    ? null
+                                    : (ref
+                                            .read(chatControllerProvider)
+                                            .currentProjectName ??
+                                        p.basename(currentWorkspacePath)),
+                                modelLabel: activeModel.isNotEmpty
+                                    ? activeModel
+                                    : (activeProviderName.isEmpty
+                                        ? '未配置模型'
+                                        : activeProviderName),
+                                modeLabel: chatMode.label,
+                                sessionTitle:
+                                    messages.isEmpty ? null : conversationTitle,
+                                runningStage: executionStage?.label,
+                                runningStageKind: executionStage?.stage,
+                                statusActive: running,
+                                currentContextTokens: liveContextTokens > 0
+                                    ? liveContextTokens
+                                    : messages.reversed
+                                            .where((m) => m.usage != null)
+                                            .map((m) =>
+                                                m.usage!.promptTokens +
+                                                m.usage!.completionTokens)
+                                            .firstOrNull ??
+                                        0,
+                                onMenu: () =>
+                                    _scaffoldKey.currentState?.openDrawer(),
+                                onNewChat: () => _startNewConversation(),
+                                onContextGaugeTap: () =>
+                                    _scaffoldKey.currentState?.openDrawer(),
+                                onTitleTap: _showSessionContext,
+                                onWorkspaceTap: _handleTopBarWorkspace,
+                                onModeTap: _showChatModeSheet,
                               ),
-                              onSend: _send,
-                              onStop: _stop,
-                              onPause: () => _chat.pause(),
-                              onResume: () => _chat.resume(),
-                              isPaused: paused,
-                              onAttachmentMenu: () {
-                                _attachmentPanelExpanded.value =
-                                    !_attachmentPanelExpanded.value;
-                              },
-                              approvalMode: approvalMode,
-                              onApprovalModeTap: _selectApprovalMode,
-                              modeLabel: chatMode.label,
-                              onModeTap: _showSessionContext,
-                              planModeEnabled: planMode,
-                              hasAttachments: _attachments.isNotEmpty,
-                              hasAttachmentsListenable: _hasAttachments,
-                              isAttachmentExpanded:
-                                  _attachmentPanelExpanded.value,
-                              attachmentExpandedListenable:
-                                  _attachmentPanelExpanded,
-                            ),
-                            ValueListenableBuilder<bool>(
-                              valueListenable: _attachmentPanelExpanded,
-                              builder: (context, expanded, _) {
-                                if (!expanded) return const SizedBox.shrink();
-                                return AttachmentDrawerPanel(
-                                  attachments: _attachments,
-                                  onCamera: () async {
-                                    _attachmentPanelExpanded.value = false;
-                                    await _pickImage(ImageSource.camera);
-                                  },
-                                  onGallery: () async {
-                                    _attachmentPanelExpanded.value = false;
-                                    await _pickMultiImage();
-                                  },
-                                  onFile: () async {
-                                    _attachmentPanelExpanded.value = false;
-                                    await _pickFiles();
-                                  },
-                                );
-                              },
-                            ),
-                          ]);
-                          if (wide) {
-                            column = Align(
-                              alignment: Alignment.topCenter,
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 700),
-                                child: column,
-                              ),
-                            );
-                          }
-                          return column;
-                        }),
-                      ),
-                      Positioned(
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        child: SafeArea(
-                          bottom: false,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
-                            child: CapsuleTopBar(
-                              glassIntensity: glassIntensity,
-                              maxContextTokens: contextTokens,
-                              workspaceLabel: (currentWorkspacePath == null ||
-                                      currentWorkspacePath.isEmpty ||
-                                      currentWorkspacePath == '未选择项目')
-                                  ? null
-                                  : (ref
-                                          .read(chatControllerProvider)
-                                          .currentProjectName ??
-                                      p.basename(currentWorkspacePath)),
-                              modelLabel: activeModel.isNotEmpty
-                                  ? activeModel
-                                  : (activeProviderName.isEmpty
-                                      ? '未配置模型'
-                                      : activeProviderName),
-                              modeLabel: chatMode.label,
-                              sessionTitle:
-                                  messages.isEmpty ? null : conversationTitle,
-                              runningStage: _currentRunningStage(
-                                toolActivities: toolActivities,
-                                running: running,
-                                paused: paused,
-                                planState: planState,
-                              ),
-                              statusActive: running,
-                              currentContextTokens: liveContextTokens > 0
-                                  ? liveContextTokens
-                                  : messages.reversed
-                                          .where((m) => m.usage != null)
-                                          .map((m) =>
-                                              m.usage!.promptTokens +
-                                              m.usage!.completionTokens)
-                                          .firstOrNull ??
-                                      0,
-                              onMenu: () => _scaffoldKey.currentState?.openDrawer(),
-                              onNewChat: () => _startNewConversation(),
-                              onContextGaugeTap: () =>
-                                  _scaffoldKey.currentState?.openDrawer(),
-                              onTitleTap: _showSessionContext,
-                              onWorkspaceTap: _handleTopBarWorkspace,
-                              onModeTap: _showChatModeSheet,
                             ),
                           ),
                         ),
-                      ),
-                    ], // Stack children
-                  ), // Stack
-                );
-              },
-            ), // ValueListenableBuilder
+                      ], // Stack children
+                    ), // Stack
+                  );
+                },
+              ), // ValueListenableBuilder
+            ), // Semantics
           ), // Scaffold
         ); // AnnotatedRegion
       },

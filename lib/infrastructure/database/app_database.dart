@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'database_executor.dart';
+import 'database_maintenance.dart';
+import '../skills/builtin_skills.dart';
 
 part 'app_database.g.dart';
 
@@ -104,7 +107,8 @@ class ModelProfiles extends Table {
 
 /// 后台任务持久化（C2）：记录 Agent / 定时任务的运行状态与请求快照，用于断点恢复。
 @TableIndex(name: 'idx_tasks_status_updated', columns: {#status, #updatedAt})
-@TableIndex(name: 'idx_tasks_project_updated', columns: {#projectId, #updatedAt})
+@TableIndex(
+    name: 'idx_tasks_project_updated', columns: {#projectId, #updatedAt})
 class Tasks extends Table {
   TextColumn get id => text()();
   TextColumn get conversationId => text()();
@@ -122,13 +126,13 @@ class Tasks extends Table {
   Set<Column<Object>> get primaryKey => {id};
 }
 
-@TableIndex(
-    name: 'idx_projects_updated', columns: {#archived, #updatedAt})
+@TableIndex(name: 'idx_projects_updated', columns: {#archived, #updatedAt})
 class Projects extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get canonicalRootPath => text()();
-  TextColumn get sourceKind => text().withDefault(const Constant('directory'))();
+  TextColumn get sourceKind =>
+      text().withDefault(const Constant('directory'))();
   TextColumn get projectKind => text().withDefault(const Constant('unknown'))();
   TextColumn get runtimePreference => text().nullable()();
   TextColumn get settingsJson => text().withDefault(const Constant('{}'))();
@@ -155,12 +159,9 @@ class Drafts extends Table {
 }
 
 @TableIndex(
-    name: 'idx_run_controls_run_sequence',
-    columns: {#runId, #sequenceNo})
+    name: 'idx_run_controls_run_sequence', columns: {#runId, #sequenceNo})
 @TableIndex(
-    name: 'idx_run_controls_client',
-    columns: {#clientControlId},
-    unique: true)
+    name: 'idx_run_controls_client', columns: {#clientControlId}, unique: true)
 class RunControls extends Table {
   TextColumn get id => text()();
   TextColumn get clientControlId => text()();
@@ -532,7 +533,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.e);
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -568,6 +569,7 @@ class AppDatabase extends _$AppDatabase {
             'ON artifacts (project_id, created_at)',
           );
           await _ensurePendingApprovals();
+          await _ensureDataMaintenanceJobs();
         },
         onUpgrade: (m, from, to) async {
           Future<bool> hasTable(String tableName) async {
@@ -842,6 +844,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 23) {
             await _ensurePendingApprovals();
           }
+          if (from < 24) {
+            await _ensureDataMaintenanceJobs();
+          }
         },
       );
 
@@ -867,6 +872,18 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_pending_approvals_created '
       'ON pending_approvals (created_at)',
+    );
+  }
+
+  Future<void> _ensureDataMaintenanceJobs() async {
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS data_maintenance_jobs ('
+      'job_key TEXT NOT NULL PRIMARY KEY, '
+      'target_version INTEGER NOT NULL, '
+      'attempts INTEGER NOT NULL DEFAULT 0, '
+      'last_error_type TEXT, '
+      'completed_at TEXT, '
+      'updated_at TEXT NOT NULL)',
     );
   }
 
@@ -1111,7 +1128,11 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  Future<List<Agent>> allAgents() => select(agents).get();
+  Future<List<Agent>> allAgents({int? limit}) {
+    final query = select(agents);
+    if (limit != null) query.limit(limit);
+    return query.get();
+  }
 
   Future<Agent?> findAgent(String id) =>
       (select(agents)..where((row) => row.id.equals(id))).getSingleOrNull();
@@ -1125,7 +1146,11 @@ class AppDatabase extends _$AppDatabase {
   Future<void> deleteAgent(String id) =>
       (delete(agents)..where((row) => row.id.equals(id))).go();
 
-  Future<List<ModelProfile>> allModelProfiles() => select(modelProfiles).get();
+  Future<List<ModelProfile>> allModelProfiles({int? limit}) {
+    final query = select(modelProfiles);
+    if (limit != null) query.limit(limit);
+    return query.get();
+  }
 
   Future<void> saveModelProfile(ModelProfile profile) =>
       into(modelProfiles).insertOnConflictUpdate(profile);
@@ -1239,12 +1264,10 @@ class AppDatabase extends _$AppDatabase {
   Future<Project?> findProject(String id) =>
       (select(projects)..where((row) => row.id.equals(id))).getSingleOrNull();
 
-  Future<Project?> findProjectByCanonicalPath(String path) =>
-      (select(projects)
-            ..where((row) =>
-                row.canonicalRootPath.equals(path) &
-                row.archived.equals(false)))
-          .getSingleOrNull();
+  Future<Project?> findProjectByCanonicalPath(String path) => (select(projects)
+        ..where((row) =>
+            row.canonicalRootPath.equals(path) & row.archived.equals(false)))
+      .getSingleOrNull();
 
   Future<void> saveProject(Project project) =>
       into(projects).insertOnConflictUpdate(project);
@@ -1278,8 +1301,7 @@ class AppDatabase extends _$AppDatabase {
     String? runId,
   }) {
     final query = select(runControls)
-      ..where((row) =>
-          row.taskId.equals(taskId) & row.status.equals('pending'))
+      ..where((row) => row.taskId.equals(taskId) & row.status.equals('pending'))
       ..orderBy([(row) => OrderingTerm.asc(row.sequenceNo)]);
     if (runId != null && runId.isNotEmpty) {
       query.where((row) => row.runId.equals(runId) | row.runId.isNull());
@@ -1342,7 +1364,8 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  Future<List<Map<String, dynamic>>> artifactsForProject(String projectId) async {
+  Future<List<Map<String, dynamic>>> artifactsForProject(
+      String projectId) async {
     final rows = await customSelect(
       'SELECT * FROM artifacts WHERE project_id = ? ORDER BY created_at DESC',
       variables: [Variable<String>(projectId)],
@@ -1530,11 +1553,10 @@ class AppDatabase extends _$AppDatabase {
           {int limit = 2000}) =>
       (select(collaborationMessages)..limit(limit)).get();
 
-  Future<List<AuditLog>> allAuditLogs({int limit = 2000}) =>
-      (select(auditLogs)
-            ..orderBy([(row) => OrderingTerm.desc(row.createdAt)])
-            ..limit(limit))
-          .get();
+  Future<List<AuditLog>> allAuditLogs({int limit = 2000}) => (select(auditLogs)
+        ..orderBy([(row) => OrderingTerm.desc(row.createdAt)])
+        ..limit(limit))
+      .get();
 
   Future<List<RunRecord>> allRunRecords({int limit = 2000}) =>
       (select(runRecords)
@@ -1542,14 +1564,13 @@ class AppDatabase extends _$AppDatabase {
             ..limit(limit))
           .get();
 
-  Future<List<RunEvent>> allRunEvents({int limit = 8000}) =>
-      (select(runEvents)
-            ..orderBy([
-              (row) => OrderingTerm.asc(row.runId),
-              (row) => OrderingTerm.asc(row.sequenceNo),
-            ])
-            ..limit(limit))
-          .get();
+  Future<List<RunEvent>> allRunEvents({int limit = 8000}) => (select(runEvents)
+        ..orderBy([
+          (row) => OrderingTerm.asc(row.runId),
+          (row) => OrderingTerm.asc(row.sequenceNo),
+        ])
+        ..limit(limit))
+      .get();
 
   Future<List<LogRecord>> allLogRecords({int limit = 4000}) =>
       (select(logRecords)
@@ -2026,6 +2047,19 @@ class AppDatabase extends _$AppDatabase {
 
 Future<AppDatabase> openAppDatabase() async {
   final database = AppDatabase(await createDatabaseExecutor());
-  await database.ensureDefaultPromptTemplates();
+  await database.customSelect('SELECT 1').getSingle();
+  unawaited(
+    DatabaseMaintenanceCoordinator(
+      database: database,
+      jobs: [
+        ...defaultDatabaseMaintenanceJobs(),
+        DatabaseMaintenanceJob(
+          key: 'seed_builtin_skills',
+          targetVersion: 1,
+          run: (database) => BuiltinSkillSeeder().ensureInstalled(database),
+        ),
+      ],
+    ).runPending(),
+  );
   return database;
 }

@@ -136,8 +136,7 @@ class HeadlessExecutor {
     var persona = systemPrompt ?? '你是一个有帮助的 AI Agent。';
     if (workspacePath != null && workspacePath.trim().isNotEmpty) {
       try {
-        final project =
-            await const ProjectKindDetector().detect(workspacePath);
+        final project = await const ProjectKindDetector().detect(workspacePath);
         final templateRules = TaskTemplateService().promptBlock(
           taskType: taskType,
           project: project,
@@ -153,8 +152,7 @@ class HeadlessExecutor {
     try {
       memoryBlock = await MemoryService()
           .buildInjectionBlock(db, contextTokens: config.contextTokens);
-      knowledgeBlock =
-          await KnowledgeService().buildInjectionBlock(db, prompt);
+      knowledgeBlock = await KnowledgeService().buildInjectionBlock(db, prompt);
       // 与聊天路径保持一致：后台任务同样注入已启用 Skill 的指令块。
       skillBlock = await SkillStore().buildInjectionBlock(db);
     } catch (_) {
@@ -354,17 +352,21 @@ class HeadlessExecutor {
       registerIfAllowed(SkillsReadTool(database: db));
       registerIfAllowed(SkillsReadResourceTool(database: db));
     } catch (_) {}
-    bool terminalFileEnabled;
+    bool workspaceFilesEnabled;
+    bool terminalEnabled;
     try {
-      terminalFileEnabled = (await SharedPreferences.getInstance())
-              .getBool('settings.tool.terminal_file') ??
-          true;
+      final prefs = await SharedPreferences.getInstance();
+      final legacy = prefs.getBool('settings.tool.terminal_file') ?? true;
+      workspaceFilesEnabled =
+          prefs.getBool('settings.tool.workspace_files') ?? legacy;
+      terminalEnabled = prefs.getBool('settings.tool.terminal') ?? legacy;
     } catch (_) {
-      terminalFileEnabled = true;
+      workspaceFilesEnabled = true;
+      terminalEnabled = true;
     }
     if (workspacePath != null &&
         workspacePath.trim().isNotEmpty &&
-        terminalFileEnabled) {
+        workspaceFilesEnabled) {
       final sandbox = WorkspaceSandbox(workspacePath);
       registerIfAllowed(ReadFileTool(sandbox: sandbox));
       registerIfAllowed(ListDirectoryTool(sandbox: sandbox));
@@ -381,9 +383,11 @@ class HeadlessExecutor {
         registerIfAllowed(EditFileTool(sandbox: sandbox));
         registerIfAllowed(DeleteFileTool(sandbox: sandbox));
         registerIfAllowed(MoveFileTool(sandbox: sandbox));
-        registerIfAllowed(TerminalCommandTool(
-          service: TerminalCommandService(workspacePath: workspacePath),
-        ));
+        if (terminalEnabled) {
+          registerIfAllowed(TerminalCommandTool(
+            service: TerminalCommandService(workspacePath: workspacePath),
+          ));
+        }
       }
     }
     return HeadlessToolAssembly(registry: registry, mcpProvider: mcpProvider);

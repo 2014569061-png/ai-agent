@@ -11,6 +11,16 @@ abstract final class AppAppearanceController {
   static final effects = ValueNotifier<String>('full');
   static final fontScale = ValueNotifier<double>(1.0);
 
+  /// Mobile devices have the widest performance range. Keep the initial
+  /// composition to one inexpensive blur pass there; people can still select
+  /// full liquid glass explicitly from Appearance settings. Desktop and web
+  /// retain the richer default because they are not the low-end target path.
+  static double get defaultGlassIntensity => kIsWeb ||
+          (defaultTargetPlatform != TargetPlatform.android &&
+              defaultTargetPlatform != TargetPlatform.iOS)
+      ? .8
+      : .45;
+
   static GlassIntensity get resolvedGlassIntensity {
     final v = glassIntensity.value;
     if (v <= 0.1) return GlassIntensity.flat;
@@ -20,7 +30,8 @@ abstract final class AppAppearanceController {
 
   static Future<void> load([SharedPreferences? shared]) async {
     final prefs = shared ?? await SharedPreferences.getInstance();
-    glassIntensity.value = (prefs.getDouble(glassKey) ?? .8).clamp(0.0, 1.0);
+    glassIntensity.value =
+        (prefs.getDouble(glassKey) ?? defaultGlassIntensity).clamp(0.0, 1.0);
     effects.value = prefs.getString(effectsKey) ?? 'full';
     fontScale.value = (prefs.getDouble(fontScaleKey) ?? 1.0).clamp(0.88, 1.28);
   }

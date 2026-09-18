@@ -107,6 +107,31 @@ void main() {
     expect(block, isEmpty);
   });
 
+  test('knowledge search index is invalidated after a new document is ingested',
+      () async {
+    await knowledgeService.ingest(
+      db: db,
+      name: 'first',
+      sourceType: 'text',
+      content: 'alpha-only knowledge',
+    );
+    expect(
+      await knowledgeService.buildInjectionBlock(db, 'alpha-only'),
+      contains('alpha-only knowledge'),
+    );
+
+    await knowledgeService.ingest(
+      db: db,
+      name: 'second',
+      sourceType: 'text',
+      content: 'beta-only knowledge',
+    );
+    expect(
+      await knowledgeService.buildInjectionBlock(db, 'beta-only'),
+      contains('beta-only knowledge'),
+    );
+  });
+
   test('memory_get exposes revision and pagination cursor', () async {
     for (var i = 0; i < 3; i++) {
       await db.saveMemory(Memory(

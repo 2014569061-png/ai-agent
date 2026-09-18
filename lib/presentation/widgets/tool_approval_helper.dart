@@ -10,6 +10,7 @@ import '../../application/chat_controller.dart';
 import '../../application/providers.dart';
 import '../../domain/models.dart';
 import '../chat/widgets/tool_approval_sheet.dart';
+import 'floating_toast.dart';
 import 'nexus_sheet.dart';
 
 /// 共享工具审批入口：审批弹窗 → 记录允许范围与审计。
@@ -50,16 +51,22 @@ Future<ToolApproval> promptToolApproval(
   final allowPersistentTrust = !sensitive &&
       risk != ToolRisk.dangerous &&
       risk != ToolRisk.requiresConfirmation;
+  var expired = false;
   final decision = await showNexusSheet<ToolApproval>(
     context: context,
     builder: (context) => ToolApprovalSheet(
       call: call,
       risk: risk,
       allowPersistentTrust: allowPersistentTrust,
+      timeout: const Duration(minutes: 5),
+      onExpired: () => expired = true,
     ),
   );
 
   final resolvedDecision = decision ?? ToolApproval.reject;
+  if (expired && context.mounted) {
+    FloatingToast.show(context, '瀹℃壒宸茶秴鏃讹紝宸茶嚜鍔ㄦ嫆缁?', tone: ToastTone.warning);
+  }
   _recordToolDecision(ref, call, risk, resolvedDecision);
   if (allowPersistentTrust &&
       (resolvedDecision == ToolApproval.allowAlways ||

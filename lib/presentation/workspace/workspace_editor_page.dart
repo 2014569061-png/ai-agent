@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../application/file_citation.dart';
 import '../../application/workspace_file_editor.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
 
@@ -126,12 +127,12 @@ class _WorkspaceEditorPageState extends State<WorkspaceEditorPage> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(child: Text(_error!))
-              : Column(
-                  children: [
+      body: AsyncStateView(
+        loading: _loading,
+        error: _error,
+        onRetry: _open,
+        child: Column(
+          children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                       child: Row(
@@ -175,6 +176,7 @@ class _WorkspaceEditorPageState extends State<WorkspaceEditorPage> {
                     ),
                   ],
                 ),
+      ),
     );
   }
 }

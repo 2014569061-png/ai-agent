@@ -14,6 +14,7 @@ import '../../infrastructure/files/local_crypto_service.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
 import '../vault/vault_page.dart';
 import '../motion/nexus_page_route_factory.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
@@ -156,10 +157,10 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
         title: '数据备份',
         subtitle: '全量数据导出、备份恢复与本地存储管理',
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+      body: AsyncStateView(
+        loading: _loading,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [
                 const SettingsSectionTitle('备份与迁移'),
                 SettingsGroupCard(
@@ -254,6 +255,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
                 ),
               ],
             ),
+      ),
     );
   }
 }

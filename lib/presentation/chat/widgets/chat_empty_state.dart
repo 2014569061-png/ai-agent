@@ -81,12 +81,15 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
           children: [
             const BrandMark(size: 44, withGlow: true),
             const SizedBox(height: 16),
-            Text(
-              '今天想构建什么？',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.displayMedium?.copyWith(
-                color: textColor,
-                fontWeight: FontWeight.w600,
+            Semantics(
+              header: true,
+              child: Text(
+                '今天想构建什么？',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.displayMedium?.copyWith(
+                  color: textColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -105,11 +108,15 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // 横向紧凑场景分段芯片（Segmented Chips，释放纵向空间）
-                    _ScenarioSegmentedBar(
-                      categories: _categories,
-                      selectedIndex: selectedIndex,
-                      onSelect: (index) =>
-                          _selectedCategoryIndex.value = index,
+                    Semantics(
+                      container: true,
+                      label: '场景类别',
+                      child: _ScenarioSegmentedBar(
+                        categories: _categories,
+                        selectedIndex: selectedIndex,
+                        onSelect: (index) =>
+                            _selectedCategoryIndex.value = index,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     // 2x2 规整极简工程卡片网格
@@ -410,6 +417,15 @@ class _EngineeringActionCard extends StatelessWidget {
       ),
     );
 
+    final semanticContent = Semantics(
+      button: data.onTap != null,
+      enabled: data.onTap != null,
+      container: true,
+      label: data.title,
+      hint: data.subtitle,
+      child: content,
+    );
+
     final intensity = AppAppearanceController.resolvedGlassIntensity;
     if (intensity != GlassIntensity.flat) {
       return GlassSurface(
@@ -438,7 +454,7 @@ class _EngineeringActionCard extends StatelessWidget {
         ],
         onTap: data.onTap,
         interactive: data.onTap != null,
-        child: content,
+        child: semanticContent,
       );
     }
 
@@ -463,7 +479,7 @@ class _EngineeringActionCard extends StatelessWidget {
               ),
             ],
           ),
-          child: content,
+          child: semanticContent,
         ),
       ),
     );

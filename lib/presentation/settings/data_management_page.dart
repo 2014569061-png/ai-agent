@@ -10,6 +10,7 @@ import '../motion/nexus_page_route_factory.dart';
 import '../scheduled/scheduled_tasks_page.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import 'data_backup_page.dart';
@@ -61,9 +62,9 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isFlat =
         AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
-    final canvas = isDark ? AppPalette.darkCanvas : const Color(0xFFF7F8FA);
+    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
     final textMuted =
-        isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Scaffold(
       backgroundColor: isFlat ? canvas : Colors.transparent,
@@ -167,7 +168,7 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
           color: isDark ? AppPalette.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
+            color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
             width: 0.8,
           ),
         ),
@@ -200,7 +201,7 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
       endIndent: 0,
       color: isDark
           ? AppPalette.darkHairline
-          : (isFlat ? const Color(0xFFF0F2F5) : const Color(0x28000000)),
+          : (isFlat ? AppPalette.lightHairline : const Color(0x28000000)),
     );
   }
 
@@ -211,8 +212,8 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
     required bool isDark,
     required VoidCallback onTap,
   }) {
-    final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
-    final textMuted = isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Material(
       color: Colors.transparent,
@@ -237,7 +238,7 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
               Text(
                 trailing,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTokens.fontSizeSubhead,
                   fontWeight: FontWeight.w400,
                   color: textMuted,
                 ),

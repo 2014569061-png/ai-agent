@@ -8,6 +8,23 @@ import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.da
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 
 void main() {
+  test(
+      'explicit development requests enter Agent mode while questions stay chat',
+      () {
+    expect(
+      ChatController.requiresAgentModeForRequest('帮我做一个 HTML 贪吃蛇'),
+      isTrue,
+    );
+    expect(
+      ChatController.requiresAgentModeForRequest('创建一个 Windows exe 程序'),
+      isTrue,
+    );
+    expect(
+      ChatController.requiresAgentModeForRequest('解释一下 Flutter 是什么'),
+      isFalse,
+    );
+  });
+
   test('ChatState defaults to chat mode and keeps planMode compatible', () {
     const initial = ChatState();
     expect(initial.mode, ChatMode.chat);

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_tokens.dart';
+
 /// 统一的分段容器组件 (NexusSection)
 /// 规范模块标题、说明文字、右侧动作与内容间距，避免各页面零散重复实现。
 class NexusSection extends StatelessWidget {
@@ -57,7 +59,7 @@ class NexusSection extends StatelessWidget {
                             title!,
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w500,
-                              fontSize: 14,
+                              fontSize: AppTokens.fontSizeSubhead,
                               letterSpacing: 0.2,
                             ),
                           ),
@@ -67,7 +69,7 @@ class NexusSection extends StatelessWidget {
                             subtitle!,
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
-                              fontSize: 12,
+                              fontSize: AppTokens.fontSizeFootnote,
                             ),
                           ),
                         ],

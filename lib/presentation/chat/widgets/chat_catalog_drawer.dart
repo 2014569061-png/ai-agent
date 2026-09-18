@@ -374,7 +374,7 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
             ),
           ),
 
-          // 3. 底部身份区 (对标图 3)：圆形头像 + 用户名「浅陌」+ 右侧「···」设置入口
+          // 3. 底部运行信息：不伪造账号身份，只展示当前模型与本地上下文使用量。
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
@@ -387,40 +387,52 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                 Container(
                   width: 32,
                   height: 32,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF4F6DF5), Color(0xFF6366F1)],
-                    ),
+                    color: isDark
+                        ? AppPalette.brandSoftDark
+                        : AppPalette.brandSoftLight,
                   ),
                   alignment: Alignment.center,
                   child: const Icon(
-                    Icons.person_rounded,
+                    Icons.auto_awesome_rounded,
                     size: 20,
-                    color: Colors.white,
+                    color: AppPalette.brand,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    '浅陌',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
-                      color: textColor,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.activeModel.isEmpty
+                            ? '未配置模型'
+                            : widget.activeModel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: AppTokens.fontSizeSubhead,
+                          fontWeight: FontWeight.w500,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        widget.contextTokens > 0
+                            ? '${widget.activeProviderName.isEmpty ? '本地配置' : widget.activeProviderName} · ${widget.liveContextTokens}/${widget.contextTokens} tokens'
+                            : (widget.activeProviderName.isEmpty
+                                ? '本地配置'
+                                : widget.activeProviderName),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: AppTokens.fontSizeFootnote,
+                          color: textMuted,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                IconButton(
-                  tooltip: '更多与设置',
-                  icon: const Icon(Icons.more_horiz_rounded, size: 20),
-                  color: textMuted,
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.of(context).push(NexusPageRoute.settingsPage(
-                        builder: (_) => const SettingsPage()));
-                  },
                 ),
               ],
             ),
@@ -462,7 +474,11 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
       ),
-      child: drawerContent,
+      child: Semantics(
+        namesRoute: true,
+        label: '会话目录',
+        child: drawerContent,
+      ),
     );
   }
 }
@@ -507,42 +523,49 @@ class _DrawerNavTileState extends State<_DrawerNavTile> {
           color: _isHovered ? surface : Colors.transparent,
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
         ),
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                Icon(widget.icon, size: 17, color: textMuted),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w400,
-                      color: textColor,
-                    ),
-                  ),
-                ),
-                if (widget.info != null && widget.info!.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 100),
-                      child: Text(
-                        widget.info!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11, color: textFaint),
+        child: Semantics(
+          button: true,
+          container: true,
+          label: widget.title,
+          value: widget.info,
+          hint: '打开${widget.title}',
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: Row(
+                children: [
+                  Icon(widget.icon, size: 17, color: textMuted),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w400,
+                        color: textColor,
                       ),
                     ),
                   ),
-                Icon(Icons.chevron_right_rounded, size: 16, color: textFaint),
-              ],
+                  if (widget.info != null && widget.info!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 100),
+                        child: Text(
+                          widget.info!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 11, color: textFaint),
+                        ),
+                      ),
+                    ),
+                  Icon(Icons.chevron_right_rounded, size: 16, color: textFaint),
+                ],
+              ),
             ),
           ),
         ),
@@ -634,13 +657,18 @@ class _DrawerSearchBarState extends State<_DrawerSearchBar> {
             ),
           ),
           if (_controller.text.isNotEmpty)
-            GestureDetector(
-              onTap: () {
-                _controller.clear();
-                widget.onChanged('');
-                setState(() {});
-              },
-              child: Icon(Icons.close_rounded, size: 14, color: textFaint),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: IconButton(
+                tooltip: '清除搜索',
+                onPressed: () {
+                  _controller.clear();
+                  widget.onChanged('');
+                  setState(() {});
+                },
+                icon: Icon(Icons.close_rounded, size: 14, color: textFaint),
+              ),
             ),
         ],
       ),
@@ -725,63 +753,72 @@ class _HistoryTileState extends State<_HistoryTile> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: Container(
-        height: AppTokens.kControlHeight, // 44px
+        height: AppTokens.kMinTouchTarget,
         margin: const EdgeInsets.symmetric(vertical: 2),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(AppTokens.radiusControl), // 8px
         ),
-        child: InkWell(
-          onTap: widget.onTap,
-          onLongPress: widget.onLongPress,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12), // 左右内边距 12px
-            child: Row(
-              children: [
-                Icon(
-                  widget.conversation.isPinned
-                      ? Icons.push_pin_rounded
-                      : Icons.chat_bubble_outline_rounded,
-                  size: 16,
-                  color: widget.isSelected ? AppPalette.brand : textMuted,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.conversation.title.isEmpty
-                        ? '新会话'
-                        : widget.conversation.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight:
-                          widget.isSelected ? FontWeight.w600 : FontWeight.w400,
-                      color: widget.isSelected ? AppPalette.brand : textColor,
-                    ),
+        child: Semantics(
+          button: true,
+          container: true,
+          label: widget.conversation.title.isEmpty
+              ? '新会话'
+              : widget.conversation.title,
+          hint: widget.isSelected ? '当前会话' : '打开会话',
+          child: InkWell(
+            onTap: widget.onTap,
+            onLongPress: widget.onLongPress,
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12), // 左右内边距 12px
+              child: Row(
+                children: [
+                  Icon(
+                    widget.conversation.isPinned
+                        ? Icons.push_pin_rounded
+                        : Icons.chat_bubble_outline_rounded,
+                    size: 16,
+                    color: widget.isSelected ? AppPalette.brand : textMuted,
                   ),
-                ),
-                if (showMore)
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      if (widget.onMoreTap != null) {
-                        widget.onMoreTap!();
-                      } else {
-                        widget.onLongPress?.call();
-                      }
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.more_horiz_rounded,
-                        size: 18,
-                        color: textMuted,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.conversation.title.isEmpty
+                          ? '新会话'
+                          : widget.conversation.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: widget.isSelected
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                        color: widget.isSelected ? AppPalette.brand : textColor,
                       ),
                     ),
                   ),
-              ],
+                  if (showMore)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (widget.onMoreTap != null) {
+                          widget.onMoreTap!();
+                        } else {
+                          widget.onLongPress?.call();
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          Icons.more_horiz_rounded,
+                          size: 18,
+                          color: textMuted,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),

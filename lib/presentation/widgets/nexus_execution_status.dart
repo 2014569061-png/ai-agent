@@ -164,7 +164,7 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTokens.fontSizeFootnote,
                     fontWeight: FontWeight.w500,
                     color: fg,
                     height: 1.2,
@@ -220,7 +220,7 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
               Text(
                 widget.detail!,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTokens.fontSizeFootnote,
                   color: isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
                   height: 1.4,
                 ),
@@ -236,14 +236,16 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        foregroundColor: AppPalette.danger,
+                        foregroundColor: isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
+                        side: BorderSide(
+                          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+                        ),
                       ),
                       onPressed: widget.onReject,
                       child: const Text('拒绝'),
                     ),
-                  if (widget.onReject != null && widget.onApprove != null)
+                  if (widget.onApprove != null) ...[
                     const SizedBox(width: 8),
-                  if (widget.onApprove != null)
                     FilledButton(
                       style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact,
@@ -252,6 +254,7 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
                       onPressed: widget.onApprove,
                       child: const Text('授权继续'),
                     ),
+                  ],
                 ],
               ),
             ],
@@ -278,7 +281,7 @@ class _ActionTextButton extends StatelessWidget {
         child: Text(
           label,
           style: const TextStyle(
-            fontSize: 12,
+            fontSize: AppTokens.fontSizeFootnote,
             fontWeight: FontWeight.w500,
             color: AppPalette.brand,
           ),

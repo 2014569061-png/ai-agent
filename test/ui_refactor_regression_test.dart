@@ -197,6 +197,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      final semanticsHandle = tester.ensureSemantics();
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
       final attachFinder = find.bySemanticsLabel('添加附件或更多工具');
       expect(attachFinder, findsOneWidget);
       final attachSize = tester.getSize(attachFinder);
@@ -211,11 +215,10 @@ void main() {
       final sendSize = tester.getSize(sendFinder);
       expect(sendSize.width, greaterThanOrEqualTo(48.0));
       expect(sendSize.height, greaterThanOrEqualTo(48.0));
+      semanticsHandle.dispose();
     });
 
-    testWidgets(
-        '模式与审批磁贴在左侧，附件与发送磁贴在右侧，且窄屏不溢出',
-        (tester) async {
+    testWidgets('模式与审批磁贴在左侧，附件与发送磁贴在右侧，且窄屏不溢出', (tester) async {
       final controller = TextEditingController();
       addTearDown(controller.dispose);
 
@@ -249,8 +252,7 @@ void main() {
         final card = tester.getRect(find.byType(FloatingCapsuleInput));
         final mode = tester.getRect(find.bySemanticsLabel('聊天模式'));
         final approval = tester.getRect(find.bySemanticsLabel('完全访问'));
-        final attach =
-            tester.getRect(find.bySemanticsLabel('添加附件或更多工具'));
+        final attach = tester.getRect(find.bySemanticsLabel('添加附件或更多工具'));
         final send = tester.getRect(find.bySemanticsLabel(RegExp('发送')));
 
         // 左组：模式 + 审批；右组：附件 + 发送。
@@ -266,6 +268,38 @@ void main() {
       }
 
       tester.view.reset();
+    });
+
+    testWidgets('running input exposes stop through a long press on pause',
+        (tester) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      var paused = 0;
+      var stopped = 0;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: FloatingCapsuleInput(
+              controller: controller,
+              isRunning: true,
+              onSend: () {},
+              onStop: () => stopped++,
+              onPause: () => paused++,
+              onAttachmentMenu: () {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final pause = find.bySemanticsLabel('暂停（长按停止）');
+      expect(pause, findsOneWidget);
+      await tester.tap(pause);
+      expect(paused, 1);
+      await tester.longPress(pause);
+      expect(stopped, 1);
     });
   });
 }

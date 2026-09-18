@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../infrastructure/terminal/linux_runtime.dart';
 import '../infrastructure/terminal/linux_runtime_factory.dart';
+import 'development_target.dart';
 
 class DevelopmentToolInstallResult {
   const DevelopmentToolInstallResult({
@@ -41,6 +42,21 @@ class DevelopmentToolInstaller {
   final Duration installTimeout;
 
   Future<DevelopmentToolInstallResult> installCommonTools() async {
+    return installForTarget(null);
+  }
+
+  /// Installs only packages that belong to [target]. A null target keeps the
+  /// legacy broad common-toolchain behavior for the existing setup entry.
+  Future<DevelopmentToolInstallResult> installForTarget(
+    DevelopmentTarget? target,
+  ) async {
+    if (target != null && !target.canInstallHere) {
+      return DevelopmentToolInstallResult(
+        succeeded: true,
+        message: '${target.label} 没有可在当前 Linux 环境自动安装的工具。',
+      );
+    }
+
     LinuxRuntimeAdapter? selected;
     for (final candidate in _candidates) {
       if (candidate.kind != LinuxRuntimeKind.builtinProot &&
@@ -63,9 +79,11 @@ class DevelopmentToolInstaller {
       );
     }
 
-    final command = selected.kind == LinuxRuntimeKind.builtinProot
-        ? alpineCommand
-        : termuxCommand;
+    final command = target == null
+        ? (selected.kind == LinuxRuntimeKind.builtinProot
+            ? alpineCommand
+            : termuxCommand)
+        : _targetCommand(target, selected.kind);
     final workingDirectory = await _workingDirectory(selected.kind);
     final result = await selected.run(
       LinuxCommandRequest(
@@ -84,9 +102,11 @@ class DevelopmentToolInstaller {
       return DevelopmentToolInstallResult(
         succeeded: true,
         runtime: selected.kind,
-        message: selected.kind == LinuxRuntimeKind.builtinProot
-            ? '常用工具已安装到内置 Alpine。'
-            : '常用工具已安装到 Termux。',
+        message: target == null
+            ? (selected.kind == LinuxRuntimeKind.builtinProot
+                ? '常用工具已安装到内置 Alpine。'
+                : '常用工具已安装到 Termux。')
+            : '${target.label} 所需的可安装工具已配置到${selected.kind == LinuxRuntimeKind.builtinProot ? '内置 Alpine' : 'Termux'}。',
       );
     }
 
@@ -98,6 +118,23 @@ class DevelopmentToolInstaller {
           ? '安装失败（退出码 ${result.exitCode}）。请检查网络和剩余空间后重试。'
           : '安装失败：${_tail(output)}',
     );
+  }
+
+  String _targetCommand(DevelopmentTarget target, LinuxRuntimeKind kind) {
+    final packages = target.tools
+        .map((tool) => kind == LinuxRuntimeKind.builtinProot
+            ? tool.alpinePackages
+            : tool.termuxPackages)
+        .expand((items) => items)
+        .toSet()
+        .toList()
+      ..sort();
+    if (packages.isEmpty) {
+      return 'echo "${target.label} 不支持在当前 Linux 环境中自动安装"';
+    }
+    return kind == LinuxRuntimeKind.builtinProot
+        ? 'apk update && apk add --no-cache ${packages.join(' ')}'
+        : 'pkg update -y && pkg install -y ${packages.join(' ')}';
   }
 
   Future<String> _workingDirectory(LinuxRuntimeKind kind) async {

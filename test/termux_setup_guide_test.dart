@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_agent/application/development_target.dart';
 import 'package:mobile_agent/application/environment_service.dart';
 import 'package:mobile_agent/infrastructure/terminal/linux_runtime.dart';
 import 'package:mobile_agent/presentation/chat/widgets/environment_sheet.dart';
@@ -55,6 +56,27 @@ void main() {
     await tester.pump(const Duration(seconds: 11));
     expect(find.textContaining('环境检测超时'), findsNothing);
   });
+  testWidgets('a target guide hides legacy Termux command cards',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          environmentServiceProvider.overrideWithValue(
+            _FixedEnvironmentService(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: EnvironmentSheet(target: DevelopmentTarget.staticWeb),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('本次只检查：静态网页'), findsOneWidget);
+    expect(find.textContaining('配置命令(整段复制'), findsNothing);
+    expect(find.textContaining('工具链安装命令'), findsNothing);
+    expect(find.textContaining('下载并安装 Termux'), findsNothing);
+  });
 }
 
 class _HangingEnvironmentService extends EnvironmentService {
@@ -63,4 +85,28 @@ class _HangingEnvironmentService extends EnvironmentService {
   @override
   Future<EnvironmentSnapshot> inspect({bool force = false}) =>
       Completer<EnvironmentSnapshot>().future;
+}
+
+class _FixedEnvironmentService extends EnvironmentService {
+  _FixedEnvironmentService() : super(candidates: <LinuxRuntimeAdapter>[]);
+
+  @override
+  Future<EnvironmentSnapshot> inspect({bool force = false}) async {
+    const runtime = LinuxRuntimeInfo(
+      kind: LinuxRuntimeKind.builtinProot,
+      label: '内置 Alpine',
+      available: true,
+      detail: '已就绪',
+      supportsShellSyntax: true,
+    );
+    return EnvironmentSnapshot(
+      selected: runtime,
+      candidates: const [runtime],
+      architecture: 'arm64',
+      freeBytes: null,
+      checkedAt: DateTime.now(),
+      tools: const [],
+      templates: const [],
+    );
+  }
 }

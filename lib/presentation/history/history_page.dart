@@ -9,8 +9,9 @@ import '../../application/mojibake_repair.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../motion/nexus_motion.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
-import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/nexus_sheet.dart';
@@ -18,22 +19,39 @@ import '../widgets/nexus_action_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 
+typedef HistoryConversationsLoader = Future<List<Conversation>> Function();
+typedef HistoryConversationsPageLoader = Future<List<Conversation>> Function({
+  required int limit,
+  required int offset,
+});
+
 /// 历史会话管理页'///
 /// Conversation history management.
 class HistoryPage extends StatefulWidget {
   final ValueChanged<Conversation>? onConversationSelected;
+  final HistoryConversationsLoader? loadConversations;
+  final HistoryConversationsPageLoader? loadConversationPage;
 
-  const HistoryPage({super.key, this.onConversationSelected});
+  const HistoryPage({
+    super.key,
+    this.onConversationSelected,
+    this.loadConversations,
+    this.loadConversationPage,
+  });
   @override
   State<HistoryPage> createState() => _HistoryPageState();
 }
 
 class _HistoryPageState extends State<HistoryPage> {
+  static const _pageSize = 50;
   final _searchController = TextEditingController();
   String _query = '';
   String _filterType = 'all'; // 'all' | 'favorite' | 'pinned'
   List<Conversation> _conversations = const [];
   bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = false;
+  bool _pagedMode = false;
 
   @override
   void initState() {
@@ -42,17 +60,70 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _reload() async {
-    final database = await DatabaseProvider.instance.database;
-    final conversations = await database.recentConversations();
-    if (!mounted) return;
-    setState(() {
-      _conversations = conversations
+    if (mounted) setState(() => _loading = true);
+    try {
+      final paged = widget.loadConversations == null &&
+          _query.trim().isEmpty &&
+          _filterType == 'all';
+      final conversations =
+          paged ? await _loadPage(offset: 0) : await _loadAll();
+      if (!mounted) return;
+      setState(() {
+        _conversations = _repairTitles(conversations);
+        _pagedMode = paged;
+        _hasMore = paged && conversations.length >= _pageSize;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      FloatingToast.error(context, '加载历史会话失败', rawDetail: error.toString());
+    }
+  }
+
+  Future<List<Conversation>> _loadAll() async {
+    final loader = widget.loadConversations;
+    if (loader != null) return loader();
+    return (await DatabaseProvider.instance.database).recentConversations();
+  }
+
+  Future<List<Conversation>> _loadPage({required int offset}) async {
+    final loader = widget.loadConversationPage;
+    if (loader != null) {
+      return loader(limit: _pageSize, offset: offset);
+    }
+    return (await DatabaseProvider.instance.database)
+        .recentConversations(limit: _pageSize, offset: offset);
+  }
+
+  List<Conversation> _repairTitles(List<Conversation> conversations) =>
+      conversations
           .map((conversation) => conversation.copyWith(
                 title: MojibakeRepair.repair(conversation.title),
               ))
-          .toList();
-      _loading = false;
-    });
+          .toList(growable: false);
+
+  Future<void> _loadMore() async {
+    if (!_pagedMode || !_hasMore || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await _loadPage(offset: _conversations.length);
+      if (!mounted) return;
+      setState(() {
+        _conversations = [..._conversations, ..._repairTitles(page)];
+        _hasMore = page.length >= _pageSize;
+        _loadingMore = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _loadingMore = false);
+      FloatingToast.error(context, '加载更多会话失败', rawDetail: error.toString());
+    }
+  }
+
+  void _onQueryChanged(String value) {
+    setState(() => _query = value);
+    unawaited(_reload());
   }
 
   List<Conversation> get _filtered {
@@ -94,6 +165,15 @@ class _HistoryPageState extends State<HistoryPage> {
       groups.putIfAbsent(group, () => []).add(conv);
     }
     return groups;
+  }
+
+  List<_HistoryRow> _rowsFor(Map<String, List<Conversation>> grouped) {
+    final rows = <_HistoryRow>[];
+    for (final entry in grouped.entries) {
+      rows.add(_HistoryGroupRow(entry.key, entry.value.length));
+      rows.addAll(entry.value.map(_HistoryConversationRow.new));
+    }
+    return rows;
   }
 
   Future<AppDatabase> _db() => DatabaseProvider.instance.database;
@@ -210,11 +290,13 @@ class _HistoryPageState extends State<HistoryPage> {
     return InkWell(
       onTap: () {
         HapticFeedback.selectionClick();
+        if (_filterType == value) return;
         setState(() => _filterType = value);
+        unawaited(_reload());
       },
       borderRadius: BorderRadius.circular(AppTokens.radiusPill),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: NexusMotion.durationFast(context),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: selected
@@ -272,6 +354,7 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     final filtered = _filtered;
     final grouped = _groupConversations(filtered);
+    final rows = _rowsFor(grouped);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isFlat =
         AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
@@ -291,7 +374,7 @@ class _HistoryPageState extends State<HistoryPage> {
             child: isFlat
                 ? TextField(
                     controller: _searchController,
-                    onChanged: (value) => setState(() => _query = value),
+                    onChanged: _onQueryChanged,
                     decoration: InputDecoration(
                       hintText: '搜索会话标题',
                       prefixIcon: const Icon(Icons.search),
@@ -301,7 +384,7 @@ class _HistoryPageState extends State<HistoryPage> {
                               tooltip: '清空',
                               onPressed: () {
                                 _searchController.clear();
-                                setState(() => _query = '');
+                                _onQueryChanged('');
                               },
                             )
                           : null,
@@ -317,7 +400,7 @@ class _HistoryPageState extends State<HistoryPage> {
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (value) => setState(() => _query = value),
+                      onChanged: _onQueryChanged,
                       decoration: InputDecoration(
                         hintText: '搜索会话标题',
                         border: InputBorder.none,
@@ -330,7 +413,7 @@ class _HistoryPageState extends State<HistoryPage> {
                                 tooltip: '清空',
                                 onPressed: () {
                                   _searchController.clear();
-                                  setState(() => _query = '');
+                                  _onQueryChanged('');
                                 },
                               )
                             : null,
@@ -353,80 +436,60 @@ class _HistoryPageState extends State<HistoryPage> {
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : filtered.isEmpty
-                    ? EmptyStateView(
-                        icon: Icons.forum_outlined,
-                        title: _conversations.isEmpty
-                            ? '还没有会话'
-                            : (_filterType == 'favorite'
-                                ? '暂无收藏的会话'
-                                : (_filterType == 'pinned'
-                                    ? '暂无置顶会话'
-                                    : '未找到匹配的会话')),
-                        message: _conversations.isEmpty ? '开启新会话以记录交流历史' : null,
-                        actionLabel: _conversations.isEmpty ? '新建会话' : null,
-                        onAction:
-                            _conversations.isEmpty ? _newConversation : null,
-                      )
-                    : ListView(
-                        padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
-                        children: [
-                          for (final entry in grouped.entries) ...[
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    entry.key,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: isDark
-                                          ? AppPalette.darkTextMuted
-                                          : AppPalette.lightTextMuted,
-                                      letterSpacing: 0.2,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppPalette.darkSurface
-                                          : AppPalette.lightSurface,
-                                      borderRadius: BorderRadius.circular(
-                                          AppTokens.radiusPill),
-                                      border: Border.all(
-                                        color: isDark
-                                            ? AppPalette.darkHairline
-                                            : AppPalette.lightHairline,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      '${entry.value.length}',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark
-                                            ? AppPalette.darkTextMuted
-                                            : AppPalette.lightTextMuted,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+            child: AsyncStateView(
+              loading: _loading,
+              isEmpty: filtered.isEmpty,
+              emptyIcon: Icons.forum_outlined,
+              emptyTitle: _conversations.isEmpty
+                  ? '还没有会话'
+                  : (_filterType == 'favorite'
+                      ? '暂无收藏的会话'
+                      : (_filterType == 'pinned' ? '暂无置顶会话' : '未找到匹配的会话')),
+              emptySubtitle: _conversations.isEmpty ? '开启新会话以记录交流历史' : null,
+              emptyAction: _conversations.isEmpty
+                  ? FilledButton(
+                      onPressed: _newConversation,
+                      child: const Text('新建会话'),
+                    )
+                  : null,
+              onRetry: _reload,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
+                itemCount: rows.length +
+                    (_pagedMode && (_hasMore || _loadingMore) ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index >= rows.length) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Center(
+                        child: _loadingMore
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : TextButton(
+                                onPressed: _loadMore,
+                                child: const Text('加载更多'),
                               ),
-                            ),
-                            for (final conversation in entry.value)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: _conversationTile(conversation),
-                              ),
-                          ],
-                        ],
                       ),
+                    );
+                  }
+                  final row = rows[index];
+                  if (row is _HistoryGroupRow) {
+                    return _groupHeader(row, isDark);
+                  }
+                  final conversation =
+                      (row as _HistoryConversationRow).conversation;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: _conversationTile(conversation),
+                  );
+                },
+              ),
+            ),
           ),
         ],
       ),
@@ -488,6 +551,48 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
+  Widget _groupHeader(_HistoryGroupRow row, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      child: Row(
+        children: [
+          Text(
+            row.title,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color:
+                  isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+              borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+              border: Border.all(
+                color:
+                    isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+              ),
+            ),
+            child: Text(
+              '${row.count}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// 会话行操作菜单：紧凑型底部操作表。
   Future<void> _showConversationActions(Conversation conversation) async {
     final action = await showNexusActionSheet<String>(
@@ -540,4 +645,21 @@ class _HistoryPageState extends State<HistoryPage> {
     _searchController.dispose();
     super.dispose();
   }
+}
+
+sealed class _HistoryRow {
+  const _HistoryRow();
+}
+
+class _HistoryGroupRow extends _HistoryRow {
+  const _HistoryGroupRow(this.title, this.count);
+
+  final String title;
+  final int count;
+}
+
+class _HistoryConversationRow extends _HistoryRow {
+  const _HistoryConversationRow(this.conversation);
+
+  final Conversation conversation;
 }

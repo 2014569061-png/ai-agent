@@ -8,7 +8,9 @@ import '../chat/chat_layout_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme_controller.dart';
 import '../theme/app_appearance_controller.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/image_cache_policy.dart';
 import '../widgets/liquid_segmented_control.dart';
 import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
@@ -80,344 +82,342 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
         title: '外观与主题',
         subtitle: '界面质感 · 动效与聊天视觉定制',
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+      body: AsyncStateView(
+        loading: _loading,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+          children: [
+            const SettingsSectionTitle('主题模式'),
+            SettingsGroupCard(
               children: [
-                const SettingsSectionTitle('主题模式'),
-                SettingsGroupCard(
-                  children: [
-                    ValueListenableBuilder<ThemeMode>(
-                      valueListenable: AppThemeController.mode,
-                      builder: (context, currentMode, _) {
-                        return Column(
-                          children: [
-                            SettingsTile(
-                              icon: Icons.brightness_auto_rounded,
-                              iconColor: settingsMutedColor(context),
-                              title: '跟随系统',
-                              subtitle: '根据系统深浅色外观自动切换',
-                              selected: currentMode == ThemeMode.system,
-                              onTap: () =>
-                                  AppThemeController.setMode(ThemeMode.system),
-                            ),
-                            const SettingsDivider(),
-                            SettingsTile(
-                              icon: Icons.light_mode_rounded,
-                              iconColor: AppPalette.warning,
-                              title: '浅色模式',
-                              subtitle: '清新明亮的白蓝质感',
-                              selected: currentMode == ThemeMode.light,
-                              onTap: () =>
-                                  AppThemeController.setMode(ThemeMode.light),
-                            ),
-                            const SettingsDivider(),
-                            SettingsTile(
-                              icon: Icons.dark_mode_rounded,
-                              iconColor: settingsMutedColor(context),
-                              title: '深色模式',
-                              subtitle: '深邃专注的纯黑沉浸感',
-                              selected: currentMode == ThemeMode.dark,
-                              onTap: () =>
-                                  AppThemeController.setMode(ThemeMode.dark),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SettingsSectionTitle('视觉与动效表现'),
-                SettingsGroupCard(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                ValueListenableBuilder<ThemeMode>(
+                  valueListenable: AppThemeController.mode,
+                  builder: (context, currentMode, _) {
+                    return Column(
                       children: [
-                        const Text('毛玻璃模糊强度',
-                            style: TextStyle(fontWeight: FontWeight.w500)),
-                        Text(
-                          '${(_glassIntensity * 100).round()}%',
-                          style: const TextStyle(
-                            color: AppPalette.brand,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        SettingsTile(
+                          icon: Icons.brightness_auto_rounded,
+                          iconColor: settingsMutedColor(context),
+                          title: '跟随系统',
+                          subtitle: '根据系统深浅色外观自动切换',
+                          selected: currentMode == ThemeMode.system,
+                          onTap: () =>
+                              AppThemeController.setMode(ThemeMode.system),
+                        ),
+                        const SettingsDivider(),
+                        SettingsTile(
+                          icon: Icons.light_mode_rounded,
+                          iconColor: AppPalette.warning,
+                          title: '浅色模式',
+                          subtitle: '清新明亮的白蓝质感',
+                          selected: currentMode == ThemeMode.light,
+                          onTap: () =>
+                              AppThemeController.setMode(ThemeMode.light),
+                        ),
+                        const SettingsDivider(),
+                        SettingsTile(
+                          icon: Icons.dark_mode_rounded,
+                          iconColor: settingsMutedColor(context),
+                          title: '深色模式',
+                          subtitle: '深邃专注的纯黑沉浸感',
+                          selected: currentMode == ThemeMode.dark,
+                          onTap: () =>
+                              AppThemeController.setMode(ThemeMode.dark),
                         ),
                       ],
-                    ),
-                    Slider(
-                      value: _glassIntensity,
-                      min: 0.2,
-                      max: 1.0,
-                      divisions: 8,
-                      onChanged: _updateGlass,
-                    ),
-                    const Divider(height: 16),
-                    const Text('动效等级',
-                        style: TextStyle(fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 8),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final textScale =
-                            MediaQuery.textScalerOf(context).scale(1.0);
-                        if (textScale > 1.15 || constraints.maxWidth < 310) {
-                          return Column(
-                            children: [
-                              _buildEffectOption('full', '完整动效', '沉浸式流体动画与转场'),
-                              const SizedBox(height: 6),
-                              _buildEffectOption(
-                                  'reduced', '节能平滑', '减少大面积缩放与模糊'),
-                              const SizedBox(height: 6),
-                              _buildEffectOption('off', '关闭动效', '即时切换，性能最优'),
-                            ],
-                          );
-                        }
-                        return LiquidSegmentedControl<String>(
-                          segments: const [
-                            LiquidSegment(value: 'full', label: '完整动效'),
-                            LiquidSegment(value: 'reduced', label: '节能平滑'),
-                            LiquidSegment(value: 'off', label: '关闭动效'),
-                          ],
-                          selected: _effectMode,
-                          onSelected: _updateEffects,
-                        );
-                      },
-                    ),
-                  ],
+                    );
+                  },
                 ),
-                const SettingsSectionTitle('聊天气泡布局'),
-                SettingsGroupCard(
+              ],
+            ),
+            const SettingsSectionTitle('视觉与动效表现'),
+            SettingsGroupCard(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    ValueListenableBuilder<double>(
-                      valueListenable: ChatLayoutController.widthFactor,
-                      builder: (context, widthFactor, _) => Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            NexusDropdown<String>(
-                              key: ValueKey(_widthOption(widthFactor)),
-                              labelText: '对话气泡宽度模式',
-                              initialValue: _widthOption(widthFactor),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: _adaptiveWidth,
-                                    child: Text('自适应屏幕')),
-                                DropdownMenuItem(
-                                    value: _compactWidth,
-                                    child: Text('紧凑 (62%)')),
-                                DropdownMenuItem(
-                                    value: _standardWidth,
-                                    child: Text('标准 (72%)')),
-                                DropdownMenuItem(
-                                    value: _wideWidth, child: Text('宽松 (86%)')),
-                                DropdownMenuItem(
-                                    value: _customWidth, child: Text('自定义比例')),
-                              ],
-                              onChanged: (selection) {
-                                if (selection == null) return;
-                                final value = switch (selection) {
-                                  _adaptiveWidth =>
-                                    ChatLayoutController.adaptive,
-                                  _compactWidth => .62,
-                                  _standardWidth => .72,
-                                  _wideWidth => .86,
-                                  _ => _defaultCustomWidth(widthFactor),
-                                };
-                                ChatLayoutController.setWidthFactor(value);
-                              },
-                            ),
-                            if (_widthOption(widthFactor) == _customWidth) ...[
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  const Text('自定义气泡最大宽度比例'),
-                                  Text(
-                                    '${(widthFactor * 100).round()}%',
-                                    style: const TextStyle(
-                                      color: AppPalette.brand,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Slider(
-                                value: widthFactor
-                                    .clamp(ChatLayoutController.customMin,
-                                        ChatLayoutController.customMax)
-                                    .toDouble(),
-                                min: ChatLayoutController.customMin,
-                                max: ChatLayoutController.customMax,
-                                divisions: 10,
-                                label: '${(widthFactor * 100).round()}%',
-                                onChanged:
-                                    ChatLayoutController.updateWidthFactor,
-                                onChangeEnd:
-                                    ChatLayoutController.setWidthFactor,
-                              ),
-                            ],
-                          ],
-                        ),
+                    const Text('毛玻璃模糊强度',
+                        style: TextStyle(fontWeight: FontWeight.w500)),
+                    Text(
+                      '${(_glassIntensity * 100).round()}%',
+                      style: const TextStyle(
+                        color: AppPalette.brand,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
                 ),
-                const SettingsSectionTitle('界面质感与液态玻璃'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      icon: Icons.blur_on_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '液态玻璃 (Liquid Glass)',
-                      subtitle: 'SDF 边缘折射 + 镜面高光 + 磨砂（遇不支持设备自动降级）',
-                      selected: _glassIntensity >= 0.6,
-                      onTap: () => _updateGlass(0.85),
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.opacity_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '经典磨砂 (Frosted Glass)',
-                      subtitle: '纯高斯背景模糊，平滑省电，全平台兼容',
-                      selected: _glassIntensity > 0.1 && _glassIntensity < 0.6,
-                      onTap: () => _updateGlass(0.45),
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.crop_square_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '纯扁平 (Flat v2)',
-                      subtitle: '零阴影、零模糊、零折射，遵循 v2 极简省电规范',
-                      selected: _glassIntensity <= 0.1,
-                      onTap: () => _updateGlass(0.0),
-                    ),
-                  ],
+                Slider(
+                  value: _glassIntensity,
+                  min: 0.2,
+                  max: 1.0,
+                  divisions: 8,
+                  onChanged: _updateGlass,
                 ),
-                const SettingsSectionTitle('聊天背景'),
-                SettingsGroupCard(
-                  children: [
-                    FutureBuilder<BackgroundConfig>(
-                      future: _backgroundService.load(),
-                      builder: (context, snapshot) {
-                        final current = snapshot.data ??
-                            const BackgroundConfig(mode: 'default');
-
-                        return Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.preview_rounded,
-                                        size: 16,
-                                        color: settingsMutedColor(context),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        '真实效果预览',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w500,
-                                          color: settingsMutedColor(context),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  _buildChatPreview(current),
-                                ],
-                              ),
-                            ),
-                            const SettingsDivider(),
-                            SettingsTile(
-                              icon: Icons.wallpaper_rounded,
-                              iconColor: settingsMutedColor(context),
-                              title: '默认（跟随主题）',
-                              subtitle: '极简纯色纯净底色，与顶栏完全融为一体',
-                              selected: current.mode == 'default',
-                              onTap: () async {
-                                await _backgroundService.setMode('default');
-                                if (mounted) setState(() {});
-                              },
-                            ),
-                            const SettingsDivider(),
-                            SettingsTile(
-                              leading: ClipRRect(
-                                borderRadius: BorderRadius.circular(7),
-                                child: SizedBox(
-                                  width: 28,
-                                  height: 28,
-                                  child: Image.asset(
-                                    BackgroundService.cloudsAsset,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
-                              title: '云朵栈桥',
-                              subtitle: '内置梦幻艺术插画背景',
-                              selected: current.mode == 'clouds',
-                              onTap: () async {
-                                await _backgroundService.setMode('clouds');
-                                if (mounted) setState(() {});
-                              },
-                            ),
-                            const SettingsDivider(),
-                            SettingsTile(
-                              leading: ClipRRect(
-                                borderRadius: BorderRadius.circular(7),
-                                child: Container(
-                                  width: 28,
-                                  height: 28,
-                                  color:
-                                      theme.colorScheme.surfaceContainerHighest,
-                                  child: (current.mode == 'custom' &&
-                                          current.customPath != null)
-                                      ? Image.file(
-                                          File(current.customPath!),
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(
-                                                  Icons.broken_image_outlined,
-                                                  size: 16),
-                                        )
-                                      : const Icon(Icons.image_outlined,
-                                          size: 16),
-                                ),
-                              ),
-                              title: '自定义相册图片',
-                              subtitle: current.mode == 'custom'
-                                  ? '当前已使用自定义背景（点击更换）'
-                                  : '从手机相册挑选个性化图片',
-                              selected: current.mode == 'custom',
-                              onTap: () async {
-                                try {
-                                  final x = await ImagePicker()
-                                      .pickImage(source: ImageSource.gallery);
-                                  if (x == null) return;
-                                  await _backgroundService
-                                      .setCustomBackground(x.path);
-                                  if (mounted) setState(() {});
-                                } catch (_) {
-                                  if (!context.mounted) return;
-                                  FloatingToast.show(context, '选图失败，请重试');
-                                }
-                              },
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ],
+                const Divider(height: 16),
+                const Text('动效等级',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final textScale =
+                        MediaQuery.textScalerOf(context).scale(1.0);
+                    if (textScale > 1.15 || constraints.maxWidth < 310) {
+                      return Column(
+                        children: [
+                          _buildEffectOption('full', '完整动效', '沉浸式流体动画与转场'),
+                          const SizedBox(height: 6),
+                          _buildEffectOption('reduced', '节能平滑', '减少大面积缩放与模糊'),
+                          const SizedBox(height: 6),
+                          _buildEffectOption('off', '关闭动效', '即时切换，性能最优'),
+                        ],
+                      );
+                    }
+                    return LiquidSegmentedControl<String>(
+                      segments: const [
+                        LiquidSegment(value: 'full', label: '完整动效'),
+                        LiquidSegment(value: 'reduced', label: '节能平滑'),
+                        LiquidSegment(value: 'off', label: '关闭动效'),
+                      ],
+                      selected: _effectMode,
+                      onSelected: _updateEffects,
+                    );
+                  },
                 ),
               ],
             ),
+            const SettingsSectionTitle('聊天气泡布局'),
+            SettingsGroupCard(
+              children: [
+                ValueListenableBuilder<double>(
+                  valueListenable: ChatLayoutController.widthFactor,
+                  builder: (context, widthFactor, _) => Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        NexusDropdown<String>(
+                          key: ValueKey(_widthOption(widthFactor)),
+                          labelText: '对话气泡宽度模式',
+                          initialValue: _widthOption(widthFactor),
+                          items: const [
+                            DropdownMenuItem(
+                                value: _adaptiveWidth, child: Text('自适应屏幕')),
+                            DropdownMenuItem(
+                                value: _compactWidth, child: Text('紧凑 (62%)')),
+                            DropdownMenuItem(
+                                value: _standardWidth, child: Text('标准 (72%)')),
+                            DropdownMenuItem(
+                                value: _wideWidth, child: Text('宽松 (86%)')),
+                            DropdownMenuItem(
+                                value: _customWidth, child: Text('自定义比例')),
+                          ],
+                          onChanged: (selection) {
+                            if (selection == null) return;
+                            final value = switch (selection) {
+                              _adaptiveWidth => ChatLayoutController.adaptive,
+                              _compactWidth => .62,
+                              _standardWidth => .72,
+                              _wideWidth => .86,
+                              _ => _defaultCustomWidth(widthFactor),
+                            };
+                            ChatLayoutController.setWidthFactor(value);
+                          },
+                        ),
+                        if (_widthOption(widthFactor) == _customWidth) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('自定义气泡最大宽度比例'),
+                              Text(
+                                '${(widthFactor * 100).round()}%',
+                                style: const TextStyle(
+                                  color: AppPalette.brand,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Slider(
+                            value: widthFactor
+                                .clamp(ChatLayoutController.customMin,
+                                    ChatLayoutController.customMax)
+                                .toDouble(),
+                            min: ChatLayoutController.customMin,
+                            max: ChatLayoutController.customMax,
+                            divisions: 10,
+                            label: '${(widthFactor * 100).round()}%',
+                            onChanged: ChatLayoutController.updateWidthFactor,
+                            onChangeEnd: ChatLayoutController.setWidthFactor,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SettingsSectionTitle('界面质感与液态玻璃'),
+            SettingsGroupCard(
+              children: [
+                SettingsTile(
+                  icon: Icons.blur_on_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '液态玻璃 (Liquid Glass)',
+                  subtitle: 'SDF 边缘折射 + 镜面高光 + 磨砂（遇不支持设备自动降级）',
+                  selected: _glassIntensity >= 0.6,
+                  onTap: () => _updateGlass(0.85),
+                ),
+                const SettingsDivider(),
+                SettingsTile(
+                  icon: Icons.opacity_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '经典磨砂 (Frosted Glass)',
+                  subtitle: '纯高斯背景模糊，平滑省电，全平台兼容',
+                  selected: _glassIntensity > 0.1 && _glassIntensity < 0.6,
+                  onTap: () => _updateGlass(0.45),
+                ),
+                const SettingsDivider(),
+                SettingsTile(
+                  icon: Icons.crop_square_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '纯扁平 (Flat v2)',
+                  subtitle: '零阴影、零模糊、零折射，遵循 v2 极简省电规范',
+                  selected: _glassIntensity <= 0.1,
+                  onTap: () => _updateGlass(0.0),
+                ),
+              ],
+            ),
+            const SettingsSectionTitle('聊天背景'),
+            SettingsGroupCard(
+              children: [
+                FutureBuilder<BackgroundConfig>(
+                  future: _backgroundService.load(),
+                  builder: (context, snapshot) {
+                    final current = snapshot.data ??
+                        const BackgroundConfig(mode: 'default');
+
+                    return Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.preview_rounded,
+                                    size: 16,
+                                    color: settingsMutedColor(context),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '真实效果预览',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: settingsMutedColor(context),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              _buildChatPreview(current),
+                            ],
+                          ),
+                        ),
+                        const SettingsDivider(),
+                        SettingsTile(
+                          icon: Icons.wallpaper_rounded,
+                          iconColor: settingsMutedColor(context),
+                          title: '默认（跟随主题）',
+                          subtitle: '极简纯色纯净底色，与顶栏完全融为一体',
+                          selected: current.mode == 'default',
+                          onTap: () async {
+                            await _backgroundService.setMode('default');
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                        const SettingsDivider(),
+                        SettingsTile(
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(7),
+                            child: SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: Image.asset(
+                                BackgroundService.cloudsAsset,
+                                fit: BoxFit.cover,
+                                cacheWidth: imageCacheWidth(
+                                  context,
+                                  logicalWidth: 28,
+                                ),
+                              ),
+                            ),
+                          ),
+                          title: '云朵栈桥',
+                          subtitle: '内置梦幻艺术插画背景',
+                          selected: current.mode == 'clouds',
+                          onTap: () async {
+                            await _backgroundService.setMode('clouds');
+                            if (mounted) setState(() {});
+                          },
+                        ),
+                        const SettingsDivider(),
+                        SettingsTile(
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(7),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              child: (current.mode == 'custom' &&
+                                      current.customPath != null)
+                                  ? Image.file(
+                                      File(current.customPath!),
+                                      fit: BoxFit.cover,
+                                      cacheWidth: imageCacheWidth(
+                                        context,
+                                        logicalWidth: 28,
+                                      ),
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                          Icons.broken_image_outlined,
+                                          size: 16),
+                                    )
+                                  : const Icon(Icons.image_outlined, size: 16),
+                            ),
+                          ),
+                          title: '自定义相册图片',
+                          subtitle: current.mode == 'custom'
+                              ? '当前已使用自定义背景（点击更换）'
+                              : '从手机相册挑选个性化图片',
+                          selected: current.mode == 'custom',
+                          onTap: () async {
+                            try {
+                              final x = await ImagePicker()
+                                  .pickImage(source: ImageSource.gallery);
+                              if (x == null) return;
+                              await _backgroundService
+                                  .setCustomBackground(x.path);
+                              if (mounted) setState(() {});
+                            } catch (_) {
+                              if (!context.mounted) return;
+                              FloatingToast.show(context, '选图失败，请重试');
+                            }
+                          },
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -503,6 +503,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        cacheWidth: imageCacheWidth(context),
       );
     } else if (config.mode == 'custom' && config.customPath != null) {
       backgroundWidget = Image.file(
@@ -510,6 +511,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
+        cacheWidth: imageCacheWidth(context),
         errorBuilder: (_, __, ___) => Container(
             color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface),
       );

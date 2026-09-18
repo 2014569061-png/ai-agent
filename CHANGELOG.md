@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.0] - 2026-09-17
+
+- 按开发目标优化环境检测：静态网页、Node Web / Electron、Python、Go、Flutter Android、原生 Android 与 Windows `.exe` 分别展示必需工具。
+- 静态网页不再要求 Node.js、Python、Flutter、JDK、Android SDK 或 Termux；Windows `.exe` 明确要求在 Windows 主机完成最终构建。
+- 原生 Android 优先使用项目自带 Gradle Wrapper；Flutter Android 与原生 Android 将 JDK 和 Android SDK Build Tools 纳入必需检测。
+- 目标化安装只安装当前目标需要的包，并隐藏目标模式下无关的 Termux 配置命令。
+- 完善环境检测失败、超时和重试入口，补充目标化环境页与安装器回归测试。
+
 ## [未发布]
 
 - 新增桌面小组件「NEXUS 指挥台」：桌面上直接放三个深链入口（描述建 Agent / 新对话 / 记忆），不用先找到并打开 App。无状态实现（`updatePeriodMillis="0"`，不唤醒系统），深链与应用快捷方式完全同源。

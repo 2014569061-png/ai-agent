@@ -168,7 +168,10 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
     if (!confirmed || !mounted) return;
     try {
       final db = await ref.read(databaseProvider.future);
-      await db.deleteKnowledgeDoc(doc.id);
+      await ref.read(knowledgeServiceProvider).delete(
+            db: db,
+            documentId: doc.id,
+          );
       await _load();
       if (mounted) FloatingToast.show(context, '文档已删除');
     } catch (error) {

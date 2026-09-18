@@ -10,6 +10,7 @@ library;
 
 const String approvalApproveAction = 'approve';
 const String approvalDenyAction = 'deny';
+const String approvalExpiredAction = 'expired';
 
 /// 从通知动作 id 解析出的裁决意图。
 class ApprovalActionRequest {

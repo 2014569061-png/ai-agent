@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/domain/models.dart';
+import 'package:mobile_agent/presentation/chat/widgets/chat_empty_state.dart';
 import 'package:mobile_agent/presentation/chat/widgets/plan_panel.dart';
 import 'package:mobile_agent/presentation/chat/widgets/tool_approval_sheet.dart';
 import 'package:mobile_agent/presentation/settings/settings_components.dart';
@@ -133,6 +134,60 @@ void main() {
         matching: find.byType(ExcludeSemantics),
       );
       expect(excludedIcons, findsWidgets);
+    });
+
+    testWidgets('empty chat actions expose labels to screen readers',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: ChatEmptyState(
+              providerConfigured: true,
+              hasWorkspace: true,
+              onSuggestionTap: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      expect(find.bySemanticsLabel('今天想构建什么？'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Semantics && widget.properties.label == '审计变更',
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('approval sheet makes timeout state visible', (tester) async {
+      var expired = false;
+      const call = ToolCall(
+        id: 'call-timeout',
+        name: 'run_shell',
+        arguments: {'command': 'echo test'},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: ToolApprovalSheet(
+              call: call,
+              risk: ToolRisk.safe,
+              timeout: const Duration(seconds: 2),
+              onExpired: () => expired = true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byIcon(Icons.timer_outlined), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 2100));
+      expect(expired, isTrue);
+      expect(find.byIcon(Icons.timer_off_outlined), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox.shrink());
     });
   });
 }

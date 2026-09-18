@@ -74,12 +74,15 @@ class SettingsSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: padding ?? const EdgeInsets.fromLTRB(16, 24, 16, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-          color: settingsMutedColor(context),
+      child: Semantics(
+        header: true,
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: settingsMutedColor(context),
+          ),
         ),
       ),
     );
@@ -241,92 +244,100 @@ class SettingsTile extends StatelessWidget {
 
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: contentPadding ??
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              if (leadingWidget != null) ...[
-                leadingWidget,
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w400,
-                        height: 1.4,
-                        color: titleColor ?? semantic.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (subtitle != null && subtitle!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
+      child: Semantics(
+        button: onTap != null,
+        enabled: onTap != null,
+        container: true,
+        label: title,
+        value: trailingText,
+        hint: onTap == null ? null : '打开$title',
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: contentPadding ??
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                if (leadingWidget != null) ...[
+                  leadingWidget,
+                  const SizedBox(width: 12),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Text(
-                        subtitle!,
+                        title,
                         style: TextStyle(
-                          fontSize: 13,
-                          height: 1.55,
-                          color: subtitleColor ?? semantic.textMuted,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          height: 1.4,
+                          color: titleColor ?? semantic.textPrimary,
                         ),
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ],
-                ),
-              ),
-              if (trailingWidget != null) ...[
-                trailingWidget!,
-              ] else ...[
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (trailingBadge != null) trailingBadge!,
-                    if (trailingText != null && trailingText!.isNotEmpty) ...[
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 150),
-                        child: Text(
-                          trailingText!,
+                      if (subtitle != null && subtitle!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle!,
                           style: TextStyle(
                             fontSize: 13,
                             height: 1.55,
-                            color: trailingTextColor ?? semantic.textFaint,
+                            color: subtitleColor ?? semantic.textMuted,
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.end,
                         ),
-                      ),
-                      const SizedBox(width: 4),
+                      ],
                     ],
-                    if (selected != null)
-                      if (selected == true)
-                        Icon(
-                          Icons.check_rounded,
-                          size: 20,
-                          color: semantic.brand,
-                        )
-                      else
-                        const SizedBox(width: 20),
-                    if (hasChevron)
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        size: 16,
-                        color: semantic.textFaint,
-                      ),
-                  ],
+                  ),
                 ),
+                if (trailingWidget != null) ...[
+                  trailingWidget!,
+                ] else ...[
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (trailingBadge != null) trailingBadge!,
+                      if (trailingText != null && trailingText!.isNotEmpty) ...[
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 150),
+                          child: Text(
+                            trailingText!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.55,
+                              color: trailingTextColor ?? semantic.textFaint,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      if (selected != null)
+                        if (selected == true)
+                          Icon(
+                            Icons.check_rounded,
+                            size: 20,
+                            color: semantic.brand,
+                          )
+                        else
+                          const SizedBox(width: 20),
+                      if (hasChevron)
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 16,
+                          color: semantic.textFaint,
+                        ),
+                    ],
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

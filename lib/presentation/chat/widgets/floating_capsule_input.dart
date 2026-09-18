@@ -8,6 +8,7 @@ import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_execution_status.dart';
 import '../../widgets/glass_surface.dart';
+import 'chat_execution_stage.dart';
 
 /// 首页输入区（对标 DeepSeek App）。
 ///
@@ -27,6 +28,7 @@ class FloatingCapsuleInput extends StatefulWidget {
     required this.controller,
     required this.isRunning,
     this.runningStage,
+    this.runningStageKind,
     required this.onSend,
     required this.onStop,
     this.onPause,
@@ -48,6 +50,7 @@ class FloatingCapsuleInput extends StatefulWidget {
   final TextEditingController controller;
   final bool isRunning;
   final String? runningStage;
+  final ChatExecutionStage? runningStageKind;
   final VoidCallback onSend;
   final VoidCallback onStop;
   final VoidCallback? onPause;
@@ -153,38 +156,35 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                     // 输入行：最小高 44px
                     ConstrainedBox(
                       constraints: const BoxConstraints(
-                          minHeight: AppTokens.kControlHeight),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextField(
-                          focusNode: _focusNode,
-                          controller: widget.controller,
-                          minLines: 1,
-                          maxLines: 5,
-                          textInputAction: TextInputAction.newline,
-                          onTapOutside: (_) => _focusNode.unfocus(),
-                          style: TextStyle(
+                          minHeight: AppTokens.kMinTouchTarget),
+                      child: TextField(
+                        focusNode: _focusNode,
+                        controller: widget.controller,
+                        minLines: 1,
+                        maxLines: 5,
+                        textInputAction: TextInputAction.newline,
+                        onTapOutside: (_) => _focusNode.unfocus(),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          height: 1.6,
+                          color: textColor,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: widget.isRunning
+                              ? (widget.isPaused ? '补充要求后继续' : '补充要求')
+                              : '发消息',
+                          hintStyle: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
-                            height: 1.6,
-                            color: textColor,
+                            color: textFaint,
                           ),
-                          decoration: InputDecoration(
-                            hintText: widget.isRunning
-                                ? (widget.isPaused ? '补充要求后继续' : '补充要求')
-                                : '发消息',
-                            hintStyle: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w400,
-                              color: textFaint,
-                            ),
-                            isDense: true,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            filled: false,
-                            contentPadding: EdgeInsets.zero,
-                          ),
+                          isDense: true,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          contentPadding: EdgeInsets.zero,
                         ),
                       ),
                     ),
@@ -250,8 +250,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                                 },
                               ),
                               _buildAttachmentButton(),
-                              _buildTrailingActionListenable(
-                                  textFaint, isDark),
+                              _buildTrailingActionListenable(textFaint, isDark),
                             ],
                           ),
                         ],
@@ -394,9 +393,8 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
       builder: (context, hasAttachments, _) =>
           ValueListenableBuilder<TextEditingValue>(
         valueListenable: widget.controller,
-        builder: (context, _, __) =>
-            _buildTrailingActionForAttachments(
-                textFaint, isDark, hasAttachments),
+        builder: (context, _, __) => _buildTrailingActionForAttachments(
+            textFaint, isDark, hasAttachments),
       ),
     );
   }
@@ -434,11 +432,15 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         key: const ValueKey('trailing_action_pause'),
         color: AppPalette.warning,
         icon: Icons.pause_rounded,
-        tooltip: '暂停',
-        semanticLabel: '暂停',
+        tooltip: '暂停（长按停止）',
+        semanticLabel: '暂停（长按停止）',
         onTap: () {
           HapticFeedback.mediumImpact();
           (widget.onPause ?? widget.onStop)();
+        },
+        onLongPress: () {
+          HapticFeedback.heavyImpact();
+          widget.onStop();
         },
       );
     } else if (canSend) {
@@ -484,24 +486,16 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
     );
   }
 
-  static NexusExecutionState _mapRunningStage(String? stage) {
-    if (stage == null) return NexusExecutionState.idle;
-    if (stage.contains('等待') || stage.contains('确认') || stage.contains('授权')) {
-      return NexusExecutionState.waitingForUser;
-    }
-    if (stage.contains('准备') || stage.contains('思考')) {
-      return NexusExecutionState.preparing;
-    }
-    if (stage.contains('完成') || stage.contains('成功')) {
-      return NexusExecutionState.succeeded;
-    }
-    if (stage.contains('失败') || stage.contains('错误')) {
-      return NexusExecutionState.failed;
-    }
-    if (stage.contains('取消') || stage.contains('停止')) {
-      return NexusExecutionState.cancelled;
-    }
-    return NexusExecutionState.running;
+  static NexusExecutionState _mapRunningStage(ChatExecutionStage? stage) {
+    return switch (stage) {
+      null => NexusExecutionState.idle,
+      ChatExecutionStage.waitingForUser => NexusExecutionState.waitingForUser,
+      ChatExecutionStage.preparing => NexusExecutionState.preparing,
+      ChatExecutionStage.running => NexusExecutionState.running,
+      ChatExecutionStage.succeeded => NexusExecutionState.succeeded,
+      ChatExecutionStage.failed => NexusExecutionState.failed,
+      ChatExecutionStage.cancelled => NexusExecutionState.cancelled,
+    };
   }
 
   Widget _buildStatusLine(Color textMuted) {
@@ -510,7 +504,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         padding: const EdgeInsets.only(left: 4, bottom: 8),
         child: NexusExecutionStatus(
           compact: true,
-          state: _mapRunningStage(widget.runningStage),
+          state: _mapRunningStage(widget.runningStageKind),
           label: widget.runningStage!,
         ),
       );
@@ -584,7 +578,7 @@ class _ModeTile extends StatelessWidget {
               radius: 24,
               child: Center(
                 child: AnimatedContainer(
-                  duration: AppTokens.durationFast,
+                  duration: NexusMotion.durationFast(context),
                   curve: AppTokens.curveStandard,
                   width: AppTokens.composerCircleButton,
                   height: AppTokens.composerCircleButton,
@@ -686,6 +680,7 @@ class _FilledCircleButton extends StatelessWidget {
     required this.semanticLabel,
     this.tooltip,
     this.onTap,
+    this.onLongPress,
     this.iconColor = Colors.white,
   });
 
@@ -694,6 +689,7 @@ class _FilledCircleButton extends StatelessWidget {
   final String semanticLabel;
   final String? tooltip;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final Color iconColor;
 
   @override
@@ -705,10 +701,11 @@ class _FilledCircleButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkResponse(
           onTap: onTap,
+          onLongPress: onLongPress,
           radius: 24,
           child: Center(
             child: AnimatedContainer(
-              duration: AppTokens.durationFast,
+              duration: NexusMotion.durationFast(context),
               curve: AppTokens.curveStandard,
               width: AppTokens.composerCircleButton,
               height: AppTokens.composerCircleButton,

@@ -8,12 +8,12 @@ void main() {
 
     expect(
       _count(source, RegExp(r'Color\s*\(\s*0x[0-9A-Fa-f]+')),
-      lessThanOrEqualTo(235),
+      lessThanOrEqualTo(182),
       reason: '新增颜色应收敛到语义 token；有意迁移时同步调整基线。',
     );
     expect(
       _count(source, RegExp(r'fontSize\s*:\s*[0-9]+(?:\.[0-9]+)?')),
-      lessThanOrEqualTo(485),
+      lessThanOrEqualTo(450),
       reason: '新增字号应使用已决策的字号 token；有意迁移时同步调整基线。',
     );
     expect(
@@ -23,7 +23,7 @@ void main() {
           r'Duration\s*\(\s*(?:milliseconds|seconds|microseconds)\s*:\s*[0-9]+',
         ),
       ),
-      lessThanOrEqualTo(42),
+      lessThanOrEqualTo(35),
       reason: '新增动画时长应使用 NexusMotion token。',
     );
   });

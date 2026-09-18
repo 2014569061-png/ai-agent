@@ -1,6 +1,7 @@
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/models.dart';
 import '../widgets/empty_state_view.dart';
@@ -36,8 +37,42 @@ class _ToolEntry {
 }
 
 class _ToolListPageState extends State<ToolListPage> {
+  static const _workspaceFilesKey = 'settings.tool.workspace_files';
+  static const _terminalKey = 'settings.tool.terminal';
+  static const _legacyTerminalFileKey = 'settings.tool.terminal_file';
+
   final _searchController = TextEditingController();
   _RiskFilter _filter = _RiskFilter.all;
+  bool _workspaceFilesEnabled = true;
+  bool _terminalEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPermissions();
+  }
+
+  Future<void> _loadPermissions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final legacy = prefs.getBool(_legacyTerminalFileKey) ?? true;
+    if (!mounted) return;
+    setState(() {
+      _workspaceFilesEnabled = prefs.getBool(_workspaceFilesKey) ?? legacy;
+      _terminalEnabled = prefs.getBool(_terminalKey) ?? legacy;
+    });
+  }
+
+  Future<void> _setWorkspaceFilesEnabled(bool enabled) async {
+    setState(() => _workspaceFilesEnabled = enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_workspaceFilesKey, enabled);
+  }
+
+  Future<void> _setTerminalEnabled(bool enabled) async {
+    setState(() => _terminalEnabled = enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_terminalKey, enabled);
+  }
 
   static const List<_ToolEntry> _allTools = [
     _ToolEntry(
@@ -455,6 +490,33 @@ class _ToolListPageState extends State<ToolListPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
         children: [
+          const SettingsSectionTitle('工作区权限'),
+          SettingsGroupCard(
+            children: [
+              SettingsTile(
+                icon: Icons.folder_open_rounded,
+                title: '允许 Agent 读写当前工作区文件',
+                subtitle: '创建和编辑网页、代码、文档等项目文件',
+                showChevron: false,
+                trailingWidget: Switch(
+                  value: _workspaceFilesEnabled,
+                  onChanged: _setWorkspaceFilesEnabled,
+                ),
+              ),
+              const SettingsDivider(),
+              SettingsTile(
+                icon: Icons.terminal_rounded,
+                title: '允许 Agent 执行终端命令',
+                subtitle: '安装依赖、运行脚本和构建项目需要此权限',
+                showChevron: false,
+                trailingWidget: Switch(
+                  value: _terminalEnabled,
+                  onChanged:
+                      _workspaceFilesEnabled ? _setTerminalEnabled : null,
+                ),
+              ),
+            ],
+          ),
           // iOS Search Field
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),

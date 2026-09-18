@@ -11,6 +11,7 @@ import '../feedback/feedback_page.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_theme_controller.dart';
 import '../widgets/empty_state_view.dart';
@@ -318,25 +319,33 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _confirmLogout(BuildContext context) async {
     final confirmed = await showConfirmAction(
       context,
-      title: '确认退出登录？',
-      message: '退出后将清除本地临时会话凭证，如需使用需重新进入。',
-      confirmLabel: '退出',
+      title: '清除本地凭证？',
+      message: '将移除服务商配置和工具凭证，但不会删除聊天记录。清除后需要重新配置模型。',
+      confirmLabel: '清除凭证',
       isDanger: true,
     );
 
-    if (confirmed && context.mounted) {
-      FloatingToast.show(context, '已退出登录');
+    if (!confirmed) return;
+    try {
+      await _providerStore.clearAll();
+      if (!context.mounted) return;
+      unawaited(_loadAll());
+      FloatingToast.show(context, '本地凭证已清除');
+    } catch (error) {
+      if (context.mounted) {
+        FloatingToast.error(context, '清除凭证失败', rawDetail: error.toString());
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final canvas = isDark ? AppPalette.darkCanvas : const Color(0xFFF7F8FA);
-    final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
+    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
-        isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
-    final cardBg = isDark ? AppPalette.darkSurface : Colors.white;
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final cardBg = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
 
     final themeMode = AppThemeController.mode.value;
     final themeLabel = switch (themeMode) {
@@ -369,7 +378,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     decoration: BoxDecoration(
                       color: isDark
                           ? AppPalette.darkSurface
-                          : const Color(0xFFF2F3F5),
+                          : AppPalette.lightSurfaceHover,
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
@@ -384,13 +393,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ),
                   ),
                   Expanded(
-                    child: Text(
-                      '设置',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
+                    child: Semantics(
+                      header: true,
+                      child: Text(
+                        '设置',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
                       ),
                     ),
                   ),
@@ -538,35 +550,41 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
                       const SizedBox(height: 14),
 
-                      // 5. 单卡：退出登录
+                      // 5. 单卡：清除本地凭证
                       _buildCard(
                         cardBg: cardBg,
                         isDark: isDark,
                         children: [
-                          Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => _confirmLogout(context),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 14),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.logout_rounded,
-                                      size: 20,
-                                      color: textColor,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      '退出登录',
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w400,
+                          Semantics(
+                            button: true,
+                            container: true,
+                            label: '清除本地凭证',
+                            hint: '删除已保存的服务商和工具凭证，保留聊天记录',
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _confirmLogout(context),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 14),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.logout_rounded,
+                                        size: 20,
                                         color: textColor,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        '清除本地凭证',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w400,
+                                          color: textColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -642,7 +660,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
+          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
           width: 0.8,
         ),
       ),
@@ -661,7 +679,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       endIndent: 0,
       color: isGlass
           ? (isDark ? const Color(0x1AFFFFFF) : const Color(0x22000000))
-          : (isDark ? AppPalette.darkHairline : const Color(0xFFF0F2F5)),
+          : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
     );
   }
 
@@ -675,41 +693,48 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }) {
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: textColor),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                    color: textColor,
+      child: Semantics(
+        button: true,
+        container: true,
+        label: title,
+        value: trailing,
+        hint: '打开$title',
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: textColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      color: textColor,
+                    ),
                   ),
                 ),
-              ),
-              if (trailing != null && trailing.isNotEmpty) ...[
-                Text(
-                  trailing,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                    color: textMuted,
+                if (trailing != null && trailing.isNotEmpty) ...[
+                  Text(
+                    trailing,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeSubhead,
+                      fontWeight: FontWeight.w400,
+                      color: textMuted,
+                    ),
                   ),
+                  const SizedBox(width: 4),
+                ],
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: textMuted.withValues(alpha: 0.6),
                 ),
-                const SizedBox(width: 4),
               ],
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: textMuted.withValues(alpha: 0.6),
-              ),
-            ],
+            ),
           ),
         ),
       ),

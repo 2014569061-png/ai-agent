@@ -5,7 +5,7 @@ import '../../application/change_review.dart';
 import '../../application/change_set_service.dart';
 import '../../application/providers.dart';
 import '../../application/task_service.dart';
-import '../widgets/empty_state_view.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
 import '../widgets/nexus_page_header.dart';
@@ -104,38 +104,41 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
         title: '任务变更集',
         subtitle: '回退前检查当前版本，人工修改不会被覆盖',
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? EmptyStateView(
-                  icon: Icons.history_outlined,
-                  title: '没有可回退内容',
-                  message: _error,
-                )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  children: [
-                    SectionCard(
-                      child: Column(
-                        children: [
-                          for (final file in set!.files)
-                            NexusListTile(
-                              icon: Icons.difference_outlined,
-                              title: file.relativePath,
-                              subtitle: file.reversible
-                                  ? file.operation
-                                  : '${file.operation} · 不可自动回退',
-                            ),
-                        ],
-                      ),
+      body: AsyncStateView(
+        loading: _loading,
+        error: _error,
+        isEmpty: set == null || set.files.isEmpty,
+        emptyIcon: Icons.history_outlined,
+        emptyTitle: '没有可回退内容',
+        emptySubtitle: _error,
+        onRetry: _load,
+        child: set == null
+            ? const SizedBox.shrink()
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                children: [
+                  SectionCard(
+                    child: Column(
+                      children: [
+                        for (final file in set.files)
+                          NexusListTile(
+                            icon: Icons.difference_outlined,
+                            title: file.relativePath,
+                            subtitle: file.reversible
+                                ? file.operation
+                                : '${file.operation} · 不可自动回退',
+                          ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: _rollback,
-                      child: const Text('回退本任务改动'),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: _rollback,
+                    child: const Text('回退本任务改动'),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }

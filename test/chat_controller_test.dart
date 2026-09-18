@@ -436,14 +436,38 @@ void main() {
       expect(rules, contains('工作区入口'));
     });
 
-    test('工具被开关关闭时提示设置入口', () {
+    test('文件工具关闭时提示真实设置入口', () {
       final rules = ChatController.workspaceToolRules(
         workspacePath: '/data/project',
         fileToolsAvailable: false,
         terminalAvailable: false,
       );
       expect(rules, contains('/data/project'));
-      expect(rules, contains('设置 → 工具'));
+      expect(rules, contains('设置 → 扩展与环境 → 工具列表'));
+      expect(rules, contains('允许 Agent 读写当前工作区文件'));
+    });
+
+    test('聊天模式引导切换 Agent，而不是错误指向工具设置', () {
+      final rules = ChatController.workspaceToolRules(
+        workspacePath: '/data/project',
+        fileToolsAvailable: false,
+        terminalAvailable: false,
+        mode: ChatMode.chat,
+      );
+      expect(rules, contains('聊天”模式'));
+      expect(rules, contains('切换到 Agent 模式'));
+      expect(rules, isNot(contains('设置 → 扩展与环境')));
+    });
+
+    test('终端不可用不阻止静态文件任务', () {
+      final rules = ChatController.workspaceToolRules(
+        workspacePath: '/data/project',
+        fileToolsAvailable: true,
+        terminalAvailable: false,
+      );
+      expect(rules, contains('文件工具可用'));
+      expect(rules, contains('静态 HTML/CSS/JS'));
+      expect(rules, contains('仍应直接完成'));
     });
 
     test('工具可用时列出工具与运行时边界', () {

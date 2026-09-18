@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:mobile_agent/application/development_target.dart';
 import 'package:mobile_agent/application/environment_service.dart';
 import 'package:mobile_agent/infrastructure/terminal/linux_runtime.dart';
 import 'package:mobile_agent/presentation/settings/linux_environment_page.dart';
@@ -65,8 +66,11 @@ void main() {
     expect(find.byTooltip('重新检测'), findsOneWidget);
   });
 
-  testWidgets('missing common tools exposes the one-click setup guide',
+  testWidgets('static web target explains that no SDK is required',
       (tester) async {
+    SharedPreferences.setMockInitialValues({
+      DevelopmentTargetX.storageKey: DevelopmentTarget.staticWeb.id,
+    });
     await tester.pumpWidget(
       MaterialApp(
         home: LinuxEnvironmentPage(
@@ -77,7 +81,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('一键补齐常用开发工具'), findsOneWidget);
+    expect(find.textContaining('静态网页'), findsWidgets);
+    expect(find.text('无需安装'), findsOneWidget);
+    expect(find.textContaining('不需要 Node.js'), findsOneWidget);
   });
 }
 

@@ -13,6 +13,7 @@ import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
@@ -279,10 +280,11 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
         title: '项目',
         subtitle: '选择、新建或导入开发项目',
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      body: AsyncStateView(
+        loading: _loading,
+        onRetry: _reload,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
               children: [
                 SectionCard(
                   child: Column(
@@ -346,6 +348,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
                   ),
               ],
             ),
+      ),
     );
   }
 }

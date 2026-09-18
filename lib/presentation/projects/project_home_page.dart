@@ -21,6 +21,7 @@ import '../motion/nexus_page_route_factory.dart';
 import '../tasks/task_details_page.dart';
 import '../terminal/terminal_page.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
@@ -250,24 +251,23 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? EmptyStateView(
-                  icon: Icons.error_outline,
-                  title: '无法打开项目',
-                  message: _error,
-                )
-              : TabBarView(
-                  controller: _tabs,
-                  children: [
-                    _overview(project!),
-                    _filesTab(project),
-                    _terminalTab(project),
-                    _tasksTab(),
-                    _artifactsTab(project),
-                  ],
-                ),
+      body: AsyncStateView(
+        loading: _loading,
+        error: _error,
+        onRetry: _reload,
+        child: project == null
+            ? const SizedBox.shrink()
+            : TabBarView(
+                controller: _tabs,
+                children: [
+                  _overview(project),
+                  _filesTab(project),
+                  _terminalTab(project),
+                  _tasksTab(),
+                  _artifactsTab(project),
+                ],
+              ),
+      ),
     );
   }
 

@@ -10,11 +10,17 @@ final dashboardSummaryProvider =
     FutureProvider.autoDispose<DashboardSummary>((ref) async {
   final service = ref.watch(dashboardServiceProvider);
   final db = await ref.watch(databaseProvider.future);
-  final chatState = ref.watch(chatControllerProvider);
+  // The dashboard only needs the plan and the selected conversation. Avoid
+  // rerunning all of the SQL aggregates for message-stream updates.
+  final chatContext = ref.watch(
+    chatControllerProvider.select(
+      (state) => (state.planState, state.conversationId),
+    ),
+  );
 
   return service.loadSummary(
     db: db,
-    currentPlanState: chatState.planState,
-    currentConversationId: chatState.conversationId,
+    currentPlanState: chatContext.$1,
+    currentConversationId: chatContext.$2,
   );
 });

@@ -64,7 +64,13 @@ extension ChatRunExecution on ChatController {
         startedAt: runStartedAt,
       ));
       tracker = RunEventTracker(database: database, runId: runId);
-    } catch (_) {}
+    } catch (_) {
+      unawaited(logService.warning(
+        'Run record initialization failed',
+        runId: runId,
+        category: 'run_persistence',
+      ));
+    }
     RunEventHandle? modelEvent;
     final toolEvents = <String, RunEventHandle?>{};
     RunEventHandle? activeNetworkEvent;
@@ -106,8 +112,14 @@ extension ChatRunExecution on ChatController {
       foregroundStarted = await ForegroundService.instance
           .start(text: 'Agent 任务执行中')
           .timeout(const Duration(seconds: 2));
-    } catch (_) {
+    } catch (error) {
       // 前台服务不可用时仍允许当前回合继续，但不宣称锁屏可靠。
+      unawaited(logService.warning(
+        'Foreground execution service unavailable',
+        runId: runId,
+        category: 'run_lifecycle',
+        detail: {'errorType': error.runtimeType.toString()},
+      ));
     }
     await logService.info('Agent 开始执行',
         runId: runId, category: 'system', detail: {'model': model});
@@ -233,7 +245,14 @@ extension ChatRunExecution on ChatController {
       );
       knowledgeBlock = await KnowledgeService()
           .buildInjectionBlock(database, _lastUserText(assistantIndex));
-    } catch (_) {}
+    } catch (error) {
+      unawaited(logService.warning(
+        'Run context injection partially failed',
+        runId: runId,
+        category: 'run_context',
+        detail: {'errorType': error.runtimeType.toString()},
+      ));
+    }
 
     // 委派规则：向主 Agent 注入使用 sub_agent 的边界与预算约束。
     var delegationRules = '';
@@ -241,7 +260,14 @@ extension ChatRunExecution on ChatController {
       final autonomousDelegation =
           await AutonomousDelegationService().isEnabled();
       delegationRules = ChatController._delegationRules(autonomousDelegation);
-    } catch (_) {}
+    } catch (error) {
+      unawaited(logService.warning(
+        'Autonomous delegation settings unavailable',
+        runId: runId,
+        category: 'run_context',
+        detail: {'errorType': error.runtimeType.toString()},
+      ));
+    }
 
     // 工作区与工具可用性：注册表是按工作区绑定动态装配的，模型必须知道自己
     // 有没有文件/终端能力；缺失时引导用户开启，而不是声称设备无法完成。
@@ -249,6 +275,7 @@ extension ChatRunExecution on ChatController {
       workspacePath: _currentState.currentWorkspacePath,
       fileToolsAvailable: registry.findRegistration('write_file') != null,
       terminalAvailable: registry.findRegistration('terminal') != null,
+      mode: _currentState.mode,
     );
 
     var taskTemplateRules = '';
@@ -264,6 +291,8 @@ extension ChatRunExecution on ChatController {
                 if (task == null) return null;
                 return TaskService().describe(task).type;
               } catch (_) {
+                // 可忽略：任务类型只用于挑选提示词模板，取不到就退化成
+                // 通用模板。外层 catch 已在整体失败时写 warning。
                 return null;
               }
             }();
@@ -295,7 +324,11 @@ extension ChatRunExecution on ChatController {
                   Map<String, dynamic>.from(progress['taskSummary'] as Map));
             }
           }
-        } catch (_) {}
+        } catch (_) {
+          // 可忽略（有意降级）：项目设置 / 任务摘要读失败时沿用默认
+          // ProjectSettings 继续组装上下文，不阻断本轮对话。
+          // 外层 catch（见下方 assemble 段）负责把整体失败记为 warning。
+        }
         final query = _lastUserText(assistantIndex);
         var context = await const ProjectContextService().assemble(
           projectId: projectId,
@@ -327,7 +360,14 @@ extension ChatRunExecution on ChatController {
           );
         }
       }
-    } catch (_) {}
+    } catch (error) {
+      unawaited(logService.warning(
+        'Project context assembly partially failed',
+        runId: runId,
+        category: 'run_context',
+        detail: {'errorType': error.runtimeType.toString()},
+      ));
+    }
 
     final baseSystemPrompt = assembleAgentSystemPrompt(
       personaPrompt: [
@@ -389,6 +429,11 @@ extension ChatRunExecution on ChatController {
                 totalSteps: _currentState.totalSteps + 1);
           }
         } else if (event is TextEvent) {
+          if (ownsRun() && visible()) {
+            _currentState = _currentState.copyWith(
+              modelServiceStatus: ModelServiceStatus.online,
+            );
+          }
           if (reasoningStartedAt != null && reasoningDuration == null) {
             reasoningDuration = DateTime.now().difference(reasoningStartedAt);
           }
@@ -408,6 +453,11 @@ extension ChatRunExecution on ChatController {
           answer.write(event.text);
           requestFlush();
         } else if (event is ReasoningEvent) {
+          if (ownsRun() && visible()) {
+            _currentState = _currentState.copyWith(
+              modelServiceStatus: ModelServiceStatus.online,
+            );
+          }
           reasoningStartedAt ??= DateTime.now();
           final firstTokenElapsed = stopwatch.elapsed;
           ttft ??= firstTokenElapsed;
@@ -449,6 +499,16 @@ extension ChatRunExecution on ChatController {
           savedCostCents = estimate.savedCostCents;
         } else if (event is AgentErrorEvent) {
           runStatus = 'failed';
+          final failure = ModelFailure.classify(
+            event.message,
+            statusCode: event.statusCode,
+            failureKind: event.failureKind,
+          );
+          if (ownsRun() && visible()) {
+            _currentState = _currentState.copyWith(
+              modelServiceStatus: failure.serviceStatus,
+            );
+          }
           await tracker?.finish(activeNetworkEvent,
               status: 'failed', outputSummary: event.message);
           await tracker?.finish(modelEvent,
@@ -460,7 +520,13 @@ extension ChatRunExecution on ChatController {
                 status: 'failed', outputSummary: event.message);
           }
           toolEvents.clear();
-          answer.write('\n\n${formatErrorForMessage(event.message)}');
+          answer.write(
+            '\n\n${formatErrorForMessage(
+              event.message,
+              statusCode: event.statusCode,
+              failureKind: event.failureKind,
+            )}',
+          );
           await recordRunEvent(
               type: 'error',
               name: 'Agent 错误',
@@ -472,8 +538,8 @@ extension ChatRunExecution on ChatController {
               errorCode: 'AGENT_EXECUTION_FAILED',
               retryable: event.retryable,
               detail: {
-                'message': event.message,
-                if (event.failureKind != null) 'failureKind': event.failureKind,
+                'errorType': event.failureKind ?? 'provider_error',
+                'serviceStatus': failure.serviceStatus.name,
                 if (event.statusCode != null) 'statusCode': event.statusCode,
               });
         } else if (event is AgentBudgetExhaustedEvent) {
@@ -702,6 +768,11 @@ extension ChatRunExecution on ChatController {
           }
           if (event.status == RunStatus.completed) {
             runStatus = 'success';
+            if (ownsRun() && visible()) {
+              _currentState = _currentState.copyWith(
+                modelServiceStatus: ModelServiceStatus.online,
+              );
+            }
             final usageMetadata = {
               'promptTokens': usage.promptTokens,
               'completionTokens': usage.completionTokens,
@@ -785,7 +856,11 @@ extension ChatRunExecution on ChatController {
           }
           await tracker?.flush();
           await logService.flush();
-        } catch (_) {}
+        } catch (_) {
+          // 可忽略（有意降级）：运行收尾（finish/flush）失败不改变本轮
+          // 结果——用户已经拿到回答，此处再抛会把成功回合显示成失败。
+          // 落库失败会在下方 insertRunRecord 的重试与最外层 catch 中被记录。
+        }
         final cancelDurationMs =
             runStatus == 'cancelled' && _cancelRequestedAt != null
                 ? DateTime.now().difference(_cancelRequestedAt!).inMilliseconds
@@ -832,8 +907,14 @@ extension ChatRunExecution on ChatController {
         }
         try {
           await runDb.pruneRunRecords();
-        } catch (_) {}
-      } catch (_) {}
+        } catch (_) {
+          // 可忽略：运行记录清理失败只影响历史表体积，不影响本轮结果。
+          // 下次启动或后续运行会再次尝试。
+        }
+      } catch (_) {
+        // 可忽略（有意降级）：运行指标持久化整体失败时不改变控制流——
+        // 到此为止用户回答已生成完毕。指标缺失只影响统计面板的完整度。
+      }
     }
     final finalAnswerText = answer.toString();
     final finalReasoningText = reasoning.isEmpty ? '' : reasoning.toString();
@@ -860,8 +941,15 @@ extension ChatRunExecution on ChatController {
       try {
         await _persistMessage(assistantMessage,
             conversationId: runConversationId);
-      } catch (_) {
+      } catch (error, stack) {
         // 持久化失败不阻断 UI 恢复。
+        unawaited(logService.error(
+          'Final assistant message persistence failed',
+          error: error,
+          stackTrace: stack,
+          runId: runId,
+          category: 'run_persistence',
+        ));
       }
       if (visible()) {
         if (assistantIndex < _currentState.messages.length) {
@@ -912,7 +1000,10 @@ extension ChatRunExecution on ChatController {
               terminal: null,
               runVerification: false,
             );
-          } catch (_) {}
+          } catch (_) {
+            // 可忽略（有意降级）：开发任务收尾失败不影响本轮对话结果；
+            // 任务状态会在下次执行或用户手动刷新时重新收敛。
+          }
         }
         await NotificationService.instance.init();
         await NotificationService.instance.show(
@@ -923,7 +1014,10 @@ extension ChatRunExecution on ChatController {
           body: _notificationPreview(answer.toString(), status),
           payload: 'task:$taskId',
         );
-      } catch (_) {}
+      } catch (_) {
+        // 可忽略（有意降级）：任务通知是「锦上添花」通道，通知权限被拒或
+        // 初始化失败不应影响已经在 UI 上呈现的运行结果。
+      }
     }
     if (foregroundStarted) {
       await ForegroundService.instance.stop();

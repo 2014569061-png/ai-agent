@@ -16,6 +16,7 @@ import '../../markdown/markdown_render_policy.dart';
 import '../../markdown/markdown_render_metrics.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../motion/nexus_motion.dart';
 import '../../widgets/floating_toast.dart';
 import 'mascot_avatar.dart';
 import 'attachment_strip.dart';
@@ -711,7 +712,7 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
                 const SizedBox(width: 4),
                 AnimatedRotation(
                   turns: _expanded ? 0.25 : 0.0,
-                  duration: AppTokens.durationSlow,
+                  duration: NexusMotion.durationExpand(context),
                   curve: AppTokens.curveStandard,
                   child: Icon(
                     Icons.keyboard_arrow_right_rounded,
@@ -747,7 +748,7 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
           ),
           crossFadeState:
               _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          duration: AppTokens.durationSlow,
+          duration: NexusMotion.durationExpand(context),
           firstCurve: AppTokens.curveStandard,
           secondCurve: AppTokens.curveStandard,
           sizeCurve: AppTokens.curveStandard,

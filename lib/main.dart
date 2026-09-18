@@ -31,13 +31,22 @@ import 'presentation/widgets/nexus_background.dart';
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  // F-5：四处分头 load() 各自触发一次平台通道往返，合并为一次实例获取后并发载入。
-  // 仍不阻塞首帧（unawaited），只是把 4 次 SharedPreferences 往返压成 1 次。
-  unawaited(_loadUiPreferences());
+  // Keep startup/plugin failures inside a zone until Sentry's Flutter
+  // integration is initialized after the first frame.
+  runZonedGuarded(
+    () {
+      // F-5：四处分头 load() 各自触发一次平台通道往返，合并为一次实例获取后并发载入。
+      // 仍不阻塞首帧（unawaited），只是把 4 次 SharedPreferences 往返压成 1 次。
+      unawaited(_loadUiPreferences());
 
-  // The first Flutter frame must not wait for platform services or storage.
-  runApp(const ProviderScope(child: MobileAgentApp()));
-  unawaited(_initializeServices());
+      // The first Flutter frame must not wait for platform services or storage.
+      runApp(const ProviderScope(child: MobileAgentApp()));
+      unawaited(_initializeServices());
+    },
+    (error, stack) {
+      unawaited(SentryService.reportException(error, stack));
+    },
+  );
 }
 
 Future<void> _loadUiPreferences() async {
@@ -99,7 +108,7 @@ Future<void> _initializeServices() async {
 
     // Initialize crash reporting after the first frame.
     try {
-      await SentryService.init(() {});
+      await SentryService.init();
     } catch (error) {
       debugPrint('崩溃上报初始化失败: $error');
     }
@@ -135,68 +144,71 @@ class MobileAgentApp extends StatelessWidget {
             darkTheme: AppTheme.dark(),
             themeMode: themeMode,
             builder: (context, child) {
-            final isDark = Theme.of(context).brightness == Brightness.dark;
-            return ValueListenableBuilder<double>(
-              valueListenable: AppAppearanceController.fontScale,
-              builder: (context, fontScale, child) {
-                final mediaQuery = MediaQuery.of(context);
-                final systemScale = mediaQuery.textScaler.scale(1.0);
-                return MediaQuery(
-                  data: mediaQuery.copyWith(
-                    textScaler:
-                        TextScaler.linear(systemScale * fontScale),
-                  ),
-                  child: AnnotatedRegion<SystemUiOverlayStyle>(
-                    value: SystemUiOverlayStyle(
-                      statusBarColor: Colors.transparent,
-                      systemNavigationBarColor: Colors.transparent,
-                      statusBarIconBrightness:
-                          isDark ? Brightness.light : Brightness.dark,
-                      systemNavigationBarIconBrightness:
-                          isDark ? Brightness.light : Brightness.dark,
-                      systemStatusBarContrastEnforced: false,
-                      systemNavigationBarContrastEnforced: false,
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return ValueListenableBuilder<double>(
+                valueListenable: AppAppearanceController.fontScale,
+                builder: (context, fontScale, child) {
+                  final mediaQuery = MediaQuery.of(context);
+                  final systemScale = mediaQuery.textScaler.scale(1.0);
+                  return MediaQuery(
+                    data: mediaQuery.copyWith(
+                      textScaler: TextScaler.linear(systemScale * fontScale),
                     ),
-                    child: NexusBackground(
-                      child: child ?? const SizedBox.shrink(),
+                    child: AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        systemNavigationBarColor: Colors.transparent,
+                        statusBarIconBrightness:
+                            isDark ? Brightness.light : Brightness.dark,
+                        systemNavigationBarIconBrightness:
+                            isDark ? Brightness.light : Brightness.dark,
+                        systemStatusBarContrastEnforced: false,
+                        systemNavigationBarContrastEnforced: false,
+                      ),
+                      child: NexusBackground(
+                        child: child ?? const SizedBox.shrink(),
+                      ),
                     ),
-                  ),
-                );
-              },
-              child: child,
-            );
-          },
-          home: showOnboarding == null
-              ? const StartupGate()
-              : (showOnboarding! ? const OnboardingPage() : const AppShell()),
+                  );
+                },
+                child: child,
+              );
+            },
+            home: showOnboarding == null
+                ? const StartupGate()
+                : (showOnboarding! ? const OnboardingPage() : const AppShell()),
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }
 
 /// Loads first-run state after the first frame and falls back to the shell if
 /// platform storage is unavailable.
 class StartupGate extends StatefulWidget {
-  const StartupGate({super.key});
+  const StartupGate({super.key, this.onboardingLoader});
+
+  /// Test seam for the first-run gate; production uses SharedPreferences.
+  final Future<bool> Function()? onboardingLoader;
 
   @override
   State<StartupGate> createState() => _StartupGateState();
 }
 
 class _StartupGateState extends State<StartupGate> {
-  late final Future<bool> _onboardingDone = _loadOnboardingState();
+  late final Future<bool> _onboardingDone =
+      widget.onboardingLoader?.call() ?? _loadOnboardingState();
 
   Future<bool> _loadOnboardingState() async {
     try {
       return await OnboardingService.isDone().timeout(
         const Duration(seconds: 2),
-        onTimeout: () => true,
+        onTimeout: () => false,
       );
     } catch (error) {
       debugPrint('新手引导状态读取失败: $error');
-      return true;
+      return false;
     }
   }
 

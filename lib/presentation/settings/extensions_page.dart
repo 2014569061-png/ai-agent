@@ -12,10 +12,12 @@ import '../motion/nexus_page_route_factory.dart';
 import '../plugins/plugins_page.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/glass_surface.dart';
 import 'linux_environment_page.dart';
 import 'tool_list_page.dart';
+import 'workspace_files_page.dart';
 
 /// 扩展与环境：管理 MCP 服务器、Skills 技能包、受控工具清单与 Linux 运行环境
 class ExtensionsPage extends StatefulWidget {
@@ -76,9 +78,10 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isFlat =
         AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
-    final canvas = isDark ? AppPalette.darkCanvas : const Color(0xFFF7F8FA);
-    final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
-    final textMuted = isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
+    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Scaffold(
       backgroundColor: isFlat ? canvas : Colors.transparent,
@@ -93,7 +96,9 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
                     width: 36,
                     height: 36,
                     decoration: BoxDecoration(
-                      color: isDark ? AppPalette.darkSurface : const Color(0xFFF2F3F5),
+                      color: isDark
+                          ? AppPalette.darkSurface
+                          : AppPalette.lightSurfaceHover,
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
@@ -161,6 +166,14 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
                       ),
                       _buildDivider(isDark),
                       _buildRow(
+                        icon: Icons.folder_open_rounded,
+                        title: AppStrings.workspaceFilesEntry,
+                        trailing: '选择项目目录',
+                        isDark: isDark,
+                        onTap: () => _openPage(const WorkspaceFilesPage()),
+                      ),
+                      _buildDivider(isDark),
+                      _buildRow(
                         icon: Icons.computer_rounded,
                         title: AppStrings.linuxEnvironmentEntry,
                         trailing: 'Termux / proot',
@@ -223,7 +236,7 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
           color: isDark ? AppPalette.darkSurface : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isDark ? AppPalette.darkHairline : const Color(0xFFECEEF2),
+            color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
             width: 0.8,
           ),
         ),
@@ -256,7 +269,7 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
       endIndent: 0,
       color: isDark
           ? AppPalette.darkHairline
-          : (isFlat ? const Color(0xFFF0F2F5) : const Color(0x28000000)),
+          : (isFlat ? AppPalette.lightHairline : const Color(0x28000000)),
     );
   }
 
@@ -267,8 +280,9 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
     required bool isDark,
     required VoidCallback onTap,
   }) {
-    final textColor = isDark ? AppPalette.darkText : const Color(0xFF1F2329);
-    final textMuted = isDark ? AppPalette.darkTextMuted : const Color(0xFF8E9297);
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Material(
       color: Colors.transparent,
@@ -293,7 +307,7 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
               Text(
                 trailing,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTokens.fontSizeSubhead,
                   fontWeight: FontWeight.w400,
                   color: textMuted,
                 ),

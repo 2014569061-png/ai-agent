@@ -4,12 +4,14 @@ import 'package:mobile_agent/presentation/chat/widgets/nexus_back_to_latest_butt
 import 'package:mobile_agent/presentation/motion/motion_preferences.dart';
 import 'package:mobile_agent/presentation/motion/nexus_motion.dart';
 import 'package:mobile_agent/presentation/motion/nexus_page_route_factory.dart';
+import 'package:mobile_agent/presentation/widgets/async_state_view.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_async_content.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_disclosure.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_execution_status.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_loading_skeleton.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_status_badge.dart';
 import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_sheet.dart';
 
 void main() {
   group('NexusMotion & MotionPreferences Tests', () {
@@ -195,6 +197,79 @@ void main() {
     });
   });
 
+  group('AsyncStateView Tests', () {
+    testWidgets('renders spinner during loading when no skeleton provided', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AsyncStateView(
+              loading: true,
+              child: Text('Content'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Content'), findsNothing);
+    });
+
+    testWidgets('renders empty state through AsyncStateView', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AsyncStateView(
+              loading: false,
+              isEmpty: true,
+              emptyTitle: '无数据',
+              emptySubtitle: '请稍后再试',
+              child: Text('Content'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('无数据'), findsOneWidget);
+      expect(find.text('请稍后再试'), findsOneWidget);
+      expect(find.text('Content'), findsNothing);
+    });
+
+    testWidgets('renders partial error banner while retaining content', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AsyncStateView(
+              loading: false,
+              error: '网络连接超时',
+              retainContentOnError: true,
+              child: Text('Existing Content'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Existing Content'), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
+    });
+
+    testWidgets('renders refreshing progress bar while retaining content', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: AsyncStateView(
+              loading: false,
+              refreshing: true,
+              child: Text('Refreshing Content'),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Refreshing Content'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    });
+  });
+
   group('NexusExecutionStatus Tests', () {
     testWidgets('renders running state with label', (tester) async {
       await tester.pumpWidget(
@@ -323,6 +398,72 @@ void main() {
 
       await tester.tap(find.byType(NexusBackToLatestButton));
       expect(tapped, isTrue);
+    });
+  });
+
+  group('Reduced Motion Compliance Tests', () {
+    testWidgets('showNexusSheet skips SlideTransition when reduced motion is enabled', (tester) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () {
+                    showNexusSheet(
+                      context: context,
+                      builder: (_) => const Text('Sheet Content'),
+                    );
+                  },
+                  child: const Text('Open Sheet'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Sheet'));
+      await tester.pump();
+      expect(find.text('Sheet Content'), findsOneWidget);
+      final sheetSlide = find.ancestor(
+        of: find.text('Sheet Content'),
+        matching: find.byType(SlideTransition),
+      );
+      expect(sheetSlide, findsNothing);
+    });
+
+    testWidgets('showNexusDialog skips ScaleTransition when reduced motion is enabled', (tester) async {
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () {
+                    showNexusDialog(
+                      context: context,
+                      builder: (_) => const Text('Dialog Content'),
+                    );
+                  },
+                  child: const Text('Open Dialog'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open Dialog'));
+      await tester.pump();
+      expect(find.text('Dialog Content'), findsOneWidget);
+      final dialogScale = find.ancestor(
+        of: find.text('Dialog Content'),
+        matching: find.byType(ScaleTransition),
+      );
+      expect(dialogScale, findsNothing);
     });
   });
 }

@@ -22,8 +22,8 @@ void main() {
       expect(approve?.requestId, 'appr-1');
       expect(approve?.approve, isTrue);
 
-      final deny =
-          parseApprovalActionId(encodeApprovalActionId('appr-2', approve: false));
+      final deny = parseApprovalActionId(
+          encodeApprovalActionId('appr-2', approve: false));
       expect(deny?.requestId, 'appr-2');
       expect(deny?.approve, isFalse);
     });
@@ -84,11 +84,13 @@ void main() {
         ttl: const Duration(minutes: 5),
       );
 
-      expect(await db.decidePendingApproval('appr-2', approvalDenyAction), isTrue);
+      expect(
+          await db.decidePendingApproval('appr-2', approvalDenyAction), isTrue);
       // 锁屏动作与前台弹窗几乎同时提交时，第二条必须被丢弃。
       expect(await db.decidePendingApproval('appr-2', approvalApproveAction),
           isFalse);
-      expect(await db.findPendingApprovalDecision('appr-2'), approvalDenyAction);
+      expect(
+          await db.findPendingApprovalDecision('appr-2'), approvalDenyAction);
     });
 
     test('清理只删过期行，未过期的不受影响', () async {
@@ -109,9 +111,11 @@ void main() {
 
       expect(await db.prunePendingApprovals(), 1);
       expect(await db.findPendingApprovalDecision('expired'), isNull);
-      final alive = await db.customSelect(
-        'SELECT COUNT(*) AS c FROM pending_approvals',
-      ).getSingle();
+      final alive = await db
+          .customSelect(
+            'SELECT COUNT(*) AS c FROM pending_approvals',
+          )
+          .getSingle();
       expect(alive.read<int>('c'), 1);
     });
   });
@@ -121,9 +125,9 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
-      final future = const ApprovalBridge(
-              pollInterval: Duration(milliseconds: 20))
-          .requestDecision(
+      final future =
+          const ApprovalBridge(pollInterval: Duration(milliseconds: 20))
+              .requestDecision(
         toolName: 'terminal',
         summary: 'terminal（需确认）',
         risk: 'requiresConfirmation',
@@ -144,9 +148,9 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
-      final future = const ApprovalBridge(
-              pollInterval: Duration(milliseconds: 20))
-          .requestDecision(
+      final future =
+          const ApprovalBridge(pollInterval: Duration(milliseconds: 20))
+              .requestDecision(
         toolName: 'terminal',
         summary: 'x',
         risk: 'dangerous',
@@ -160,13 +164,13 @@ void main() {
       expect(await future, isFalse);
     });
 
-    test('无人处理时超时返回 null（调用方据此保守拒绝）', () async {
+    test('无人处理时超时返回 null，并保留 expired 决策', () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
 
-      final decision = await const ApprovalBridge(
-              pollInterval: Duration(milliseconds: 20))
-          .requestDecision(
+      final decision =
+          await const ApprovalBridge(pollInterval: Duration(milliseconds: 20))
+              .requestDecision(
         toolName: 'terminal',
         summary: 'x',
         risk: 'dangerous',
@@ -175,8 +179,13 @@ void main() {
       );
 
       expect(decision, isNull);
-      // 超时也必须清理，否则通知会指向一个无人等待的请求。
-      await _expectNoPendingRows(db);
+      final rows = await db
+          .customSelect(
+            'SELECT decision FROM pending_approvals',
+          )
+          .get();
+      expect(rows, hasLength(1));
+      expect(rows.single.read<String>('decision'), approvalExpiredAction);
     });
   });
 

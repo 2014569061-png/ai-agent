@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile_agent/application/error_humanizer.dart';
+import 'package:mobile_agent/domain/model_failure.dart';
 
 void main() {
   group('humanizeError 规则映射', () {
@@ -29,8 +30,15 @@ void main() {
       expect(humanizeError('403 permission denied').summary, contains('密钥'));
     });
 
-    test('429 → 限流', () {
-      expect(humanizeError('429 rate limit exceeded').summary, contains('限流'));
+    test('429 → 限流并展示等待时间', () {
+      final error = humanizeError(
+        'rate limit exceeded',
+        statusCode: 429,
+        retryAfter: const Duration(seconds: 12),
+      );
+      expect(error.summary, contains('限流'));
+      expect(error.summary, contains('12 秒'));
+      expect(error.failure.serviceStatus, ModelServiceStatus.rateLimited);
     });
 
     test('5xx → 服务不可用', () {

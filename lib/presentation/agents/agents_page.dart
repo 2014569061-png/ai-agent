@@ -50,7 +50,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
   /// 注入点，测试可以 override 成内存库，页面才进得了冒烟守护。
   void _reload() {
     _agents = ref.read(databaseProvider.future).then((db) async {
-      final agents = await db.allAgents();
+      final agents = await db.allAgents(limit: 200);
       return agents
           .map((agent) =>
               agent.copyWith(name: MojibakeRepair.repair(agent.name)))
@@ -237,7 +237,8 @@ class _DescribeEntryCard extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: BoxDecoration(
-            color: isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight,
+            color:
+                isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight,
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
             border: Border.all(
               color: isDark

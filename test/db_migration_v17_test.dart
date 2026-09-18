@@ -5,9 +5,9 @@ import 'package:mobile_agent/infrastructure/database/app_database.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('schemaVersion 已升至 23', () {
+  test('schemaVersion 已升至 24', () {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 23);
+    expect(db.schemaVersion, 24);
     db.close();
   });
 
@@ -86,7 +86,8 @@ void main() {
         {'run_controls', 'execution_leases'});
     final columns =
         await db.customSelect('PRAGMA table_info(run_records)').get();
-    expect(columns.map((row) => row.data['name']), containsAll(['task_id', 'project_id']));
+    expect(columns.map((row) => row.data['name']),
+        containsAll(['task_id', 'project_id']));
     await db.close();
   });
 
@@ -121,7 +122,8 @@ void main() {
   test('v22→v23 迁移创建锁屏审批决策表（含索引）', () async {
     final db = AppDatabase(NativeDatabase.memory());
     // 模拟 v22：把 fresh-create 时已建的表与索引删掉，再跑升级路径。
-    await db.customStatement('DROP INDEX IF EXISTS idx_pending_approvals_created');
+    await db
+        .customStatement('DROP INDEX IF EXISTS idx_pending_approvals_created');
     await db.customStatement('DROP TABLE IF EXISTS pending_approvals');
 
     final m = db.createMigrator();
@@ -153,8 +155,42 @@ void main() {
     );
     expect(await db.findPendingApprovalDecision('appr-migrated'), isNull);
     expect(await db.decidePendingApproval('appr-migrated', 'approve'), isTrue);
-    expect(
-        await db.findPendingApprovalDecision('appr-migrated'), 'approve');
+    expect(await db.findPendingApprovalDecision('appr-migrated'), 'approve');
+    await db.close();
+  });
+
+  test('v23→v24 迁移创建后台数据维护任务表', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.customStatement('DROP TABLE IF EXISTS data_maintenance_jobs');
+
+    final m = db.createMigrator();
+    await db.migration.onUpgrade(m, 23, 24);
+
+    final tables = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'data_maintenance_jobs'",
+        )
+        .get();
+    expect(tables, isNotEmpty);
+    await db.close();
+  });
+
+  test('v23→v24 重复迁移保持幂等', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    await db.customStatement('DROP TABLE IF EXISTS data_maintenance_jobs');
+
+    final m = db.createMigrator();
+    await db.migration.onUpgrade(m, 23, 24);
+    await db.migration.onUpgrade(m, 23, 24);
+
+    final tables = await db
+        .customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table' "
+          "AND name = 'data_maintenance_jobs'",
+        )
+        .get();
+    expect(tables, hasLength(1));
     await db.close();
   });
 

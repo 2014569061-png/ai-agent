@@ -386,7 +386,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 child: Text(
                                   '类型：${_task.type}',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: AppTokens.fontSizeFootnote,
                                     fontWeight: FontWeight.w500,
                                     color: theme.colorScheme.primary,
                                   ),
@@ -406,7 +406,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 child: Text(
                                   '来源：${_task.sourceType}',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: AppTokens.fontSizeFootnote,
                                     color: theme.colorScheme.onSurfaceVariant,
                                   ),
                                 ),
@@ -451,13 +451,13 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 const SizedBox(width: 6),
                                 const Text('工作区：',
                                     style: TextStyle(
-                                        fontSize: 12,
+                                        fontSize: AppTokens.fontSizeFootnote,
                                         fontWeight: FontWeight.w500)),
                                 Expanded(
                                   child: SelectableText(
                                     workspacePath,
                                     style: const TextStyle(
-                                        fontSize: 12,
+                                        fontSize: AppTokens.fontSizeFootnote,
                                         color: AppTheme.textSecondary),
                                   ),
                                 ),
@@ -469,7 +469,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 child: Text(
                                   '项目目录已不可访问，请重新绑定工作区后再恢复任务。',
                                   style: TextStyle(
-                                      fontSize: 12, color: AppPalette.warning),
+                                      fontSize: AppTokens.fontSizeFootnote,
+                                      color: AppPalette.warning),
                                 ),
                               ),
                             const SizedBox(height: 6),
@@ -482,7 +483,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                               Text(
                                 '更新时间：${_formatDate(_task.updatedAt)}',
                                 style: const TextStyle(
-                                    fontSize: 12,
+                                    fontSize: AppTokens.fontSizeFootnote,
                                     color: AppTheme.textSecondary),
                               ),
                             ],
@@ -501,7 +502,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                       padding: const EdgeInsets.all(16),
                       child: SelectableText(
                         _task.prompt.isEmpty ? '（无文本输入）' : _task.prompt,
-                        style: const TextStyle(fontSize: 14, height: 1.45),
+                        style: const TextStyle(
+                            fontSize: AppTokens.fontSizeSubhead, height: 1.45),
                       ),
                     ),
                   ),
@@ -537,7 +539,9 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                         padding: const EdgeInsets.all(16),
                         child: SelectableText(
                           summary,
-                          style: const TextStyle(fontSize: 14, height: 1.45),
+                          style: const TextStyle(
+                              fontSize: AppTokens.fontSizeSubhead,
+                              height: 1.45),
                         ),
                       ),
                     ),
@@ -1313,10 +1317,10 @@ class _CodeDiffCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF14171F) : const Color(0xFFF8FAFC),
+        color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
         borderRadius: BorderRadius.circular(AppTokens.radiusControl),
         border: Border.all(
-          color: isDark ? const Color(0xFF282D3D) : const Color(0xFFE2E8F0),
+          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
         ),
       ),
       child: Column(
@@ -1326,7 +1330,7 @@ class _CodeDiffCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E2330) : const Color(0xFFEDF2F7),
+              color: isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(8)),
             ),
@@ -1342,7 +1346,7 @@ class _CodeDiffCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontFamily: 'monospace',
-                      fontSize: 12,
+                      fontSize: AppTokens.fontSizeFootnote,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -1361,7 +1365,7 @@ class _CodeDiffCard extends StatelessWidget {
                           Text(
                             '回滚',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: AppTokens.fontSizeBadge,
                               fontWeight: FontWeight.w500,
                               color: AppPalette.brand,
                             ),
@@ -1382,14 +1386,14 @@ class _CodeDiffCard extends StatelessWidget {
                 final isAdded = line.startsWith('+');
                 final isDeleted = line.startsWith('-');
                 final bgColor = isAdded
-                    ? const Color(0xFF2E7D32).withValues(alpha: 0.2)
+                    ? AppPalette.diffAddedBg
                     : isDeleted
-                        ? const Color(0xFFC62828).withValues(alpha: 0.2)
+                        ? AppPalette.diffRemovedBg
                         : Colors.transparent;
                 final textColor = isAdded
-                    ? const Color(0xFF69F0AE)
+                    ? AppPalette.diffAddedText
                     : isDeleted
-                        ? const Color(0xFFFF5252)
+                        ? AppPalette.diffRemovedText
                         : (isDark ? AppPalette.darkText : AppPalette.lightText);
 
                 return Container(

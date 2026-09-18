@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +18,14 @@ class KnowledgeService {
   static const _overlap = 100;
   static const _prefsKeyEnabled = 'knowledge_enabled';
   static const _injectionBudget = 1500;
+  static final Map<AppDatabase, Future<_KnowledgeSearchIndex>> _indexCache =
+      <AppDatabase, Future<_KnowledgeSearchIndex>>{};
+
+  /// Invalidates the in-memory BM25 index after an external database import
+  /// or deletion.
+  static void invalidate(AppDatabase db) {
+    _indexCache.remove(db);
+  }
 
   Future<bool> isEnabled() async {
     final prefs = await SharedPreferences.getInstance();
@@ -54,7 +63,14 @@ class KnowledgeService {
         index: i,
       ));
     }
+    invalidate(db);
     return doc;
+  }
+
+  Future<void> delete(
+      {required AppDatabase db, required String documentId}) async {
+    await db.deleteKnowledgeDoc(documentId);
+    invalidate(db);
   }
 
   List<String> _chunk(String text) {
@@ -75,9 +91,9 @@ class KnowledgeService {
       {int topK = 5}) async {
     if (!await isEnabled()) return '';
     if (query.trim().isEmpty) return '';
-    final chunks = await db.allKnowledgeChunks();
-    if (chunks.isEmpty) return '';
-    final top = _bm25(chunks, query, topK: topK);
+    final index = await _indexFor(db);
+    if (index.chunks.isEmpty) return '';
+    final top = _bm25(index, query, topK: topK);
     if (top.isEmpty) return '';
     final buffer = StringBuffer('## 知识库相关片段\n');
     var used = 0;
@@ -93,21 +109,52 @@ class KnowledgeService {
     return buffer.toString();
   }
 
-  List<KnowledgeChunk> _bm25(List<KnowledgeChunk> chunks, String query,
+  Future<_KnowledgeSearchIndex> _indexFor(AppDatabase db) async {
+    final cached = _indexCache[db];
+    if (cached != null) return cached;
+
+    final future = _buildIndex(db);
+    _indexCache[db] = future;
+    try {
+      return await future;
+    } catch (_) {
+      if (identical(_indexCache[db], future)) {
+        unawaited(_indexCache.remove(db));
+      }
+      rethrow;
+    }
+  }
+
+  Future<_KnowledgeSearchIndex> _buildIndex(AppDatabase db) async {
+    final chunks = await db.allKnowledgeChunks();
+    final List<List<String>> tokens =
+        chunks.map((chunk) => _tokenize(chunk.content)).toList(growable: false);
+    final List<int> lengths =
+        tokens.map((item) => item.length).toList(growable: false);
+    final documentFrequency = <String, int>{};
+    for (final item in tokens) {
+      for (final token in item.toSet()) {
+        documentFrequency[token] = (documentFrequency[token] ?? 0) + 1;
+      }
+    }
+    return _KnowledgeSearchIndex(
+      chunks: chunks,
+      tokens: tokens,
+      lengths: lengths,
+      documentFrequency: documentFrequency,
+    );
+  }
+
+  List<KnowledgeChunk> _bm25(_KnowledgeSearchIndex index, String query,
       {int topK = 5}) {
     const k1 = 1.5;
     const b = 0.75;
-    final docTokens = chunks.map((c) => _tokenize(c.content)).toList();
-    final docLen = docTokens.map((t) => t.length).toList();
+    final chunks = index.chunks;
+    final docTokens = index.tokens;
+    final docLen = index.lengths;
     final avgLen =
         docLen.isEmpty ? 1 : docLen.reduce((a, x) => a + x) / docLen.length;
     final n = chunks.length;
-    final df = <String, int>{};
-    for (final tokens in docTokens) {
-      for (final t in tokens.toSet()) {
-        df[t] = (df[t] ?? 0) + 1;
-      }
-    }
     final queryTokens = _tokenize(query).toSet().toList();
     final scores = <double>[];
     for (var i = 0; i < chunks.length; i++) {
@@ -120,7 +167,7 @@ class KnowledgeService {
       for (final qt in queryTokens) {
         final f = tf[qt] ?? 0;
         if (f == 0) continue;
-        final d = df[qt] ?? 0;
+        final d = index.documentFrequency[qt] ?? 0;
         final idf = math.log((n - d + 0.5) / (d + 0.5) + 1);
         final denom = f + k1 * (1 - b + b * (tokens.length / avgLen));
         score += idf * (f * (k1 + 1)) / denom;
@@ -164,3 +211,17 @@ class KnowledgeService {
 
 final knowledgeServiceProvider =
     Provider<KnowledgeService>((ref) => KnowledgeService());
+
+class _KnowledgeSearchIndex {
+  const _KnowledgeSearchIndex({
+    required this.chunks,
+    required this.tokens,
+    required this.lengths,
+    required this.documentFrequency,
+  });
+
+  final List<KnowledgeChunk> chunks;
+  final List<List<String>> tokens;
+  final List<int> lengths;
+  final Map<String, int> documentFrequency;
+}

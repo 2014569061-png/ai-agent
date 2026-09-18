@@ -74,6 +74,9 @@ void main() {
         .getSingle();
     expect(feedbackTable, isNotEmpty);
     expect(sentinel.data['value'], 'kept');
-    expect(rawDb.userVersion, 23);
+    // 断言迁移链收敛到当前 schema 版本（AppDatabase.schemaVersion）。
+    // 用实例 getter 而非字面量：schema 升级时这里有提示，不会再出现
+    // 「版本号已升、测试还断言旧值」的静默漂移。
+    expect(rawDb.userVersion, db.schemaVersion);
   });
 }

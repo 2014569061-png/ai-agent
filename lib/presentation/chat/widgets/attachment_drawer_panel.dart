@@ -32,9 +32,9 @@ class _AttachmentDrawerPanelState extends State<AttachmentDrawerPanel> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? const Color(0xFF131A29) : const Color(0xFFF3F4F6);
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final border = isDark ? Colors.white.withValues(alpha: 0.08) : const Color(0xFFE2E8F0);
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final cardBg = isDark ? AppPalette.darkSurfaceHover : AppPalette.lightCanvas;
+    final border = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 

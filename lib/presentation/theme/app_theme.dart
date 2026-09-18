@@ -237,6 +237,8 @@ abstract final class AppTheme {
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final hairline =
         isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final controlBorder =
+        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
     final text = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
@@ -327,23 +329,15 @@ abstract final class AppTheme {
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           borderSide: BorderSide(
-            color: isFlat
-                ? hairline
-                : (isDark
-                    ? Colors.white.withValues(alpha: 0.16)
-                    : Colors.white.withValues(alpha: 0.60)),
-            width: 0.8,
+            color: controlBorder,
+            width: 1.0,
           ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           borderSide: BorderSide(
-            color: isFlat
-                ? hairline
-                : (isDark
-                    ? Colors.white.withValues(alpha: 0.16)
-                    : Colors.white.withValues(alpha: 0.60)),
-            width: 0.8,
+            color: controlBorder,
+            width: 1.0,
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -392,8 +386,7 @@ abstract final class AppTheme {
             : (isDark
                 ? const Color(0xFF141A29).withValues(alpha: 0.90)
                 : Colors.white.withValues(alpha: 0.92)),
-        modalBarrierColor:
-            Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+        modalBarrierColor: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(

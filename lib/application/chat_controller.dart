@@ -14,12 +14,12 @@ import 'mojibake_repair.dart';
 import 'autonomous_delegation.dart';
 
 import '../domain/models.dart';
+import '../domain/model_failure.dart';
 import '../domain/tool_codes.dart';
 import '../domain/tool_result.dart';
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/files/document_extractor.dart';
-import '../infrastructure/skills/builtin_skills.dart';
 import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
 import '../infrastructure/providers/provider_factory.dart';
@@ -156,14 +156,18 @@ class ToolActivity {
 class ToolSettings {
   const ToolSettings({
     this.webBrowsing = false,
-    this.terminalFile = true,
+    this.workspaceFiles = true,
+    this.terminal = true,
   });
 
   /// 网页浏览（web_search）。默认关闭，避免普通聊天隐式携带联网工具。
   final bool webBrowsing;
 
-  /// 终端 / 工作区文件工具。
-  final bool terminalFile;
+  /// 工作区内的文件读取、创建和编辑工具。
+  final bool workspaceFiles;
+
+  /// 在已选择工作区内执行命令的工具。
+  final bool terminal;
 }
 
 class SessionSkillInstruction {
@@ -204,6 +208,7 @@ class ChatState {
     this.reasoningMode = ReasoningMode.standard,
     this.webSearchEnabled = false,
     this.providerConfigured = false,
+    this.modelServiceStatus = ModelServiceStatus.online,
     this.planMode = false,
     ChatMode? mode,
     this.approvalMode = ApprovalMode.ask,
@@ -253,6 +258,7 @@ class ChatState {
   final ReasoningMode reasoningMode;
   final bool webSearchEnabled;
   final bool providerConfigured;
+  final ModelServiceStatus modelServiceStatus;
   final bool planMode;
   final ChatMode mode;
   final ApprovalMode approvalMode;
@@ -289,6 +295,7 @@ class ChatState {
     ReasoningMode? reasoningMode,
     bool? webSearchEnabled,
     bool? providerConfigured,
+    ModelServiceStatus? modelServiceStatus,
     bool? planMode,
     ChatMode? mode,
     ApprovalMode? approvalMode,
@@ -348,6 +355,7 @@ class ChatState {
       reasoningMode: reasoningMode ?? this.reasoningMode,
       webSearchEnabled: webSearchEnabled ?? this.webSearchEnabled,
       providerConfigured: providerConfigured ?? this.providerConfigured,
+      modelServiceStatus: modelServiceStatus ?? this.modelServiceStatus,
       planMode: nextPlanMode,
       mode: nextMode,
       approvalMode: approvalMode ?? this.approvalMode,
@@ -355,12 +363,10 @@ class ChatState {
       currentWorkspacePath: clearWorkspace
           ? null
           : (currentWorkspacePath ?? this.currentWorkspacePath),
-      currentProjectId: clearProject
-          ? null
-          : (currentProjectId ?? this.currentProjectId),
-      currentProjectName: clearProject
-          ? null
-          : (currentProjectName ?? this.currentProjectName),
+      currentProjectId:
+          clearProject ? null : (currentProjectId ?? this.currentProjectId),
+      currentProjectName:
+          clearProject ? null : (currentProjectName ?? this.currentProjectName),
       currentTaskId: clearTask ? null : (currentTaskId ?? this.currentTaskId),
       currentRunId: clearTask ? null : (currentRunId ?? this.currentRunId),
       pendingCitations: pendingCitations ?? this.pendingCitations,
@@ -412,7 +418,7 @@ class ChatController extends Notifier<ChatState> {
             .catchError((_) => null),
         ref.read(providerConfigStoreProvider).load(),
         database.recentConversations(limit: 200),
-        database.allAgents(),
+        database.allAgents(limit: 200),
       ]);
       final activeWorkspace = results[0] as String?;
       final config = results[1] as ProviderConfig;
@@ -433,9 +439,8 @@ class ChatController extends Notifier<ChatState> {
       // 历史脏数据修复：统一修复早期版本遗留的乱码文本。
       // F-5：版本位短路 —— 完整跑过一次后不再每次启动全表扫描。
       await _healMojibakeAgents(database);
-      // 内置技能（手机开发配方等）幂等种子安装：同版本跳过，失败不阻断启动。
-      // 不 await：安装最多毫秒级（两个 Markdown），但不阻塞首屏数据装配。
-      unawaited(BuiltinSkillSeeder().ensureInstalled(database));
+      // 内置技能由数据库打开后的维护队列异步安装，不阻塞首屏初始化。
+
       final conversation = conversations.isNotEmpty
           ? conversations.first
           : await _createConversation(database);
@@ -450,7 +455,7 @@ class ChatController extends Notifier<ChatState> {
           modelProfileId: 'default',
           updatedAt: now,
         ));
-        agents = await database.allAgents();
+        agents = await database.allAgents(limit: 200);
       }
       final activeAgent = agents.first;
       final restored = _restoreFromMessages(storedMessages);
@@ -732,7 +737,7 @@ class ChatController extends Notifier<ChatState> {
     registry.register(ManagePlanTool(onPlanUpdated: _onPlanUpdated));
 
     final wsPath = state.currentWorkspacePath;
-    if (settings.terminalFile && wsPath != null && wsPath.isNotEmpty) {
+    if (settings.workspaceFiles && wsPath != null && wsPath.isNotEmpty) {
       final sandbox = WorkspaceSandbox(wsPath);
       registry.register(ReadFileTool(sandbox: sandbox));
       registry.register(WriteFileTool(sandbox: sandbox));
@@ -741,7 +746,7 @@ class ChatController extends Notifier<ChatState> {
       registry.register(SearchFilesTool(sandbox: sandbox));
       registry.register(DeleteFileTool(sandbox: sandbox));
       registry.register(MoveFileTool(sandbox: sandbox));
-      if (!kIsWeb) {
+      if (settings.terminal && !kIsWeb) {
         registry.register(TerminalCommandTool(
           service: TerminalCommandService(workspacePath: wsPath),
         ));
@@ -759,7 +764,14 @@ class ChatController extends Notifier<ChatState> {
       final prefs = await SharedPreferences.getInstance();
       return ToolSettings(
         webBrowsing: state.webSearchEnabled,
-        terminalFile: prefs.getBool('settings.tool.terminal_file') ?? true,
+        // Keep the former combined key as a migration fallback. New installs
+        // and the settings page use separate permissions from this point on.
+        workspaceFiles: prefs.getBool('settings.tool.workspace_files') ??
+            prefs.getBool('settings.tool.terminal_file') ??
+            true,
+        terminal: prefs.getBool('settings.tool.terminal') ??
+            prefs.getBool('settings.tool.terminal_file') ??
+            true,
       );
     } catch (_) {
       return ToolSettings(webBrowsing: state.webSearchEnabled);
@@ -955,6 +967,24 @@ class ChatController extends Notifier<ChatState> {
     );
   }
 
+  /// Keeps ordinary questions in chat mode while routing explicit project work
+  /// through Agent mode, where workspace tools can be registered.
+  static bool requiresAgentModeForRequest(
+    String text, {
+    String taskType = 'general',
+  }) {
+    if (taskType != 'general') return true;
+    final normalized = text.trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+    final hasAction = RegExp(
+      r'创建|新建|生成|制作|做|开发|实现|修改|编辑|修复|构建|编译|写一个|create|build|implement|edit|fix',
+    ).hasMatch(normalized);
+    final hasDevelopmentTarget = RegExp(
+      r'html|网页|网站|页面|项目|代码|程序|应用|文件|exe|flutter|react|vue|python|go|node|file|app',
+    ).hasMatch(normalized);
+    return hasAction && hasDevelopmentTarget;
+  }
+
   Future<void> send({
     required String text,
     required List<PlatformFile> attachments,
@@ -971,6 +1001,10 @@ class ChatController extends Notifier<ChatState> {
         ? UniqueId.generate('req')
         : clientRequestId;
     if (!_inflightRequestIds.add(requestId)) return;
+    if (state.mode == ChatMode.chat &&
+        requiresAgentModeForRequest(trimmed, taskType: taskType)) {
+      setMode(ChatMode.agent);
+    }
     final conversationId = state.conversationId;
     final workspacePath = state.currentWorkspacePath;
     final runGeneration = _runs.beginRun();
@@ -1067,7 +1101,8 @@ class ChatController extends Notifier<ChatState> {
         }
       } catch (_) {}
       try {
-        final existing = await TaskService().findByRequestId(database, requestId);
+        final existing =
+            await TaskService().findByRequestId(database, requestId);
         if (existing != null) {
           runningTaskId = existing.id;
           _runs.activeTaskId = existing.id;
@@ -1082,56 +1117,57 @@ class ChatController extends Notifier<ChatState> {
         if (runningTaskId != null) {
           // clientRequestId 已创建过任务，不再插入第二条。
         } else {
-        final task = await TaskService().create(
-          db: database,
-          conversationId: conversationId ?? '',
-          type: 'development:$taskType',
-          requestJson: jsonEncode({
-            'prompt': trimmed,
-            'conversationId': conversationId,
-            'model': prep.model,
-            'maxSteps': prep.maxSteps,
-            'requestId': requestId,
-          }),
-          metadata: {
-            'taskType': taskType,
-            'sourceType': sourceType,
-            'workspacePath': workspacePath,
-            if (state.currentProjectId != null)
-              'projectId': state.currentProjectId,
-            'title': _taskTitle(taskType, trimmed),
-            'attachments': attachments.map((file) => file.name).toList(),
-            'requestId': requestId,
-            if (project != null) 'projectKind': project.kind.id,
-            if (state.pendingCitations.isNotEmpty)
-              'citations': [
-                for (final citation in state.pendingCitations) citation.toJson()
-              ],
-          },
-        );
-        runningTaskId = task.id;
-        _runs.activeTaskId = task.id;
-        _runs.boundConversationId = conversationId;
-        state = state.copyWith(currentTaskId: task.id);
-        Map<String, dynamic>? snapshotJson;
-        if (workspacePath != null && workspacePath.trim().isNotEmpty) {
-          try {
-            snapshotJson = (await const WorkspaceSnapshotService()
-                    .capture(workspacePath))
-                .toJson();
-          } catch (_) {}
-        }
-        await TaskService().updateProgress(
-          database,
-          task.id,
-          phase: 'running',
-          extra: {
-            if (project != null) 'projectKind': project.kind.id,
-            'workspaceAccessible': workspacePath != null &&
-                workspacePath.trim().isNotEmpty,
-            if (snapshotJson != null) 'workspaceSnapshot': snapshotJson,
-          },
-        );
+          final task = await TaskService().create(
+            db: database,
+            conversationId: conversationId ?? '',
+            type: 'development:$taskType',
+            requestJson: jsonEncode({
+              'prompt': trimmed,
+              'conversationId': conversationId,
+              'model': prep.model,
+              'maxSteps': prep.maxSteps,
+              'requestId': requestId,
+            }),
+            metadata: {
+              'taskType': taskType,
+              'sourceType': sourceType,
+              'workspacePath': workspacePath,
+              if (state.currentProjectId != null)
+                'projectId': state.currentProjectId,
+              'title': _taskTitle(taskType, trimmed),
+              'attachments': attachments.map((file) => file.name).toList(),
+              'requestId': requestId,
+              if (project != null) 'projectKind': project.kind.id,
+              if (state.pendingCitations.isNotEmpty)
+                'citations': [
+                  for (final citation in state.pendingCitations)
+                    citation.toJson()
+                ],
+            },
+          );
+          runningTaskId = task.id;
+          _runs.activeTaskId = task.id;
+          _runs.boundConversationId = conversationId;
+          state = state.copyWith(currentTaskId: task.id);
+          Map<String, dynamic>? snapshotJson;
+          if (workspacePath != null && workspacePath.trim().isNotEmpty) {
+            try {
+              snapshotJson = (await const WorkspaceSnapshotService()
+                      .capture(workspacePath))
+                  .toJson();
+            } catch (_) {}
+          }
+          await TaskService().updateProgress(
+            database,
+            task.id,
+            phase: 'running',
+            extra: {
+              if (project != null) 'projectKind': project.kind.id,
+              'workspaceAccessible':
+                  workspacePath != null && workspacePath.trim().isNotEmpty,
+              if (snapshotJson != null) 'workspaceSnapshot': snapshotJson,
+            },
+          );
         }
         state = state.copyWith(pendingCitations: const []);
       } catch (_) {} // 任务登记失败不阻断执行。
@@ -1659,8 +1695,7 @@ class ChatController extends Notifier<ChatState> {
     final opened = await projectService.open(project.id);
     await _applyOpenedProject(opened.project, bindConversation: true);
     if (!opened.accessible) {
-      throw ProjectException(
-          opened.missingReason ?? '原目录不可访问，请重新定位项目路径');
+      throw ProjectException(opened.missingReason ?? '原目录不可访问，请重新定位项目路径');
     }
   }
 
@@ -1907,7 +1942,8 @@ class ChatController extends Notifier<ChatState> {
         prompt: prompt,
         systemPrompt: systemPrompt,
         maxTokens: SubAgentTool.clampBudget(budget),
-      )).text;
+      ))
+          .text;
     } catch (error) {
       return '子任务执行失败：$error';
     }
@@ -1945,8 +1981,15 @@ class ChatController extends Notifier<ChatState> {
     String? workspacePath,
     required bool fileToolsAvailable,
     required bool terminalAvailable,
+    ChatMode mode = ChatMode.agent,
   }) {
     final ws = workspacePath?.trim() ?? '';
+    if (mode == ChatMode.chat) {
+      return '[工作区环境]\n'
+          '- 当前会话为“聊天”模式，未装配文件或终端工具；这不是设置或设备能力问题。\n'
+          '- 用户要求创建、修改、保存文件或执行构建时，请引导其切换到 Agent 模式并选择项目目录后重试。\n'
+          '- 不要要求用户寻找不存在的“文件/终端开关”，也不要编造文件已创建。';
+    }
     if (ws.isEmpty) {
       return '[工作区环境]\n'
           '- 当前未选择工作区，文件读写与终端工具未启用。这是应用内配置，不是设备能力缺失。\n'
@@ -1954,10 +1997,15 @@ class ChatController extends Notifier<ChatState> {
           '点击聊天页顶栏的工作区入口选择一个项目目录，然后重发任务。\n'
           '- 不要声称设备无法完成，也不要在无工具时编造执行结果。';
     }
-    if (!fileToolsAvailable || !terminalAvailable) {
+    if (!fileToolsAvailable) {
       return '[工作区环境]\n'
-          '- 工作区：$ws，但「设置 → 工具」中的终端与文件开关已关闭，相关工具未注册。\n'
-          '- 若任务需要读写文件或执行命令，请提示用户到设置里重新开启后再试。';
+          '- 工作区：$ws，但工作区文件工具未启用，相关文件操作不可用。\n'
+          '- 若任务需要读写文件，请提示用户到“设置 → 扩展与环境 → 工具列表”开启“允许 Agent 读写当前工作区文件”后再试。';
+    }
+    if (!terminalAvailable) {
+      return '[工作区环境]\n'
+          '- 工作区目录：$ws，文件工具可用，可创建、读取和编辑项目文件。\n'
+          '- 终端命令当前不可用。静态 HTML/CSS/JS、Markdown 等文件任务仍应直接完成；仅安装依赖、构建或运行命令需要用户开启终端或配置运行环境。';
     }
     return '[工作区环境]\n'
         '- 工作区目录：$ws（文件工具与终端的默认工作目录；仅默认目录，不是完整文件系统沙箱）。\n'
@@ -2525,8 +2573,8 @@ class ChatController extends Notifier<ChatState> {
     String? requestId,
   }) async {
     final database = await ref.read(databaseProvider.future);
-    final conversationId = state.conversationId ??
-        (await _createConversation(database)).id;
+    final conversationId =
+        state.conversationId ?? (await _createConversation(database)).id;
     final handle = await DevelopmentExecutionService(db: database).enqueue(
       DevelopmentTaskRequest(
         prompt: prompt,

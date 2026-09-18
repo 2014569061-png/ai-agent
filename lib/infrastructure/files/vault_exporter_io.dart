@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../database/app_database.dart';
 import '../../domain/models.dart';
 import '../../domain/sensitive_tool_policy.dart';
+import '../observability/sentry_service.dart';
 import '../providers/provider_config.dart';
 import '../providers/provider_config_store.dart';
 import 'local_crypto_service.dart';
@@ -29,7 +31,11 @@ Future<String?> exportVaultFile(AppDatabase db, String password,
         dir.path, 'nexus-${DateTime.now().millisecondsSinceEpoch}.nexusvault'));
     await file.writeAsString(cipher, flush: true);
     return file.path;
-  } catch (_) {
+  } catch (error, stackTrace) {
+    // 影响用户：导出失败会让用户拿不到备份文件。返回 null 由调用方提示，
+    // 但必须留下记录，否则「备份没生成」这件事在数据上不可见。
+    // 只记录 error type：password 与路径都不能进日志。
+    unawaited(SentryService.reportException(error, stackTrace));
     return null;
   }
 }
@@ -77,7 +83,10 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
             if (id != null && name != null) toolNamesById[id] = name;
           }
         }
-      } catch (_) {}
+      } catch (_) {
+        // 可忽略：toolCallsJson 损坏时只跳过「工具名映射」这一步，消息本身
+        // 仍会导出（下方的脱敏会退化为按敏感工具策略整体兜底）。
+      }
     }
     messages.addAll(rows
         .map((row) => _redactPersistedMessage(row.toJson(), toolNamesById)));
@@ -188,8 +197,9 @@ Map<String, dynamic> _redactPersistedMessage(
           return call;
         }).toList(growable: false));
       }
-    } catch (_) {
-      // 旧版本的损坏 toolCallsJson 不阻断整个保险箱导出。
+    } catch (error, stackTrace) {
+      // 可忽略（有意降级）：旧版本的损坏 toolCallsJson 不阻断整个保险箱导出。
+      unawaited(SentryService.reportException(error, stackTrace));
     }
   }
   return result;
@@ -376,8 +386,11 @@ Future<void> _restoreOptionalRows<T>(
   for (final item in raw.whereType<Map>()) {
     try {
       await save(fromJson(Map<String, dynamic>.from(item)));
-    } catch (_) {
-      // 单行损坏不阻断整份备份恢复。
+    } catch (error, stackTrace) {
+      // 可忽略（有意降级）：单行损坏不阻断整份备份恢复——整份回滚会让用户
+      // 在「一条坏数据」与「全部丢失」之间被迫二选一。上报以统计损坏率，
+      // 便于判断备份格式是否在退化。
+      unawaited(SentryService.reportException(error, stackTrace));
     }
   }
 }
@@ -418,8 +431,10 @@ Future<Map<String, Map<String, String>>> _collectSkillFiles(
           final rel = p.relative(entity.path, from: root.path);
           try {
             files[rel] = base64Encode(await entity.readAsBytes());
-          } catch (_) {
-            // 单个文件读取失败不影响整体导出。
+          } catch (error, stackTrace) {
+            // 可忽略（有意降级）：单个文件读取失败不影响整体导出（如权限、
+            // 文件被占用）。缺失文件在恢复后表现为技能文件不全，属可接受降级。
+            unawaited(SentryService.reportException(error, stackTrace));
           }
         }
       }

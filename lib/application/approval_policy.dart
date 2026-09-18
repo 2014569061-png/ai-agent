@@ -1,5 +1,8 @@
 import '../domain/models.dart';
 
+const approvalUiCountdownTick = Duration(seconds: 1);
+const approvalUiExpiryNotice = Duration(seconds: 1);
+
 /// Centralizes foreground tool approval decisions.
 class ApprovalPolicy {
   const ApprovalPolicy();

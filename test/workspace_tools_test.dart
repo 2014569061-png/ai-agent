@@ -16,9 +16,7 @@ void main() {
   });
 
   tearDown(() async {
-    if (await tempDir.exists()) {
-      await tempDir.delete(recursive: true);
-    }
+    await _deleteDirectoryWithRetry(tempDir);
   });
 
   group('WorkspaceSandbox 沙盒安全测试', () {
@@ -187,8 +185,9 @@ void main() {
     });
 
     test('拦截经由符号链接逃逸出工作区的路径（B-5）', () async {
-      final outside = await Directory.systemTemp.createTemp('workspace_escape_');
-      addTearDown(() => outside.delete(recursive: true));
+      final outside =
+          await Directory.systemTemp.createTemp('workspace_escape_');
+      addTearDown(() => _deleteDirectoryWithRetry(outside));
       final Link link;
       try {
         link = await Link('${tempDir.path}${Platform.pathSeparator}escape')
@@ -207,4 +206,17 @@ void main() {
       );
     });
   });
+}
+
+Future<void> _deleteDirectoryWithRetry(Directory directory) async {
+  for (var attempt = 0; attempt < 8; attempt++) {
+    if (!await directory.exists()) return;
+    try {
+      await directory.delete(recursive: true);
+      return;
+    } on FileSystemException {
+      if (attempt == 7) rethrow;
+      await Future<void>.delayed(Duration(milliseconds: 25 * (attempt + 1)));
+    }
+  }
 }

@@ -40,7 +40,9 @@ abstract final class AppTokens {
   static const fontSizeHeadline = 22.0;
   static const fontSizeTitle = 17.0;
   static const fontSizeBody = 15.0;
+  static const fontSizeSubhead = 14.0;
   static const fontSizeCaption = 13.0;
+  static const fontSizeFootnote = 12.0;
   static const fontSizeBadge = 11.0;
 
   // 微环境光遮蔽阴影 Token（Ambient Occlusion，防内容穿透）

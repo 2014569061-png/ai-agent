@@ -126,7 +126,9 @@ class _InlineErrorBanner extends StatelessWidget {
               humanized.summary,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: AppPalette.danger),
+              style: const TextStyle(
+                  fontSize: AppTokens.fontSizeFootnote,
+                  color: AppPalette.danger),
             ),
           ),
           if (onRetry != null)
@@ -136,7 +138,8 @@ class _InlineErrorBanner extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
               ),
               onPressed: onRetry,
-              child: const Text('重试', style: TextStyle(fontSize: 12)),
+              child: const Text('重试',
+                  style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
             ),
         ],
       ),
@@ -213,7 +216,9 @@ class _FullPageErrorView extends StatelessWidget {
                 child: NexusDisclosure(
                   title: Text(
                     '技术诊断详情',
-                    style: TextStyle(fontSize: 12, color: textMuted),
+                    style: TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote,
+                        color: textMuted),
                   ),
                   trailingActions: IconButton(
                     icon: const Icon(Icons.copy_rounded, size: 14),

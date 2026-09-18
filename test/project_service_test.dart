@@ -35,8 +35,8 @@ void main() {
     }
   });
 
-  test('schemaVersion is 23', () {
-    expect(db.schemaVersion, 23);
+  test('schemaVersion is 24', () {
+    expect(db.schemaVersion, 24);
   });
 
   test('creates a static web project from template', () async {
@@ -48,8 +48,8 @@ void main() {
     expect(project.projectKind, ProjectKind.staticWeb.id);
     expect(File(p.join(project.canonicalRootPath, 'index.html')).existsSync(),
         isTrue);
-    expect(File(p.join(project.canonicalRootPath, 'app.js')).existsSync(),
-        isTrue);
+    expect(
+        File(p.join(project.canonicalRootPath, 'app.js')).existsSync(), isTrue);
     final listed = await service.list();
     expect(listed.map((item) => item.id), contains(project.id));
   });
@@ -64,12 +64,14 @@ void main() {
     ));
     expect(project.projectKind, ProjectKind.javaApk.id);
     expect(
-      File(p.join(project.canonicalRootPath, 'src/com/demo/tool/MainActivity.java'))
+      File(p.join(
+              project.canonicalRootPath, 'src/com/demo/tool/MainActivity.java'))
           .existsSync(),
       isTrue,
     );
     expect(
-      File(p.join(project.canonicalRootPath, 'src/com/nexus/starter/MainActivity.java'))
+      File(p.join(project.canonicalRootPath,
+              'src/com/nexus/starter/MainActivity.java'))
           .existsSync(),
       isFalse,
     );
@@ -86,7 +88,8 @@ void main() {
   test('same directory is registered only once', () async {
     final directory = Directory(p.join(temp.path, 'shared'));
     await directory.create();
-    await File(p.join(directory.path, 'index.html')).writeAsString('<html></html>');
+    await File(p.join(directory.path, 'index.html'))
+        .writeAsString('<html></html>');
     final first = await service.importDirectory(
       ImportDirectoryRequest(directoryPath: directory.path),
     );
@@ -180,8 +183,8 @@ void main() {
         .customSelect(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('projects','drafts')")
         .get();
-    expect(
-        tables.map((row) => row.data['name']), containsAll(['projects', 'drafts']));
+    expect(tables.map((row) => row.data['name']),
+        containsAll(['projects', 'drafts']));
     final columns =
         await db.customSelect('PRAGMA table_info(conversations)').get();
     expect(columns.map((row) => row.data['name']), contains('project_id'));

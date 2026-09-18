@@ -11,15 +11,29 @@ class EnvironmentStatusView extends StatelessWidget {
     super.key,
     required this.snapshot,
     this.compact = false,
+    this.toolIds,
+    this.toolSectionTitle,
+    this.showGlobalMissing = true,
   });
 
   final EnvironmentSnapshot snapshot;
   final bool compact;
 
+  /// When set, only tools relevant to the selected development target are
+  /// rendered. A null value preserves the complete diagnostic view.
+  final Set<String>? toolIds;
+  final String? toolSectionTitle;
+  final bool showGlobalMissing;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final candidates = snapshot.inspectedCandidates;
+    final selectedTools = toolIds == null
+        ? snapshot.tools
+        : snapshot.tools
+            .where((tool) => toolIds!.contains(tool.id))
+            .toList(growable: false);
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxChipWidth = constraints.hasBoundedWidth
@@ -83,16 +97,18 @@ class EnvironmentStatusView extends StatelessWidget {
                 ),
               ],
             ),
-            if (snapshot.tools.isNotEmpty) ...[
+            if (selectedTools.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('工具探测（当前运行时：${snapshot.selected.label}）',
-                  style: theme.textTheme.labelLarge),
+              Text(
+                toolSectionTitle ?? '工具探测（当前运行时：${snapshot.selected.label}）',
+                style: theme.textTheme.labelLarge,
+              ),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  for (final tool in snapshot.tools)
+                  for (final tool in selectedTools)
                     _toolChip(tool, maxWidth: maxChipWidth),
                 ],
               ),
@@ -107,25 +123,27 @@ class EnvironmentStatusView extends StatelessWidget {
                     isSelected:
                         candidate.runtime.kind == snapshot.selected.kind,
                   ),
-            const SizedBox(height: 10),
-            Text('全局缺失（所有可用运行时）', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: snapshot.missingCapabilities.isEmpty
-                  ? [
-                      _chip('无', AppPalette.success, maxWidth: maxChipWidth),
-                    ]
-                  : [
-                      for (final capability in snapshot.missingCapabilities)
-                        _chip(
-                          '缺失 · $capability',
-                          AppPalette.danger,
-                          maxWidth: maxChipWidth,
-                        ),
-                    ],
-            ),
+            if (showGlobalMissing) ...[
+              const SizedBox(height: 10),
+              Text('全局缺失（所有可用运行时）', style: theme.textTheme.labelLarge),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: snapshot.missingCapabilities.isEmpty
+                    ? [
+                        _chip('无', AppPalette.success, maxWidth: maxChipWidth),
+                      ]
+                    : [
+                        for (final capability in snapshot.missingCapabilities)
+                          _chip(
+                            '缺失 · $capability',
+                            AppPalette.danger,
+                            maxWidth: maxChipWidth,
+                          ),
+                      ],
+              ),
+            ],
             if (!compact) ...[
               const SizedBox(height: AppTokens.sp4),
               Text(snapshot.selected.detail, style: theme.textTheme.bodySmall),
@@ -234,15 +252,32 @@ class EnvironmentStatusView extends StatelessWidget {
 }
 
 class EnvironmentStatusCard extends StatelessWidget {
-  const EnvironmentStatusCard({super.key, required this.snapshot});
+  const EnvironmentStatusCard({
+    super.key,
+    required this.snapshot,
+    this.compact = false,
+    this.toolIds,
+    this.toolSectionTitle,
+    this.showGlobalMissing = true,
+  });
 
   final EnvironmentSnapshot snapshot;
+  final bool compact;
+  final Set<String>? toolIds;
+  final String? toolSectionTitle;
+  final bool showGlobalMissing;
 
   @override
   Widget build(BuildContext context) {
     return SectionCard(
       padding: const EdgeInsets.all(16),
-      child: EnvironmentStatusView(snapshot: snapshot),
+      child: EnvironmentStatusView(
+        snapshot: snapshot,
+        compact: compact,
+        toolIds: toolIds,
+        toolSectionTitle: toolSectionTitle,
+        showGlobalMissing: showGlobalMissing,
+      ),
     );
   }
 }

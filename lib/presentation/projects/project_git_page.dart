@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../application/git_service.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
@@ -85,16 +86,12 @@ class _ProjectGitPageState extends State<ProjectGitPage> {
         title: 'Git',
         subtitle: '查看状态、按文件暂存并提交',
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? EmptyStateView(
-                  icon: Icons.error_outline,
-                  title: '无法读取仓库',
-                  message: _error,
-                )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      body: AsyncStateView(
+        loading: _loading,
+        error: _error,
+        onRetry: _reload,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   children: [
                     SectionCard(
                       padding: const EdgeInsets.all(16),
@@ -149,6 +146,7 @@ class _ProjectGitPageState extends State<ProjectGitPage> {
                       ),
                   ],
                 ),
+      ),
     );
   }
 }

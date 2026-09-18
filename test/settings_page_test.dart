@@ -90,7 +90,7 @@ void main() {
     expect(find.text('检查更新'), findsOneWidget);
     expect(find.text('服务协议'), findsOneWidget);
     expect(find.text('帮助与反馈'), findsOneWidget);
-    expect(find.text('退出登录'), findsOneWidget);
+    expect(find.text('清除本地凭证'), findsOneWidget);
 
     // 4. 设置页不再显示底部备案与合规声明块
     expect(find.textContaining('备案号'), findsNothing);
@@ -140,6 +140,23 @@ void main() {
 
     expect(find.text('加载未成功'), findsOneWidget);
     expect(find.text('重试'), findsOneWidget);
+  });
+
+  testWidgets(
+      'ToolListPage exposes independent workspace and terminal controls',
+      (tester) async {
+    await tester.pumpWidget(createWidgetUnderTest(const ToolListPage()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('允许 Agent 读写当前工作区文件'), findsOneWidget);
+    expect(find.text('允许 Agent 执行终端命令'), findsOneWidget);
+    expect(find.byType(Switch), findsNWidgets(2));
+
+    await tester.tap(find.byType(Switch).first);
+    await tester.pumpAndSettle();
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('settings.tool.workspace_files'), isFalse);
+    expect(tester.widget<Switch>(find.byType(Switch).last).onChanged, isNull);
   });
 
   testWidgets('ToolListPage renders filter chips and list of tools',

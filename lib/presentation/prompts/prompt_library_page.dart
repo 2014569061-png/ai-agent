@@ -6,8 +6,8 @@ import '../../infrastructure/database/database_provider.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
-import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
@@ -376,23 +376,23 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
             ),
           ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                : filtered.isEmpty
-                    ? const EmptyStateView(
-                        icon: Icons.lightbulb_outline,
-                        title: '暂无 Prompt 模板',
-                        message: '点击右下角按钮新建你的第一个 Prompt 模板。',
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, index) {
-                          final template = filtered[index];
-                          return _promptCard(template);
-                        },
-                      ),
+            child: AsyncStateView(
+              loading: _loading,
+              isEmpty: filtered.isEmpty,
+              emptyIcon: Icons.lightbulb_outline,
+              emptyTitle: '暂无 Prompt 模板',
+              emptySubtitle: '点击右下角按钮新建你的第一个 Prompt 模板。',
+              onRetry: _reload,
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
+                itemCount: filtered.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final template = filtered[index];
+                  return _promptCard(template);
+                },
+              ),
+            ),
           ),
         ],
       ),

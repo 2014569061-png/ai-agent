@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../infrastructure/database/app_database.dart';
 import '../../application/error_humanizer.dart';
+import '../../application/nexus_guard.dart';
 import '../history/history_page.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
@@ -58,22 +59,30 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
   }
 
   Future<void> _loadPresentationMode() async {
-    try {
-      final preferences = await SharedPreferences.getInstance();
-      if (mounted) {
-        setState(() =>
-            _developerMode = preferences.getBool(_developerModeKey) ?? false);
-      }
-    } catch (_) {}
+    // 可忽略：读不到偏好时保持默认「简化视图」，这是更保守的呈现方式，
+    // 不影响任何数据正确性。经由 application 层的 NexusGuard 记录，
+    // 避免 presentation 直接依赖 infrastructure（见 layering_test）。
+    final preferences = await NexusGuard.silentlyAsync<SharedPreferences>(
+      'dashboard-load-presentation-mode',
+      SharedPreferences.getInstance,
+    );
+    if (preferences != null && mounted) {
+      setState(() =>
+          _developerMode = preferences.getBool(_developerModeKey) ?? false);
+    }
   }
 
   Future<void> _togglePresentationMode() async {
     final next = !_developerMode;
     setState(() => _developerMode = next);
-    try {
-      final preferences = await SharedPreferences.getInstance();
-      await preferences.setBool(_developerModeKey, next);
-    } catch (_) {}
+    // 可忽略：写入失败只影响「下次启动是否记住」，本次切换已在内存生效。
+    await NexusGuard.silentlyAsync<bool>(
+      'dashboard-persist-presentation-mode',
+      () async {
+        final preferences = await SharedPreferences.getInstance();
+        return preferences.setBool(_developerModeKey, next);
+      },
+    );
   }
 
   void _startRefreshTimer() {

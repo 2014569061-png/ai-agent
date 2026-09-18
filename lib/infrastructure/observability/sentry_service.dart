@@ -25,15 +25,13 @@ class SentryService {
   }
 
   /// 按授权情况初始化并启动应用。未授权 / 无 DSN / Web 时直接启动，不加载 SDK。
-  static Future<void> init(void Function() appRunner) async {
+  static Future<void> init() async {
     if (!hasDsn || kIsWeb) {
       _initialized = false;
-      appRunner();
       return;
     }
     if (!await isEnabled()) {
       _initialized = false;
-      appRunner();
       return;
     }
     await SentryFlutter.init(
@@ -69,10 +67,9 @@ class SentryService {
             return event;
           };
       },
-      appRunner: appRunner,
     );
-    // SentryFlutter.init installs the FlutterError and PlatformDispatcher
-    // integrations. Keep the flag separate so best-effort reports from
+    // SentryFlutter.init installs the FlutterError, PlatformDispatcher, and
+    // zone integrations. Keep the flag separate so best-effort reports from
     // intentional fallbacks do not touch the SDK before initialization.
     _initialized = true;
   }
