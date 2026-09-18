@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: '发布 tag（如 v0.8.9.2）'
+        description: '发布 tag（如 v0.9）'
         required: true
-        default: 'v0.8.9.2'
+        default: 'v0.9'
 
 permissions:
   contents: write
@@ -55,7 +55,12 @@ jobs:
           test -n "$version"
           version_name="$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' android/app/build.gradle.kts | head -n 1)"
           test -n "$version_name"
-          test "$tag" = "v$version_name"
+          full_tag="v$version_name"
+          short_tag="v${version_name%.0}"
+          if [ "$tag" != "$full_tag" ] && [ "$tag" != "$short_tag" ]; then
+            printf 'Tag %s does not match %s or %s\n' "$tag" "$full_tag" "$short_tag"
+            exit 1
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "version_name=$version_name" >> "$GITHUB_OUTPUT"

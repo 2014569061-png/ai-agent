@@ -298,7 +298,7 @@ if errorlevel 1 (
 
 echo.
 echo [4/5] Writing the APK SHA-256 sidecar...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "(Get-FileHash -LiteralPath '!APK_PATH!' -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content -LiteralPath '!CHECKSUM_PATH!' -Encoding ascii"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$sha=[System.Security.Cryptography.SHA256]::Create(); $stream=[System.IO.File]::OpenRead('!APK_PATH!'); try { ([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() | Set-Content -LiteralPath '!CHECKSUM_PATH!' -Encoding ascii } finally { $stream.Dispose(); $sha.Dispose() }"
 if errorlevel 1 (
   echo [ERROR] Failed to write the SHA-256 file.
   goto :fail
@@ -359,7 +359,7 @@ if errorlevel 1 (
 )
 
 rem Verify the copied artifact, not only the intermediate build output.
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$expected=(Get-Content -Raw -LiteralPath '!LATEST_CHECKSUM_PATH!').Trim(); $actual=(Get-FileHash -LiteralPath '!LATEST_APK_PATH!' -Algorithm SHA256).Hash.ToLowerInvariant(); if ($actual -ne $expected) { Write-Error ('Latest APK checksum mismatch: ' + $actual + ' != ' + $expected); exit 1 }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$expected=(Get-Content -Raw -LiteralPath '!LATEST_CHECKSUM_PATH!').Trim(); $sha=[System.Security.Cryptography.SHA256]::Create(); $stream=[System.IO.File]::OpenRead('!LATEST_APK_PATH!'); try { $actual=([System.BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant() } finally { $stream.Dispose(); $sha.Dispose() }; if ($actual -ne $expected) { Write-Error ('Latest APK checksum mismatch: ' + $actual + ' != ' + $expected); exit 1 }"
 if errorlevel 1 (
   echo [ERROR] The stable latest APK failed checksum verification.
   goto :fail

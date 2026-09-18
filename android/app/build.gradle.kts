@@ -47,9 +47,8 @@ android {
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
         // flag during build.
         versionCode = flutter.versionCode
-        // Pub only accepts three-part semantic versions; expose the requested
-        // four-part Android version name while keeping the build number in pubspec.
-        versionName = "0.8.9.2"
+        // Keep the user-facing Android version aligned with the v0.9 release.
+        versionName = "0.9.0"
 
         // [体积优化] 仅打包现代 Android 设备使用的 ARM64 ABI，减少原生库体积
         ndk {
