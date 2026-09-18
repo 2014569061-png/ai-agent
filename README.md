@@ -1,6 +1,6 @@
 # NEXUS Agent
 
-面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.8.9.2**（Android versionCode `93`）。
+面向移动端开发者的多模型 AI Agent 工作台，当前公开版本为 **v0.9.0**（Android versionCode `94`）。
 
 ## 核心能力
 
@@ -15,6 +15,20 @@
 - 支持系统级入口：长按应用图标可通过快捷方式直达「描述建 Agent」「新对话」「记忆」，桌面小组件「NEXUS 指挥台」提供同样的三个入口。
 - 支持锁屏/通知栏审批：应用不在前台时，需要审批的工具会改发一条带「批准/拒绝」动作的通知，可在锁屏直接裁决；动作不拉起界面，超时视为拒绝。
 - API Key 使用系统安全存储，隐私保险箱支持加密备份与恢复。
+
+## 开发目标与环境检测
+
+环境页按当前开发目标检查工具，避免把无关 SDK 当成必需依赖：
+
+- **静态网页**：无需 Node.js、Python、Flutter、JDK、Android SDK 或 Termux，可直接编辑和预览 HTML/CSS/JavaScript。
+- **Node Web / Electron**：需要 Node.js 和 npm。
+- **Python**：需要 Python。
+- **Go**：需要 Go。
+- **Flutter Android**：需要 Flutter SDK、JDK 和 Android SDK Build Tools。
+- **原生 Android**：需要 JDK 和 Android SDK；优先使用项目自带的 `gradlew` / `gradlew.bat`，不要求单独安装系统 Gradle。
+- **Windows `.exe`**：手机 Linux 环境不能直接生成 Windows `.exe`，最终构建必须在 Windows 主机完成。
+
+可在环境页切换开发目标。默认只显示当前目标相关工具；完整运行时清单仅用于高级诊断。目标化安装不会安装无关工具，检测失败时仍提供错误信息和重试入口。
 
 ## Android 隐私边界
 
@@ -63,7 +77,7 @@ flutter build apk --release
 cd android && ./gradlew app:assembleRelease -PallowDebugSigning=true
 ```
 
-正式发布 tag 使用 `v<versionName>`，本版本为 `v0.8.9.2`；`+93` 仅作为 Android versionCode。
+正式发布 tag 使用 `v<versionName>`；本版本为 `v0.9`（versionName `0.9.0`）；`+94` 仅作为 Android versionCode。
 
 ## 构建 APK
 
