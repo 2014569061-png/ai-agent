@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../domain/model_failure.dart';
+import '../../motion/nexus_entrance.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_execution_status.dart';
@@ -403,23 +404,29 @@ class CapsuleTopBar extends StatelessWidget {
       );
     }
 
-    return GlassSurface(
-      role: GlassRole.navigation,
-      variant: GlassVariant.regular,
-      intensity: glassIntensity,
-      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-      blurSigma: 24,
-      refraction: 16,
-      edgeWidth: 16,
-      gloss: 0.42,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
-        ),
-      ],
-      child: content,
+    // M2：首屏入场只位移不淡入（玻璃放进 Opacity 缓冲区会闪烁），每进程一次。
+    return NexusEntrance(
+      offset: const Offset(0, -8),
+      fade: false,
+      onceId: 'chat_top_bar',
+      child: GlassSurface(
+        role: GlassRole.navigation,
+        variant: GlassVariant.regular,
+        intensity: glassIntensity,
+        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+        blurSigma: 24,
+        refraction: 16,
+        edgeWidth: 16,
+        gloss: 0.42,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        child: content,
+      ),
     );
   }
 

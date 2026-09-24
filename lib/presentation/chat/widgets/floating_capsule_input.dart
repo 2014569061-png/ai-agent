@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../domain/models.dart';
 import '../../motion/motion_preferences.dart';
+import '../../motion/nexus_entrance.dart';
 import '../../motion/nexus_haptics.dart';
 import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
@@ -135,193 +136,201 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
             ? 8.0
             : MediaQuery.paddingOf(context).bottom + 8.0);
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottomPadding),
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 运行状态提示（仅生成 / 计划模式时出现，首页态不显示）
-            _buildStatusLine(),
+    // M2：首屏入场槽位 3（120ms 后），只位移不淡入，每进程一次。
+    return NexusEntrance(
+      slot: 3,
+      offset: const Offset(0, 12),
+      fade: false,
+      onceId: 'chat_composer',
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomPadding),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 运行状态提示（仅生成 / 计划模式时出现，首页态不显示）
+              _buildStatusLine(),
 
-            // 外层容器：20px 圆角，聚焦时描边转 brand
-            Builder(
-              builder: (context) {
-                final inputCard = Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 输入行：最小高 44px
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(
-                          minHeight: AppTokens.kMinTouchTarget),
-                      child: TextField(
-                        focusNode: _focusNode,
-                        controller: widget.controller,
-                        minLines: 1,
-                        maxLines: 5,
-                        textInputAction: TextInputAction.newline,
-                        onTapOutside: (_) => _focusNode.unfocus(),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                          height: 1.6,
-                          color: textColor,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: widget.isRunning
-                              ? (widget.isPaused ? '补充要求后继续' : '补充要求')
-                              : '发消息',
-                          hintStyle: TextStyle(
+              // 外层容器：20px 圆角，聚焦时描边转 brand
+              Builder(
+                builder: (context) {
+                  final inputCard = Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 输入行：最小高 44px
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(
+                            minHeight: AppTokens.kMinTouchTarget),
+                        child: TextField(
+                          focusNode: _focusNode,
+                          controller: widget.controller,
+                          minLines: 1,
+                          maxLines: 5,
+                          textInputAction: TextInputAction.newline,
+                          onTapOutside: (_) => _focusNode.unfocus(),
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w400,
-                            color: textFaint,
+                            height: 1.6,
+                            color: textColor,
                           ),
-                          isDense: true,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          contentPadding: EdgeInsets.zero,
+                          decoration: InputDecoration(
+                            hintText: widget.isRunning
+                                ? (widget.isPaused ? '补充要求后继续' : '补充要求')
+                                : '发消息',
+                            hintStyle: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w400,
+                              color: textFaint,
+                            ),
+                            isDense: true,
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            filled: false,
+                            contentPadding: EdgeInsets.zero,
+                          ),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 0),
+                      const SizedBox(height: 0),
 
-                    // 操作行：高 48px，左右两端对齐（左2靠左，右3靠右）
-                    SizedBox(
-                      height: 48,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          // 左：模式 + 审批策略（圆形磁贴，靠左）
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _ModeTile(
-                                icon: Icons.tune_rounded,
-                                semanticLabel: '${widget.modeLabel}模式',
-                                selected: true,
-                                onTap: widget.onModeTap != null
-                                    ? () {
-                                        NexusHaptics.light(context);
-                                        widget.onModeTap!();
-                                      }
-                                    : null,
-                              ),
-                              if (widget.onApprovalModeTap != null)
+                      // 操作行：高 48px，左右两端对齐（左2靠左，右3靠右）
+                      SizedBox(
+                        height: 48,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // 左：模式 + 审批策略（圆形磁贴，靠左）
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
                                 _ModeTile(
-                                  icon: widget.approvalMode ==
-                                          ApprovalMode.fullAccess
-                                      ? Icons.shield_outlined
-                                      : Icons.verified_user_outlined,
-                                  semanticLabel:
-                                      _approvalModeLabel(widget.approvalMode),
-                                  selected: widget.approvalMode ==
-                                      ApprovalMode.fullAccess,
-                                  onTap: () {
-                                    NexusHaptics.light(context);
-                                    widget.onApprovalModeTap!();
-                                  },
+                                  icon: Icons.tune_rounded,
+                                  semanticLabel: '${widget.modeLabel}模式',
+                                  selected: true,
+                                  onTap: widget.onModeTap != null
+                                      ? () {
+                                          NexusHaptics.light(context);
+                                          widget.onModeTap!();
+                                        }
+                                      : null,
                                 ),
-                            ],
-                          ),
-                          // 右：代码块快捷 +「＋」附件 + 尾键（发送/停止/置灰发送，靠右）
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              PopupMenuButton<String>(
-                                tooltip: '更多输入工具',
-                                icon: const Icon(Icons.more_horiz_rounded,
-                                    size: 20),
-                                constraints:
-                                    const BoxConstraints(minWidth: 160),
-                                onSelected: (_) => _insertCodeBlock(),
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                      value: 'code', child: Text('插入代码块')),
-                                ],
-                              ),
-                              _buildAttachmentButton(),
-                              if (widget.isRunning && widget.isPaused)
-                                _buildPausedStopButton(isDark),
-                              _buildTrailingActionListenable(textFaint, isDark),
-                            ],
-                          ),
-                        ],
+                                if (widget.onApprovalModeTap != null)
+                                  _ModeTile(
+                                    icon: widget.approvalMode ==
+                                            ApprovalMode.fullAccess
+                                        ? Icons.shield_outlined
+                                        : Icons.verified_user_outlined,
+                                    semanticLabel:
+                                        _approvalModeLabel(widget.approvalMode),
+                                    selected: widget.approvalMode ==
+                                        ApprovalMode.fullAccess,
+                                    onTap: () {
+                                      NexusHaptics.light(context);
+                                      widget.onApprovalModeTap!();
+                                    },
+                                  ),
+                              ],
+                            ),
+                            // 右：代码块快捷 +「＋」附件 + 尾键（发送/停止/置灰发送，靠右）
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PopupMenuButton<String>(
+                                  tooltip: '更多输入工具',
+                                  icon: const Icon(Icons.more_horiz_rounded,
+                                      size: 20),
+                                  constraints:
+                                      const BoxConstraints(minWidth: 160),
+                                  onSelected: (_) => _insertCodeBlock(),
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                        value: 'code', child: Text('插入代码块')),
+                                  ],
+                                ),
+                                _buildAttachmentButton(),
+                                if (widget.isRunning && widget.isPaused)
+                                  _buildPausedStopButton(isDark),
+                                _buildTrailingActionListenable(
+                                    textFaint, isDark),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
-                );
+                    ],
+                  );
 
-                if (widget.glassIntensity == GlassIntensity.flat) {
+                  if (widget.glassIntensity == GlassIntensity.flat) {
+                    return _withFocusRing(
+                      radius: BorderRadius.circular(AppTokens.radiusComposer),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(12, 6, 10, 4),
+                        decoration: BoxDecoration(
+                          color: surface,
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusComposer),
+                          border: Border.all(
+                            color: isDark
+                                ? AppPalette.darkHairline
+                                : AppPalette.lightHairline,
+                            width: 1.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isDark
+                                  ? AppPalette.darkShadowAmbient
+                                  : AppPalette.lightShadowAmbient,
+                              blurRadius: AppTokens.shadowFloatingBlur,
+                              offset: AppTokens.shadowFloatingOffset,
+                            ),
+                          ],
+                        ),
+                        child: inputCard,
+                      ),
+                    );
+                  }
+
                   return _withFocusRing(
                     radius: BorderRadius.circular(AppTokens.radiusComposer),
-                    child: Container(
+                    child: GlassSurface(
+                      role: GlassRole.control,
+                      variant: GlassVariant.regular,
+                      intensity: widget.glassIntensity,
+                      borderRadius:
+                          BorderRadius.circular(AppTokens.radiusComposer),
+                      blurSigma: 28,
+                      refraction: 20,
+                      edgeWidth: 24,
+                      gloss: 0.55,
+                      borderColor: isDark
+                          ? const Color(0x38FFFFFF)
+                          : const Color(0x90FFFFFF),
+                      borderWidth: 1.0,
+                      tint: isDark
+                          ? AppPalette.darkSurface.withValues(alpha: 0.36)
+                          : AppPalette.lightCanvas.withValues(alpha: 0.32),
                       padding: const EdgeInsets.fromLTRB(12, 6, 10, 4),
-                      decoration: BoxDecoration(
-                        color: surface,
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusComposer),
-                        border: Border.all(
+                      boxShadow: [
+                        BoxShadow(
                           color: isDark
-                              ? AppPalette.darkHairline
-                              : AppPalette.lightHairline,
-                          width: 1.0,
+                              ? const Color(0x60000000)
+                              : const Color(0x1A1E3A8A),
+                          blurRadius: 24,
+                          offset: const Offset(0, 8),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: isDark
-                                ? AppPalette.darkShadowAmbient
-                                : AppPalette.lightShadowAmbient,
-                            blurRadius: AppTokens.shadowFloatingBlur,
-                            offset: AppTokens.shadowFloatingOffset,
-                          ),
-                        ],
-                      ),
+                      ],
                       child: inputCard,
                     ),
                   );
-                }
-
-                return _withFocusRing(
-                  radius: BorderRadius.circular(AppTokens.radiusComposer),
-                  child: GlassSurface(
-                    role: GlassRole.control,
-                    variant: GlassVariant.regular,
-                    intensity: widget.glassIntensity,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusComposer),
-                    blurSigma: 28,
-                    refraction: 20,
-                    edgeWidth: 24,
-                    gloss: 0.55,
-                    borderColor: isDark
-                        ? const Color(0x38FFFFFF)
-                        : const Color(0x90FFFFFF),
-                    borderWidth: 1.0,
-                    tint: isDark
-                        ? AppPalette.darkSurface.withValues(alpha: 0.36)
-                        : AppPalette.lightCanvas.withValues(alpha: 0.32),
-                    padding: const EdgeInsets.fromLTRB(12, 6, 10, 4),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? const Color(0x60000000)
-                            : const Color(0x1A1E3A8A),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                    child: inputCard,
-                  ),
-                );
-              },
-            ),
-          ],
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

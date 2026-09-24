@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../motion/nexus_entrance.dart';
+
 import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
@@ -53,6 +55,9 @@ class ChatEmptyState extends StatefulWidget {
 class _ChatEmptyStateState extends State<ChatEmptyState> {
   late final ValueNotifier<int> _selectedCategoryIndex;
 
+  /// 卡片区只在本次挂载的首次出现时入场；键盘开合导致的重新插入不重播。
+  bool _gridEntered = false;
+
   static const List<String> _categories = ['常用', '代码', '审查', '终端'];
 
   @override
@@ -75,73 +80,101 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
+    final animateGrid = !_gridEntered;
+    if (!widget.keyboardVisible) _gridEntered = true;
+
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const BrandMark(size: 44, withGlow: true),
-            const SizedBox(height: 16),
-            Semantics(
-              header: true,
-              child: Text(
-                '今天想构建什么？',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.displayMedium?.copyWith(
-                  color: textColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '审查代码变更 · 执行指令 · 自动化重构',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: textMuted,
+            // M2：主视觉（无玻璃）淡入 + 0.96→1 缩放，槽位 1。
+            NexusEntrance(
+              slot: 1,
+              scaleFrom: 0.96,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const BrandMark(size: 44, withGlow: true),
+                  const SizedBox(height: 16),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      '今天想构建什么？',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.displayMedium?.copyWith(
+                        color: textColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '审查代码变更 · 执行指令 · 自动化重构',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: textMuted,
+                    ),
+                  ),
+                ],
               ),
             ),
             if (!widget.keyboardVisible) ...[
               const SizedBox(height: 24),
-              ValueListenableBuilder<int>(
-                valueListenable: _selectedCategoryIndex,
-                builder: (context, selectedIndex, _) => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 横向紧凑场景分段芯片（Segmented Chips，释放纵向空间）
-                    Semantics(
-                      container: true,
-                      label: '场景类别',
-                      child: _ScenarioSegmentedBar(
-                        categories: _categories,
-                        selectedIndex: selectedIndex,
-                        onSelect: (index) =>
-                            _selectedCategoryIndex.value = index,
+              // M2：卡片区含玻璃，只做 12dp 上移，槽位 2。
+              _maybeEntrance(
+                animate: animateGrid,
+                child: ValueListenableBuilder<int>(
+                  valueListenable: _selectedCategoryIndex,
+                  builder: (context, selectedIndex, _) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 横向紧凑场景分段芯片（Segmented Chips，释放纵向空间）
+                      Semantics(
+                        container: true,
+                        label: '场景类别',
+                        child: _ScenarioSegmentedBar(
+                          categories: _categories,
+                          selectedIndex: selectedIndex,
+                          onSelect: (index) =>
+                              _selectedCategoryIndex.value = index,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    // 2x2 规整极简工程卡片网格
-                    _AuthoritativeActionGrid(
-                      categoryIndex: selectedIndex,
-                      providerConfigured: widget.providerConfigured,
-                      hasWorkspace: widget.hasWorkspace,
-                      onConfigureModel: widget.onConfigureModel,
-                      onPickWorkspace: widget.onWorkspaceTap,
-                      onAnalyzeWorkspace: widget.onAnalyzeWorkspace,
-                      onCreateAgent: widget.onCreateAgent,
-                      onTap: (prompt) {
-                        widget.onSuggestionTap
-                            ?.call(QuickAction(label: prompt));
-                      },
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      // 2x2 规整极简工程卡片网格
+                      _AuthoritativeActionGrid(
+                        categoryIndex: selectedIndex,
+                        providerConfigured: widget.providerConfigured,
+                        hasWorkspace: widget.hasWorkspace,
+                        onConfigureModel: widget.onConfigureModel,
+                        onPickWorkspace: widget.onWorkspaceTap,
+                        onAnalyzeWorkspace: widget.onAnalyzeWorkspace,
+                        onCreateAgent: widget.onCreateAgent,
+                        onTap: (prompt) {
+                          widget.onSuggestionTap
+                              ?.call(QuickAction(label: prompt));
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _maybeEntrance({required bool animate, required Widget child}) {
+    // 包装始终存在（结构稳定）；enabled 只在挂载时读取一次。
+    return NexusEntrance(
+      enabled: animate,
+      slot: 2,
+      offset: const Offset(0, 12),
+      fade: false,
+      child: child,
     );
   }
 }

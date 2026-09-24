@@ -24,6 +24,11 @@ abstract final class NexusMotion {
   /// 整屏层级转场进入时长（配合 [NexusSpringCurve] 使用）
   static const Duration pageSpring = AppTokens.durationPageSpring;
 
+  /// 首屏入场（M2）：单元素时长、槽位错开、reduced 淡入时长。
+  static const Duration entrance = AppTokens.durationEntrance;
+  static const Duration entranceStagger = AppTokens.entranceStagger;
+  static const Duration reducedEntrance = AppTokens.durationReducedEntrance;
+
   /// 页面退出：已在视线中的元素应更快离场，减少等待感。
   static const Duration pageExit = AppTokens.durationPageExit;
 

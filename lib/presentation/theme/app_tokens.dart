@@ -106,6 +106,9 @@ abstract final class AppTokens {
   static const _durationSheetMs = 300;
   static const _durationToastMs = 220;
   static const _durationImeSettleMs = 400;
+  static const _durationEntranceMs = 260;
+  static const _entranceStaggerMs = 40;
+  static const _durationReducedEntranceMs = 120;
   static const Duration durationInstant =
       Duration(milliseconds: _durationInstantMs);
   static const Duration durationFast = Duration(milliseconds: 150);
@@ -127,6 +130,14 @@ abstract final class AppTokens {
   /// 仍未归零，就视为系统残留的过期 inset（见 KeyboardInsetScope）。
   static const Duration durationImeSettle =
       Duration(milliseconds: _durationImeSettleMs);
+
+  /// 首屏入场：单个元素时长 / 槽位错开 / 减少动效时的淡入时长。
+  static const Duration durationEntrance =
+      Duration(milliseconds: _durationEntranceMs);
+  static const Duration entranceStagger =
+      Duration(milliseconds: _entranceStaggerMs);
+  static const Duration durationReducedEntrance =
+      Duration(milliseconds: _durationReducedEntranceMs);
   @Deprecated('请改用 durationExpand (300ms)')
   static const Duration durationModal = durationExpand;
   @Deprecated('请改用 durationExpand (300ms)')
