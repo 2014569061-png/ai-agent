@@ -265,6 +265,38 @@ void main() {
       );
     });
 
+    test('导入后补齐写权限能把只读标记翻回可写', () async {
+      // 只读导入不再被闸住之后，用户会先导入、再去系统设置补权限。
+      // 这条路径必须真的落库，否则项目会一直显示「只能读取」，
+      // 用户唯一的出路是删掉项目重新导入一次。
+      final directory = Directory(p.join(temp.path, 'granted-later'));
+      await directory.create();
+      await Directory(p.join(directory.path, '.nexus-write-probe')).create();
+
+      final project = await service.importDirectory(
+        ImportDirectoryRequest(directoryPath: directory.path, name: 'later'),
+      );
+      final readonly = ProjectSettings.decode(project.settingsJson);
+      expect(readonly.directoryWritable, isFalse);
+
+      // 模拟用户补到权限：写探测的障碍消失。
+      await Directory(p.join(directory.path, '.nexus-write-probe')).delete();
+      expect(await ProjectService.probeWritable(directory), isTrue);
+
+      await service.updateSettings(
+        project.id,
+        readonly.copyWith(directoryWritable: true),
+      );
+
+      final reloaded = await db.findProject(project.id);
+      expect(reloaded, isNotNull);
+      expect(
+        ProjectSettings.decode(reloaded!.settingsJson).directoryWritable,
+        isTrue,
+        reason: '补齐权限后必须落库，界面否则永远停在只读提示',
+      );
+    });
+
     test('可写性字段的序列化兼容旧记录', () {
       expect(const ProjectSettings().directoryWritable, isTrue);
       expect(ProjectSettings.decode('{}').directoryWritable, isTrue);

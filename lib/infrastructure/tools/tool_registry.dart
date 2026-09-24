@@ -104,6 +104,32 @@ abstract interface class ToolExecutionMetadata {
   Map<String, dynamic> get lastMetadata;
 }
 
+/// Adds action-specific approval and one-time authorization to a tool.
+abstract interface class ToolApprovalGate {
+  ToolRisk riskForArguments(Map<String, dynamic> arguments);
+
+  bool requiresPreviewPlan(Map<String, dynamic> arguments);
+
+  Map<String, dynamic>? approvalDetailsFor(
+    Map<String, dynamic> arguments,
+  );
+
+  Map<String, dynamic> authorizeAfterApproval(
+    Map<String, dynamic> arguments,
+  );
+
+  void rejectApproval(Map<String, dynamic> arguments);
+}
+
+class ToolApprovalAuthorizationException implements Exception {
+  const ToolApprovalAuthorizationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class ToolRegistry {
   ToolRegistry({ToolCatalog? catalog}) : catalog = catalog ?? ToolCatalog();
 

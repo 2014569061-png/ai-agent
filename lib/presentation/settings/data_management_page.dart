@@ -11,6 +11,7 @@ import '../scheduled/scheduled_tasks_page.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../widgets/floating_toast.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import 'data_backup_page.dart';
@@ -48,7 +49,14 @@ class _DataManagementPageState extends ConsumerState<DataManagementPage> {
           _scheduledCount = tasks.length;
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      // 统计读取失败时三个计数保持 0。0 会被读成「没有数据」，因此这里必须给出
+      // 提示，否则用户可能误以为自己的记忆/知识库被清空了。
+      if (mounted) {
+        FloatingToast.show(context, '统计信息读取失败，显示的数字可能不准确',
+            tone: ToastTone.warning);
+      }
+    }
   }
 
   void _openPage(Widget page) {

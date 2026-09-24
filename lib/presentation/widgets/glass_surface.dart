@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
+import '../motion/motion_preferences.dart';
 import 'liquid_glass.dart';
 
 export 'liquid_glass.dart' show GlassIntensity;
@@ -108,7 +110,7 @@ class _GlassSurfaceState extends State<GlassSurface> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final media = MediaQuery.maybeOf(context);
-    final reduceMotion = media?.disableAnimations ?? false;
+    final reduceMotion = MotionPreferences.shouldReduceMotion(context);
     final highContrast = media?.highContrast ?? false;
     final intensity =
         widget.intensity ?? AppAppearanceController.resolvedGlassIntensity;
@@ -125,7 +127,20 @@ class _GlassSurfaceState extends State<GlassSurface> {
             ? (isDark ? AppPalette.darkHairline : AppPalette.lightHairline)
             : _defaultBorder(isDark: isDark, highContrast: highContrast));
     final effectiveShadow = intensity == GlassIntensity.flat
-        ? const <BoxShadow>[]
+        ? (widget.boxShadow ??
+            ((widget.role == GlassRole.overlay ||
+                    widget.role == GlassRole.control ||
+                    widget.role == GlassRole.navigation)
+                ? [
+                    BoxShadow(
+                      color: isDark
+                          ? AppPalette.darkShadowAmbient
+                          : AppPalette.lightShadowAmbient,
+                      blurRadius: AppTokens.shadowFloatingBlur,
+                      offset: AppTokens.shadowFloatingOffset,
+                    ),
+                  ]
+                : const <BoxShadow>[]))
         : (widget.boxShadow ??
             _defaultShadow(isDark: isDark, role: widget.role));
 

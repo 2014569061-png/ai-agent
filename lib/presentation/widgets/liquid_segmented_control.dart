@@ -2,8 +2,10 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../motion/motion_preferences.dart';
+import '../motion/nexus_haptics.dart';
+import '../motion/nexus_motion.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import 'glass_surface.dart';
@@ -23,13 +25,10 @@ class LiquidSegment<T> {
   final Widget? badge;
 }
 
-/// iOS 27 概念级液态玻璃滑动分段选择器 (LiquidSegmentedControl)
+/// 轻量玻璃分段选择器。
 ///
-/// 特性：
-/// 1. **流体水滴表面张力拉伸 (Fluid Tension)**：滑动/切换时根据位移进度横向拉长变形，带果冻回弹；
-/// 2. **SDF 透镜光学折射 (Lens Refraction)**：滑块划过底层文字时，底层文字在透镜边缘产生实时弧形折射与高光；
-/// 3. **全档位平滑降级**：在 liquid 模式展现透镜折射，在 frosted 模式展现高斯磨砂，在 flat 模式降级为纯平面滑块；
-/// 4. **轻量触感反馈**：切换时触发系统级微触感反馈。
+/// 选中态通过共享容器连续移动，融合流体水滴弹性拉伸与鸿蒙 ArkUI 响应曲线；
+/// 触感反馈和液态玻璃材质保留，减少动态效果时则直接切换。
 class LiquidSegmentedControl<T> extends StatefulWidget {
   const LiquidSegmentedControl({
     super.key,
@@ -62,6 +61,7 @@ class _LiquidSegmentedControlState<T> extends State<LiquidSegmentedControl<T>>
 
   double _fromIndex = 0;
   double _toIndex = 0;
+  bool? _motionReduced;
 
   int get _selectedIndex {
     final idx = widget.segments.indexWhere((s) => s.value == widget.selected);
@@ -75,11 +75,11 @@ class _LiquidSegmentedControlState<T> extends State<LiquidSegmentedControl<T>>
     _toIndex = _fromIndex;
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 280),
+      duration: NexusMotion.fast,
     );
     _animation = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutBack,
+      curve: NexusMotion.curveResponsive,
     );
   }
 
@@ -95,22 +95,42 @@ class _LiquidSegmentedControlState<T> extends State<LiquidSegmentedControl<T>>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final reduceMotion = MotionPreferences.shouldReduceMotion(context);
+    if (_motionReduced == reduceMotion) return;
+    _motionReduced = reduceMotion;
+    if (reduceMotion && _controller.isAnimating) {
+      _fromIndex = _toIndex;
+      _controller
+        ..stop()
+        ..value = 1.0;
+    }
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
   void _animateToIndex(double newIndex) {
+    final reduceMotion = MotionPreferences.shouldReduceMotion(context);
+    _motionReduced = reduceMotion;
     _fromIndex =
         ui.lerpDouble(_fromIndex, _toIndex, _animation.value) ?? _toIndex;
     _toIndex = newIndex;
-    _controller.reset();
-    _controller.forward();
+    if (reduceMotion) {
+      _fromIndex = _toIndex;
+      _controller.value = 1.0;
+      return;
+    }
+    _controller.forward(from: 0);
   }
 
   void _onItemTap(int index) {
     if (index == _selectedIndex) return;
-    HapticFeedback.selectionClick();
+    NexusHaptics.selection(context);
     widget.onSelected(widget.segments[index].value);
   }
 
@@ -149,8 +169,9 @@ class _LiquidSegmentedControlState<T> extends State<LiquidSegmentedControl<T>>
             child: Center(
               child: _SegmentContent(
                 segment: item,
-                textColor:
-                    isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
+                textColor: isDark
+                    ? AppPalette.darkTextMuted
+                    : AppPalette.lightTextMuted,
                 isHighlighted: false,
               ),
             ),
@@ -183,8 +204,7 @@ class _LiquidSegmentedControlState<T> extends State<LiquidSegmentedControl<T>>
               child: Center(
                 child: _SegmentContent(
                   segment: activeSegment,
-                  textColor:
-                      isDark ? Colors.white : AppPalette.lightText,
+                  textColor: isDark ? Colors.white : AppPalette.lightText,
                   isHighlighted: true,
                 ),
               ),
@@ -205,8 +225,7 @@ class _LiquidSegmentedControlState<T> extends State<LiquidSegmentedControl<T>>
               child: Center(
                 child: _SegmentContent(
                   segment: activeSegment,
-                  textColor:
-                      isDark ? Colors.white : AppPalette.lightText,
+                  textColor: isDark ? Colors.white : AppPalette.lightText,
                   isHighlighted: true,
                 ),
               ),

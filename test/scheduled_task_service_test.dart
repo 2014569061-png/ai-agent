@@ -74,6 +74,36 @@ void main() {
     expect(due, isEmpty);
   });
 
+  test('scheduled run history is persisted and scoped to its task', () async {
+    final createdAt = DateTime(2026, 9, 12, 13);
+    await db.insertAuditLog(AuditLogsCompanion.insert(
+      id: 'scheduled-run-1',
+      type: 'scheduled_task_run',
+      detail: jsonEncode({
+        'taskId': 'sched-1',
+        'taskName': '日报',
+        'status': 'success',
+        'result': '完成',
+      }),
+      createdAt: createdAt,
+    ));
+    await db.insertAuditLog(AuditLogsCompanion.insert(
+      id: 'scheduled-run-2',
+      type: 'scheduled_task_run',
+      detail: jsonEncode({
+        'taskId': 'sched-2',
+        'taskName': '其他',
+        'status': 'failed',
+      }),
+      createdAt: createdAt.add(const Duration(minutes: 1)),
+    ));
+
+    final history = await db.scheduledTaskRunHistory('sched-1');
+
+    expect(history, hasLength(1));
+    expect(jsonDecode(history.single.detail)['result'], '完成');
+  });
+
   test('plugin agent import is idempotent', () async {
     final plugin = await PluginStore().importPlugin(
       db: db,

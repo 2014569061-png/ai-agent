@@ -106,7 +106,7 @@ void main() {
     expect(approvalTapped, isTrue);
   });
 
-  testWidgets('top bar keeps model, workspace and mode visible',
+  testWidgets('top bar prioritizes model and mode; workspace and context stay in tooltip',
       (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1.0;
@@ -130,8 +130,9 @@ void main() {
     );
 
     expect(find.text('当前会话'), findsOneWidget);
-    expect(find.textContaining('Claude Sonnet · mobile_agent'), findsOneWidget);
-    expect(find.textContaining('上下文 0 / 128k'), findsOneWidget);
+    expect(find.text('Claude Sonnet'), findsOneWidget);
+    expect(find.textContaining('上下文 0 / 128k'), findsNothing);
+    expect(find.byTooltip('Claude Sonnet · mobile_agent · 上下文 0 / 128k'), findsOneWidget);
     expect(find.text('Agent'), findsOneWidget);
 
     await tester.tap(find.text('Agent'));

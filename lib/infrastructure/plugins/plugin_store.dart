@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 
 import '../../domain/models.dart';
 import '../../domain/network_access_policy.dart';
@@ -9,12 +10,18 @@ import '../../domain/tool_result.dart';
 import '../../domain/unique_id.dart';
 import '../database/app_database.dart';
 import '../tools/tool_registry.dart';
+import '../tools/pinned_host_connector.dart';
 
 /// 插件市场（C6）：声明式工具包 / Agent 预设包。
 /// 包格式（JSON manifest）：`{name, version, kind, tools:[{name,description,schema,request}], agents:[...]}`。
 /// V1 只支持「声明式工具」与「Agent 预设」，不支持任意本地代码（安全边界）。
 class PluginStore {
   static const _maxToolsPerPlugin = 20;
+
+  PluginStore({NetworkAccessPolicy? policy})
+      : _policy = policy ?? const NetworkAccessPolicy();
+
+  final NetworkAccessPolicy _policy;
 
   String? manifestError(String manifestJson) {
     try {
@@ -36,7 +43,6 @@ class PluginStore {
         return '单个插件最多声明 $_maxToolsPerPlugin 个工具';
       }
       if (tools is List) {
-        const policy = NetworkAccessPolicy();
         for (final raw in tools) {
           if (raw is! Map) return '工具声明必须是对象';
           final def = Map<String, dynamic>.from(raw);
@@ -47,7 +53,7 @@ class PluginStore {
           final request = def['request'];
           if (request is! Map) return '工具 $toolName 缺少 request';
           final url = request['url']?.toString() ?? '';
-          final decision = policy.inspect(url);
+          final decision = _policy.inspect(url);
           if (!decision.allowed) {
             return '工具 $toolName 的 URL 被拒绝：${decision.reason}';
           }
@@ -64,6 +70,28 @@ class PluginStore {
   bool validateManifest(String manifestJson) =>
       manifestError(manifestJson) == null;
 
+  /// 导入时再做 DNS 检查。字面量检查仍由 [manifestError] 同步完成。
+  Future<String?> resolvedManifestError(String manifestJson) async {
+    final syntactic = manifestError(manifestJson);
+    if (syntactic != null) return syntactic;
+    final decoded = jsonDecode(manifestJson);
+    if (decoded is! Map) return 'manifest 必须是 JSON 对象';
+    final tools = decoded['tools'];
+    if (tools is! List) return null;
+    for (final raw in tools) {
+      if (raw is! Map) continue;
+      final request = raw['request'];
+      if (request is! Map) continue;
+      final toolName = raw['name']?.toString() ?? 'tool';
+      final url = request['url']?.toString() ?? '';
+      final decision = await _policy.inspectResolved(url);
+      if (!decision.allowed) {
+        return '工具 $toolName 的 URL 被拒绝：${decision.reason}';
+      }
+    }
+    return null;
+  }
+
   Future<Plugin> importPlugin({
     required AppDatabase db,
     required String name,
@@ -75,6 +103,10 @@ class PluginStore {
     final error = manifestError(manifestJson);
     if (error != null) {
       throw FormatException(error);
+    }
+    final resolvedError = await resolvedManifestError(manifestJson);
+    if (resolvedError != null) {
+      throw FormatException(resolvedError);
     }
     final existing = (await db.allPlugins())
         .where((plugin) => plugin.name == normalizedName && plugin.kind == kind)
@@ -102,7 +134,7 @@ class PluginStore {
         final defs = (map['tools'] as List? ?? const [])
             .whereType<Map<String, dynamic>>();
         for (final def in defs) {
-          tools.add(DeclarativeTool.fromManifest(def));
+          tools.add(DeclarativeTool.fromManifest(def, policy: _policy));
         }
       } catch (_) {
         // 单个插件解析失败不影响其余。
@@ -151,8 +183,10 @@ class DeclarativeTool implements AgentTool {
   DeclarativeTool.fromManifest(
     Map<String, dynamic> map, {
     NetworkAccessPolicy policy = const NetworkAccessPolicy(),
+    Dio Function()? clientFactory,
   })  : _request = (map['request'] as Map<String, dynamic>?) ?? const {},
         _policy = policy,
+        _clientFactory = clientFactory,
         manifest = UnifiedTool(
           name: (map['name'] as String? ?? 'plugin_tool').trim(),
           description: map['description'] as String? ?? '',
@@ -163,30 +197,59 @@ class DeclarativeTool implements AgentTool {
 
   final Map<String, dynamic> _request;
   final NetworkAccessPolicy _policy;
+  final Dio Function()? _clientFactory;
+  static const supportedMethods = {
+    'GET',
+    'HEAD',
+    'POST',
+    'PUT',
+    'PATCH',
+    'DELETE'
+  };
 
   @override
   final UnifiedTool manifest;
 
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async {
+    final rawMethod = _request['method'];
+    final method = rawMethod == null
+        ? 'GET'
+        : rawMethod is String
+            ? rawMethod.trim().toUpperCase()
+            : '';
+    if (!supportedMethods.contains(method)) {
+      return ToolResult.failure(
+          code: ToolCodes.invalidArguments,
+          message: '不支持的 HTTP method：$rawMethod');
+    }
     final url = (_request['url'] as String? ?? '').trim();
-    final decision = _policy.inspect(url);
+    final endpoint = await _policy.resolveForConnect(url);
+    final decision = endpoint.decision;
     if (!decision.allowed) {
       return ToolResult.failure(
         code: ToolCodes.notConfigured,
         message: '插件工具未配置有效 URL：${decision.reason}',
       );
     }
-    final method = (_request['method'] as String? ?? 'GET').toUpperCase();
-    // 只读方法可确定没有改动外部世界；其余方法一旦发出就可能已生效。
+    // Non-read-only requests are never replayed automatically.
     final readOnly = method == 'GET' || method == 'HEAD';
+    final dio = _clientFactory?.call() ??
+        Dio(BaseOptions(
+            connectTimeout: const Duration(seconds: 10),
+            receiveTimeout: const Duration(seconds: 20)));
+    final adapter = dio.httpClientAdapter;
+    if (adapter is IOHttpClientAdapter && endpoint.address != null) {
+      final connector = PinnedHostConnector()
+        ..pin(Uri.parse(url).host, endpoint.address!);
+      adapter.createHttpClient = connector.createClient;
+    }
     try {
-      final dio = Dio(BaseOptions(
-          connectTimeout: const Duration(seconds: 10),
-          receiveTimeout: const Duration(seconds: 20)));
-      final response = method == 'POST'
-          ? await dio.post<dynamic>(url, data: arguments)
-          : await dio.get<dynamic>(url, queryParameters: arguments);
+      final response = await dio.request<dynamic>(url,
+          queryParameters: readOnly ? arguments : null,
+          data: readOnly ? null : arguments,
+          options:
+              Options(method: method, followRedirects: false, maxRedirects: 0));
       return ToolResult.text(
         jsonEncode({'status': response.statusCode, 'data': response.data}),
         effect: readOnly ? ToolEffect.none : ToolEffect.applied,
@@ -198,6 +261,8 @@ class DeclarativeTool implements AgentTool {
             '${readOnly ? '' : '；请求可能已送达，请先确认对方状态再决定是否重试'}',
         effect: readOnly ? ToolEffect.none : ToolEffect.unknown,
       );
+    } finally {
+      dio.close();
     }
   }
 }

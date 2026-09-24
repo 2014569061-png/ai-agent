@@ -10,6 +10,7 @@ import '../../../application/environment_service.dart';
 import '../../../application/development_tool_installer.dart';
 import '../../../infrastructure/update/update_service.dart';
 import '../../environment/environment_status_view.dart';
+import '../../widgets/confirm_action.dart';
 import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_page_header.dart';
 
@@ -253,7 +254,10 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
     final codeFile = '$_bridgeDir/env-code-$id.txt';
     try {
       Directory(_bridgeDir).createSync(recursive: true);
-    } catch (_) {}
+    } catch (_) {
+      // 桥接目录建不出来时，下面的脚本仍会执行并因找不到输出文件而在轮询中
+      // 超时；届时向用户返回的是带排查提示的超时文案，因此这里不重复报错。
+    }
     final script = "{\n$command\n} > '$outFile' 2>&1\necho \$? > '$codeFile'";
     try {
       await _bridge.invokeMethod('runInTermux', {
@@ -288,7 +292,10 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
       try {
         of.deleteSync();
         cf.deleteSync();
-      } catch (_) {}
+      } catch (_) {
+        // 桥接临时文件（输出/退出码）删除失败只留下两个小文件，且下次执行会
+        // 用新的 id 生成新文件；结果已经在上面返回给用户了。
+      }
       return (code == 0, code == 0 ? out : '命令退出码 $code:$out');
     }
     return (
@@ -299,12 +306,41 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
   }
 
   Future<void> _installTermux() async {
+    // Termux 是这份引导里唯一「来自第三方、且没有可固定摘要」的安装包：
+    // 镜像站与 F-Droid 的 APK 由对方发布，本应用没有任何可信渠道预先获知它的
+    // SHA-256。既然不能验证，就必须让用户知道自己在装什么，而不是静默地按
+    // 「只验 ZIP 魔术字节」把它交给系统安装器（那等于没有完整性保护）。
+    if (!await showConfirmAction(
+      context,
+      title: '安装未校验的 Termux',
+      message: 'NEXUS 无法校验该安装包的完整性：文件来自第三方镜像（清华镜像 / '
+          'F-Droid），这些来源不提供可离线固定的校验值。\n\n'
+          '下载完成后会显示该文件的 SHA-256，你可以对照 F-Droid 官方页面自行核对。'
+          '如果你不接受这个风险，可以改为手动从 F-Droid 安装 Termux。',
+      confirmLabel: '继续下载',
+      cancelLabel: '取消',
+      isDanger: true,
+    )) {
+      return;
+    }
+    if (!mounted) return;
     setState(() => _installStatus = '正在下载 Termux(约 90MB,清华镜像)...');
     for (final url in _termuxApkUrls) {
-      final ok = await UpdateService().downloadAndInstall(url);
+      // 显式声明不要求摘要，让「这里没有校验」成为一处需要读到的决定，
+      // 而不是藏在默认值里的疏漏。
+      final result = await UpdateService().downloadAndInstallDetailed(
+        url,
+        requireSha256: false,
+      );
       if (!mounted) return;
-      if (ok) {
-        setState(() => _installStatus = '已拉起系统安装,完成后回来点"重新检测"');
+      if (result.success) {
+        final digest = result.sha256;
+        setState(() {
+          _installStatus = digest == null
+              ? '已拉起系统安装,完成后回来点"重新检测"'
+              : '已拉起系统安装,完成后回来点"重新检测"\n'
+                  '该安装包实测 SHA-256(未经校验,可对照 F-Droid 官方页面核对):\n$digest';
+        });
         return;
       }
       setState(() => _installStatus = '源 $url 失败,尝试下一个源...');
@@ -449,7 +485,8 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
           ]),
           if (_installStatus.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(_installStatus, style: Theme.of(context).textTheme.bodySmall),
+            SelectableText(_installStatus,
+              style: Theme.of(context).textTheme.bodySmall),
           ],
           if (widget.target == null) ...[
             const SizedBox(height: 24),

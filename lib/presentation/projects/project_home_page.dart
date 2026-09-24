@@ -26,6 +26,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
 import '../widgets/nexus_page_header.dart';
+import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
 import '../../application/apk_install_bridge.dart';
 import '../../application/artifact_service.dart';
@@ -36,6 +37,7 @@ import 'remote_execution_page.dart';
 import '../workspace/development_workbench_page.dart';
 import '../workspace/file_tree_sheet.dart';
 import '../workspace/terminal_sheet.dart';
+import '../workspace/workspace_sheet_frame.dart';
 import '../workspace/workspace_editor_page.dart';
 
 class ProjectHomePage extends ConsumerStatefulWidget {
@@ -300,6 +302,18 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
             ],
           ),
         ),
+        const SizedBox(height: AppTokens.sp4),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: _continueInChat,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(AppTokens.kControlHeight),
+            ),
+            icon: const Icon(Icons.chat_bubble_outline),
+            label: const Text('继续开发此项目'),
+          ),
+        ),
         if (_environmentLoading ||
             _environment != null ||
             _environmentError != null) ...[
@@ -356,21 +370,17 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
           ),
         ],
         const SizedBox(height: AppTokens.sp4),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Text('项目工具', style: Theme.of(context).textTheme.titleSmall),
+        ),
         SectionCard(
           child: Column(
             children: [
               NexusListTile(
-                icon: Icons.chat_bubble_outline,
-                title: '继续开发',
-                subtitle: '把当前项目带到对话里',
-                onTap: _continueInChat,
-              ),
-              NexusListTile(
                 icon: Icons.play_circle_outline,
-                title: '运行 / 预览',
-                subtitle: settings.previewCommand?.isNotEmpty == true
-                    ? settings.previewCommand
-                    : '未配置预览命令',
+                title: '打开开发工作台',
+                subtitle: '在工作台运行预览、执行验证',
                 onTap: accessible
                     ? () {
                         Navigator.of(context).push(NexusPageRoute.workspace(
@@ -384,23 +394,6 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
                         FloatingToast.show(context, '原目录不可访问，请重新定位',
                             tone: ToastTone.warning);
                       },
-              ),
-              NexusListTile(
-                icon: Icons.verified_outlined,
-                title: '执行验证',
-                subtitle: settings.testCommand?.isNotEmpty == true
-                    ? settings.testCommand
-                    : '使用项目检测出的检查命令',
-                onTap: accessible
-                    ? () {
-                        Navigator.of(context).push(NexusPageRoute.workspace(
-                          builder: (_) => DevelopmentWorkbenchPage(
-                            workspacePath: project.canonicalRootPath,
-                            projectId: project.id,
-                          ),
-                        ));
-                      }
-                    : null,
               ),
               NexusListTile(
                 icon: Icons.account_tree_outlined,
@@ -476,8 +469,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
                   showModalBottomSheet<void>(
                     context: context,
                     isScrollControlled: true,
-                    builder: (sheetContext) => SizedBox(
-                      height: MediaQuery.of(context).size.height * 0.75,
+                    builder: (sheetContext) => WorkspaceSheetFrame(
                       child: FileTreeSheet(
                         workspacePath: project.canonicalRootPath,
                       ),
@@ -543,8 +535,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
               showModalBottomSheet<void>(
                 context: context,
                 isScrollControlled: true,
-                builder: (_) => SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.75,
+                builder: (_) => WorkspaceSheetFrame(
                   child: TerminalSheet(
                     workspacePath: project.canonicalRootPath,
                     sharedService: _terminal,
@@ -573,23 +564,26 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
         SectionCard(
           child: Column(
             children: [
-              for (final task in _tasks)
-                NexusListTile(
-                  icon: Icons.task_alt_outlined,
-                  title: TaskService().describe(task).title,
-                  subtitle: '${task.status} · ${task.type}',
-                  onTap: () {
-                    Navigator.of(context).push(NexusPageRoute.detail(
-                      builder: (_) => TaskDetailsPage(
-                        task: TaskService().describe(task),
-                      ),
-                    ));
-                  },
-                ),
+              for (final task in _tasks) _projectTaskTile(task),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _projectTaskTile(Task task) {
+    final info = TaskService().describe(task);
+    return NexusListTile(
+      icon: Icons.task_alt_outlined,
+      title: info.title,
+      subtitle: TaskService.taskTypeLabel(info.type),
+      trailing: NexusStatusPill.fromString(info.status, isCompact: true),
+      onTap: () {
+        Navigator.of(context).push(NexusPageRoute.detail(
+          builder: (_) => TaskDetailsPage(task: info),
+        ));
+      },
     );
   }
 
@@ -616,9 +610,24 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
                   title: artifact.relativePath,
                   subtitle:
                       '${artifact.kind} · ${artifact.bytes} bytes · task ${artifact.taskId}',
-                  onTap: artifact.kind == 'apk'
-                      ? () => _installRecordedArtifact(project, artifact)
-                      : null,
+                  onTap: () => _openArtifactTask(artifact),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: '查看所属任务结果',
+                        icon: const Icon(Icons.open_in_new_rounded),
+                        onPressed: () => _openArtifactTask(artifact),
+                      ),
+                      if (artifact.kind == 'apk')
+                        IconButton(
+                          tooltip: '安装 APK',
+                          icon: const Icon(Icons.install_mobile_rounded),
+                          onPressed: () =>
+                              _installRecordedArtifact(project, artifact),
+                        ),
+                    ],
+                  ),
                 ),
             ],
           ),
@@ -638,6 +647,25 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
         ],
       ),
     );
+  }
+
+  Future<void> _openArtifactTask(ProjectArtifact artifact) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final task = await db.findTask(artifact.taskId);
+      if (!mounted) return;
+      if (task == null) {
+        FloatingToast.show(context, '未找到产物对应的任务记录', tone: ToastTone.warning);
+        return;
+      }
+      await Navigator.of(context).push(NexusPageRoute.detail(
+        builder: (_) => TaskDetailsPage(task: TaskService().describe(task)),
+      ));
+    } catch (error) {
+      if (mounted) {
+        FloatingToast.show(context, '无法打开任务结果：$error', tone: ToastTone.warning);
+      }
+    }
   }
 
   Future<void> _togglePreview(Project project, ProjectSettings settings) async {

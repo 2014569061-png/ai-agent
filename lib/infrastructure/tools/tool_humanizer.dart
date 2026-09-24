@@ -56,6 +56,8 @@ class ToolHumanizer {
       'sub_agent' => _s(a, 'prompt').isNotEmpty
           ? '委派子 Agent：${_clip(_s(a, 'prompt'), 40)}'
           : '委派子 Agent 交叉验证',
+      'android_device' => _androidDeviceSummary(a),
+      'android_automation' => _androidAutomationSummary(a),
       _ => null,
     };
   }
@@ -105,8 +107,67 @@ class ToolHumanizer {
           if (a['fileExtension'] != null) ('fileExtension', v('fileExtension')),
         ],
       'list_directory' => [('path', vv('path', '.'))],
+      'android_device' ||
+      'android_automation' =>
+        _androidDeviceApprovalLines(a),
       _ => [],
     };
+  }
+
+  String _androidDeviceSummary(Map<String, dynamic> arguments) {
+    final action = _s(arguments, 'action');
+    final details = arguments['_approvalDetails'];
+    if (details is Map && details['target'] is String) {
+      return '$action · ${details['target']}';
+    }
+    return action.isEmpty ? 'Android 设备操作' : 'Android 设备操作 · $action';
+  }
+
+  String _androidAutomationSummary(Map<String, dynamic> arguments) {
+    final action = _s(arguments, 'action');
+    final label = switch (action) {
+      'create_rule' => '创建设备自动化规则',
+      'set_rule_enabled' =>
+        arguments['enabled'] == true ? '启用设备自动化规则' : '暂停设备自动化规则',
+      'delete_rule' => '删除设备自动化规则',
+      'list_rules' => '查看设备自动化规则',
+      'rule_history' => '查看自动化执行记录',
+      'trigger_status' => '读取自动化触发器状态',
+      'pending_fires' => '查看待确认的自动化触发',
+      _ => '设备自动化',
+    };
+    final name = _s(arguments, 'name');
+    return name.isEmpty ? label : '$label「${_clip(name, 40)}」';
+  }
+
+  List<(String, String)> _androidDeviceApprovalLines(
+    Map<String, dynamic> arguments,
+  ) {
+    final details = arguments['_approvalDetails'];
+    if (details is! Map) {
+      return [
+        if (_s(arguments, 'action').isNotEmpty)
+          ('action', _s(arguments, 'action')),
+        if (_s(arguments, 'packageName').isNotEmpty)
+          ('packageName', _s(arguments, 'packageName')),
+        if (_s(arguments, 'path').isNotEmpty) ('path', _s(arguments, 'path')),
+      ];
+    }
+    String detail(String key) => details[key]?.toString() ?? '';
+    final rows = <(String, String)>[
+      if (detail('target').isNotEmpty) ('目标', detail('target')),
+      if (detail('scope').isNotEmpty) ('影响范围', detail('scope')),
+      if (detail('impact').isNotEmpty) ('影响', detail('impact')),
+      if (detail('command').isNotEmpty) ('Root 命令', detail('command')),
+      if (detail('executionPlan').isNotEmpty) ('执行计划', detail('executionPlan')),
+      if (details['reversible'] == true)
+        ('可撤销', detail('rollback').isEmpty ? '可再次设置恢复' : detail('rollback')),
+      if (details['reversible'] == false)
+        ('可撤销', detail('rollback').isEmpty ? '否' : '否；${detail('rollback')}'),
+    ];
+    return rows
+        .map((row) => (row.$1, _clip(row.$2, 400)))
+        .toList(growable: false);
   }
 
   String _fileSummary(String name, String path) {

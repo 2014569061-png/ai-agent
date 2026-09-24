@@ -8,6 +8,8 @@ import '../../application/error_humanizer.dart';
 
 import 'nexus_surface.dart';
 import '../theme/app_tokens.dart';
+import '../motion/motion_preferences.dart';
+import '../motion/nexus_motion.dart';
 import 'glass_chip.dart';
 import '../chat/widgets/capsule_top_bar.dart';
 import '../theme/app_appearance_controller.dart';
@@ -55,7 +57,7 @@ class FloatingToast {
   FloatingToast._();
 
   static const _displayDuration = Duration(seconds: 3);
-  static const _animationDuration = Duration(milliseconds: 220);
+  static const _animationDuration = NexusMotion.base;
   static const _toolCapsuleHeight = 32.0;
   static const _topOffset =
       (4.0 + kCapsuleTopBarHeight) + 8.0 + _toolCapsuleHeight + 8.0;
@@ -236,6 +238,7 @@ class _ToastViewState extends State<_ToastView>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<Offset> _slide;
+  bool _started = false;
 
   @override
   void initState() {
@@ -251,7 +254,20 @@ class _ToastViewState extends State<_ToastView>
         CurvedAnimation(parent: _controller, curve: AppTokens.curveStandard));
 
     widget.onCreated(_controller);
-    _controller.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration =
+        MotionPreferences.adjustDuration(context, widget.animationDuration);
+    _controller.reverseDuration = _controller.duration;
+    if (!_started) {
+      _started = true;
+      _controller.forward();
+    } else if (MotionPreferences.animationsDisabled(context)) {
+      _controller.value = 1.0;
+    }
   }
 
   @override
@@ -279,7 +295,9 @@ class _ToastViewState extends State<_ToastView>
       left: 0,
       right: 0,
       child: SlideTransition(
-        position: _slide,
+        position: MotionPreferences.shouldReduceMotion(context)
+            ? const AlwaysStoppedAnimation(Offset.zero)
+            : _slide,
         // Toast 内的玻璃面板也不能被 Opacity 包裹，否则 BackdropFilter
         // 在出现/消失帧中会读取临时缓冲而闪烁。
         child: Center(
@@ -300,78 +318,78 @@ class _ToastViewState extends State<_ToastView>
                         : HitTestBehavior.opaque,
                     child: Builder(
                       builder: (context) {
-                          final glassIntensity =
-                              AppAppearanceController.resolvedGlassIntensity;
-                          final toastChild = Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.tone != ToastTone.neutral) ...[
-                                Icon(widget.tone.icon,
-                                    size: 18, color: widget.tone.accent(isDark)),
-                                const SizedBox(width: 10),
-                              ],
-                              Flexible(
-                                child: Text(
-                                  widget.message,
-                                  style: TextStyle(
-                                      color: textColor,
-                                      fontSize: 13,
-                                      height: 1.4,
-                                      fontWeight: FontWeight.w500),
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
+                        final glassIntensity =
+                            AppAppearanceController.resolvedGlassIntensity;
+                        final toastChild = Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (widget.tone != ToastTone.neutral) ...[
+                              Icon(widget.tone.icon,
+                                  size: 18, color: widget.tone.accent(isDark)),
+                              const SizedBox(width: 10),
+                            ],
+                            Flexible(
+                              child: Text(
+                                widget.message,
+                                style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 13,
+                                    height: 1.4,
+                                    fontWeight: FontWeight.w500),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (widget.actions.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: Wrap(
+                                  spacing: 8,
+                                  children: [
+                                    for (final a in widget.actions)
+                                      GlassChip(
+                                        label: a.label,
+                                        icon: a.icon,
+                                        onPressed: () => _onAction(a),
+                                      )
+                                  ],
                                 ),
                               ),
-                              if (widget.actions.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 8),
-                                  child: Wrap(
-                                    spacing: 8,
-                                    children: [
-                                      for (final a in widget.actions)
-                                        GlassChip(
-                                          label: a.label,
-                                          icon: a.icon,
-                                          onPressed: () => _onAction(a),
-                                        )
-                                    ],
-                                  ),
-                                ),
-                              if (widget.persistent)
-                                IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  tooltip: '关闭',
-                                  icon: const Icon(Icons.close_rounded, size: 18),
-                                  onPressed: widget.onDismiss,
-                                ),
-                            ],
-                          );
+                            if (widget.persistent)
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                tooltip: '关闭',
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                onPressed: widget.onDismiss,
+                              ),
+                          ],
+                        );
 
-                          if (glassIntensity == GlassIntensity.flat) {
-                            return NexusSurface(
-                              level: SurfaceLevel.thick,
-                              borderRadius:
-                                  BorderRadius.circular(AppTokens.radiusPill),
-                              padding: EdgeInsets.fromLTRB(
-                                  16, 10, widget.persistent ? 8 : 16, 10),
-                              child: toastChild,
-                            );
-                          }
-
-                          return GlassSurface(
-                            role: GlassRole.overlay,
-                            variant: GlassVariant.regular,
-                            intensity: glassIntensity,
+                        if (glassIntensity == GlassIntensity.flat) {
+                          return NexusSurface(
+                            level: SurfaceLevel.thick,
                             borderRadius:
                                 BorderRadius.circular(AppTokens.radiusPill),
-                            blurSigma: 24,
-                            refraction: 18,
-                            edgeWidth: 20,
-                            gloss: 0.60,
                             padding: EdgeInsets.fromLTRB(
                                 16, 10, widget.persistent ? 8 : 16, 10),
                             child: toastChild,
                           );
+                        }
+
+                        return GlassSurface(
+                          role: GlassRole.overlay,
+                          variant: GlassVariant.regular,
+                          intensity: glassIntensity,
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusPill),
+                          blurSigma: 24,
+                          refraction: 18,
+                          edgeWidth: 20,
+                          gloss: 0.60,
+                          padding: EdgeInsets.fromLTRB(
+                              16, 10, widget.persistent ? 8 : 16, 10),
+                          child: toastChild,
+                        );
                       },
                     ),
                   ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../motion/motion_preferences.dart';
+import '../motion/motion_lifecycle.dart';
+import '../motion/nexus_motion.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
@@ -44,7 +46,7 @@ class NexusExecutionStatus extends StatefulWidget {
 }
 
 class _NexusExecutionStatusState extends State<NexusExecutionStatus>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, MotionLifecycle<NexusExecutionStatus> {
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
 
@@ -53,21 +55,24 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
     super.initState();
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 1400),
     );
-    _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    _pulseAnimation = Tween<double>(begin: 0.68, end: 1.0).animate(
+      CurvedAnimation(
+          parent: _pulseController, curve: NexusMotion.curveBreathing),
     );
 
-    if (_shouldPulse(widget.state)) {
-      _pulseController.repeat(reverse: true);
-    }
   }
 
   @override
   void didUpdateWidget(covariant NexusExecutionStatus oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (_shouldPulse(widget.state)) {
+    onMotionActivityChanged();
+  }
+
+  @override
+  void onMotionActivityChanged() {
+    if (decorativeMotionActive && _shouldPulse(widget.state)) {
       if (!_pulseController.isAnimating) {
         _pulseController.repeat(reverse: true);
       }
@@ -102,12 +107,12 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
         ),
       NexusExecutionState.preparing => (
           Icons.hourglass_top_rounded,
-          AppPalette.brand,
+          AppPalette.brandTextFor(isDark),
           isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
         ),
       NexusExecutionState.running => (
           Icons.sync_rounded,
-          AppPalette.brand,
+          AppPalette.brandTextFor(isDark),
           isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
         ),
       NexusExecutionState.waitingForUser => (
@@ -132,8 +137,28 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
         ),
     };
 
-    Widget iconWidget = Icon(icon, size: widget.compact ? 14 : 16, color: fg);
-    if (_shouldPulse(widget.state) && !reduceMotion) {
+    Widget iconWidget = Icon(
+      icon,
+      key: ValueKey(widget.state),
+      size: widget.compact ? 14 : 16,
+      color: fg,
+    );
+    if (!reduceMotion) {
+      iconWidget = AnimatedSwitcher(
+        duration: NexusMotion.fast,
+        switchInCurve: NexusMotion.curveEnter,
+        switchOutCurve: NexusMotion.curveExit,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.92, end: 1.0).animate(animation),
+            child: child,
+          ),
+        ),
+        child: iconWidget,
+      );
+    }
+    if (_shouldPulse(widget.state) && decorativeMotionActive) {
       iconWidget = AnimatedBuilder(
         animation: _pulseAnimation,
         builder: (context, child) => Opacity(
@@ -147,7 +172,9 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
     if (widget.compact) {
       return Semantics(
         label: '状态：${widget.label}',
-        child: Container(
+        child: AnimatedContainer(
+          duration: reduceMotion ? Duration.zero : NexusMotion.fast,
+          curve: NexusMotion.curveStandard,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: bg,
@@ -179,7 +206,9 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
 
     return Semantics(
       label: '状态：${widget.label}。${widget.detail ?? ''}',
-      child: Container(
+      child: AnimatedContainer(
+        duration: reduceMotion ? Duration.zero : NexusMotion.base,
+        curve: NexusMotion.curveStandard,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: bg,
@@ -212,7 +241,8 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
                 if (widget.onRetry != null)
                   _ActionTextButton(label: '重试', onTap: widget.onRetry!),
                 if (widget.onViewDetails != null)
-                  _ActionTextButton(label: '查看详情', onTap: widget.onViewDetails!),
+                  _ActionTextButton(
+                      label: '查看详情', onTap: widget.onViewDetails!),
               ],
             ),
             if (widget.detail != null && widget.detail!.isNotEmpty) ...[
@@ -221,7 +251,9 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
                 widget.detail!,
                 style: TextStyle(
                   fontSize: AppTokens.fontSizeFootnote,
-                  color: isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
+                  color: isDark
+                      ? AppPalette.darkTextMuted
+                      : AppPalette.lightTextMuted,
                   height: 1.4,
                 ),
               ),
@@ -236,9 +268,13 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        foregroundColor: isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
+                        foregroundColor: isDark
+                            ? AppPalette.darkTextMuted
+                            : AppPalette.lightTextMuted,
                         side: BorderSide(
-                          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+                          color: isDark
+                              ? AppPalette.darkHairline
+                              : AppPalette.lightHairline,
                         ),
                       ),
                       onPressed: widget.onReject,
@@ -280,10 +316,10 @@ class _ActionTextButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: AppTokens.fontSizeFootnote,
             fontWeight: FontWeight.w500,
-            color: AppPalette.brand,
+            color: AppPalette.brandText(context),
           ),
         ),
       ),

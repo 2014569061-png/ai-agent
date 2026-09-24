@@ -92,12 +92,24 @@ build-apk.bat
 ```bat
 build-apk.bat --offline       rem 只使用本机 Pub/native-assets 缓存，缓存缺失时快速失败
 build-apk.bat --online        rem 显式允许恢复 Pub 依赖和 native-assets
-build-apk.bat --clean --online rem 冷构建；删除生成输出后在线预热缓存
+build-apk.bat --check --no-pause rem 只检查环境、版本、签名文件与缓存，不构建
+build-apk.bat --keep 5        rem 成功发布后最多保留 5 个时间戳包，另加 latest
+build-apk.bat --keep-all      rem 当次构建不清理旧 APK
+build-apk.bat --no-pause --no-open rem 自动化调用，不等待按键、不打开文件夹
+build-apk.bat --install       rem 构建发布成功后安装到设备
+build-apk.bat --clean --online rem 冷构建；--clean 必须搭配 --online
+build-apk.bat --fast          rem 本地快速迭代；跳过 R8/资源收缩，且不发布到 dist/
 ```
 
 首次 checkout 或依赖、Flutter/Android 工具链尚未缓存时仍需要网络。`--offline` 能约束 Pub 依赖恢复，但 Flutter 的 `sqlite3` native-assets hook 还需要本地已有经过 hash 校验的 ARM64 库；缺少时脚本会在构建前提示，而不是等待 GitHub 网络超时。完全断网、可复现的构建还需要将该原生资源放入受控的内部制品源或随构建环境预热，不能仅靠 Gradle `--offline` 实现。
 
-`build-apk.bat` 会保留正式签名、ARM64、APK 新鲜度、非空和 SHA-256 sidecar 检查，并将可分享副本写入 `dist/`。如果只需要 Flutter 默认构建，也可以直接运行：
+`build-apk.bat` 继续请求正式签名 ARM64 构建，检查 APK 新鲜度、非空和 SHA-256，并将可分享副本写入 `dist/`。默认 release 会执行 R8 和资源收缩；本地迭代可使用 `--fast` 跳过这两个耗时步骤，但 `--fast` 产物不可作为正式发布包。Gradle daemon、并行任务和构建缓存默认开启；配置缓存因 Flutter 3.47.2/AGP 8.13 的任务序列化兼容性问题保持关闭。环境与发布逻辑位于 `tool/build-apk-tools.ps1`，需要 Windows PowerShell；构建本身不需要 Python。
+
+默认成功发布后保留 **3 个带时间戳的有效 APK 加 1 个 latest**，其中优先为最新的不同版本保留一个回滚候选名额（未保证降级兼容）。只删除名称符合规则且 SHA-256 正确的旧包及其配套校验文件；未知文件、无效校验包不会删除，所以实际文件数可能超过此上限。重要历史包请外部备份，或使用 `--keep-all`。
+
+Flutter 构建日志写入 `artifacts/build-apk/`，构建失败不覆盖已发布的 latest；发布阶段会校验暂存副本，并在可捕获的替换错误后尝试恢复旧 latest。APK 和校验文件不是跨文件原子事务，断电后需重新校验。若进程被强制关闭，先确认没有构建正在运行，再移除遗留的 `artifacts/build-apk/.lock` 空目录。
+
+Windows 脚本回归测试：`python tool/test_build_apk.py`（使用隔离假产物，不运行真实 Flutter 构建）。如果只需要 Flutter 默认构建，也可以直接运行：
 
 ```bash
 flutter build apk --release --target-platform android-arm64

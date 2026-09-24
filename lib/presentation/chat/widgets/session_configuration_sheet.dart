@@ -6,11 +6,11 @@ import '../../../application/chat_controller.dart';
 import '../../../domain/models.dart';
 import '../../../infrastructure/tools/tool_humanizer.dart';
 
-/// 统一「会话上下文」面板：一次看清并修改模型/服务、Agent、工作区、
+/// 统一「会话配置」面板：一次看清并修改模型/服务、Agent、工作区、
 /// 思考程度、计划模式。把原先散落在头像菜单、底栏、顶部 chip、输入区的
 /// 上下文入口收拢到一处，减少用户在不同角落找配置的心智负担。
-class SessionContextSheet extends StatelessWidget {
-  const SessionContextSheet({
+class SessionConfigurationSheet extends StatelessWidget {
+  const SessionConfigurationSheet({
     super.key,
     required this.state,
     required this.onSelectModel,
@@ -79,7 +79,7 @@ class SessionContextSheet extends StatelessWidget {
             Row(children: [
               const Icon(Icons.tune_rounded),
               const SizedBox(width: 8),
-              Text('会话上下文',
+              Text('会话配置',
                   style: theme.textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w500)),
             ]),

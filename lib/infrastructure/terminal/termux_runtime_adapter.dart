@@ -264,7 +264,10 @@ class TermuxRuntimeAdapter
           await File(ack).delete();
           return true;
         }
-      } catch (_) {}
+      } catch (_) {
+        // 轮询等待 ack 文件：尚未创建或只写了一半都属于预期内的「未就绪」。
+        // 这里加日志会在 5 秒窗口内刷屏，就绪与否由循环返回值表达。
+      }
       await Future<void>.delayed(const Duration(milliseconds: 200));
     }
     return false;
@@ -312,7 +315,9 @@ class TermuxRuntimeAdapter
           await _deleteFiles([markerPath, partPath]);
           return true;
         }
-      } catch (_) {}
+      } catch (_) {
+        // 轮询等待 marker 文件，同 _waitForAck：未就绪是正常状态。
+      }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     await _deleteFiles([markerPath, partPath]);
@@ -324,7 +329,10 @@ class TermuxRuntimeAdapter
       try {
         final file = File(path);
         if (await file.exists()) await file.delete();
-      } catch (_) {}
+      } catch (_) {
+        // 尽力而为的临时文件清理：删不掉不影响任何结果，残留文件会在下次
+        // 使用同名路径前被重新创建或删除。
+      }
     }
   }
 
@@ -367,7 +375,9 @@ $commandLine
       try {
         final pid = int.tryParse((await File(path).readAsString()).trim());
         if (pid != null && pid > 0) return pid;
-      } catch (_) {}
+      } catch (_) {
+        // 轮询等待 PID 文件：进程刚启动时文件可能还没落盘。
+      }
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
     return null;
@@ -392,7 +402,10 @@ $commandLine
                 : 127,
             timedOut: value is Map && value['timedOut'] == true,
           );
-        } catch (_) {}
+        } catch (_) {
+          // 轮询：exit 文件已出现但内容可能只写了一半（JSON 尚不完整），下一轮
+          // 会重新读取。真正读不出来时由循环外的超时分支兜底。
+        }
       }
       if (!await verifyDetached(pid, ownerToken)) {
         await Future<void>.delayed(const Duration(milliseconds: 250));
@@ -441,7 +454,10 @@ $commandLine
       if (oldOut.existsSync()) oldOut.deleteSync();
       final oldCode = File(codeFile);
       if (oldCode.existsSync()) oldCode.deleteSync();
-    } catch (_) {}
+    } catch (_) {
+      // 准备桥接目录失败不在这里上报：紧随其后的命令执行会因为读写该目录失败
+      // 而返回非零退出码，错误只是换了个地方暴露，不会消失。
+    }
 
     final escapedCwd = cwd.replaceAll("'", "'\\''");
     final script = "cd '$escapedCwd' 2>/dev/null || exit 125\n"
@@ -481,7 +497,10 @@ $commandLine
       try {
         outFileHandle.deleteSync();
         codeFileHandle.deleteSync();
-      } catch (_) {}
+      } catch (_) {
+        // 清理本轮临时文件失败：结果已经读出来了，删不掉只留下残留文件，
+        // 下次同 id 执行前会先删除它们。
+      }
       return CommandResult(output: output, exitCode: code);
     }
     return CommandResult(

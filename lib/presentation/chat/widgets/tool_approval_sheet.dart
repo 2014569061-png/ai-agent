@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import '../../motion/nexus_haptics.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
@@ -21,30 +21,61 @@ class ToolApprovalSheet extends StatefulWidget {
     super.key,
     required this.call,
     required this.risk,
-    this.allowPersistentTrust = true,
+    this.allowSessionTrust = true,
+    this.allowPersistentTrust = false,
     this.timeout = const Duration(minutes: 5),
     this.onExpired,
+    this.onBackgrounded,
   });
 
   final ToolCall call;
   final ToolRisk risk;
+
+  /// 是否提供「本会话允许」。授权只存在内存，退出应用即失效。
+  final bool allowSessionTrust;
+
+  /// 是否提供「始终允许」。会写入持久信任清单，因此默认关闭：
+  /// 调用方只应在明确允许长期放行的场景显式打开。
   final bool allowPersistentTrust;
   final Duration timeout;
   final VoidCallback? onExpired;
+
+  /// 审批期间应用被切到后台（或锁屏）时回调。
+  ///
+  /// 弹窗此时已经不可见，而 Dart 定时器在后台会被冻结，倒计时不会走完 —— 若什么
+  /// 都不做，需要审批的工具会在后台一直等下去。调用方应据此改走通知裁决通道
+  /// （[ApprovalBridge]），并让本弹窗以 [ToolApproval.reject] 收敛，避免留下一个
+  /// 无人可见、又尚未结束的审批。
+  final VoidCallback? onBackgrounded;
 
   @override
   State<ToolApprovalSheet> createState() => _ToolApprovalSheetState();
 }
 
-class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
+class _ToolApprovalSheetState extends State<ToolApprovalSheet>
+    with WidgetsBindingObserver {
   Timer? _countdownTimer;
   Timer? _expiryCloseTimer;
   Duration _remaining = Duration.zero;
   bool _expired = false;
 
+  /// 是否已经把这次审批交给后台通知通道（见 [widget.onBackgrounded]）。
+  bool _handedOff = false;
+
+  /// 审批的绝对截止时刻，用于回到前台时校正。
+  ///
+  /// 展示用的 [_remaining] 仍按 tick 递减，而不是每次 tick 都按墙钟重算：widget
+  /// 测试用 fake async 推进定时器，`DateTime.now()` 走的却是真实时钟，若按墙钟
+  /// 重算，测试里时间几乎不前进，倒计时永远不会走完。两者结合的效果是：前台按
+  /// tick 递减（可测且与真实截止同步），后台定时器被冻结后回到前台按绝对截止
+  /// 时刻校正（不撒谎）。
+  late DateTime _deadline;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _deadline = DateTime.now().add(widget.timeout);
     _remaining = widget.timeout;
     _countdownTimer = Timer.periodic(
       approvalUiCountdownTick,
@@ -57,9 +88,53 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
     _expiryCloseTimer?.cancel();
     super.dispose();
+  }
+
+  /// 回到前台时按绝对时钟校正一次。
+  ///
+  /// 应用切到后台、系统冻结 Dart timer 或设备休眠时定时器不再触发，递减值会原地
+  /// 停住；而底层等待方（RunController 的审批等待、ApprovalBridge 的 TTL）用的是
+  /// 真实时钟。若不校正，用户在"看起来还有时间"时会被静默拒绝。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 审批期间切到后台：弹窗已不可见，且后台期间定时器被冻结，倒计时不会走完。
+    // 交给调用方改走通知通道，本弹窗立刻以 reject 收敛。
+    //
+    // 只看 paused / hidden，不看 inactive：inactive 会在下拉通知栏、来电、系统
+    // 权限弹框等「瞬间失焦但又马上回来」的场景触发，据此中止审批会误伤正常流程。
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _handOffToBackground();
+      return;
+    }
+    if (state != AppLifecycleState.resumed || !mounted || _expired) return;
+    // 已经交还给后台通道的这次审批不再参与倒计时校正。
+    if (_handedOff) return;
+    final remaining = _deadline.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
+      _expire();
+      return;
+    }
+    setState(() => _remaining = remaining);
+  }
+
+  /// 把不可见的审批交还调用方（转通知通道），并让本弹窗结束等待。
+  ///
+  /// 未注入 [ToolApprovalSheet.onBackgrounded] 时不改动行为：直接构造本组件的调用
+  /// 方（例如无障碍测试）没有接通知通道，擅自 pop 反而会变成一次无提示的静默拒绝。
+  void _handOffToBackground() {
+    if (_handedOff || _expired || !mounted) return;
+    final onBackgrounded = widget.onBackgrounded;
+    if (onBackgrounded == null) return;
+    _handedOff = true;
+    _countdownTimer?.cancel();
+    _expiryCloseTimer?.cancel();
+    onBackgrounded();
+    Navigator.of(context).pop(ToolApproval.reject);
   }
 
   void _updateCountdown() {
@@ -101,6 +176,10 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
     final humanizer = const ToolHumanizer();
     final summary = humanizer.summaryOf(widget.call);
     final paramLines = humanizer.paramLines(widget.call);
+    final approvalArguments = Map<String, dynamic>.from(widget.call.arguments)
+      ..remove('_approvalDetails')
+      ..remove('planId')
+      ..remove('previewId');
 
     final command = (widget.call.arguments['CommandLine'] ??
             widget.call.arguments['command'] ??
@@ -163,9 +242,8 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
                   const SizedBox(height: 16),
                   Semantics(
                     liveRegion: true,
-                    label: _expired
-                        ? '瀹℃壒宸茶繃鏈燂紝宸茶嚜鍔ㄦ嫆缁?'
-                        : '瀹℃壒鍓╀綑 ${_formatRemaining()}',
+                    label:
+                        _expired ? '审批已过期，已自动拒绝' : '审批剩余 ${_formatRemaining()}',
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
@@ -188,8 +266,8 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
                           Expanded(
                             child: Text(
                               _expired
-                                  ? '瀹℃壒宸茶繃鏈燂紝璇锋敹鍒伴噸璇曚换鍔?'
-                                  : '瀹℃壒鏈夋晥鏃堕棿 ${_formatRemaining()}',
+                                  ? '审批已过期，请重试任务'
+                                  : '审批有效时间 ${_formatRemaining()}',
                               style: TextStyle(
                                 color: riskColor,
                                 fontSize: AppTokens.fontSizeFootnote,
@@ -275,8 +353,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
                               .surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(10)),
                       child: SingleChildScrollView(
-                          child: SelectableText(
-                              _prettyJson(widget.call.arguments),
+                          child: SelectableText(_prettyJson(approvalArguments),
                               style: const TextStyle(
                                   fontFamily: 'monospace',
                                   fontSize: AppTokens.fontSizeFootnote))),
@@ -295,6 +372,9 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
 
   Widget _buildActions(BuildContext context, bool danger, Color riskColor) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // 危险级在任何入口都只提供「拒绝 / 本次执行」，不提供任何范围的信任。
+    final showSessionTrust = widget.allowSessionTrust && !danger;
+    final showPersistentTrust = widget.allowPersistentTrust && !danger;
     final buttonPadding = const EdgeInsets.fromLTRB(20, 10, 20, 14);
     return Container(
       decoration: BoxDecoration(
@@ -323,7 +403,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
                       onPressed: _expired
                           ? null
                           : () {
-                              HapticFeedback.selectionClick();
+                              NexusHaptics.selection(context);
                               Navigator.pop(context, ToolApproval.reject);
                             },
                       child: const Text(AppStrings.reject),
@@ -338,7 +418,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
                       onPressed: _expired
                           ? null
                           : () {
-                              HapticFeedback.mediumImpact();
+                              NexusHaptics.medium(context);
                               Navigator.pop(context, ToolApproval.allowOnce);
                             },
                       child: const Text('确认执行'),
@@ -346,30 +426,54 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet> {
                   ),
                 ],
               ),
-              if (!danger && widget.allowPersistentTrust && !_expired) ...[
+              // 信任按钮只渲染「当前入口真的能授予」的范围：
+              // * 危险级：任何模式都逐次确认，两个按钮都不给；
+              // * requiresConfirmation（终端、写文件）：只给会话级授权。持久放行会
+              //   绕过 README 里「终端默认逐次确认」的承诺，想长期免打扰应显式改用
+              //   「完全访问」模式（一个可随时撤回的全局开关）；
+              // * 敏感工具：参数含凭据，同样只给会话级。
+              // 此前这里恒为 false（只有 safe 能通过，而 safe 从不弹窗），两个按钮
+              // 实际永远不显示，属于不可达的假 UI。
+              if (showSessionTrust && !_expired) ...[
                 const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () {
-                          HapticFeedback.selectionClick();
+                          NexusHaptics.selection(context);
                           Navigator.pop(context, ToolApproval.allowSession);
                         },
-                        child: const Text('仅本次允许'),
+                        // allowSession 的语义是「本会话内一直允许」。此前写作
+                        // 「仅本次允许」，与上排 allowOnce（确认执行）重复，用户
+                        // 无法区分两个按钮的差别。
+                        child: const Text('本会话允许'),
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.tonal(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          Navigator.pop(context, ToolApproval.allowAlways);
-                        },
-                        child: const Text('始终允许'),
+                    if (showPersistentTrust) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton.tonal(
+                          onPressed: () {
+                            NexusHaptics.medium(context);
+                            Navigator.pop(context, ToolApproval.allowAlways);
+                          },
+                          child: const Text('始终允许'),
+                        ),
                       ),
-                    ),
+                    ],
                   ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  showPersistentTrust
+                      ? '「本会话允许」退出应用后失效；「始终允许」全局持久生效，'
+                          '可在「设置 → 工具清单」中撤销。'
+                      : '「本会话允许」只在本次应用运行期间生效，重启后需要重新确认。',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
                 ),
               ],
             ],

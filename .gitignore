@@ -84,6 +84,22 @@ windows/flutter/generated_plugin_registrant.h
 scripts/flutter_hot_daemon.ps1
 
 # Local-only development material; keep the GitHub repository runnable and lean.
+# 本地 Agent / 外部工具运行状态，不属于 Flutter 项目源代码。
+.skill-install/
+.workbuddy-ai/
+/dsh-context-source/
+/NUL
+
+# 外部 DSH / 视觉素材工具生成的临时工件，不属于 NEXUS Agent 源码。
+/natgeo_landscape_*.jpg
+/smoke_*.png
+/fixed_*.png
+/final_agent_*.png
+/preset-detail-*.json
+/preset-square-SKILL.md
+/preset-*.html
+/*.dshpreset
+
 # 注：/test/ 已于 2026-09-10 移出忽略列表 —— 40+ 文件 / 7500+ 行测试是重要资产，
 #     此前仅存在于本机、一旦丢失不可恢复，且 CI 依赖它们却拉不到。
 # 注：/.github/ 与 analysis_options.yaml 已于 2026-09-10 入库 —— 否则 CI 工作流
@@ -101,3 +117,6 @@ MCP_Implementation_Plan.md
 Workspace_Coding_Agent_Plan.md
 fix_chat_page.py
 start.bat
+
+# Local cleanup archives, logs, screenshots and manifests
+/artifacts/

@@ -1,6 +1,6 @@
 plugins {
     id("com.android.application")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    // The Flutter Gradle Plugin must be applied after the Android plugin.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -13,6 +13,10 @@ val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseKey = keystorePropertiesFile.exists()
 val allowDebugSigning = providers.gradleProperty("allowDebugSigning").orNull == "true"
+// Local iteration can opt out of the expensive R8/resource-shrinking pass with
+// --android-project-arg=fastBuild=true. The normal release build remains fully
+// shrunk so published APKs keep their size and optimization guarantees.
+val fastBuild = providers.gradleProperty("fastBuild").orNull == "true"
 val releaseTaskRequested = gradle.startParameter.taskNames.any {
     it.contains("release", ignoreCase = true)
 }
@@ -76,9 +80,15 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            // [体积优化] 开启 R8 代码压缩与资源收缩，删除未使用的原生代码与资源
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // [体积优化] 正式构建开启 R8 代码压缩与资源收缩，删除未使用的
+            // 原生代码与资源；本地迭代可通过 fastBuild 暂时跳过这两个慢步骤。
+            isMinifyEnabled = !fastBuild
+            isShrinkResources = !fastBuild
+            // Shizuku UserService 由类名反射加载，keep 规则见 proguard-rules.pro。
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
 
             // 正式密钥缺失时，仅显式 allowDebugSigning 开关允许调试签名。
             signingConfig = if (hasReleaseKey) {
@@ -87,6 +97,11 @@ android {
                 signingConfigs.getByName("debug")
             }
         }
+    }
+
+    // Shizuku UserService 通过 AIDL 与应用通信（免 Root 提权通道）。
+    buildFeatures {
+        aidl = true
     }
 
     // PRoot is launched as an executable from applicationInfo.nativeLibraryDir.
@@ -110,4 +125,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // 免 Root 提权：Shizuku（ADB/Root 模式）API 与 Binder 接收 Provider。
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 }

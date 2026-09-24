@@ -29,8 +29,17 @@ extension ChatRunExecution on ChatController {
     List<ChatMessage>? resumeContext,
   }) async {
     if (!_runs.ownsRun(runGeneration, runConversationId)) return;
+    // Capture the run's anchor before any await or conversation switch.
+    final assistantMessageId = assistantIndex < _currentState.messages.length
+        ? _currentState.messages[assistantIndex].id ??
+            UniqueId.generate('message')
+        : UniqueId.generate('message');
+    final deviceAuditUserRequest =
+        assistantIndex >= 0 && assistantIndex <= _currentState.messages.length
+            ? _lastUserText(assistantIndex)
+            : '';
     _activePlanGeneration = runGeneration;
-    final runHistory = resumeContext ??
+    var runHistory = resumeContext ??
         List<ChatMessage>.of(_currentState.messages.take(assistantIndex));
     final runPlanMode = _currentState.planMode;
     final runApprovalMode = _currentState.approvalMode;
@@ -44,8 +53,14 @@ extension ChatRunExecution on ChatController {
     if (visible()) {
       _currentState = _currentState.copyWith(currentRunId: runId);
     }
-    final logService = ref.read(logServiceProvider);
+    final logService = _ref.read(logServiceProvider);
     final runStartedAt = DateTime.now();
+    _setRunProgress(
+      runGeneration: runGeneration,
+      conversationId: runConversationId,
+      stage: ChatRunStage.preparing,
+      label: '正在准备任务',
+    );
     var eventSequence = 0;
     var runStatus = 'running';
     Map<String, dynamic>? runCheckpoint;
@@ -53,7 +68,7 @@ extension ChatRunExecution on ChatController {
     var foregroundStarted = false;
     RunEventTracker? tracker;
     try {
-      final database = await ref.read(databaseProvider.future);
+      final database = await _ref.read(databaseProvider.future);
       await database.insertRunRecord(RunRecordsCompanion.insert(
         runId: runId,
         conversationId: runConversationId ?? 'unknown',
@@ -73,6 +88,8 @@ extension ChatRunExecution on ChatController {
     }
     RunEventHandle? modelEvent;
     final toolEvents = <String, RunEventHandle?>{};
+    // 设备操作审计需要执行耗时；按工具调用 ID 记录开始时间。
+    final toolStartedAt = <String, DateTime>{};
     RunEventHandle? activeNetworkEvent;
     var networkSequence = 0;
     void syncEventCount() {
@@ -109,9 +126,8 @@ extension ChatRunExecution on ChatController {
     }
 
     try {
-      foregroundStarted = await ForegroundService.instance
-          .start(text: 'Agent 任务执行中')
-          .timeout(const Duration(seconds: 2));
+      foregroundStarted =
+          await ForegroundService.instance.start(text: 'Agent 任务执行中');
     } catch (error) {
       // 前台服务不可用时仍允许当前回合继续，但不宣称锁屏可靠。
       unawaited(logService.warning(
@@ -126,7 +142,7 @@ extension ChatRunExecution on ChatController {
     final provider =
         config.isConfigured ? createLlmProvider(config) : DemoProvider();
     final executor = AgentExecutor(provider: provider, tools: registry);
-    final retrySettings = ref.read(agentRetrySettingsProvider);
+    final retrySettings = _ref.read(agentRetrySettingsProvider);
     final cancellationToken = AgentCancellationToken();
     final dioCancelToken = CancelToken();
     final runController = AgentRunController(
@@ -138,6 +154,11 @@ extension ChatRunExecution on ChatController {
     final answer = StringBuffer();
     final reasoning = StringBuffer();
     var usage = const Usage();
+    var timing = TimingSnapshot.empty;
+    DateTime? modelStartedAt;
+    DateTime? firstModelTokenAt;
+    DateTime? timingReasoningStartedAt;
+    DateTime? firstTextStartedAt;
     int? estimatedCostCents;
     int? savedCostCents;
     final stopwatch = Stopwatch()..start();
@@ -158,7 +179,76 @@ extension ChatRunExecution on ChatController {
     var lastFlush = DateTime.now();
     var lastFlushedUnits = 0;
     var lastContextEstimate = DateTime.fromMillisecondsSinceEpoch(0);
+    var lastProgressCharacters = 0;
+    var lastProgressReportAt = DateTime.fromMillisecondsSinceEpoch(0);
     Timer? flushTimer;
+
+    void publishTiming() {
+      if (!ownsRun() || !visible()) return;
+      _currentState = _currentState.copyWith(
+        timingSnapshot: timing.copyWith(wallMs: stopwatch.elapsedMilliseconds),
+      );
+    }
+
+    void finishModelTiming([DateTime? endedAt]) {
+      final startedAt = modelStartedAt;
+      if (startedAt == null) return;
+      final ended = endedAt ?? DateTime.now();
+      final firstToken = firstModelTokenAt;
+      final waitMs = firstToken == null
+          ? ended.difference(startedAt).inMilliseconds
+          : firstToken.difference(startedAt).inMilliseconds;
+      final reasoningStarted = timingReasoningStartedAt;
+      final firstText = firstTextStartedAt;
+      final reasoningEnd = firstText ?? ended;
+      final reasoningMs = reasoningStarted == null
+          ? 0
+          : reasoningEnd.difference(reasoningStarted).inMilliseconds;
+      final outputMs =
+          firstText == null ? 0 : ended.difference(firstText).inMilliseconds;
+      timing = timing.copyWith(
+        modelWaitMs: timing.modelWaitMs + (waitMs < 0 ? 0 : waitMs),
+        reasoningMs: timing.reasoningMs + (reasoningMs < 0 ? 0 : reasoningMs),
+        outputMs: timing.outputMs + (outputMs < 0 ? 0 : outputMs),
+      );
+      modelStartedAt = null;
+      firstModelTokenAt = null;
+      timingReasoningStartedAt = null;
+      firstTextStartedAt = null;
+      publishTiming();
+    }
+
+    void beginModelTiming() {
+      finishModelTiming();
+      modelStartedAt = DateTime.now();
+      timing = timing.copyWith(modelCalls: timing.modelCalls + 1);
+      publishTiming();
+    }
+
+    void reportGeneratedProgress({
+      required ChatRunStage stage,
+      required String label,
+    }) {
+      final totalCharacters = answer.length + reasoning.length;
+      final now = DateTime.now();
+      if (totalCharacters == lastProgressCharacters &&
+          now.difference(lastProgressReportAt) < const Duration(seconds: 1)) {
+        return;
+      }
+      if (totalCharacters - lastProgressCharacters < 24 &&
+          now.difference(lastProgressReportAt) < const Duration(seconds: 1)) {
+        return;
+      }
+      lastProgressCharacters = totalCharacters;
+      lastProgressReportAt = now;
+      _setRunProgress(
+        runGeneration: runGeneration,
+        conversationId: runConversationId,
+        stage: stage,
+        label: label,
+        generatedCharacters: totalCharacters,
+      );
+    }
 
     void flushAnswer({bool force = false}) {
       if (!ownsRun() ||
@@ -232,8 +322,13 @@ extension ChatRunExecution on ChatController {
     var memoryBlock = '';
     var knowledgeBlock = '';
     try {
-      final database = await ref.read(databaseProvider.future);
-      skillIndexBlock = await SkillStore().buildInjectionBlock(database);
+      final database = await _ref.read(databaseProvider.future);
+      // 普通聊天模式不装配工具；Agent 权限也可能明确关闭 Skill 工具。
+      // 只有存在匹配的读取工具时才注入索引，避免提示词与能力不一致。
+      if (_currentState.mode != ChatMode.chat &&
+          registry.findExecutor('skills_read') != null) {
+        skillIndexBlock = await SkillStore().buildInjectionBlock(database);
+      }
       for (final instruction in sessionSkillInstructions) {
         final content = instruction.content.trim();
         if (content.isNotEmpty) sessionSkillTexts.add(content);
@@ -286,7 +381,7 @@ extension ChatRunExecution on ChatController {
           ? null
           : await () async {
               try {
-                final database = await ref.read(databaseProvider.future);
+                final database = await _ref.read(databaseProvider.future);
                 final task = await database.findTask(taskId);
                 if (task == null) return null;
                 return TaskService().describe(task).type;
@@ -312,7 +407,7 @@ extension ChatRunExecution on ChatController {
         ProjectSettings settings = const ProjectSettings();
         TaskSummary? summary;
         try {
-          final database = await ref.read(databaseProvider.future);
+          final database = await _ref.read(databaseProvider.future);
           final row = await database.findProject(projectId);
           if (row != null) {
             settings = ProjectSettings.decode(row.settingsJson);
@@ -350,6 +445,7 @@ extension ChatRunExecution on ChatController {
           tools: registry.manifests,
           history: _currentState.messages.take(assistantIndex).toList(),
           projectContext: context,
+          reservedOutputTokens: maxTokens,
         );
         context = budgetPlan.projectContext;
         projectContextBlock = context.toPromptBlock();
@@ -369,6 +465,12 @@ extension ChatRunExecution on ChatController {
       ));
     }
 
+    _setRunProgress(
+      runGeneration: runGeneration,
+      conversationId: runConversationId,
+      stage: ChatRunStage.analyzing,
+      label: '正在分析需求',
+    );
     final baseSystemPrompt = assembleAgentSystemPrompt(
       personaPrompt: [
         runSystemPrompt,
@@ -384,7 +486,7 @@ extension ChatRunExecution on ChatController {
     );
 
     try {
-      final trustStore = await ref.read(toolTrustStoreProvider.future);
+      final trustStore = await _ref.read(toolTrustStoreProvider.future);
       await for (final event in executor.run(
         history: runHistory,
         model: model,
@@ -407,9 +509,125 @@ extension ChatRunExecution on ChatController {
         cancellationToken: cancellationToken,
         cancelToken: dioCancelToken,
         runController: runController,
+        // 默认聊天：40 轮预算，最近有进展时自动续跑 2 次；选了 Agent 时尊重
+        // 它自己设定的最大步数上限，不自动续跑。
+        autoContinueLimit: _currentState.agentId == null ? 2 : 0,
       )) {
-        if (event is AgentStatusEvent &&
+        if (event is ContextSnapshotEvent) {
+          final record = ContextStepRecord(
+            step: event.step,
+            snapshot: event.snapshot,
+            startedAt: DateTime.now(),
+            anchorMessageId: event.anchorMessageId,
+          );
+          if (ownsRun() && visible()) {
+            _currentState = _currentState.copyWith(
+              contextSnapshot: event.snapshot,
+              contextSteps: [..._currentState.contextSteps, record],
+              liveContextTokens: event.snapshot.usedTokens,
+            );
+          }
+          await recordRunEvent(
+            type: 'context_snapshot',
+            name: '上下文快照',
+            status: 'recorded',
+            metadata: record.toJson(),
+          );
+        } else if (event is AgentContextCompressionEvent) {
+          if (ownsRun()) {
+            await _persistCompressionMarkers(
+              runConversationId,
+              event.toolCallIds,
+            );
+          }
+          if (ownsRun() && visible()) {
+            final ids = event.toolCallIds.toSet();
+            _currentState = _currentState.copyWith(
+              toolActivities: _currentState.toolActivities.map((activity) {
+                if (!ids.contains(activity.call.id)) return activity;
+                return activity.copyWith(
+                  compressed: true,
+                  originalResult: activity.result,
+                );
+              }).toList(growable: false),
+            );
+          }
+          await recordRunEvent(
+            type: 'context_compress',
+            name: '用户确认压缩工具结果',
+            status: 'success',
+            metadata: {
+              'approved': true,
+              'toolCallIds': event.toolCallIds,
+              'candidateCount': event.candidateCount,
+              'estimatedSavedTokens': event.estimatedSavedTokens,
+              'originalTokens': event.originalTokens,
+              'compressedTokens': event.compressedTokens,
+            },
+          );
+        } else if (event is ContextBudgetWarningEvent) {
+          await recordRunEvent(
+            type: 'context_budget',
+            name: '上下文预算${event.level.label}',
+            status: event.level.name,
+            metadata: {
+              'level': event.level.name,
+              'usedTokens': event.usedTokens,
+              'contextWindow': event.contextWindow,
+              'remainingTokens': event.remainingTokens,
+              if (event.dominantPart != null)
+                'dominantPart': event.dominantPart,
+            },
+          );
+        } else if (event is AgentContextChangeEvent) {
+          await recordRunEvent(
+            type: event.kind,
+            name: _contextChangeName(event),
+            status: 'recorded',
+            metadata: {
+              'step': event.step,
+              'category': event.category,
+              'deltaTokens': event.deltaTokens,
+              'estimated': true,
+            },
+          );
+        } else if (event is AgentStepUsageEvent) {
+          if (ownsRun() && visible()) {
+            final steps = _currentState.contextSteps.map((record) {
+              return record.step == event.step
+                  ? record.withUsage(event.usage)
+                  : record;
+            }).toList(growable: false);
+            _currentState = _currentState.copyWith(
+              contextSteps: steps,
+              contextSnapshot:
+                  _currentState.contextSnapshot?.withProviderUsage(event.usage),
+            );
+          }
+          await recordRunEvent(
+            type: 'context_usage',
+            name: '上下文使用量',
+            status: 'recorded',
+            metadata: {
+              'step': event.step,
+              'promptTokens': event.usage.promptTokens,
+              'completionTokens': event.usage.completionTokens,
+              'cachedTokens': event.usage.cachedTokens,
+              'cacheWriteTokens': event.usage.cacheWriteTokens,
+              'reasoningTokens': event.usage.reasoningTokens,
+              'usageReported': event.usage.usageReported,
+              'cacheStatsReported': event.usage.cacheStatsReported,
+            },
+          );
+        } else if (event is AgentStatusEvent &&
             event.status == RunStatus.waitingModel) {
+          beginModelTiming();
+          _setRunProgress(
+            runGeneration: runGeneration,
+            conversationId: runConversationId,
+            stage: ChatRunStage.waitingModel,
+            label: '正在等待模型响应',
+          );
           await tracker?.finish(modelEvent, status: 'success');
           modelEvent = await tracker?.start(
             type: 'model_request',
@@ -441,6 +659,8 @@ extension ChatRunExecution on ChatController {
           ttft ??= firstTokenElapsed;
           firstTokenDurationMs ??= firstTokenElapsed.inMilliseconds;
           final now = DateTime.now();
+          firstModelTokenAt ??= now;
+          firstTextStartedAt ??= now;
           firstOutputAt ??= now;
           if (lastOutputAt != null) {
             final stallMs = now.difference(lastOutputAt).inMilliseconds;
@@ -451,6 +671,10 @@ extension ChatRunExecution on ChatController {
           }
           lastOutputAt = now;
           answer.write(event.text);
+          reportGeneratedProgress(
+            stage: ChatRunStage.generating,
+            label: '正在生成回答',
+          );
           requestFlush();
         } else if (event is ReasoningEvent) {
           if (ownsRun() && visible()) {
@@ -463,6 +687,8 @@ extension ChatRunExecution on ChatController {
           ttft ??= firstTokenElapsed;
           firstTokenDurationMs ??= firstTokenElapsed.inMilliseconds;
           final now = DateTime.now();
+          firstModelTokenAt ??= now;
+          timingReasoningStartedAt ??= now;
           firstOutputAt ??= now;
           if (lastOutputAt != null) {
             final stallMs = now.difference(lastOutputAt).inMilliseconds;
@@ -473,6 +699,10 @@ extension ChatRunExecution on ChatController {
           }
           lastOutputAt = now;
           reasoning.write(event.text);
+          reportGeneratedProgress(
+            stage: ChatRunStage.reasoning,
+            label: '正在整理思路',
+          );
           requestFlush();
         } else if (event is AgentUsageEvent) {
           usage = Usage(
@@ -487,17 +717,21 @@ extension ChatRunExecution on ChatController {
               visible() &&
               assistantIndex < _currentState.messages.length) {
             final current = _currentState.messages[assistantIndex];
+            final snapshot = _currentState.contextSnapshot;
             _currentState = _withMessageAt(
               _currentState,
               assistantIndex,
               current.copyWith(usage: usage),
             ).copyWith(
-                liveContextTokens: usage.promptTokens + usage.completionTokens);
+              liveContextTokens:
+                  snapshot?.usedTokens ?? _currentState.liveContextTokens,
+            );
           }
           final estimate = _estimateUsageCost(config, usage);
           estimatedCostCents = estimate.costCents;
           savedCostCents = estimate.savedCostCents;
         } else if (event is AgentErrorEvent) {
+          finishModelTiming();
           runStatus = 'failed';
           final failure = ModelFailure.classify(
             event.message,
@@ -543,6 +777,7 @@ extension ChatRunExecution on ChatController {
                 if (event.statusCode != null) 'statusCode': event.statusCode,
               });
         } else if (event is AgentBudgetExhaustedEvent) {
+          finishModelTiming();
           // 达到 maxSteps：可恢复的预算暂停，不是失败。保存续跑上下文与原因。
           runStatus = 'paused';
           _runs.budgetPauseContext = List<ChatMessage>.of(event.context);
@@ -559,19 +794,63 @@ extension ChatRunExecution on ChatController {
               status: 'success', outputSummary: event.message);
           activeNetworkEvent = null;
           modelEvent = null;
-          answer.write('\n\n${formatErrorForMessage(event.message)}');
+          // 写入可续跑暂停提示（不是错误）：气泡据此显示暂停卡，提供
+          // 继续执行 / 从头重试 / 切换模型，而不是「未知错误」。
+          final pausedForFailures =
+              event.reason == AgentPauseReason.repeatedFailures;
+          final pauseNotice = formatRunPauseForMessage(
+            kind: pausedForFailures
+                ? RunPauseKind.repeatedFailures
+                : RunPauseKind.budget,
+            maxSteps: event.maxSteps,
+            runId: runId,
+          );
+          answer.write('\n\n$pauseNotice');
           await recordRunEvent(
               type: 'budget',
-              name: '执行预算已耗尽',
+              name: pausedForFailures ? '连续失败已暂停' : '执行预算已耗尽',
               status: 'paused',
               outputSummary: event.message,
-              metadata: {'maxSteps': event.maxSteps});
-          await logService.warning('Agent 达到执行步数预算，已暂停可续跑',
+              metadata: {
+                'maxSteps': event.maxSteps,
+                'reason': event.reason.name,
+              });
+          await logService.warning(
+              pausedForFailures
+                  ? 'Agent 连续工具失败，已暂停可续跑'
+                  : 'Agent 达到执行步数预算，已暂停可续跑',
               runId: runId,
               category: 'budget',
               detail: {'maxSteps': event.maxSteps});
+        } else if (event is AgentBudgetExtendedEvent) {
+          // 预算用完但仍有进展：执行器已自动追加一轮预算，只记录、不打断。
+          await recordRunEvent(
+              type: 'budget',
+              name: '自动续跑',
+              status: 'success',
+              outputSummary: '已自动续跑（${event.round}/${event.limit}），'
+                  '再执行 ${event.addedSteps} 轮',
+              metadata: {
+                'round': event.round,
+                'limit': event.limit,
+                'addedSteps': event.addedSteps,
+              });
+          if (ownsRun() && visible()) {
+            _currentState = _currentState.copyWith(activityLog: [
+              ..._currentState.activityLog,
+              '已自动续跑（${event.round}/${event.limit}）',
+            ]);
+          }
         } else if (event is AgentRetryEvent) {
+          finishModelTiming();
+          beginModelTiming();
           retryCount = event.attempt;
+          _setRunProgress(
+            runGeneration: runGeneration,
+            conversationId: runConversationId,
+            stage: ChatRunStage.waitingModel,
+            label: '连接波动，正在重试第 ${event.attempt + 1} 次',
+          );
           await tracker?.finish(activeNetworkEvent,
               status: 'failed', metadata: {'attempt': event.attempt});
           await tracker?.finish(modelEvent,
@@ -595,7 +874,14 @@ extension ChatRunExecution on ChatController {
               category: 'network',
               detail: {'attempt': event.attempt});
         } else if (event is ToolRequestedEvent) {
+          finishModelTiming();
           if (!ownsRun()) continue;
+          _setRunProgress(
+            runGeneration: runGeneration,
+            conversationId: runConversationId,
+            stage: ChatRunStage.waitingForTool,
+            label: '准备处理：${event.call.name}',
+          );
           final risk = _riskFor(registry, event.call.name);
           // The provider response is complete once tool calls are emitted;
           // keep network latency separate from the tool execution duration.
@@ -603,6 +889,7 @@ extension ChatRunExecution on ChatController {
           await tracker?.finish(modelEvent, status: 'success');
           activeNetworkEvent = null;
           modelEvent = null;
+          toolStartedAt[event.call.id] = DateTime.now();
           toolEvents[event.call.id] = await tracker?.start(
             type: _isFileOperationTool(event.call.name)
                 ? 'file_operation'
@@ -626,8 +913,17 @@ extension ChatRunExecution on ChatController {
                 conversationId: runConversationId);
           }
           if (!ownsRun() || !visible()) continue;
+          _setRunProgress(
+            runGeneration: runGeneration,
+            conversationId: runConversationId,
+            stage: ChatRunStage.waitingForTool,
+            label: '等待工具开始执行：${event.call.name}',
+          );
           _currentState = _currentState.copyWith(
-            activityLog: [..._currentState.activityLog, '等待确认'],
+            activityLog: [
+              ..._currentState.activityLog,
+              '准备执行：${event.call.name}',
+            ],
             toolActivities: [
               ..._currentState.toolActivities,
               ToolActivity(
@@ -644,43 +940,149 @@ extension ChatRunExecution on ChatController {
         } else if (event is AgentStatusEvent &&
             event.status == RunStatus.executingTool) {
           if (!ownsRun()) continue;
+          final currentTool = _currentState.toolActivities.lastOrNull;
+          _setRunProgress(
+            runGeneration: runGeneration,
+            conversationId: runConversationId,
+            stage: ChatRunStage.executingTool,
+            label: currentTool == null
+                ? '正在执行工具'
+                : '正在执行：${currentTool.call.name}',
+          );
           if (_currentState.toolActivities.isEmpty ||
               _currentState.toolActivities.last.call.name != 'manage_plan') {
             _updatePlanStepStatus('running');
           }
           _currentState = _currentState.copyWith(
-            activityLog: [..._currentState.activityLog, '等待确认'],
+            activityLog: [
+              ..._currentState.activityLog,
+              currentTool == null
+                  ? '正在执行工具'
+                  : '正在执行：${currentTool.call.name}',
+            ],
             toolActivities: _updateLastToolActivity(
                 _currentState.toolActivities,
                 status: '执行中'),
           );
         } else if (event is ApprovalRequiredEvent) {
           if (!ownsRun()) continue;
+          _setRunProgress(
+            runGeneration: runGeneration,
+            conversationId: runConversationId,
+            stage: ChatRunStage.waitingForUser,
+            label: '等待你的确认：${event.call.name}',
+          );
           _currentState = _currentState.copyWith(
-            activityLog: [..._currentState.activityLog, '等待确认'],
+            activityLog: [
+              ..._currentState.activityLog,
+              '等待你的确认：${event.call.name}',
+            ],
             toolActivities: _updateToolActivity(
                 _currentState.toolActivities, event.call.id,
                 status: '等待确认'),
           );
           if (taskId != null) {
-            final taskDb = await ref.read(databaseProvider.future);
+            final taskDb = await _ref.read(databaseProvider.future);
             await TaskService()
                 .updateStatus(taskDb, taskId, 'waiting_approval');
           }
-          await NotificationService.instance.init();
-          await NotificationService.instance.show(
-            id: event.call.id.hashCode & 0x7fffffff,
-            title: '开发任务等待审批',
-            body: '需要确认工具：${event.call.name}',
-            payload: 'conversation:${_currentState.conversationId ?? ''}',
-          );
+          // 这里刻意不再发通知：
+          // * 应用在前台时，用户直接看得到审批弹窗，弹通知纯属噪音；
+          // * 应用在后台时，promptToolApproval 会转走 ApprovalBridge，由它发出
+          //   带「批准 / 拒绝」动作的通知。
+          // 此前这里额外发一条不带动作的「开发任务等待审批」，于是后台审批会在
+          // 通知栏出现两条指向同一次审批的通知，其中一条点了没有任何裁决能力。
         } else if (event is ToolResultEvent) {
           if (!ownsRun()) continue;
+          final toolFailed = !event.result.ok;
+          if (event.call.name == 'android_device' ||
+              event.call.name == 'android_device_preview' ||
+              event.call.name == 'android_app_private_data' ||
+              event.call.name == 'android_app_private_data_preview') {
+            try {
+              final auditDb = await _ref.read(databaseProvider.future);
+              final privateDataPreview =
+                  event.call.name == 'android_app_private_data_preview';
+              final devicePreview = event.call.name == 'android_device_preview';
+              final executedDeviceCall = event.call.name == 'android_device';
+              await _ref.read(auditServiceProvider).logAndroidDeviceOperation(
+                    auditDb,
+                    userRequest: deviceAuditUserRequest,
+                    arguments: event.call.arguments,
+                    resultOk: event.result.ok,
+                    resultCode: event.result.code,
+                    resultEffect: event.result.effect.name,
+                    risk: privateDataPreview || devicePreview
+                        ? 'safe'
+                        : event.call.name == 'android_app_private_data'
+                            ? 'dangerous'
+                            : event.call.name == 'android_device'
+                                ? AndroidDeviceTool.auditRiskForArguments(
+                                        event.call.arguments)
+                                    .name
+                                : 'requiresConfirmation',
+                    previewOnly: privateDataPreview || devicePreview,
+                    conversationId: runConversationId,
+                    toolName: event.call.name,
+                    execution: executedDeviceCall || devicePreview
+                        ? AndroidDeviceTool.auditExecutionFor(
+                            event.call.arguments)
+                        : null,
+                    startedAt: toolStartedAt.remove(event.call.id),
+                  );
+            } catch (error, stackTrace) {
+              NexusGuard.degradeCaught(
+                'audit.androidDeviceOperation.database',
+                error,
+                stackTrace,
+                logger: logService.warning,
+                runId: runId,
+              );
+            }
+          }
+          if (event.call.name == 'android_automation' &&
+              const {'create_rule', 'set_rule_enabled', 'delete_rule'}
+                  .contains(event.call.arguments['action'])) {
+            // 规则变更与用户原话关联入审计；规则服务自身另记一条生命周期事件。
+            try {
+              final auditDb = await _ref.read(databaseProvider.future);
+              final args = event.call.arguments;
+              final trigger = AutomationTrigger.fromJson(args['trigger']);
+              final actions = args['actions'] is List
+                  ? (args['actions'] as List)
+                      .map(AutomationAction.fromJson)
+                      .whereType<AutomationAction>()
+                      .toList()
+                  : const <AutomationAction>[];
+              await _ref.read(auditServiceProvider).logDeviceAutomationEvent(
+                    auditDb,
+                    event:
+                        'agent_${args['action']}_${event.result.ok ? 'ok' : event.result.code}',
+                    ruleId:
+                        (event.result.data?['ruleId'] ?? args['ruleId'] ?? '')
+                            .toString(),
+                    ruleName: args['name']?.toString() ?? '',
+                    trigger: trigger?.describe() ?? '',
+                    actions:
+                        actions.map((action) => action.describe()).toList(),
+                    requiresRoot: actions.any((action) => action.requiresRoot),
+                    irreversible: actions.any((action) => action.irreversible),
+                    userRequest: deviceAuditUserRequest,
+                  );
+            } catch (error, stackTrace) {
+              NexusGuard.degradeCaught(
+                'audit.deviceAutomation.database',
+                error,
+                stackTrace,
+                logger: logService.warning,
+                runId: runId,
+              );
+            }
+          }
           if (taskId != null) {
-            final taskDb = await ref.read(databaseProvider.future);
+            final taskDb = await _ref.read(databaseProvider.future);
             await TaskService().updateStatus(taskDb, taskId, 'running');
           }
-          final toolFailed = !event.result.ok;
           final auditMetadata = <String, dynamic>{
             ...event.metadata,
             'tool': event.call.name,
@@ -695,6 +1097,7 @@ extension ChatRunExecution on ChatController {
               'operation': event.call.name,
           };
           final toolHandle = toolEvents.remove(event.call.id);
+          toolStartedAt.remove(event.call.id);
           await tracker?.finish(
             toolHandle,
             status: toolFailed ? 'failed' : 'success',
@@ -747,15 +1150,49 @@ extension ChatRunExecution on ChatController {
               effect: event.result.effect,
             ),
           );
+          final toolExecutionMs = _currentState.toolActivities.fold<int>(
+            0,
+            (total, activity) => total + activity.executionMs,
+          );
+          timing = timing.copyWith(
+            toolExecutionMs: toolExecutionMs,
+            toolCalls: timing.toolCalls + 1,
+          );
+          publishTiming();
+          final completedTools = _currentState.toolActivities
+              .where((activity) =>
+                  activity.status == '已完成' || activity.status == '执行失败')
+              .length;
+          _setRunProgress(
+            runGeneration: runGeneration,
+            conversationId: runConversationId,
+            stage: ChatRunStage.waitingModel,
+            label: toolFailed ? '工具未完成，正在重新规划' : '工具已完成，正在继续处理',
+            completedTools: completedTools,
+          );
         }
         if (event is AgentStatusEvent) {
           if (event.status == RunStatus.paused && ownsRun()) {
+            finishModelTiming();
             runStatus = 'paused';
+            _setRunProgress(
+              runGeneration: runGeneration,
+              conversationId: runConversationId,
+              stage: ChatRunStage.paused,
+              label: '已暂停，可继续或追加指令',
+            );
             if (visible()) {
-              _currentState = _currentState.copyWith(paused: true);
+              _currentState = _currentState.copyWith(
+                paused: true,
+                activityLog: [
+                  ..._currentState.activityLog,
+                  '已暂停，可继续或追加指令',
+                ],
+              );
             }
           }
           if (event.status == RunStatus.cancelled) {
+            finishModelTiming();
             runStatus = 'cancelled';
             await tracker?.finish(activeNetworkEvent, status: 'cancelled');
             await tracker?.finish(modelEvent, status: 'cancelled');
@@ -767,6 +1204,7 @@ extension ChatRunExecution on ChatController {
             toolEvents.clear();
           }
           if (event.status == RunStatus.completed) {
+            finishModelTiming();
             runStatus = 'success';
             if (ownsRun() && visible()) {
               _currentState = _currentState.copyWith(
@@ -829,13 +1267,27 @@ extension ChatRunExecution on ChatController {
     } finally {
       flushTimer?.cancel();
       flushTimer = null;
+      finishModelTiming();
       stopwatch.stop();
+      publishTiming();
       try {
-        final runDb = await ref.read(databaseProvider.future);
+        final runDb = await _ref.read(databaseProvider.future);
         if (_runs.wasCancelled(runGeneration)) {
           runStatus = 'cancelled';
         }
         if (runStatus == 'running') runStatus = 'failed';
+        if (runStatus == 'success' &&
+            answer.toString().trim().isEmpty &&
+            reasoning.toString().trim().isEmpty) {
+          runStatus = 'failed';
+          answer.write('模型未返回可显示内容，请检查 Provider/模型配置后重试。');
+          await logService.error(
+            '模型返回空响应',
+            runId: runId,
+            category: 'model',
+            errorCode: 'EMPTY_MODEL_RESPONSE',
+          );
+        }
         try {
           if (activeNetworkEvent != null) {
             await tracker?.finish(activeNetworkEvent,
@@ -916,9 +1368,13 @@ extension ChatRunExecution on ChatController {
         // 到此为止用户回答已生成完毕。指标缺失只影响统计面板的完整度。
       }
     }
+    // 运行事件已完成落库；让下一次打开指标面板重新读取历史，避免在运行中
+    // 预加载过一次之后继续展示缺少本轮结果的旧缓存。
+    _invalidateContextRuns();
     final finalAnswerText = answer.toString();
     final finalReasoningText = reasoning.isEmpty ? '' : reasoning.toString();
     final assistantMessage = ChatMessage(
+      id: assistantMessageId,
       role: MessageRole.assistant,
       parts: [MessagePart.text(finalAnswerText)],
       reasoning: finalReasoningText.isEmpty ? null : finalReasoningText,
@@ -958,19 +1414,23 @@ extension ChatRunExecution on ChatController {
                   .copyWith(
             running: false,
             clearLiveReply: true,
+            clearRunProgress: true,
             liveContextTokens: usage.totalTokens > 0
                 ? usage.totalTokens
                 : _estimateLiveContextTokens(assistantIndex, assistantMessage),
           );
         } else {
           _currentState = _currentState.copyWith(
-              running: false, paused: false, clearLiveReply: true);
+              running: false,
+              paused: false,
+              clearLiveReply: true,
+              clearRunProgress: true);
         }
       }
     }
     if (taskId != null) {
       try {
-        final taskDb = await ref.read(databaseProvider.future);
+        final taskDb = await _ref.read(databaseProvider.future);
         final taskService = TaskService();
         final status = runCancelled
             ? 'cancelled'
@@ -1035,5 +1495,19 @@ extension ChatRunExecution on ChatController {
     if (runStatus == 'success' || runStatus == 'cancelled') {
       _runs.budgetPauseContext = null;
     }
+  }
+
+  String _contextChangeName(AgentContextChangeEvent event) {
+    final category = ContextPartType.values
+        .where((type) => type.name == event.category)
+        .map((type) => type.label)
+        .firstOrNull;
+    final label = category ?? event.category;
+    return switch (event.kind) {
+      'context_inject' => '$label 注入',
+      'context_prune' => '$label 剪枝',
+      'context_compress' => '历史上下文压缩',
+      _ => '上下文变化',
+    };
   }
 }

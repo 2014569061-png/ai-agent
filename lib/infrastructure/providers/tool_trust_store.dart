@@ -71,7 +71,19 @@ class ToolTrustStore {
   /// 记录「本会话允许」。
   void allowSession(String name) => _session.add(name);
 
+  /// 本会话内「允许」清单（用于设置页展示与收回）。
+  ///
+  /// 排序：界面与测试都依赖稳定顺序，而 Set 的迭代顺序取决于插入顺序。
+  List<String> get sessionAllowed => _session.toList()..sort();
+
+  /// 收回单个工具的「本会话允许」。
+  void revokeSession(String name) => _session.remove(name);
+
+  /// 一次性收回全部「本会话允许」。
+  void clearSession() => _session.clear();
+
   /// 当前持久化的「始终允许」清单（用于设置页展示与收回）。
   List<String> get alwaysAllowed =>
-      _always.entries.where((e) => e.value).map((e) => e.key).toList();
+      (_always.entries.where((e) => e.value).map((e) => e.key).toList())
+        ..sort();
 }

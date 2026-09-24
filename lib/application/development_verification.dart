@@ -120,8 +120,8 @@ class VerificationStep {
       command: json['command']?.toString() ?? '',
       kind: json['kind']?.toString() ?? 'command',
       required: json['required'] as bool? ?? true,
-      timeout: Duration(
-          seconds: (json['timeoutSeconds'] as num?)?.toInt() ?? 600),
+      timeout:
+          Duration(seconds: (json['timeoutSeconds'] as num?)?.toInt() ?? 600),
       expectedArtifactPath: json['expectedArtifactPath']?.toString(),
       status: VerificationStepStatusX.parse(json['status']?.toString()),
       output: json['output']?.toString() ?? '',
@@ -255,9 +255,8 @@ class DevelopmentVerificationService {
   String _gradleCommand(String? configured, String task) {
     final value = configured?.trim();
     if (value == null || value.isEmpty) return 'gradlew $task';
-    return value
-        .replaceFirst(RegExp(r'^\./gradlew\b'), 'gradlew')
-        .replaceFirst(RegExp(r'^gradlew\.bat\b', caseSensitive: false), 'gradlew');
+    return value.replaceFirst(RegExp(r'^\./gradlew\b'), 'gradlew').replaceFirst(
+        RegExp(r'^gradlew\.bat\b', caseSensitive: false), 'gradlew');
   }
 
   Future<DevelopmentVerificationPlan> planFor(
@@ -313,8 +312,7 @@ class DevelopmentVerificationService {
             VerificationStep(
               id: 'build',
               title: 'Gradle 构建',
-              command:
-                  _gradleCommand(project.buildCommand, 'assembleRelease'),
+              command: _gradleCommand(project.buildCommand, 'assembleRelease'),
               timeout: const Duration(minutes: 20),
               expectedArtifactPath:
                   'app/build/outputs/apk/release/app-release.apk',
@@ -443,8 +441,8 @@ class DevelopmentVerificationService {
     DevelopmentVerificationPlan? plan,
     String? retryStepId,
   }) async {
-    var current = plan ??
-        await planFor(workspacePath, includeBuild: retryStepId == null);
+    var current =
+        plan ?? await planFor(workspacePath, includeBuild: retryStepId == null);
     final session = await service.openSession(workingDirectory: workspacePath);
     ArtifactInspection? artifact;
     try {
@@ -528,7 +526,8 @@ class DevelopmentVerificationService {
           command: step.command,
           timeout: step.timeout,
         );
-        final output = execution.data?['output']?.toString() ?? execution.message;
+        final output =
+            execution.data?['output']?.toString() ?? execution.message;
         final ok = execution.ok;
         current = _replaceStep(
           current,
@@ -624,9 +623,9 @@ class ArtifactInspector {
     bool? signed;
     if (relativePath.toLowerCase().endsWith('.apk')) {
       final header = await file.openRead(0, 4).fold<List<int>>(
-            <int>[],
-            (previous, element) => previous..addAll(element),
-          );
+        <int>[],
+        (previous, element) => previous..addAll(element),
+      );
       final isZip = header.length >= 4 &&
           header[0] == 0x50 &&
           header[1] == 0x4B &&

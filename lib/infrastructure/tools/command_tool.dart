@@ -12,6 +12,7 @@ import '../../domain/tool_result.dart';
 import '../terminal/linux_runtime.dart';
 import '../terminal/linux_runtime_factory.dart';
 import '../terminal/daemon_persistence.dart';
+import '../terminal/terminal_job_log_store.dart';
 import 'tool_registry.dart';
 import 'workspace_tools.dart';
 
@@ -33,7 +34,9 @@ class TerminalCommandService {
     String? defaultWorkingDirectory,
     TerminalDaemonPersistence? daemonPersistence,
     Directory? jobLogDirectory,
-  })  : _runtime = runtime ?? createDefaultLinuxRuntime(),
+    this.maxCompletedJobs = 50,
+  })  : assert(maxCompletedJobs > 0),
+        _runtime = runtime ?? createDefaultLinuxRuntime(),
         _shellTypeOverride = shellType,
         _defaultWorkDirOverride = defaultWorkingDirectory,
         _jobLogDirectory = jobLogDirectory,
@@ -58,6 +61,10 @@ class TerminalCommandService {
 
   final Map<String, _TerminalSession> _sessions = {};
   final Map<String, _TerminalJob> _jobs = {};
+  final int maxCompletedJobs;
+  final List<String> _completedJobOrder = [];
+  late final _jobLogs =
+      TerminalJobLogStore(_resolvedJobLogDirectory, maxFiles: maxCompletedJobs);
   final Map<String, _TerminalDaemon> _daemons = {};
   Future<void> _serialTail = Future<void>.value();
   late final Future<void> _daemonReady;
@@ -143,81 +150,169 @@ class TerminalCommandService {
     String? taskId,
     String? runId,
     Duration timeout = defaultTimeout,
+  }) =>
+      _startTrackedJob(
+          command: command,
+          workingDirectory: workingDirectory,
+          taskId: taskId,
+          runId: runId,
+          timeout: timeout);
+
+  Future<TerminalJobHandle> _startTrackedJob({
+    required String command,
+    String? workingDirectory,
+    String? taskId,
+    String? runId,
+    String sessionId = '',
+    void Function(CommandResult)? onResult,
+    Duration timeout = defaultTimeout,
   }) async {
     final jobId =
         'job-${DateTime.now().microsecondsSinceEpoch}-${_jobs.length}';
     final cwd = _resolveWorkingDirectory(workingDirectory) ??
         _resolveWorkingDirectory(_defaultWorkDir) ??
         workspacePath;
-    final future = run(command, workingDirectory: cwd, timeout: timeout);
+    // Prepare tracking before starting any process: storage failures must not
+    // leave a running command whose handle was never returned.
     final logDir = _resolvedJobLogDirectory;
     await logDir.create(recursive: true);
+    await pruneJobLogs();
     final logFile = File(p.join(logDir.path, '$jobId.log'));
     final job = _TerminalJob(
-      jobId: jobId,
-      sessionId: '',
-      command: command,
-      future: future,
-      taskId: taskId,
-      runId: runId,
-      logPath: logFile.path,
-    );
-    job.appendEvent(TerminalJobEvent(
-      jobId: jobId,
-      taskId: taskId,
-      runId: runId,
-      sequence: 0,
-      timestamp: DateTime.now(),
-      type: 'started',
-      payload: command,
-    ));
+        jobId: jobId,
+        sessionId: sessionId,
+        command: command,
+        taskId: taskId,
+        runId: runId,
+        logPath: logFile.path);
     _jobs[jobId] = job;
+    Future<CommandResult> future;
+    var liveOutput = supportsLiveOutput;
+    final ownerToken = _newOwnerToken();
+    final runtime = _runtime;
+    final prepared = _prepareDetachedCommand(
+      command,
+      cwd,
+      timeout,
+      runtime.supportsShellSyntax,
+    );
+    DetachedCommandHandle? detached;
+    DetachedLinuxRuntimeAdapter? detachedRuntime;
+    var attemptedDetached = false;
+    if (prepared != null && runtime is DetachedLinuxRuntimeAdapter) {
+      attemptedDetached = true;
+      detachedRuntime = runtime as DetachedLinuxRuntimeAdapter;
+      try {
+        detached = await detachedRuntime.startDetached(
+          prepared.$1,
+          workingDirectory: prepared.$2,
+          timeout: prepared.$3,
+          ownerToken: ownerToken,
+          logPath: logFile.path,
+        );
+      } catch (_) {
+        detached = null;
+      }
+    }
+    if (detached != null && detachedRuntime != null) {
+      final handle = detached;
+      final adapter = detachedRuntime;
+      job.logPath = handle.logPath ?? logFile.path;
+      job.cancel = () async {
+        if (!await adapter.stopDetached(handle.pid, ownerToken)) return false;
+        try {
+          await handle.completion.timeout(const Duration(seconds: 5));
+          return true;
+        } on TimeoutException {
+          return false;
+        } catch (_) {
+          return false;
+        }
+      };
+      future = handle.completion;
+      liveOutput = false;
+    } else if (attemptedDetached) {
+      future = Future.value(const CommandResult(
+        output: '无法确认后台作业是否已启动；为避免重复执行，请先检查目标状态',
+        exitCode: 124,
+        timedOut: true,
+      ));
+    } else {
+      future = run(command, workingDirectory: cwd, timeout: timeout);
+    }
+    job.appendEvent(TerminalJobEvent(
+        jobId: jobId,
+        taskId: taskId,
+        runId: runId,
+        sequence: 0,
+        timestamp: DateTime.now(),
+        type: 'started',
+        payload: command));
     unawaited(future.then((result) {
       if (job.cancelled) return;
-      job.result = result;
+      onResult?.call(result);
+      final output = TerminalJobLogStore.boundedOutput(result.output);
+      job.result = CommandResult(
+          output: output,
+          exitCode: result.exitCode,
+          timedOut: result.timedOut,
+          notExecuted: result.notExecuted);
       job.completed = true;
       job.appendEvent(TerminalJobEvent(
-        jobId: jobId,
-        taskId: taskId,
-        runId: runId,
-        sequence: job.nextSequence,
-        timestamp: DateTime.now(),
-        type: result.exitCode == 0 ? 'stdout' : 'stderr',
-        payload: result.output,
-      ));
+          jobId: jobId,
+          taskId: taskId,
+          runId: runId,
+          sequence: job.nextSequence,
+          timestamp: DateTime.now(),
+          type: result.exitCode == 0 ? 'stdout' : 'stderr',
+          payload: output));
       job.appendEvent(TerminalJobEvent(
-        jobId: jobId,
-        taskId: taskId,
-        runId: runId,
-        sequence: job.nextSequence,
-        timestamp: DateTime.now(),
-        type: result.timedOut ? 'timeout' : 'completed',
-        payload: result.output,
-        exitCode: result.exitCode,
-      ));
+          jobId: jobId,
+          taskId: taskId,
+          runId: runId,
+          sequence: job.nextSequence,
+          timestamp: DateTime.now(),
+          type: result.timedOut ? 'timeout' : 'completed',
+          payload: output,
+          exitCode: result.exitCode));
+      _finishTrackedJob(job);
     }, onError: (Object error, StackTrace stack) {
       if (job.cancelled) return;
-      job.error = error.toString();
+      job.error = TerminalJobLogStore.boundedOutput(error.toString());
       job.completed = true;
       job.appendEvent(TerminalJobEvent(
+          jobId: jobId,
+          taskId: taskId,
+          runId: runId,
+          sequence: job.nextSequence,
+          timestamp: DateTime.now(),
+          type: 'completed',
+          payload: job.error!,
+          exitCode: 127));
+      _finishTrackedJob(job);
+    }));
+    return TerminalJobHandle(
         jobId: jobId,
         taskId: taskId,
         runId: runId,
-        sequence: job.nextSequence,
-        timestamp: DateTime.now(),
-        type: 'completed',
-        payload: error.toString(),
-        exitCode: 127,
-      ));
-    }));
-    return TerminalJobHandle(
-      jobId: jobId,
-      taskId: taskId,
-      runId: runId,
-      liveOutput: supportsLiveOutput,
-      logPath: logFile.path,
-    );
+        liveOutput: liveOutput,
+        logPath: job.logPath);
   }
+
+  void _finishTrackedJob(_TerminalJob job) {
+    job.close();
+    _completedJobOrder.add(job.jobId);
+    while (_completedJobOrder.length > maxCompletedJobs) {
+      _jobs.remove(_completedJobOrder.removeAt(0));
+    }
+    unawaited(pruneJobLogs());
+  }
+
+  Future<void> pruneJobLogs() => _jobLogs.prune(
+      activePaths: () => _jobs.values
+          .where((job) => !job.completed)
+          .map((job) => job.logPath)
+          .whereType<String>());
 
   Stream<TerminalJobEvent> watchJob(String jobId, {int afterSequence = -1}) {
     final job = _jobs[jobId];
@@ -233,31 +328,30 @@ class TerminalCommandService {
   Future<bool> cancelJob(String jobId) async {
     final job = _jobs[jobId];
     if (job == null) return false;
-    if (!job.completed) {
-      job.cancelled = true;
-      // 只停止当前作业，不 stop() 整个 runtime，避免误杀其他作业或预览服务。
-      final othersRunning =
-          _jobs.values.any((item) => item.jobId != jobId && !item.completed);
-      if (!othersRunning) {
-        stop();
-      }
-      job.completed = true;
-      job.result = const CommandResult(
-        output: 'cancelled',
-        exitCode: 130,
-        notExecuted: false,
-      );
-      job.appendEvent(TerminalJobEvent(
-        jobId: job.jobId,
-        taskId: job.taskId,
-        runId: job.runId,
-        sequence: job.nextSequence,
-        timestamp: DateTime.now(),
-        type: 'completed',
-        payload: 'cancelled',
-        exitCode: 130,
-      ));
-    }
+    if (job.completed) return true;
+    final cancel = job.cancel;
+    if (cancel == null) return false;
+    final stopped = await cancel();
+    if (job.completed) return true;
+    if (!stopped) return false;
+    job.cancelled = true;
+    job.completed = true;
+    job.result = const CommandResult(
+      output: 'cancelled',
+      exitCode: 130,
+      notExecuted: false,
+    );
+    job.appendEvent(TerminalJobEvent(
+      jobId: job.jobId,
+      taskId: job.taskId,
+      runId: job.runId,
+      sequence: job.nextSequence,
+      timestamp: DateTime.now(),
+      type: 'completed',
+      payload: 'cancelled',
+      exitCode: 130,
+    ));
+    _finishTrackedJob(job);
     return true;
   }
 
@@ -290,36 +384,34 @@ class TerminalCommandService {
           ok: false, code: ToolCodes.notFound, message: '终端会话不存在');
     }
     final parsedCd = _parseLeadingCd(command, session.cwd);
-    final future =
-        run(command, workingDirectory: session.cwd, timeout: timeout);
     if (asynchronous) {
-      final jobId =
-          'job-${DateTime.now().microsecondsSinceEpoch}-${_jobs.length}';
-      final job = _TerminalJob(
-          jobId: jobId, sessionId: sessionId, command: command, future: future);
-      _jobs[jobId] = job;
-      unawaited(future.then((result) {
-        job.result = result;
-        job.completed = true;
-        if (parsedCd != null &&
-            result.exitCode == 0 &&
-            !result.timedOut &&
-            !result.notExecuted) {
-          session.cwd = parsedCd;
-        }
-      }, onError: (Object error, StackTrace stack) {
-        job.error = error.toString();
-        job.completed = true;
-      }));
+      final handle = await _startTrackedJob(
+          command: command,
+          workingDirectory: session.cwd,
+          sessionId: sessionId,
+          timeout: timeout,
+          onResult: (result) {
+            if (identical(_sessions[sessionId], session) &&
+                parsedCd != null &&
+                result.succeeded) {
+              session.cwd = parsedCd;
+            }
+          });
       return TerminalSessionExecution(
         ok: true,
         code: ToolCodes.ok,
         message: '异步命令已启动',
         effect: ToolEffect.applied,
-        data: {'sessionId': sessionId, 'jobId': jobId, 'cwd': session.cwd},
+        data: {
+          'sessionId': sessionId,
+          'jobId': handle.jobId,
+          'cwd': session.cwd,
+          'logPath': handle.logPath
+        },
       );
     }
-    final result = await future;
+    final result =
+        await run(command, workingDirectory: session.cwd, timeout: timeout);
     if (parsedCd != null &&
         result.exitCode == 0 &&
         !result.timedOut &&
@@ -366,7 +458,8 @@ class TerminalCommandService {
       return const TerminalSessionExecution(
           ok: false, code: ToolCodes.notFound, message: '终端会话不存在');
     }
-    _jobs.removeWhere((_, job) => job.sessionId == sessionId && !job.completed);
+    // Closing a UI session does not cancel its work or invalidate result handles.
+    // Completed results expire through the same bounded retention as startJob.
     return const TerminalSessionExecution(
         ok: true, code: ToolCodes.ok, message: '终端会话已关闭');
   }
@@ -519,7 +612,11 @@ class TerminalCommandService {
           );
         }
       } else {
-        stop();
+        return const TerminalSessionExecution(
+            ok: false,
+            code: ToolCodes.outcomeUnknown,
+            message: '该后台进程无法单独停止；未停止共享 runtime，以免影响其他任务',
+            effect: ToolEffect.none);
       }
       daemon.stopped = true;
       await _saveDaemons();
@@ -637,7 +734,12 @@ class TerminalCommandService {
       final file = File(path);
       await file.parent.create(recursive: true);
       await file.writeAsString(result.output, flush: true);
-    } catch (_) {}
+    } catch (_) {
+      // 守护进程日志写不进去：进程输出只能留在内存里，用户后续查看该会话时
+      // 会看到空输出。这里不重复上报是因为同一次运行里每次落盘都会失败，
+      // 上报会把诊断日志冲掉；失败的根本原因（磁盘满、目录不可写）会在命令
+      // 本身的执行结果里以另一种形式暴露。
+    }
   }
 
   Future<String> _readDaemonLog(_TerminalDaemon daemon) async {
@@ -1048,7 +1150,6 @@ class _TerminalJob {
     required this.jobId,
     required this.sessionId,
     required this.command,
-    required this.future,
     this.taskId,
     this.runId,
     this.logPath,
@@ -1059,8 +1160,9 @@ class _TerminalJob {
   final String command;
   final String? taskId;
   final String? runId;
-  final String? logPath;
-  final Future<CommandResult> future;
+  String? logPath;
+  Future<bool> Function()? cancel;
+  // Do not retain the completed Future: it holds the original unbounded output.
   final List<TerminalJobEvent> events = [];
   final StreamController<TerminalJobEvent> _controller =
       StreamController<TerminalJobEvent>.broadcast();
@@ -1088,23 +1190,41 @@ class _TerminalJob {
     if (path == null) return;
     try {
       File(path).writeAsStringSync(
-        '${event.sequence}|${event.type}|${event.payload}\n',
+        '${event.sequence}|${event.type}|${TerminalJobLogStore.persistedPayload(event.type, event.payload)}\n',
         mode: FileMode.append,
         flush: true,
       );
-    } catch (_) {}
+    } catch (_) {
+      // 事件日志落盘失败：内存里的 events 与流式订阅仍然正常，只有「事后回看
+      // 日志文件」会缺事件。此处在每次事件追加时都会被调用，一旦目录不可写
+      // 就是连续失败，不适合逐条上报。
+    }
   }
 
-  Stream<TerminalJobEvent> watch({int afterSequence = -1}) async* {
-    for (final event in events) {
-      if (event.sequence > afterSequence) yield event;
-    }
-    if (completed) return;
-    await for (final event in _controller.stream) {
-      if (event.sequence > afterSequence) yield event;
-      if (event.type == 'completed' || event.type == 'timeout') return;
-    }
+  void close() {
+    if (!_controller.isClosed) unawaited(_controller.close());
   }
+
+  Stream<TerminalJobEvent> watch({int afterSequence = -1}) =>
+      Stream<TerminalJobEvent>.multi((output) {
+        var last = afterSequence;
+        void emit(TerminalJobEvent event) {
+          if (event.sequence <= last) return;
+          last = event.sequence;
+          output.add(event);
+        }
+
+        // Subscribe before replay so completion during replay cannot be lost.
+        final subscription = _controller.stream
+            .listen(emit, onError: output.addError, onDone: output.close);
+        output.onCancel = subscription.cancel;
+        output.onPause = subscription.pause;
+        output.onResume = subscription.resume;
+        for (final event in events) {
+          emit(event);
+        }
+        if (completed) output.close();
+      });
 }
 
 class _TerminalDaemon {
@@ -1215,7 +1335,10 @@ class TerminalCommandTool implements AgentTool {
       final timeoutSeconds =
           (arguments['timeoutSeconds'] ?? arguments['timeout_seconds']) as num?;
       final timeout = Duration(
-        seconds: ((timeoutSeconds?.toInt() ?? 30).clamp(1, 86400)).toInt(),
+        seconds: ((timeoutSeconds?.toInt() ??
+                    (action == 'daemon_start' ? 86400 : 30))
+                .clamp(1, 86400))
+            .toInt(),
       );
       final offset =
           (((arguments['offsetChars'] ?? arguments['offset_chars']) as num?)

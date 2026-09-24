@@ -18,6 +18,20 @@ void main() {
     expect(controller.resume(), isFalse);
   });
 
+  test('pause fires the interrupt hook once; cancel clears it', () {
+    final controller = AgentRunController();
+    var interrupts = 0;
+    controller.onPauseInterrupt = () => interrupts++;
+
+    expect(controller.pause(), isTrue);
+    expect(controller.pause(), isFalse);
+    expect(interrupts, 1);
+
+    expect(controller.resume(), isTrue);
+    expect(controller.cancel(), isTrue);
+    expect(controller.onPauseInterrupt, isNull);
+  });
+
   test('cancel wakes a paused checkpoint and clears steering', () async {
     var callbackCount = 0;
     final controller = AgentRunController(onCancel: () => callbackCount++);
@@ -34,6 +48,15 @@ void main() {
     expect(controller.pendingSteering, isEmpty);
     expect(controller.steer('too late'), isFalse);
     expect(controller.cancel(), isFalse);
+  });
+
+  test('queues compression IDs once and clears them on drain', () {
+    final controller = AgentRunController();
+    expect(controller.queueCompression(['tool-1', 'tool-1', '']), isTrue);
+    expect(controller.drainCompressionToolCallIds(), {'tool-1'});
+    expect(controller.drainCompressionToolCallIds(), isEmpty);
+    controller.seal();
+    expect(controller.queueCompression(['tool-2']), isFalse);
   });
 
   test('pollSteeringOrSeal atomically consumes or seals the run', () {

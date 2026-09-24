@@ -26,6 +26,7 @@ void main() {
       kpis: const DashboardKpis(
         todayConversations: 0,
         todayTokens: 0,
+        todayPromptTokens: 0,
         todayCachedTokens: 0,
         runningTasks: 0,
         taskSuccessRate: null,

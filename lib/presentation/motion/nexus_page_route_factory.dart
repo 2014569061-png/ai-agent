@@ -32,9 +32,12 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
   }) : super(
           pageBuilder: (context, animation, secondaryAnimation) =>
               builder(context),
-          transitionDuration: _getTransitionDuration(presentation),
-          // Keep both directions on the same fast page-transition rhythm.
-          reverseTransitionDuration: _getTransitionDuration(presentation),
+          transitionDuration:
+              _getTransitionDuration(presentation, entering: true),
+          // Entering establishes the new spatial relationship; leaving should
+          // release the old page quickly instead of holding the user.
+          reverseTransitionDuration:
+              _getTransitionDuration(presentation, entering: false),
           // BackdropFilter 在 Opacity 临时缓冲区中可能产生闪烁；玻璃页面
           // 必须在转场期间保持实时绘制，不能使用路由快照。
           allowSnapshotting: false,
@@ -49,13 +52,36 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
           },
         );
 
+  @override
+  Duration get transitionDuration => _effectiveDuration(super.transitionDuration);
+
+  @override
+  Duration get reverseTransitionDuration =>
+      _effectiveDuration(super.reverseTransitionDuration);
+
+  Duration _effectiveDuration(Duration base) {
+    final routeContext = navigator?.context;
+    return routeContext == null ? base :
+        MotionPreferences.adjustDuration(routeContext, base, listen: false);
+  }
+
+  void _syncDurations() {
+    controller?.duration = transitionDuration;
+    controller?.reverseDuration = reverseTransitionDuration;
+  }
+
+  @override
+  bool didPop(T? result) {
+    _syncDurations();
+    return super.didPop(result);
+  }
+
   /// 本路由是否在整段生命周期内遮挡下层。
   ///
   /// `fade` 档靠上层淡出让下层透出来，压住下层会变成「淡出到空白再跳出内容」，
   /// 所以这一类必须放行。其余档位都是「上层自带不透明画布底 + 位移只有
   /// 8~16dp」，转场期间下层在视觉上完全不可见。
-  bool get _occludesUnderlyingRoute =>
-      presentation != RoutePresentation.fade;
+  bool get _occludesUnderlyingRoute => presentation != RoutePresentation.fade;
 
   /// 让下层路由停止绘制（**进入和返回都算**）。
   ///
@@ -106,6 +132,7 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
 
   @override
   TickerFuture didPush() {
+    _syncDurations();
     final future = super.didPush();
     animation?.addListener(_keepUnderlyingRouteHidden);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -178,17 +205,17 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
     );
   }
 
-  static Duration _getTransitionDuration(RoutePresentation presentation) {
-    switch (presentation) {
-      case RoutePresentation.detail:
-        return NexusMotion.fast; // 150ms
-      case RoutePresentation.settings:
-        return NexusMotion.fast; // 150ms
-      case RoutePresentation.workspace:
-        return NexusMotion.fast; // 150ms
-      case RoutePresentation.fade:
-        return NexusMotion.fast; // 150ms
-    }
+  static Duration _getTransitionDuration(
+    RoutePresentation presentation, {
+    required bool entering,
+  }) {
+    if (!entering) return NexusMotion.pageExit;
+    return switch (presentation) {
+      RoutePresentation.detail => NexusMotion.page,
+      RoutePresentation.settings => NexusMotion.page,
+      RoutePresentation.workspace => NexusMotion.page,
+      RoutePresentation.fade => NexusMotion.base,
+    };
   }
 
   static Widget _buildTransition(
@@ -251,7 +278,7 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
               end: Offset.zero,
             ).animate(CurvedAnimation(
               parent: animation,
-              curve: NexusMotion.curveStandard,
+              curve: NexusMotion.curveEnter,
               reverseCurve: NexusMotion.curveExit,
             )),
             child: canvasChild,
@@ -262,7 +289,7 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
               end: Offset.zero,
             ).animate(CurvedAnimation(
               parent: animation,
-              curve: NexusMotion.curveStandard,
+              curve: NexusMotion.curveEnter,
               reverseCurve: NexusMotion.curveExit,
             )),
             child: canvasChild,
@@ -273,7 +300,7 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
               end: Offset.zero,
             ).animate(CurvedAnimation(
               parent: animation,
-              curve: NexusMotion.curveStandard,
+              curve: NexusMotion.curveEnter,
               reverseCurve: NexusMotion.curveExit,
             )),
             child: canvasChild,

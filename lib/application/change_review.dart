@@ -163,8 +163,8 @@ class ChangeReviewService {
   ) {
     final mark = result.success
         ? ChangeVerificationMark.passed
-        : result.plan.steps.any(
-                (step) => step.status == VerificationStepStatus.failed)
+        : result.plan.steps
+                .any((step) => step.status == VerificationStepStatus.failed)
             ? ChangeVerificationMark.failed
             : ChangeVerificationMark.unverified;
     return ChangeReview(

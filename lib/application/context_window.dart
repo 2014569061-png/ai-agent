@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import '../domain/models.dart';
 
@@ -17,6 +18,7 @@ import '../domain/models.dart';
 class ContextWindow {
   ContextWindow({
     int? maxTokens,
+    this.fixedTokens = 0,
     this.maxToolResultChars = defaultMaxToolResultChars,
     this.maxToolArgumentChars = defaultMaxToolArgumentChars,
     this.maxToolCallsPerMessage = defaultMaxToolCallsPerMessage,
@@ -50,10 +52,15 @@ class ContextWindow {
 
   /// 单条 tool 结果被截断时追加的标记。
   static const toolResultTruncatedMark = '…[工具结果过长，已截断]';
+  static const compressedToolResultMark = '[工具结果已压缩]';
 
   /// 单个 tool_call 参数被截断后的替身，保持 JSON 可解析。
   static const truncatedArgumentMark = '_truncated';
 
+  /// Tokens consumed by request components that are not part of [messages],
+  /// such as serialized tool definitions. They are counted against the same
+  /// input budget so the final request does not exceed the model window.
+  final int fixedTokens;
   final int maxTokens;
   final int maxToolResultChars;
   final int maxToolArgumentChars;
@@ -70,14 +77,24 @@ class ContextWindow {
         .toList(growable: false);
     final capped = _capMessages(rest);
     final estimates = capped.map(estimateTokens).toList(growable: false);
-    final total = estimates.fold<int>(0, (sum, item) => sum + item);
+    final systemTokens =
+        system.fold<int>(0, (sum, message) => sum + estimateTokens(message));
+    final messageTokens = estimates.fold<int>(0, (sum, item) => sum + item);
+    final fixed = math.max(0, fixedTokens);
+    final total = fixed + systemTokens + messageTokens;
     if (total <= maxTokens) {
       return [...system, ...capped];
     }
 
     // 确定要裁剪：先给告示留出预算，免得告示本身把上下文重新顶超。
-    final budget =
-        (maxTokens - estimateTokens(_noticeMessage())).clamp(0, maxTokens);
+    // 已存在的告示已经计入 systemTokens，不要在每一轮重复插入。
+    final hasNotice = system.any((message) =>
+        message.role == MessageRole.system && message.text == compactionNotice);
+    final noticeTokens = hasNotice ? 0 : estimateTokens(_noticeMessage());
+    final budget = math.max(
+      0,
+      maxTokens - fixed - systemTokens - noticeTokens,
+    );
 
     // 从最新向前保留预算内的消息。
     var used = 0;
@@ -104,7 +121,11 @@ class ContextWindow {
     if (cut <= 0) {
       return [...system, ...capped];
     }
-    return [...system, _noticeMessage(), ...capped.sublist(cut)];
+    return [
+      ...system,
+      if (!hasNotice) _noticeMessage(),
+      ...capped.sublist(cut),
+    ];
   }
 
   /// 单条消息 token 估算：文本按 CJK ~1 token/字、其余 ~4 字符/token 计；

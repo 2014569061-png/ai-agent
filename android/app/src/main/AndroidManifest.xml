@@ -26,11 +26,43 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- E3 本地通知（Android 13+ 需运行时申请 POST_NOTIFICATIONS）。 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"/>
+    <!-- 备份与恢复：只在用户发起对应备份时运行时申请；短信和通话记录只导出不写回。 -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
+    <uses-permission android:name="android.permission.READ_SMS"/>
+    <uses-permission android:name="android.permission.READ_CALL_LOG"/>
+    <!-- 设备自动化：开机后重新排程触发检查；Wi-Fi 触发读取 SSID 需要定位权限，
+         仅在用户创建 Wi-Fi 规则时运行时申请（后台读取 SSID 需“始终允许”）。 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
+    <!-- 免 Root 降级路径：
+         - KILL_BACKGROUND_PROCESSES：无特权时停止应用的部分替代（普通权限）。
+         - ACCESS_NOTIFICATION_POLICY：勿扰访问授权后用系统 API 切换勿扰。
+         - CHANGE_WIFI_STATE / BLUETOOTH*：旧系统上用系统 API 开关 Wi-Fi、蓝牙。
+         - PACKAGE_USAGE_STATS / WRITE_SECURE_SETTINGS / READ_LOGS：普通应用无法获得，
+           只能由用户在系统设置授予，或经 Shizuku/Root 执行 appops / pm grant 授予。 -->
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES"/>
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions"/>
+    <uses-permission android:name="android.permission.READ_LOGS"
+        tools:ignore="ProtectedPermissions"/>
     <application
             android:label="NEXUS Agent"
             android:name="${applicationName}"
             android:icon="@mipmap/ic_launcher"
             android:networkSecurityConfig="@xml/network_security_config"
+            android:allowBackup="false"
+            android:fullBackupContent="@xml/backup_rules"
+            android:dataExtractionRules="@xml/data_extraction_rules"
             android:extractNativeLibs="true">
         <activity
             android:name=".MainActivity"
@@ -49,6 +81,11 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- app_links owns cold and warm URI delivery. Do not also ask
+                 Flutter's default Navigator to route nexus:// URLs. -->
+            <meta-data
+                android:name="flutter_deeplinking_enabled"
+                android:value="false"/>
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -95,6 +132,15 @@
                 android:resource="@xml/nexus_command_widget_info"/>
         </receiver>
         <!-- 应用内更新安装 APK 用 FileProvider。 -->
+        <!-- 设备自动化触发检查：闹钟/开机/更新后评估规则，只发“待确认”通知，不执行设备动作。 -->
+        <receiver
+            android:name=".DeviceAutomationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -104,6 +150,27 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"/>
         </provider>
+        <!-- Shizuku：接收 Shizuku 服务 Binder；权限声明使只有系统/Shizuku 能调用。 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+        <!-- 免 Root 网络过滤：本地 VPN 只接管虚拟 DNS 地址或被断网应用的流量。 -->
+        <service
+            android:name=".NetworkFilterVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.VpnService"/>
+            </intent-filter>
+        </service>
+        <!-- APK 恢复：PackageInstaller 会话状态回调（仅本应用 PendingIntent 投递）。 -->
+        <receiver
+            android:name=".ApkInstallResultReceiver"
+            android:exported="false" />
         <!-- C2 前台服务（flutter_foreground_task，服务名不可改）。 -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
@@ -141,9 +208,16 @@
         </intent>
         <!-- G1 Termux 桥：Android 11+ 包可见性，否则显式 Intent 无法解析 Termux 服务。 -->
         <package android:name="com.termux"/>
+        <!-- 免 Root 提权：检测 Shizuku 是否安装。 -->
+        <package android:name="moe.shizuku.privileged.api"/>
         <!-- G1 长按朗读：Android 11+ 包可见性，否则看不到系统 TTS 引擎。 -->
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
+        <!-- 仅查询可从启动器打开的 Activity，无需 QUERY_ALL_PACKAGES。 -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
         </intent>
     </queries>
 </manifest>

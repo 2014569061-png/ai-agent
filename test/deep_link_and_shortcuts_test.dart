@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/application/providers.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/share/deep_link_service.dart';
+import 'package:mobile_agent/infrastructure/share/sharing_service.dart';
 import 'package:mobile_agent/presentation/agents/agents_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -75,11 +76,53 @@ void main() {
       expect(service.drainNewAgent(), isFalse);
     });
 
+    test('无提示词的新会话意图以空字符串消费，不能和无事件混淆', () {
+      service.handleUri(Uri.parse('nexus://new-chat'));
+      expect(service.hasPending, isTrue);
+      expect(service.drainPrompt(), '');
+      expect(service.drainPrompt(), isNull);
+      expect(service.hasPending, isFalse);
+    });
+
+    test('只通知已识别入口，消费后可再次接收同一个热链接', () {
+      var changes = 0;
+      void changed() => changes++;
+      service.addListener(changed);
+      addTearDown(() => service.removeListener(changed));
+      service.handleUri(Uri.parse('https://example.com/new-chat'));
+      service.handleUri(Uri.parse('nexus://unsupported'));
+      expect(changes, 0);
+      final uri = Uri.parse('nexus://new-chat?prompt=hello');
+      service.handleUri(uri);
+      expect(service.drainPrompt(), 'hello');
+      service.handleUri(uri);
+      expect(service.drainPrompt(), 'hello');
+      expect(changes, 2);
+    });
+
     test('非 nexus scheme 一律忽略', () {
       service.handleUri(Uri.parse('https://example.com/new-agent'));
 
       expect(service.drainNewAgent(), isFalse);
       expect(service.drainPrompt(), isNull);
+    });
+
+    test('未知 nexus host 不会预填提示词', () {
+      service.handleUri(Uri.parse('nexus://evil?prompt=注入'));
+
+      expect(service.drainPrompt(), isNull);
+      expect(service.drainNewAgent(), isFalse);
+      expect(service.drainMemory(), isFalse);
+    });
+
+    test('nexus URI 不会被当作系统分享文本', () {
+      expect(SharingService.isShareableText('nexus://memory'), isFalse);
+      expect(
+        SharingService.isShareableText('nexus://new-chat?prompt=hello'),
+        isFalse,
+      );
+      expect(SharingService.isShareableText('普通分享文本'), isTrue);
+      expect(SharingService.isShareableText('https://example.com'), isTrue);
     });
   });
 

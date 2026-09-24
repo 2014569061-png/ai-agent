@@ -58,6 +58,22 @@ class StructuredTaskResult {
 class TaskService {
   static const maxAppliedRunIds = 128;
 
+  static String taskTypeLabel(String type) {
+    final normalized = type.toLowerCase();
+    final key = normalized.startsWith('development:')
+        ? normalized.substring('development:'.length)
+        : normalized;
+    return switch (key) {
+      'project_analysis' => '项目解读',
+      'bug_fix' => '问题修复',
+      'code_review' => '代码审查',
+      'release_check' => '发布检查',
+      'implement_and_verify' => '实现并验证',
+      'development' || 'agent' => '开发任务',
+      _ => '开发任务',
+    };
+  }
+
   static String _newTaskId() => UniqueId.generate('task');
 
   Future<List<Task>> runningTasks(AppDatabase db) => db.runningTasks();
@@ -285,6 +301,7 @@ class DevelopmentTaskInfo {
   const DevelopmentTaskInfo({
     required this.id,
     required this.conversationId,
+    this.projectId,
     required this.type,
     required this.status,
     required this.prompt,
@@ -308,6 +325,7 @@ class DevelopmentTaskInfo {
 
   final String id;
   final String conversationId;
+  final String? projectId;
   final String type;
   final String status;
   final String prompt;
@@ -342,6 +360,7 @@ class DevelopmentTaskInfo {
     return DevelopmentTaskInfo(
       id: task.id,
       conversationId: task.conversationId,
+      projectId: task.projectId,
       type: taskType,
       status: task.status,
       prompt: prompt,
@@ -384,17 +403,14 @@ class DevelopmentTaskInfo {
   }
 
   static String _titleFor(String type, String prompt) {
-    const labels = <String, String>{
-      'project_analysis': '项目解读',
-      'bug_fix': '问题修复',
-      'code_review': '代码审查',
-      'release_check': '发布检查',
-      'implement_and_verify': '实现并验证',
-    };
-    final label = labels[type] ?? '开发任务';
+    final label = taskTypeLabel(type);
     final shortPrompt = prompt.trim();
     if (shortPrompt.isEmpty) return label;
     return '$label：${shortPrompt.length > 28 ? '${shortPrompt.substring(0, 28)}…' : shortPrompt}';
+  }
+
+  static String taskTypeLabel(String type) {
+    return TaskService.taskTypeLabel(type);
   }
 }
 
@@ -496,11 +512,9 @@ ChatMessage? chatMessageFromJson(dynamic value) {
           // 旧数据没有这几个键，反序列化走默认值即可。
           cacheWriteTokens:
               (usageMap['cacheWriteTokens'] as num?)?.toInt() ?? 0,
-          reasoningTokens:
-              (usageMap['reasoningTokens'] as num?)?.toInt() ?? 0,
+          reasoningTokens: (usageMap['reasoningTokens'] as num?)?.toInt() ?? 0,
           usageReported: usageMap['usageReported'] as bool? ?? false,
-          cacheStatsReported:
-              usageMap['cacheStatsReported'] as bool? ?? false,
+          cacheStatsReported: usageMap['cacheStatsReported'] as bool? ?? false,
         )
       : null;
   return ChatMessage(

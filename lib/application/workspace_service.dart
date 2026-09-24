@@ -64,7 +64,7 @@ class WorkspaceService {
         }
       }
 
-      final selectedDirectory = await FilePicker.platform.getDirectoryPath(
+      final selectedDirectory = await FilePicker.getDirectoryPath(
         dialogTitle: '选择本地项目工作区目录',
       );
       if (selectedDirectory != null && selectedDirectory.isNotEmpty) {

@@ -7,6 +7,8 @@ import '../../domain/unique_id.dart';
 import '../../infrastructure/mcp/mcp_server_config.dart';
 import '../../infrastructure/mcp/mcp_tool_provider.dart';
 import '../l10n/app_strings.dart';
+import '../motion/nexus_motion.dart';
+import '../motion/motion_preferences.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -33,6 +35,8 @@ class _McpServersPageState extends State<McpServersPage> {
   bool _loading = true;
   List<McpServerConfig> _servers = const [];
   final Map<String, bool> _testing = {};
+  final Map<String, ({bool ok, int toolCount, String? error})>
+      _connectionResults = {};
 
   /// stdio 真机开关（默认关闭）。开启前页面完全不暴露本地进程模式。
   bool _stdioEnabled = false;
@@ -53,6 +57,7 @@ class _McpServersPageState extends State<McpServersPage> {
       setState(() {
         _servers = servers;
         _stdioEnabled = stdioEnabled;
+        _connectionResults.clear();
         _loading = false;
       });
     }
@@ -64,8 +69,7 @@ class _McpServersPageState extends State<McpServersPage> {
     if (_tapCount < 5) return;
     _tapCount = 0;
     if (!McpStdioAvailability.supportedByPlatform) {
-      FloatingToast.show(context, '当前平台不支持本地进程模式',
-          tone: ToastTone.danger);
+      FloatingToast.show(context, '当前平台不支持本地进程模式', tone: ToastTone.danger);
       return;
     }
     if (_stdioEnabled) {
@@ -94,8 +98,7 @@ class _McpServersPageState extends State<McpServersPage> {
     await McpStdioAvailability.writeEnabled(true);
     await _reload();
     if (mounted) {
-      FloatingToast.show(context, '本地进程模式已开启',
-          tone: ToastTone.success);
+      FloatingToast.show(context, '本地进程模式已开启', tone: ToastTone.success);
     }
   }
 
@@ -127,7 +130,8 @@ class _McpServersPageState extends State<McpServersPage> {
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     // 在 builder 外捕获：builder 闭包里拿不到 State 字段，且开表期间不应变化。
     final stdioEnabled = _stdioEnabled;
@@ -175,17 +179,23 @@ class _McpServersPageState extends State<McpServersPage> {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          isEdit ? AppStrings.editMcpServer : AppStrings.addMcpServer,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: textColor,
+                        Expanded(
+                          child: Text(
+                            isEdit
+                                ? AppStrings.editMcpServer
+                                : AppStrings.addMcpServer,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeBodyLarge,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
                           ),
                         ),
-                        const Spacer(),
                         IconButton(
                           icon: const Icon(Icons.close_rounded, size: 20),
+                          tooltip: '关闭配置',
                           onPressed: () => Navigator.pop(sheetContext, false),
                         ),
                       ],
@@ -197,7 +207,7 @@ class _McpServersPageState extends State<McpServersPage> {
                       Text(
                         '常用预设模版',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: AppTokens.fontSizeFootnote,
                           fontWeight: FontWeight.w500,
                           color: textMuted,
                         ),
@@ -208,9 +218,11 @@ class _McpServersPageState extends State<McpServersPage> {
                         runSpacing: 6,
                         children: [
                           ActionChip(
-                            avatar: const Icon(Icons.language_rounded, size: 14),
+                            avatar:
+                                const Icon(Icons.language_rounded, size: 14),
                             label: const Text('Streamable HTTP'),
-                            labelStyle: const TextStyle(fontSize: 12),
+                            labelStyle: const TextStyle(
+                                fontSize: AppTokens.fontSizeFootnote),
                             onPressed: () => applyPreset(
                               '远程 HTTP 服务',
                               McpServerKind.http,
@@ -224,7 +236,8 @@ class _McpServersPageState extends State<McpServersPage> {
                               avatar: const Icon(Icons.table_chart_outlined,
                                   size: 14),
                               label: const Text('SQLite 数据库'),
-                              labelStyle: const TextStyle(fontSize: 12),
+                              labelStyle: const TextStyle(
+                                  fontSize: AppTokens.fontSizeFootnote),
                               onPressed: () => applyPreset(
                                 'SQLite 数据库',
                                 McpServerKind.stdio,
@@ -236,7 +249,8 @@ class _McpServersPageState extends State<McpServersPage> {
                               avatar:
                                   const Icon(Icons.folder_outlined, size: 14),
                               label: const Text('文件系统'),
-                              labelStyle: const TextStyle(fontSize: 12),
+                              labelStyle: const TextStyle(
+                                  fontSize: AppTokens.fontSizeFootnote),
                               onPressed: () => applyPreset(
                                 '本地文件系统',
                                 McpServerKind.stdio,
@@ -248,7 +262,8 @@ class _McpServersPageState extends State<McpServersPage> {
                               avatar:
                                   const Icon(Icons.terminal_rounded, size: 14),
                               label: const Text('自定义 STDIO'),
-                              labelStyle: const TextStyle(fontSize: 12),
+                              labelStyle: const TextStyle(
+                                  fontSize: AppTokens.fontSizeFootnote),
                               onPressed: () => applyPreset(
                                 'STDIO 进程',
                                 McpServerKind.stdio,
@@ -309,7 +324,9 @@ class _McpServersPageState extends State<McpServersPage> {
                       const SizedBox(height: 6),
                       Text(
                         '仅支持公网地址；本机（127.0.0.1）与内网地址会被安全策略拒绝。',
-                        style: TextStyle(fontSize: 11, color: textMuted),
+                        style: TextStyle(
+                            fontSize: AppTokens.fontSizeBadge,
+                            color: textMuted),
                       ),
                     ] else ...[
                       TextField(
@@ -358,9 +375,12 @@ class _McpServersPageState extends State<McpServersPage> {
                           Navigator.pop(sheetContext, true);
                         },
                         child: Text(
-                          isEdit ? AppStrings.saveConfig : AppStrings.addMcpServer,
+                          isEdit
+                              ? AppStrings.saveConfig
+                              : AppStrings.addMcpServer,
                           style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w500),
+                              fontSize: AppTokens.fontSizeBody,
+                              fontWeight: FontWeight.w500),
                         ),
                       ),
                     ),
@@ -376,7 +396,8 @@ class _McpServersPageState extends State<McpServersPage> {
     if (saved != true || !mounted) return;
 
     final isHttp = kind == McpServerKind.http;
-    final name = nameCtrl.text.trim().isEmpty ? 'MCP Server' : nameCtrl.text.trim();
+    final name =
+        nameCtrl.text.trim().isEmpty ? 'MCP Server' : nameCtrl.text.trim();
     final command = isHttp ? '' : cmdCtrl.text.trim();
     final args = isHttp
         ? const <String>[]
@@ -443,9 +464,17 @@ class _McpServersPageState extends State<McpServersPage> {
   Future<void> _testConnection(McpServerConfig server) async {
     if (_testing[server.id] == true) return;
     setState(() => _testing[server.id] = true);
-    final result = await _toolProvider.testConnection(server);
+    ({bool ok, int toolCount, String? error}) result;
+    try {
+      result = await _toolProvider.testConnection(server);
+    } catch (error) {
+      result = (ok: false, toolCount: 0, error: error.toString());
+    }
     if (!mounted) return;
-    setState(() => _testing[server.id] = false);
+    setState(() {
+      _testing[server.id] = false;
+      _connectionResults[server.id] = result;
+    });
     FloatingToast.show(
       context,
       result.ok
@@ -517,17 +546,19 @@ class _McpServersPageState extends State<McpServersPage> {
                   onAction: _add,
                 )
               : ListView.separated(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                   itemCount: _servers.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppTokens.sp3),
                   itemBuilder: (context, index) {
                     final server = _servers[index];
                     final isStdio = server.kind != McpServerKind.http;
+                    final connectionResult = _connectionResults[server.id];
 
                     return SectionCard(
                       glass: true,
                       child: Padding(
-                        padding: const EdgeInsets.all(14),
+                        padding: const EdgeInsets.all(AppTokens.sp4),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -569,14 +600,15 @@ class _McpServersPageState extends State<McpServersPage> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         server.name,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
-                                          fontSize: 15,
+                                          fontSize: AppTokens.fontSizeBody,
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
@@ -593,17 +625,22 @@ class _McpServersPageState extends State<McpServersPage> {
                                             )
                                           else
                                             NexusStatusBadge(
-                                              label: server.enabled ? '已启用' : '已停用',
+                                              label: server.enabled
+                                                  ? '已启用'
+                                                  : '已停用',
                                               tone: server.enabled
                                                   ? NexusBadgeTone.success
                                                   : NexusBadgeTone.neutral,
                                             ),
                                           NexusStatusBadge(
-                                            label: isStdio ? 'STDIO 进程' : 'HTTP 远程',
+                                            label: isStdio
+                                                ? 'STDIO 进程'
+                                                : 'HTTP 远程',
                                             tone: NexusBadgeTone.neutral,
                                           ),
                                           NexusStatusBadge(
-                                            label: isStdio ? '高权限本地执行' : '受控网络请求',
+                                            label:
+                                                isStdio ? '高权限本地执行' : '受控网络请求',
                                             tone: isStdio
                                                 ? NexusBadgeTone.warning
                                                 : NexusBadgeTone.brand,
@@ -613,108 +650,160 @@ class _McpServersPageState extends State<McpServersPage> {
                                     ],
                                   ),
                                 ),
-                            Switch(
-                              value: server.enabled,
-                              onChanged: (enabled) async {
-                                unawaited(HapticFeedback.selectionClick());
-                                await _service.toggleServer(server.id, enabled);
-                                await _reload();
-                              },
-                            ),
-                            PopupMenuButton<String>(
-                              icon:
-                                  const Icon(Icons.more_vert_rounded, size: 20),
-                              tooltip: '更多操作',
-                              onSelected: (action) {
-                                switch (action) {
-                                  case 'test':
-                                    _testConnection(server);
-                                    break;
-                                  case 'edit':
-                                    _edit(server);
-                                    break;
-                                  case 'delete':
-                                    _deleteServer(server);
-                                    break;
-                                }
-                              },
-                              itemBuilder: (ctx) => [
-                                PopupMenuItem(
-                                  value: 'test',
-                                  child: Row(
-                                    children: [
-                                      _testing[server.id] == true
-                                          ? const Icon(
-                                              Icons.sync_rounded,
-                                              size: 18,
-                                              color: AppPalette.brandAction,
-                                            )
-                                          : const Icon(
-                                              Icons.wifi_tethering_rounded,
-                                              size: 18),
-                                      const SizedBox(width: 8),
-                                      const Text('测试连接'),
-                                    ],
-                                  ),
+                                Switch(
+                                  value: server.enabled,
+                                  onChanged: (enabled) async {
+                                    unawaited(HapticFeedback.selectionClick());
+                                    await _service.toggleServer(
+                                        server.id, enabled);
+                                    await _reload();
+                                  },
                                 ),
-                                const PopupMenuItem(
-                                  value: 'edit',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.edit_outlined, size: 18),
-                                      SizedBox(width: 8),
-                                      Text('编辑配置'),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.delete_outline_rounded,
-                                          size: 18, color: AppPalette.danger),
-                                      SizedBox(width: 8),
-                                      Text(
-                                        '删除服务器',
-                                        style:
-                                            TextStyle(color: AppPalette.danger),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert_rounded,
+                                      size: 20),
+                                  tooltip: '更多操作',
+                                  onSelected: (action) {
+                                    switch (action) {
+                                      case 'test':
+                                        _testConnection(server);
+                                        break;
+                                      case 'edit':
+                                        _edit(server);
+                                        break;
+                                      case 'delete':
+                                        _deleteServer(server);
+                                        break;
+                                    }
+                                  },
+                                  itemBuilder: (ctx) => [
+                                    PopupMenuItem(
+                                      value: 'test',
+                                      child: Row(
+                                        children: [
+                                          _testing[server.id] == true
+                                              ? const Icon(
+                                                  Icons.sync_rounded,
+                                                  size: 18,
+                                                  color: AppPalette.brandAction,
+                                                )
+                                              : const Icon(
+                                                  Icons.wifi_tethering_rounded,
+                                                  size: 18),
+                                          const SizedBox(width: 8),
+                                          const Text('测试连接'),
+                                        ],
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'edit',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.edit_outlined, size: 18),
+                                          SizedBox(width: 8),
+                                          Text('编辑配置'),
+                                        ],
+                                      ),
+                                    ),
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.delete_outline_rounded,
+                                              size: 18,
+                                              color: AppPalette.danger),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            '删除服务器',
+                                            style: TextStyle(
+                                                color: AppPalette.danger),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 10),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppPalette.darkSurface
+                                    : AppPalette.lightSurface,
+                                borderRadius: BorderRadius.circular(
+                                    AppTokens.radiusControl),
+                              ),
+                              child: SelectableText(
+                                server.url ?? server.command ?? '未指定地址',
+                                style: TextStyle(
+                                  fontSize: AppTokens.fontSizeFootnote,
+                                  fontFamily: 'monospace',
+                                  color: isDark
+                                      ? AppPalette.darkTextMuted
+                                      : AppPalette.lightTextMuted,
+                                ),
+                              ),
+                            ),
+                            AnimatedSize(
+                              duration: MotionPreferences.adjustDuration(
+                                context,
+                                NexusMotion.fast,
+                              ),
+                              alignment: Alignment.topCenter,
+                              child: connectionResult == null
+                                  ? const SizedBox.shrink()
+                                  : AnimatedSwitcher(
+                                      duration:
+                                          MotionPreferences.adjustDuration(
+                                        context,
+                                        NexusMotion.fast,
+                                      ),
+                                      switchInCurve: NexusMotion.curveEnter,
+                                      switchOutCurve: NexusMotion.curveExit,
+                                      child: Column(
+                                        key: ValueKey(connectionResult),
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            connectionResult.ok
+                                                ? '最近测试：连接成功 · ${connectionResult.toolCount} 个工具'
+                                                : '最近测试：连接失败',
+                                            style: TextStyle(
+                                              fontSize:
+                                                  AppTokens.fontSizeFootnote,
+                                              color: connectionResult.ok
+                                                  ? AppPalette.brandAction
+                                                  : AppPalette.danger,
+                                            ),
+                                          ),
+                                          if (!connectionResult.ok &&
+                                              connectionResult
+                                                      .error?.isNotEmpty ==
+                                                  true)
+                                            Text(
+                                              connectionResult.error!,
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: Theme.of(context)
+                                                  .textTheme
+                                                  .bodySmall,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppPalette.darkSurface
-                                : AppPalette.lightSurface,
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusControl),
-                          ),
-                          child: SelectableText(
-                            server.url ?? server.command ?? '未指定地址',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontFamily: 'monospace',
-                              color: isDark
-                                  ? AppPalette.darkTextMuted
-                                  : AppPalette.lightTextMuted,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+                      ),
+                    );
+                  },
+                ),
       floatingActionButton: FloatingActionButton(
         onPressed: _add,
         backgroundColor: AppPalette.brandAction,

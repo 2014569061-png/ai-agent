@@ -16,12 +16,17 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_theme_controller.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
+import '../widgets/liquid_glass.dart' show GlassIntensity;
 import '../widgets/nexus_async_content.dart';
+import '../widgets/nexus_content_box.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/section_card.dart';
 import '../widgets/confirm_action.dart';
 import 'appearance_theme_page.dart';
 import 'data_management_page.dart';
+import 'device_automation_page.dart';
+import 'device_backups_page.dart';
+import 'device_capabilities_page.dart';
 import 'extensions_page.dart';
 import 'language_page.dart';
 import 'provider_list_page.dart';
@@ -79,6 +84,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   String? _appBuildNumber;
   _SettingsLoadState _loadState = _SettingsLoadState.loading;
   Object? _loadError;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
 
   bool get _isInTest =>
       WidgetsBinding.instance.runtimeType.toString().contains('Test');
@@ -87,6 +94,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   void initState() {
     super.initState();
     _loadAll();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAll() async {
@@ -156,41 +169,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ? '较大'
                 : '标准';
 
-    // App version
-    if (!_isInTest) {
-      try {
-        final info = await PackageInfo.fromPlatform()
-            .timeout(const Duration(milliseconds: 300));
-        final appVersion = info.version;
-        final appBuildNumber = info.buildNumber;
-        return SettingsSnapshot(
-          activeProvider: activeProvider,
-          currentLanguage: _currentLanguage,
-          fontSizeLabel: _fontSizeLabel,
-          appVersion: appVersion,
-          appBuildNumber: appBuildNumber,
-          isEmpty: _isEmptySettings(prefs, activeProvider),
-        );
-      } catch (_) {
-        return SettingsSnapshot(
-          activeProvider: activeProvider,
-          currentLanguage: _currentLanguage,
-          fontSizeLabel: _fontSizeLabel,
-          appVersion: AppStrings.appVersionName.replaceFirst('v', ''),
-          appBuildNumber: '93',
-          isEmpty: _isEmptySettings(prefs, activeProvider),
-        );
-      }
-    } else {
-      return SettingsSnapshot(
-        activeProvider: activeProvider,
-        currentLanguage: _currentLanguage,
-        fontSizeLabel: _fontSizeLabel,
-        appVersion: AppStrings.appVersionName.replaceFirst('v', ''),
-        appBuildNumber: '93',
-        isEmpty: _isEmptySettings(prefs, activeProvider),
-      );
+    // App version (从平台 PackageInfo 读取单一来源)
+    String? appVersion;
+    String? appBuildNumber;
+    try {
+      final info = await PackageInfo.fromPlatform()
+          .timeout(const Duration(milliseconds: 300));
+      appVersion = info.version;
+      appBuildNumber = info.buildNumber;
+    } catch (_) {
+      // 平台信息不可用或处于测试环境无 mock 时保持 null
     }
+
+    return SettingsSnapshot(
+      activeProvider: activeProvider,
+      currentLanguage: _currentLanguage,
+      fontSizeLabel: _fontSizeLabel,
+      appVersion: appVersion,
+      appBuildNumber: appBuildNumber,
+      isEmpty: _isEmptySettings(prefs, activeProvider),
+    );
   }
 
   bool _isEmptySettings(
@@ -309,7 +307,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       case UpdateCheckStatus.upToDate:
         FloatingToast.show(
           context,
-          '当前已是最新版本 ${result.currentVersion ?? _appVersion ?? AppStrings.appVersionName}',
+          '当前已是最新版本 ${result.currentVersion ?? (_appVersion != null ? 'v$_appVersion' : '')}'
+              .trim(),
         );
       case UpdateCheckStatus.failed:
         FloatingToast.show(context, result.error ?? '检查失败');
@@ -345,7 +344,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final cardBg = isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
 
     final themeMode = AppThemeController.mode.value;
     final themeLabel = switch (themeMode) {
@@ -365,243 +363,392 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     return Scaffold(
       backgroundColor: isFlat ? canvas : Colors.transparent,
       body: SafeArea(
-        child: Column(
-          children: [
-            // 顶栏：微圆角后退键 + 居中标题「设置」
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-              child: Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppPalette.darkSurface
-                          : AppPalette.lightSurfaceHover,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      tooltip: '返回',
-                      icon: Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 16,
-                        color: textColor,
+        child: NexusContentBox(
+          child: Column(
+            children: [
+              // 顶栏：微圆角后退键 + 居中标题「设置」
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppPalette.darkSurface
+                            : AppPalette.lightSurfaceHover,
+                        shape: BoxShape.circle,
                       ),
-                      onPressed: () => Navigator.maybePop(context),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
-                  Expanded(
-                    child: Semantics(
-                      header: true,
-                      child: Text(
-                        '设置',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
+                      child: IconButton(
+                        tooltip: '返回',
+                        icon: Icon(
+                          Icons.arrow_back_ios_new_rounded,
+                          size: 16,
                           color: textColor,
                         ),
+                        onPressed: () => Navigator.maybePop(context),
+                        padding: EdgeInsets.zero,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 36), // 保持居中对称
-                ],
-              ),
-            ),
-            Expanded(
-              child: NexusAsyncContent(
-                loading: _loadState == _SettingsLoadState.loading,
-                error:
-                    _loadState == _SettingsLoadState.error ? _loadError : null,
-                onRetry: _loadAll,
-                child: RefreshIndicator(
-                  onRefresh: _loadAll,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-                    children: [
-                      if (_loadState == _SettingsLoadState.empty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 18),
-                          child: EmptyStateView.compact(
-                            icon: Icons.settings_outlined,
-                            title: '尚未配置服务商',
-                            message: '可以先配置一个服务商，其他设置仍可继续使用。',
-                            actionLabel: '配置服务商',
-                            onAction: () => _openPage(const ProviderListPage()),
+                    Expanded(
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          '设置',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: textColor,
                           ),
                         ),
-                      // 1. 账户组
-                      _buildSectionHeader('账户', textMuted),
-                      _buildCard(
-                        cardBg: cardBg,
-                        isDark: isDark,
-                        children: [
-                          _buildRow(
-                            icon: Icons.person_outline_rounded,
-                            title: '账号管理',
-                            trailing: providerText,
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: () => _openPage(const ProviderListPage()),
-                          ),
-                          _buildDivider(isDark),
-                          _buildRow(
-                            icon: Icons.storage_outlined,
-                            title: '数据管理',
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: () => _openPage(const DataManagementPage()),
-                          ),
-                        ],
                       ),
-
-                      const SizedBox(height: 18),
-
-                      // 2. 应用组
-                      _buildSectionHeader('应用', textMuted),
-                      _buildCard(
-                        cardBg: cardBg,
-                        isDark: isDark,
-                        children: [
-                          _buildRow(
-                            icon: Icons.language_rounded,
-                            title: '语言',
-                            trailing: _currentLanguage,
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: () => _openPage(const LanguagePage()),
-                          ),
-                          _buildDivider(isDark),
-                          _buildRow(
-                            icon: Icons.wb_sunny_outlined,
-                            title: '外观',
-                            trailing: themeLabel,
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: () => _openPage(const AppearanceThemePage()),
-                          ),
-                          _buildDivider(isDark),
-                          _buildRow(
-                            icon: Icons.format_size_rounded,
-                            title: '字体大小',
-                            trailing: _fontSizeLabel,
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: _selectFontSize,
-                          ),
-                          _buildDivider(isDark),
-                          _buildRow(
-                            icon: Icons.extension_outlined,
-                            title: '扩展与环境',
-                            trailing: 'MCP / 技能 / 工具',
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: () => _openPage(const ExtensionsPage()),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 18),
-
-                      // 3. 关于组
-                      _buildSectionHeader('关于', textMuted),
-                      _buildCard(
-                        cardBg: cardBg,
-                        isDark: isDark,
-                        children: [
-                          _buildRow(
-                            icon: Icons.info_outline_rounded,
-                            title: '检查更新',
-                            trailing:
-                                '${_appVersion ?? AppStrings.appVersionName.replaceFirst('v', '')}(${_appBuildNumber ?? '93'})',
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: _checkUpdate,
-                          ),
-                          _buildDivider(isDark),
-                          _buildRow(
-                            icon: Icons.article_outlined,
-                            title: '服务协议',
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: _showPrivacyNotice,
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // 4. 单卡：帮助与反馈
-                      _buildCard(
-                        cardBg: cardBg,
-                        isDark: isDark,
-                        children: [
-                          _buildRow(
-                            icon: Icons.help_outline_rounded,
-                            title: '帮助与反馈',
-                            textColor: textColor,
-                            textMuted: textMuted,
-                            onTap: () => _openPage(const FeedbackPage()),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // 5. 单卡：清除本地凭证
-                      _buildCard(
-                        cardBg: cardBg,
-                        isDark: isDark,
-                        children: [
-                          Semantics(
-                            button: true,
-                            container: true,
-                            label: '清除本地凭证',
-                            hint: '删除已保存的服务商和工具凭证，保留聊天记录',
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => _confirmLogout(context),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 14),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.logout_rounded,
-                                        size: 20,
-                                        color: textColor,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        '清除本地凭证',
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w400,
-                                          color: textColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                    ),
+                    const SizedBox(width: 36), // 保持居中对称
+                  ],
+                ),
+              ),
+              Expanded(
+                child: NexusAsyncContent(
+                  loading: _loadState == _SettingsLoadState.loading,
+                  error: _loadState == _SettingsLoadState.error
+                      ? _loadError
+                      : null,
+                  onRetry: _loadAll,
+                  child: RefreshIndicator(
+                    onRefresh: _loadAll,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                      children: [
+                        // 0. 搜索栏
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: (val) =>
+                                setState(() => _searchQuery = val.trim()),
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeBody,
+                              color: textColor,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: AppStrings.searchSettingsPlaceholder,
+                              hintStyle: TextStyle(
+                                fontSize: AppTokens.fontSizeBody,
+                                color: textMuted,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search_rounded,
+                                size: 20,
+                                color: textMuted,
+                              ),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear_rounded,
+                                          size: 18),
+                                      tooltip: '清空搜索',
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() => _searchQuery = '');
+                                      },
+                                    )
+                                  : null,
+                              filled: true,
+                              fillColor: isDark
+                                  ? AppPalette.darkSurface
+                                  : AppPalette.lightSurface,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                    AppTokens.radiusControl),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? AppPalette.darkHairline
+                                      : AppPalette.lightHairline,
+                                  width: 1.0,
+                                ),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                    AppTokens.radiusControl),
+                                borderSide: BorderSide(
+                                  color: isDark
+                                      ? AppPalette.darkHairline
+                                      : AppPalette.lightHairline,
+                                  width: 1.0,
+                                ),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                    AppTokens.radiusControl),
+                                borderSide: BorderSide(
+                                  color: AppPalette.brandTextFor(isDark),
+                                  width: 1.2,
                                 ),
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
 
-                      const SizedBox(height: 28),
-                    ],
+                        if (_loadState == _SettingsLoadState.empty &&
+                            _searchQuery.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 18),
+                            child: EmptyStateView.compact(
+                              icon: Icons.settings_outlined,
+                              title: '尚未配置服务商',
+                              message: '可以先配置一个服务商，其他设置仍可继续使用。',
+                              actionLabel: '配置服务商',
+                              onAction: () =>
+                                  _openPage(const ProviderListPage()),
+                            ),
+                          ),
+
+                        if (_searchQuery.isNotEmpty &&
+                            !_hasAnyMatch(
+                              providerText: providerText,
+                              themeLabel: themeLabel,
+                            ))
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 36),
+                            child: EmptyStateView.compact(
+                              icon: Icons.search_off_rounded,
+                              title: '未找到相关设置',
+                              message: '请尝试其他关键词',
+                            ),
+                          ),
+
+                        // 1. 账户组
+                        if (_matchesSearch('账号管理', providerText) ||
+                            _matchesSearch('数据管理')) ...[
+                          _buildSectionHeader('账户', textMuted),
+                          _buildCard(
+                            children: _joinWithDividers([
+                              if (_matchesSearch('账号管理', providerText))
+                                _buildRow(
+                                  icon: Icons.person_outline_rounded,
+                                  title: '账号管理',
+                                  trailing: providerText,
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const ProviderListPage()),
+                                ),
+                              if (_matchesSearch('数据管理'))
+                                _buildRow(
+                                  icon: Icons.storage_outlined,
+                                  title: '数据管理',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const DataManagementPage()),
+                                ),
+                            ], isDark),
+                          ),
+                          const SizedBox(height: AppTokens.sp4),
+                        ],
+
+                        // 2. 应用组
+                        if (_matchesSearch('语言', _currentLanguage) ||
+                            _matchesSearch('外观', themeLabel) ||
+                            _matchesSearch('字体大小', _fontSizeLabel) ||
+                            _matchesSearch('扩展与环境', 'MCP / 技能 / 工具') ||
+                            _matchesSearch('设备能力',
+                                'Root / Magisk / KernelSU / Termux / Linux Runtime / SAF')) ...[
+                          _buildSectionHeader('应用', textMuted),
+                          _buildCard(
+                            children: _joinWithDividers([
+                              if (_matchesSearch('语言', _currentLanguage))
+                                _buildRow(
+                                  icon: Icons.language_rounded,
+                                  title: '语言',
+                                  trailing: _currentLanguage,
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () => _openPage(const LanguagePage()),
+                                ),
+                              if (_matchesSearch('外观', themeLabel))
+                                _buildRow(
+                                  icon: Icons.wb_sunny_outlined,
+                                  title: '外观',
+                                  trailing: themeLabel,
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const AppearanceThemePage()),
+                                ),
+                              if (_matchesSearch('字体大小', _fontSizeLabel))
+                                _buildRow(
+                                  icon: Icons.format_size_rounded,
+                                  title: '字体大小',
+                                  trailing: _fontSizeLabel,
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: _selectFontSize,
+                                ),
+                              if (_matchesSearch('扩展与环境', 'MCP / 技能 / 工具'))
+                                _buildRow(
+                                  icon: Icons.extension_outlined,
+                                  title: '扩展与环境',
+                                  trailing: 'MCP / 技能 / 工具',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const ExtensionsPage()),
+                                ),
+                              if (_matchesSearch('设备能力',
+                                  'Root / Magisk / KernelSU / Termux / Linux Runtime / SAF'))
+                                _buildRow(
+                                  icon: Icons.admin_panel_settings_outlined,
+                                  title: '设备能力',
+                                  trailing: 'Root / Termux / Linux / SAF',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const DeviceCapabilitiesPage()),
+                                ),
+                              if (_matchesSearch('设备自动化', '定时 / Wi-Fi / 电量触发'))
+                                _buildRow(
+                                  icon: Icons.bolt_outlined,
+                                  title: '设备自动化',
+                                  trailing: '定时 / Wi-Fi / 电量',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const DeviceAutomationPage()),
+                                ),
+                              if (_matchesSearch('备份与恢复', '通讯录 / 短信 / 应用数据'))
+                                _buildRow(
+                                  icon: Icons.backup_outlined,
+                                  title: '备份与恢复',
+                                  trailing: '通讯录 / 应用数据',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const DeviceBackupsPage()),
+                                ),
+                            ], isDark),
+                          ),
+                          const SizedBox(height: AppTokens.sp4),
+                        ],
+
+                        // 3. 关于组
+                        if (_matchesSearch('检查更新', _appVersion) ||
+                            _matchesSearch('服务协议')) ...[
+                          _buildSectionHeader('关于', textMuted),
+                          _buildCard(
+                            children: _joinWithDividers([
+                              if (_matchesSearch('检查更新', _appVersion))
+                                _buildRow(
+                                  icon: Icons.info_outline_rounded,
+                                  title: '检查更新',
+                                  trailing: _appVersion != null
+                                      ? '$_appVersion(${_appBuildNumber ?? '—'})'
+                                      : '—',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: _checkUpdate,
+                                ),
+                              if (_matchesSearch('服务协议'))
+                                _buildRow(
+                                  icon: Icons.article_outlined,
+                                  title: '服务协议',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: _showPrivacyNotice,
+                                ),
+                            ], isDark),
+                          ),
+                          const SizedBox(height: AppTokens.sp4),
+                        ],
+
+                        // 4. 单卡：帮助与反馈
+                        if (_matchesSearch('帮助与反馈')) ...[
+                          _buildCard(
+                            children: [
+                              _buildRow(
+                                icon: Icons.help_outline_rounded,
+                                title: '帮助与反馈',
+                                textColor: textColor,
+                                textMuted: textMuted,
+                                onTap: () => _openPage(const FeedbackPage()),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppTokens.sp4),
+                        ],
+
+                        // 5. 单卡：清除本地凭证
+                        if (_matchesSearch('清除本地凭证'))
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildSectionHeader('危险操作', AppPalette.danger),
+                              _buildCard(children: [
+                                _buildRow(
+                                  icon: Icons.delete_outline_rounded,
+                                  title: '清除本地凭证',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  danger: true,
+                                  semanticHint: '删除已保存的服务商和工具凭证，保留聊天记录',
+                                  onTap: () => _confirmLogout(context),
+                                ),
+                              ]),
+                            ],
+                          ),
+
+                        const SizedBox(height: 28),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  bool _matchesSearch(String title, [String? trailing]) {
+    if (_searchQuery.isEmpty) return true;
+    final q = _searchQuery.toLowerCase();
+    if (title.toLowerCase().contains(q)) return true;
+    if (trailing != null && trailing.toLowerCase().contains(q)) {
+      return true;
+    }
+    return false;
+  }
+
+  bool _hasAnyMatch({
+    required String providerText,
+    required String themeLabel,
+  }) {
+    return _matchesSearch('账号管理', providerText) ||
+        _matchesSearch('数据管理') ||
+        _matchesSearch('语言', _currentLanguage) ||
+        _matchesSearch('外观', themeLabel) ||
+        _matchesSearch('字体大小', _fontSizeLabel) ||
+        _matchesSearch('扩展与环境', 'MCP / 技能 / 工具') ||
+        _matchesSearch('设备能力',
+            'Root / Magisk / KernelSU / Termux / Linux Runtime / SAF') ||
+        _matchesSearch('检查更新', _appVersion) ||
+        _matchesSearch('服务协议') ||
+        _matchesSearch('帮助与反馈') ||
+        _matchesSearch('清除本地凭证');
+  }
+
+  List<Widget> _joinWithDividers(List<Widget> items, bool isDark) {
+    if (items.isEmpty) return const [];
+    final result = <Widget>[];
+    for (var i = 0; i < items.length; i++) {
+      if (i > 0) result.add(_buildDivider(isDark));
+      result.add(items[i]);
+    }
+    return result;
   }
 
   Widget _buildSectionHeader(String title, Color color) {
@@ -619,53 +766,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _buildCard({
-    required Color cardBg,
-    required bool isDark,
     required List<Widget> children,
   }) {
-    final intensity = AppAppearanceController.resolvedGlassIntensity;
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: children,
-    );
-
-    if (intensity != GlassIntensity.flat) {
-      return GlassSurface(
-        role: GlassRole.content,
-        variant: GlassVariant.regular,
-        intensity: intensity,
-        borderRadius: BorderRadius.circular(16),
-        borderColor: isDark ? const Color(0x33FFFFFF) : const Color(0x80FFFFFF),
-        tint: isDark
-            ? AppPalette.darkSurface.withValues(alpha: 0.42)
-            : AppPalette.lightCanvas.withValues(alpha: 0.46),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? const Color(0x40000000) : const Color(0x141E3A8A),
-            blurRadius: 16,
-            offset: const Offset(0, 5),
-          ),
-        ],
-        child: Material(
-          type: MaterialType.transparency,
-          borderRadius: BorderRadius.circular(16),
-          clipBehavior: Clip.antiAlias,
-          child: content,
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
-          width: 0.8,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: content,
+    return SectionCard(
+      child: Column(mainAxisSize: MainAxisSize.min, children: children),
     );
   }
 
@@ -690,7 +794,13 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     required Color textColor,
     required Color textMuted,
     required VoidCallback onTap,
+    bool danger = false,
+    String? semanticHint,
   }) {
+    final stackedValue = trailing != null &&
+        trailing.isNotEmpty &&
+        (MediaQuery.sizeOf(context).width <= 360 ||
+            MediaQuery.textScalerOf(context).scale(14) >= 22);
     return Material(
       color: Colors.transparent,
       child: Semantics(
@@ -698,32 +808,59 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         container: true,
         label: title,
         value: trailing,
-        hint: '打开$title',
+        hint: semanticHint ?? (danger ? '危险操作，$title' : '打开$title'),
         child: InkWell(
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
               children: [
-                Icon(icon, size: 20, color: textColor),
+                Icon(icon,
+                    size: 20, color: danger ? AppPalette.danger : textColor),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w400,
-                      color: textColor,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400,
+                          color: danger ? AppPalette.danger : textColor,
+                        ),
+                      ),
+                      if (stackedValue) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          trailing,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: AppTokens.fontSizeSubhead,
+                            color: textMuted,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                if (trailing != null && trailing.isNotEmpty) ...[
-                  Text(
-                    trailing,
-                    style: TextStyle(
-                      fontSize: AppTokens.fontSizeSubhead,
-                      fontWeight: FontWeight.w400,
-                      color: textMuted,
+                if (trailing != null &&
+                    trailing.isNotEmpty &&
+                    !stackedValue) ...[
+                  Flexible(
+                    child: Text(
+                      trailing,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppTokens.fontSizeSubhead,
+                        fontWeight: FontWeight.w400,
+                        color: textMuted,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 4),

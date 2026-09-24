@@ -34,16 +34,31 @@ class NotificationService {
       const darwin = DarwinInitializationSettings();
       const settings = InitializationSettings(android: android, iOS: darwin);
       await _plugin.initialize(
-        settings,
+        settings: settings,
         onDidReceiveNotificationResponse: onResponse,
         onDidReceiveBackgroundNotificationResponse: onBackgroundResponse,
       );
       _initialized = true;
-      // Android 13+ otherwise silently drops task notifications.
-      await requestPermission();
     } catch (_) {
       // 通知初始化失败不影响主流程（静默降级）。
     }
+  }
+
+  /// 是否已经就通知权限问过用户。
+  ///
+  /// 权限只在首次真正发起任务时申请（见 [ensurePermissionOnce]），而不是在
+  /// `init()` 里：启动首帧就弹系统弹窗时用户还不知道这个应用会通知什么，拒绝率
+  /// 高且 Android 上拒绝两次后就不再弹窗，等于永久失去通知能力。
+  bool _permissionRequested = false;
+
+  /// 在「用户刚触发一个真实动作」时申请一次通知权限。
+  ///
+  /// Android 13+ 不授权会静默丢弃所有通知，所以必须有人主动申请；关键是时机——
+  /// 用户发出第一个任务时正好有明确理由（"任务跑完要通知我"）。
+  Future<void> ensurePermissionOnce() async {
+    if (_permissionRequested) return;
+    _permissionRequested = true;
+    await requestPermission();
   }
 
   /// Android 13+ 需要运行时申请 POST_NOTIFICATIONS。
@@ -55,6 +70,22 @@ class NotificationService {
       await android?.requestNotificationsPermission();
     } catch (_) {
       // 权限申请失败静默降级，UI 可引导用户到系统设置。
+    }
+  }
+
+  /// 读取「应用是被点击某条通知拉起的」对应的 payload。
+  ///
+  /// 冷启动场景下 `onDidReceiveNotificationResponse` 不会触发（当时没有运行中的
+  /// 引擎），只能靠这里取。返回 null 表示本次不是由通知点击启动。
+  Future<String?> notificationLaunchPayload() async {
+    if (kIsWeb || !_initialized) return null;
+    try {
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      if (details?.didNotificationLaunchApp != true) return null;
+      return details?.notificationResponse?.payload;
+    } catch (_) {
+      // 取不到就当普通启动，不影响主流程。
+      return null;
     }
   }
 
@@ -76,7 +107,13 @@ class NotificationService {
         ),
         iOS: DarwinNotificationDetails(),
       );
-      await _plugin.show(id, title, body, details, payload: payload);
+      await _plugin.show(
+          id: id,
+          title: title,
+          body: body,
+          notificationDetails: details,
+          payload: payload,
+        );
     } catch (_) {
       // 弹通知失败不阻断任务。
     }
@@ -130,7 +167,13 @@ class NotificationService {
         ),
         iOS: const DarwinNotificationDetails(),
       );
-      await _plugin.show(id, title, body, details, payload: 'approval:$requestId');
+      await _plugin.show(
+          id: id,
+          title: title,
+          body: body,
+          notificationDetails: details,
+          payload: 'approval:$requestId',
+        );
     } catch (_) {
       // 通知失败不阻断审批：前台弹窗路径仍在。
     }
@@ -139,7 +182,7 @@ class NotificationService {
   Future<void> cancel(int id) async {
     if (kIsWeb || !_initialized) return;
     try {
-      await _plugin.cancel(id);
+      await _plugin.cancel(id: id);
     } catch (_) {
       // 取消失败无害，通知会随用户操作或被系统回收。
     }

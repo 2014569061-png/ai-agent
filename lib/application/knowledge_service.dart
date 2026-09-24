@@ -24,7 +24,7 @@ class KnowledgeService {
   /// Invalidates the in-memory BM25 index after an external database import
   /// or deletion.
   static void invalidate(AppDatabase db) {
-    _indexCache.remove(db);
+    unawaited(_indexCache.remove(db));
   }
 
   Future<bool> isEnabled() async {
@@ -43,7 +43,11 @@ class KnowledgeService {
     required String sourceType,
     required String content,
   }) async {
-    final chunks = _chunk(content.trim());
+    final normalizedContent = content.trim();
+    if (normalizedContent.isEmpty) {
+      throw ArgumentError.value(content, 'content', 'must not be empty');
+    }
+    final chunks = _chunk(normalizedContent);
     final now = DateTime.now();
     final doc = KnowledgeDoc(
       id: UniqueId.generate('kd', now: now),
@@ -53,16 +57,19 @@ class KnowledgeService {
       createdAt: now,
       updatedAt: now,
     );
-    await db.saveKnowledgeDoc(doc);
-    for (var i = 0; i < chunks.length; i++) {
-      await db.saveKnowledgeChunk(KnowledgeChunk(
-        id: '${doc.id}:chunk:$i',
-        docId: doc.id,
-        content: chunks[i],
-        embeddingJson: null,
-        index: i,
-      ));
-    }
+    await db.saveKnowledgeDocWithChunks(
+      doc,
+      [
+        for (var i = 0; i < chunks.length; i++)
+          KnowledgeChunk(
+            id: '${doc.id}:chunk:$i',
+            docId: doc.id,
+            content: chunks[i],
+            embeddingJson: null,
+            index: i,
+          ),
+      ],
+    );
     invalidate(db);
     return doc;
   }
@@ -110,76 +117,106 @@ class KnowledgeService {
   }
 
   Future<_KnowledgeSearchIndex> _indexFor(AppDatabase db) async {
-    final cached = _indexCache[db];
-    if (cached != null) return cached;
-
-    final future = _buildIndex(db);
-    _indexCache[db] = future;
-    try {
-      return await future;
-    } catch (_) {
-      if (identical(_indexCache[db], future)) {
-        unawaited(_indexCache.remove(db));
+    while (true) {
+      final cached = _indexCache[db];
+      if (cached != null) {
+        try {
+          final index = await cached;
+          if (index.generation == db.knowledgeGeneration) return index;
+          if (identical(_indexCache[db], cached)) {
+            unawaited(_indexCache.remove(db));
+          }
+        } catch (_) {
+          if (identical(_indexCache[db], cached)) {
+            unawaited(_indexCache.remove(db));
+          }
+          rethrow;
+        }
       }
-      rethrow;
+
+      final generation = db.knowledgeGeneration;
+      final future = _buildIndex(db, generation);
+      _indexCache[db] = future;
+      try {
+        final index = await future;
+        if (index.generation == db.knowledgeGeneration) return index;
+        if (identical(_indexCache[db], future)) {
+          unawaited(_indexCache.remove(db));
+        }
+      } catch (_) {
+        if (identical(_indexCache[db], future)) {
+          unawaited(_indexCache.remove(db));
+        }
+        rethrow;
+      }
     }
   }
 
-  Future<_KnowledgeSearchIndex> _buildIndex(AppDatabase db) async {
+  Future<_KnowledgeSearchIndex> _buildIndex(
+      AppDatabase db, int generation) async {
     final chunks = await db.allKnowledgeChunks();
-    final List<List<String>> tokens =
-        chunks.map((chunk) => _tokenize(chunk.content)).toList(growable: false);
-    final List<int> lengths =
-        tokens.map((item) => item.length).toList(growable: false);
+    final lengths = <int>[];
+    final termFrequencies = <Map<String, int>>[];
     final documentFrequency = <String, int>{};
-    for (final item in tokens) {
-      for (final token in item.toSet()) {
+    for (final chunk in chunks) {
+      final frequencies = <String, int>{};
+      var tokenCount = 0;
+      for (final token in _tokenize(chunk.content)) {
+        tokenCount++;
+        frequencies[token] = (frequencies[token] ?? 0) + 1;
+      }
+      lengths.add(tokenCount);
+      termFrequencies.add(frequencies);
+      for (final token in frequencies.keys) {
         documentFrequency[token] = (documentFrequency[token] ?? 0) + 1;
       }
     }
     return _KnowledgeSearchIndex(
+      generation: generation,
       chunks: chunks,
-      tokens: tokens,
+      termFrequencies: termFrequencies,
       lengths: lengths,
+      averageLength: lengths.isEmpty
+          ? 1
+          : lengths.reduce((sum, length) => sum + length) / lengths.length,
       documentFrequency: documentFrequency,
     );
   }
 
   List<KnowledgeChunk> _bm25(_KnowledgeSearchIndex index, String query,
       {int topK = 5}) {
+    if (topK <= 0 || index.chunks.isEmpty) return const [];
     const k1 = 1.5;
     const b = 0.75;
     final chunks = index.chunks;
-    final docTokens = index.tokens;
+    final termFrequencies = index.termFrequencies;
     final docLen = index.lengths;
-    final avgLen =
-        docLen.isEmpty ? 1 : docLen.reduce((a, x) => a + x) / docLen.length;
-    final n = chunks.length;
     final queryTokens = _tokenize(query).toSet().toList();
-    final scores = <double>[];
+    if (queryTokens.isEmpty) return const [];
+    final best = <(int, double)>[];
     for (var i = 0; i < chunks.length; i++) {
       var score = 0.0;
-      final tokens = docTokens[i];
-      final tf = <String, int>{};
-      for (final t in tokens) {
-        tf[t] = (tf[t] ?? 0) + 1;
-      }
+      final tf = termFrequencies[i];
       for (final qt in queryTokens) {
         final f = tf[qt] ?? 0;
         if (f == 0) continue;
         final d = index.documentFrequency[qt] ?? 0;
-        final idf = math.log((n - d + 0.5) / (d + 0.5) + 1);
-        final denom = f + k1 * (1 - b + b * (tokens.length / avgLen));
+        final idf = math.log((chunks.length - d + 0.5) / (d + 0.5) + 1);
+        final denom = f + k1 * (1 - b + b * (docLen[i] / index.averageLength));
         score += idf * (f * (k1 + 1)) / denom;
       }
-      scores.add(score);
+      if (score <= 0) continue;
+
+      // 只维护得分最高的 K 项，避免对全部 N 个片段排序。
+      var insertionIndex = best.length;
+      while (insertionIndex > 0 && best[insertionIndex - 1].$2 < score) {
+        insertionIndex--;
+      }
+      if (insertionIndex >= topK) continue;
+      best.insert(insertionIndex, (i, score));
+      if (best.length > topK) best.removeLast();
     }
-    final indexed = List<int>.generate(chunks.length, (i) => i);
-    indexed.sort((a, x) => scores[x].compareTo(scores[a]));
-    return [
-      for (final i in indexed.take(topK))
-        if (scores[i] > 0) chunks[i]
-    ];
+    return [for (final result in best) chunks[result.$1]];
   }
 
   /// 分词：英文/数字按词，中文按单字，其余为分隔符。
@@ -189,9 +226,9 @@ class KnowledgeService {
     final buffer = StringBuffer();
     for (final rune in lower.runes) {
       final ch = String.fromCharCode(rune);
-      if (RegExp(r'[a-z0-9]').hasMatch(ch)) {
+      if ((rune >= 0x61 && rune <= 0x7a) || (rune >= 0x30 && rune <= 0x39)) {
         buffer.write(ch);
-      } else if (RegExp(r'[\u4e00-\u9fff]').hasMatch(ch)) {
+      } else if (rune >= 0x4e00 && rune <= 0x9fff) {
         if (buffer.isNotEmpty) {
           tokens.add(buffer.toString());
           buffer.clear();
@@ -214,14 +251,18 @@ final knowledgeServiceProvider =
 
 class _KnowledgeSearchIndex {
   const _KnowledgeSearchIndex({
+    required this.generation,
     required this.chunks,
-    required this.tokens,
+    required this.termFrequencies,
     required this.lengths,
+    required this.averageLength,
     required this.documentFrequency,
   });
 
+  final int generation;
   final List<KnowledgeChunk> chunks;
-  final List<List<String>> tokens;
+  final List<Map<String, int>> termFrequencies;
   final List<int> lengths;
+  final double averageLength;
   final Map<String, int> documentFrequency;
 }

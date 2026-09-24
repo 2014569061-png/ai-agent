@@ -29,4 +29,32 @@ void main() {
       '委派子 Agent：核对测试覆盖',
     );
   });
+
+  test('shows the reviewed Android operation details in approval summaries',
+      () {
+    final lines = humanizer.paramLines(call('android_device', {
+      'action': 'delete_root_file',
+      '_approvalDetails': {
+        'target': '/data/local/tmp/report.txt',
+        'scope': 'single file',
+        'impact': 'permanent deletion',
+        'command': 'su -c rm',
+        'executionPlan': 'delete only the listed file',
+        'reversible': false,
+        'rollback': 'restore from a backup',
+      },
+    }));
+
+    expect(
+        lines.map((line) => line.$1),
+        containsAll([
+          '目标',
+          '影响范围',
+          '影响',
+          'Root 命令',
+          '执行计划',
+          '可撤销',
+        ]));
+    expect(lines.first.$2, '/data/local/tmp/report.txt');
+  });
 }

@@ -63,6 +63,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('empty state exposes the guided Agent creation entry',
+      (tester) async {
+    var created = false;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: Scaffold(
+        body: ChatEmptyState(
+          providerConfigured: true,
+          onCreateAgent: () => created = true,
+        ),
+      ),
+    ));
+
+    expect(find.text('创建专属 Agent'), findsOneWidget);
+    await tester.tap(find.text('创建专属 Agent'));
+    expect(created, isTrue);
+  });
+
   testWidgets('empty state action grid uses liquid glass in liquid mode',
       (tester) async {
     AppAppearanceController.glassIntensity.value = 0.85;

@@ -20,6 +20,7 @@ import 'memory_service.dart';
 import 'project_kind_detector.dart';
 import 'system_prompt_assembly.dart';
 import 'task_template_service.dart';
+import 'nexus_guard.dart';
 
 import '../infrastructure/skills/skill_store.dart';
 import '../infrastructure/mcp/mcp_tool_provider.dart';
@@ -135,7 +136,8 @@ class HeadlessExecutor {
     final executor = AgentExecutor(provider: provider, tools: registry);
     var persona = systemPrompt ?? '你是一个有帮助的 AI Agent。';
     if (workspacePath != null && workspacePath.trim().isNotEmpty) {
-      try {
+      await NexusGuard.silentlyAsync<void>('headless.taskTemplateRules',
+          () async {
         final project = await const ProjectKindDetector().detect(workspacePath);
         final templateRules = TaskTemplateService().promptBlock(
           taskType: taskType,
@@ -144,7 +146,7 @@ class HeadlessExecutor {
         if (templateRules.isNotEmpty) {
           persona = '$persona\n\n$templateRules';
         }
-      } catch (_) {}
+      });
     }
     var memoryBlock = '';
     var knowledgeBlock = '';
@@ -153,8 +155,11 @@ class HeadlessExecutor {
       memoryBlock = await MemoryService()
           .buildInjectionBlock(db, contextTokens: config.contextTokens);
       knowledgeBlock = await KnowledgeService().buildInjectionBlock(db, prompt);
-      // 与聊天路径保持一致：后台任务同样注入已启用 Skill 的指令块。
-      skillBlock = await SkillStore().buildInjectionBlock(db);
+      // 只有本轮真正注册了 skills_read，才注入可按需读取的 Skill 索引。
+      // Agent 的 allow-list 可能明确关闭 Skill 工具。
+      if (registry.findExecutor('skills_read') != null) {
+        skillBlock = await SkillStore().buildInjectionBlock(db);
+      }
     } catch (_) {
       // 注入失败不阻断执行。
     }
@@ -255,26 +260,31 @@ class HeadlessExecutor {
     registerIfAllowed(JsonQueryTool());
     registerIfAllowed(ImageGenTool(config: config));
 
-    try {
+    // 插件工具加载失败会让「模型看不到我的插件工具」且毫无线索，因此接入上报
+    // （NexusGuard.silently 只上报、不改控制流，无需 logger）。
+    await NexusGuard.silentlyAsync<void>('headless.loadPluginTools', () async {
       final pluginTools = await PluginStore().loadDeclarativeTools(db);
       for (final tool in pluginTools) {
         registerIfAllowed(tool);
       }
-    } catch (_) {}
+    });
 
     final mcpProvider = McpToolProvider();
-    try {
+    await NexusGuard.silentlyAsync<void>('headless.loadMcpTools', () async {
       final servers =
           await McpService(database: Future.value(db)).loadEnabled();
       for (final server in servers) {
-        try {
+        // 单个 MCP 服务器连不上是常见情况（未启动、网络不通），不应影响其它
+        // 服务器注册，但同样要留下痕迹。
+        await NexusGuard.silentlyAsync<void>('headless.connectMcpServer',
+            () async {
           final tools = await mcpProvider.connectAndListTools(server);
           for (final tool in tools) {
             registerIfAllowed(tool);
           }
-        } catch (_) {}
+        });
       }
-    } catch (_) {}
+    });
 
     final memoryService = MemoryService();
     registerIfAllowed(MemoryGetTool(onGet: (query, offset, limit) async {
@@ -348,10 +358,11 @@ class HeadlessExecutor {
       }));
     }
 
-    try {
+    await NexusGuard.silentlyAsync<void>('headless.registerSkillsTools',
+        () async {
       registerIfAllowed(SkillsReadTool(database: db));
       registerIfAllowed(SkillsReadResourceTool(database: db));
-    } catch (_) {}
+    });
     bool workspaceFilesEnabled;
     bool terminalEnabled;
     try {

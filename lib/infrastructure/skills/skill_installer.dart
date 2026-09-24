@@ -16,6 +16,7 @@ import '../database/app_database.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/unique_id.dart';
 import 'skill_parser.dart';
+import 'skill_change_notifier.dart';
 
 /// 解析后的 GitHub Skill 来源引用。
 class GithubSkillRef {
@@ -95,6 +96,10 @@ class SkillInstaller {
   final Dio _dio;
 
   static const int _maxRawArchiveBytes = 10 * 1024 * 1024;
+  static const int _maxSingleFileBytes = kSkillMaxBytes;
+  // Tar headers and end blocks add a small amount above the retained payload.
+  static const int _maxExpandedArchiveBytes =
+      kSkillMaxBytes + kSkillMaxFiles * 1024;
 
   /// 解析用户输入为 GitHub 源。仅允许 github.com，拒绝其它任意 URL。
   GithubSkillRef parseInput(String input) {
@@ -106,18 +111,28 @@ class SkillInstaller {
     final shorthand =
         RegExp(r'^([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)$').firstMatch(raw);
     if (shorthand != null) {
+      final owner = shorthand.group(1)!;
+      final repo = shorthand.group(2)!;
+      if (!_isSafeOwner(owner) || !_isSafeRepo(repo)) {
+        throw SkillValidationException('GitHub owner/repo 格式非法');
+      }
       return GithubSkillRef(
         original: raw,
-        owner: shorthand.group(1)!,
-        repo: shorthand.group(2)!,
+        owner: owner,
+        repo: repo,
         ref: 'HEAD',
         subPath: null,
       );
     }
     final uri = Uri.tryParse(raw);
     if (uri == null ||
-        (uri.host != 'github.com' && uri.host != 'www.github.com')) {
-      throw SkillValidationException('仅支持 GitHub 公开仓库地址或 owner/repo 简写');
+        uri.scheme != 'https' ||
+        (uri.host != 'github.com' && uri.host != 'www.github.com') ||
+        uri.userInfo.isNotEmpty ||
+        (uri.hasPort && uri.port != 443) ||
+        uri.query.isNotEmpty ||
+        uri.fragment.isNotEmpty) {
+      throw SkillValidationException('仅支持 HTTPS GitHub 公开仓库地址或 owner/repo 简写');
     }
     final segments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
     if (segments.length < 2) {
@@ -125,6 +140,9 @@ class SkillInstaller {
     }
     final owner = segments[0];
     var repo = segments[1].replaceAll(RegExp(r'\.git$'), '');
+    if (!_isSafeOwner(owner) || !_isSafeRepo(repo)) {
+      throw SkillValidationException('GitHub owner/repo 格式非法');
+    }
     var ref = 'HEAD';
     String? subPath;
     if (segments.length >= 3) {
@@ -195,10 +213,11 @@ class SkillInstaller {
       throw SkillValidationException('SKILL.md 路径不在白名单内');
     }
     final hashInput = <int>[];
-    result.forEach((key, value) {
+    final hashPaths = result.keys.toList()..sort();
+    for (final key in hashPaths) {
       hashInput.addAll(utf8.encode(key));
-      hashInput.addAll(value);
-    });
+      hashInput.addAll(result[key]!);
+    }
     final checksum = sha256.convert(hashInput).toString();
     return SkillPackPreview(
       source: resolvedSource,
@@ -223,6 +242,9 @@ class SkillInstaller {
     var committed = false;
     final now = DateTime.now();
     final fileList = <String>[];
+    // Read the current row before replacing the directory so an update keeps
+    // the user's explicit enabled/disabled choice.
+    final existing = await db.findSkillPackByName(preview.metadata.name);
     try {
       await stagingDir.create(recursive: true);
       for (final entry in preview.fileContents.entries) {
@@ -247,7 +269,6 @@ class SkillInstaller {
       await stagingDir.rename(installRoot);
       committed = true;
 
-      final existing = await db.findSkillPackByName(preview.metadata.name);
       final pack = SkillPack(
         id: existing?.id ?? UniqueId.generate('skill', now: now),
         name: preview.metadata.name,
@@ -262,7 +283,7 @@ class SkillInstaller {
         subPath: preview.source.subPath,
         installRoot: installRoot,
         fileListJson: jsonEncode(fileList),
-        enabled: true,
+        enabled: existing?.enabled ?? true,
         installedAt: existing?.installedAt ?? now,
         updatedAt: now,
         sha256: preview.sha256Hex,
@@ -275,6 +296,7 @@ class SkillInstaller {
       if (backupDir?.existsSync() == true) {
         await backupDir!.delete(recursive: true);
       }
+      SkillChangeNotifier.notify();
       return pack;
     } catch (error) {
       // 解析/校验错误不会触及旧目录，不需要冻结；写盘、rename 或 DB 提交
@@ -298,13 +320,18 @@ class SkillInstaller {
       if (stagingDir.existsSync()) {
         try {
           await stagingDir.delete(recursive: true);
-        } catch (_) {}
+        } catch (_) {
+          // 暂存目录清理失败不影响本次安装的结论（成功或已冻结），只留下一个
+          // 残留目录；下次安装会先重建同名暂存目录。
+        }
       }
       // 成功提交后旧目录已不再需要；失败路径若回滚成功则 backup 已被 rename。
       if (backupDir?.existsSync() == true && committed) {
         try {
           await backupDir!.delete(recursive: true);
-        } catch (_) {}
+        } catch (_) {
+          // 提交成功后旧备份删不掉：只占磁盘，不影响已生效的新版本。
+        }
       }
     }
   }
@@ -358,23 +385,26 @@ class SkillInstaller {
   Future<Uint8List> _downloadArchive(GithubSkillRef source) async {
     final url =
         'https://codeload.github.com/${source.fullRepo}/tar.gz/refs/heads/${Uri.encodeComponent(source.ref)}';
-    final resp = await _dio.get<List<int>>(
+    final resp = await _dio.get<ResponseBody>(
       url,
       options: Options(
-        responseType: ResponseType.bytes,
+        responseType: ResponseType.stream,
         followRedirects: true,
         sendTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 60),
       ),
     );
-    final data = resp.data;
-    if (data == null || data.isEmpty) {
-      throw SkillValidationException('GitHub 返回空内容');
+    final body = resp.data;
+    if (body == null) throw SkillValidationException('GitHub 返回空内容');
+    final bytes = <int>[];
+    await for (final chunk in body.stream) {
+      bytes.addAll(chunk);
+      if (bytes.length > _maxRawArchiveBytes) {
+        throw SkillValidationException('下载包超过 10MB 上限');
+      }
     }
-    if (data.length > _maxRawArchiveBytes) {
-      throw SkillValidationException('下载包超过 10MB 上限');
-    }
-    return Uint8List.fromList(data);
+    if (bytes.isEmpty) throw SkillValidationException('GitHub 返回空内容');
+    return Uint8List.fromList(bytes);
   }
 
   Archive _decodeArchive(Uint8List bytes) {
@@ -383,12 +413,37 @@ class SkillInstaller {
           bytes[0] == 0x50 &&
           bytes[1] == 0x4b &&
           (bytes[2] == 0x03 || bytes[2] == 0x05 || bytes[2] == 0x07)) {
+        // Inspect the central directory before ZipDecoder touches symlink
+        // payloads. This prevents many oversized entries from being inflated
+        // merely to discover that the archive is unsafe.
+        final directory = ZipDirectory()..read(InputMemoryStream(bytes));
+        _validateZipHeaders(directory.fileHeaders);
         return ZipDecoder().decodeBytes(bytes);
       }
-      final gz = const GZipDecoder().decodeBytes(bytes);
-      return TarDecoder().decodeBytes(gz);
+      final output = _CappedOutputStream(_maxExpandedArchiveBytes);
+      const GZipDecoder().decodeStream(InputMemoryStream(bytes), output);
+      return TarDecoder().decodeBytes(output.getBytes());
+    } on SkillValidationException {
+      rethrow;
     } catch (_) {
       throw SkillValidationException('仅支持 ZIP 或 tar.gz 格式的 Skill 压缩包');
+    }
+  }
+
+  void _validateZipHeaders(Iterable<ZipFileHeader> headers) {
+    if (headers.length > kSkillMaxFiles) {
+      throw SkillValidationException('Skill 包含超过 200 个文件');
+    }
+    var totalBytes = 0;
+    for (final header in headers) {
+      if (header.uncompressedSize < 0 ||
+          header.uncompressedSize > _maxSingleFileBytes) {
+        throw SkillValidationException('Skill 文件超过 5MB 限制：${header.filename}');
+      }
+      totalBytes += header.uncompressedSize;
+      if (totalBytes > _maxExpandedArchiveBytes) {
+        throw SkillValidationException('Skill 包解压后超过安全上限');
+      }
     }
   }
 
@@ -442,10 +497,24 @@ class SkillInstaller {
     if (rootPrefix.isNotEmpty && rel.startsWith(rootPrefix)) {
       rel = rel.substring(rootPrefix.length);
     }
-    while (rel.startsWith('/')) {
-      rel = rel.substring(1);
-    }
     return rel;
+  }
+
+  String? _normalizeArchivePath(String value) {
+    var path = value.replaceAll('\\', '/');
+    if (path.startsWith('/') ||
+        path.startsWith('\\') ||
+        (path.length >= 2 && path.codeUnitAt(1) == 0x3a) ||
+        path.contains('\u0000')) {
+      return null;
+    }
+    final parts = <String>[];
+    for (final part in path.split('/')) {
+      if (part.isEmpty || part == '.') continue;
+      if (part == '..' || part.contains(':')) return null;
+      parts.add(part);
+    }
+    return parts.isEmpty ? null : parts.join('/');
   }
 
   /// 提取白名单内的文件，并统一剥离 tar 根目录第一层。
@@ -455,21 +524,26 @@ class SkillInstaller {
     final rootPrefix = _findRootPrefix(archive);
     final result = <String, Uint8List>{};
     var fileCount = 0;
+    var totalBytes = 0;
+    final canonicalPaths = <String>{};
+    final normalizedSubPath = subPath == null || subPath.isEmpty
+        ? null
+        : _normalizeArchivePath(subPath);
+    if (subPath != null && subPath.isNotEmpty && normalizedSubPath == null) {
+      throw SkillValidationException('Skill 子目录包含非法路径');
+    }
     for (final file in archive) {
-      var rel = file.name;
-      if (rootPrefix.isNotEmpty && rel.startsWith(rootPrefix)) {
-        rel = rel.substring(rootPrefix.length);
-      }
-      rel = rel.replaceAll('\\', '/');
-      if (rel.startsWith('/')) rel = rel.substring(1);
+      var rel = _relativeArchivePath(file.name, rootPrefix);
       if (rel.isEmpty) continue;
-      if (rel.split('/').contains('..')) {
+      final normalizedRel = _normalizeArchivePath(rel);
+      if (normalizedRel == null) {
         throw SkillValidationException('Skill 包包含路径穿越：$rel');
       }
+      rel = normalizedRel;
       // 只关心 subPath 目录下（无 subPath 时看根目录）
-      if (subPath != null && subPath.isNotEmpty) {
-        if (rel.startsWith('$subPath/')) {
-          rel = rel.substring(subPath.length + 1);
+      if (normalizedSubPath != null) {
+        if (rel.startsWith('$normalizedSubPath/')) {
+          rel = rel.substring(normalizedSubPath.length + 1);
         } else {
           continue;
         }
@@ -488,10 +562,23 @@ class SkillInstaller {
       if (!_isAllowedPath(rel)) {
         throw SkillValidationException('Skill 包含不允许的文件：$rel');
       }
+      final canonicalPath = rel.toLowerCase();
+      if (!canonicalPaths.add(canonicalPath)) {
+        throw SkillValidationException('Skill 包含重复文件路径：$rel');
+      }
+      if (file.size > _maxSingleFileBytes) {
+        throw SkillValidationException('Skill 文件超过 5MB 限制：$rel');
+      }
       final data = file.readBytes();
-      if (data == null ||
-          data.isEmpty && !rel.endsWith('.md') && !rel.endsWith('.txt')) {
-        if (data == null) continue;
+      if (data == null) {
+        throw SkillValidationException('Skill 文件无法读取：$rel');
+      }
+      if (data.length > _maxSingleFileBytes) {
+        throw SkillValidationException('Skill 文件超过 5MB 限制：$rel');
+      }
+      totalBytes += data.length;
+      if (totalBytes > kSkillMaxBytes) {
+        throw SkillValidationException('Skill 包超过 5MB 限制');
       }
       result[rel] = data;
     }
@@ -508,6 +595,13 @@ class SkillInstaller {
     return names.every((name) => name.startsWith('$prefix/')) ? '$prefix/' : '';
   }
 
+  bool _isSafeOwner(String value) =>
+      RegExp(r'^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$').hasMatch(value);
+
+  bool _isSafeRepo(String value) =>
+      RegExp(r'^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,99})$').hasMatch(value) &&
+      !value.endsWith('.');
+
   bool _isAllowedPath(String rel) {
     final lower = rel.toLowerCase();
     if (!kSkillAllowedExtensions.any((ext) => lower.endsWith(ext))) {
@@ -519,5 +613,37 @@ class SkillInstaller {
       return lower.startsWith('assets/');
     }
     return const {'.md', '.txt'}.contains(ext);
+  }
+}
+
+/// GZip 解压时的硬上限，避免高压缩比归档在校验前耗尽内存。
+class _CappedOutputStream extends OutputMemoryStream {
+  _CappedOutputStream(this.maxBytes);
+
+  final int maxBytes;
+
+  void _check(int additional) {
+    if (additional < 0 || length > maxBytes - additional) {
+      throw SkillValidationException('压缩包解压后超过 5MB 安全上限');
+    }
+  }
+
+  @override
+  void writeByte(int value) {
+    _check(1);
+    super.writeByte(value);
+  }
+
+  @override
+  void writeBytes(List<int> bytes, {int? length}) {
+    final count = length ?? bytes.length;
+    _check(count);
+    super.writeBytes(bytes, length: count);
+  }
+
+  @override
+  void writeBackReference(int distance, int count) {
+    _check(count);
+    super.writeBackReference(distance, count);
   }
 }

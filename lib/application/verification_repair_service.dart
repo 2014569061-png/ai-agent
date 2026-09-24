@@ -85,8 +85,7 @@ class VerificationRepairService {
       buffer.writeln('不要反复安装同一缺失项；说明缺少的工具并停止自动重试。');
     }
     if (!canAutoRetry(request)) {
-      buffer.writeln(
-          '自动修复已达 ${request.maxAttempts} 次上限，请给出下一步建议而不是继续重跑。');
+      buffer.writeln('自动修复已达 ${request.maxAttempts} 次上限，请给出下一步建议而不是继续重跑。');
     }
     return buffer.toString().trim();
   }

@@ -37,7 +37,7 @@ class AgentDraft {
     this.fromModel = true,
   });
 
-  static const defaultMaxSteps = 8;
+  static const defaultMaxSteps = 40;
   static const defaultTemperature = 0.7;
   static const defaultMaxTokens = 2048;
   static const defaultTopP = 1.0;

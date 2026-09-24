@@ -1,18 +1,25 @@
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../application/audit_service.dart';
+import '../../application/nexus_guard.dart';
+import '../../application/providers.dart';
 import '../../domain/models.dart';
+import '../../infrastructure/providers/tool_trust_store.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
+import '../widgets/nexus_sheet.dart';
 import 'settings_components.dart';
 
-class ToolListPage extends StatefulWidget {
+class ToolListPage extends ConsumerStatefulWidget {
   const ToolListPage({super.key});
 
   @override
-  State<ToolListPage> createState() => _ToolListPageState();
+  ConsumerState<ToolListPage> createState() => _ToolListPageState();
 }
 
 enum _RiskFilter { all, safe, requiresConfirmation, dangerous, sensitive }
@@ -36,7 +43,7 @@ class _ToolEntry {
   });
 }
 
-class _ToolListPageState extends State<ToolListPage> {
+class _ToolListPageState extends ConsumerState<ToolListPage> {
   static const _workspaceFilesKey = 'settings.tool.workspace_files';
   static const _terminalKey = 'settings.tool.terminal';
   static const _legacyTerminalFileKey = 'settings.tool.terminal_file';
@@ -46,10 +53,151 @@ class _ToolListPageState extends State<ToolListPage> {
   bool _workspaceFilesEnabled = true;
   bool _terminalEnabled = true;
 
+  /// 信任清单纯属运行时状态：会话级授权只存在内存里，所以必须复用 provider
+  /// 持有的那个实例，另建一个 ToolTrustStore 会看不到本会话已授予的项。
+  ToolTrustStore? _trustStore;
+  List<String> _sessionTrusted = const [];
+  List<String> _alwaysTrusted = const [];
+
   @override
   void initState() {
     super.initState();
     _loadPermissions();
+    _loadTrust();
+  }
+
+  Future<void> _loadTrust() async {
+    final store = await ref.read(toolTrustStoreProvider.future);
+    if (!mounted) return;
+    setState(() {
+      _trustStore = store;
+      _sessionTrusted = store.sessionAllowed;
+      _alwaysTrusted = store.alwaysAllowed;
+    });
+  }
+
+  /// 直接改的是 provider 持有的实例，不是响应式 notifier，所以手动重读刷新。
+  Future<void> _refreshTrust() async {
+    final store = _trustStore;
+    if (store == null || !mounted) return;
+    setState(() {
+      _sessionTrusted = store.sessionAllowed;
+      _alwaysTrusted = store.alwaysAllowed;
+    });
+  }
+
+  /// 撤销与授予留痕对称：撤销同样是安全相关动作，必须能在审计页看到。
+  void _logRevoke(String toolName, {required String scope}) {
+    final audit = ref.read(auditServiceProvider);
+    final db = ref.read(databaseProvider.future);
+    unawaited(
+      NexusGuard.silentlyAsync<bool>('trust.revoke', () async {
+        final database = await db;
+        await audit.logSecurityEvent(
+          database,
+          type: 'tool_revoke_$scope',
+          detail: toolName,
+          decision: 'revoked',
+        );
+        return true;
+      }),
+    );
+  }
+
+  Future<void> _revokeSession(String name) async {
+    _trustStore?.revokeSession(name);
+    _logRevoke(name, scope: 'session');
+    await _refreshTrust();
+  }
+
+  Future<void> _revokeAlways(String name) async {
+    await _trustStore?.removeAlways(name);
+    _logRevoke(name, scope: 'always');
+    await _refreshTrust();
+  }
+
+  Future<void> _revokeAll() async {
+    final store = _trustStore;
+    if (store == null) return;
+    for (final name in store.alwaysAllowed) {
+      await store.removeAlways(name);
+      _logRevoke(name, scope: 'always');
+    }
+    for (final name in store.sessionAllowed) {
+      _logRevoke(name, scope: 'session');
+    }
+    store.clearSession();
+    await _refreshTrust();
+  }
+
+  String _labelForName(String name) {
+    for (final tool in _allTools) {
+      if (tool.name == name) return tool.displayName;
+    }
+    return name;
+  }
+
+  IconData _iconForName(String name) {
+    for (final tool in _allTools) {
+      if (tool.name == name) return _toolIcon(tool);
+    }
+    return Icons.handyman_rounded;
+  }
+
+  /// 免审批清单。清单为空时也要显示，否则用户无法区分「没人免审批」和
+  /// 「这里根本没有这个功能」。
+  List<Widget> _trustTiles() {
+    final rows = <Widget>[];
+    void add(Widget tile) {
+      if (rows.isNotEmpty) rows.add(const SettingsDivider());
+      rows.add(tile);
+    }
+
+    if (_sessionTrusted.isEmpty && _alwaysTrusted.isEmpty) {
+      add(const SettingsTile(
+        icon: Icons.verified_user_outlined,
+        title: '当前没有工具处于免审批状态',
+        subtitle: '所有需要确认的工具都会逐次弹出审批窗。',
+        showChevron: false,
+      ));
+      return rows;
+    }
+
+    for (final name in _sessionTrusted) {
+      add(SettingsTile(
+        icon: _iconForName(name),
+        title: _labelForName(name),
+        subtitle: '本会话免审批 · 退出应用后失效',
+        showChevron: false,
+        trailingWidget: TextButton(
+          onPressed: () => _revokeSession(name),
+          child: const Text('撤销'),
+        ),
+      ));
+    }
+    for (final name in _alwaysTrusted) {
+      add(SettingsTile(
+        icon: _iconForName(name),
+        title: _labelForName(name),
+        subtitle: '始终允许 · 重启后仍免审批',
+        showChevron: false,
+        trailingWidget: TextButton(
+          onPressed: () => _revokeAlways(name),
+          child: const Text('撤销'),
+        ),
+      ));
+    }
+    add(SettingsTile(
+      icon: Icons.lock_reset_rounded,
+      title: '撤销全部免审批',
+      subtitle: '恢复为每个需确认的工具都逐次审批',
+      showChevron: false,
+      trailingWidget: TextButton(
+        onPressed: _revokeAll,
+        child: const Text('撤销全部'),
+      ),
+    ));
+    return rows;
   }
 
   Future<void> _loadPermissions() async {
@@ -75,6 +223,22 @@ class _ToolListPageState extends State<ToolListPage> {
   }
 
   static const List<_ToolEntry> _allTools = [
+    _ToolEntry(
+      name: 'android_device',
+      displayName: 'Android 设备控制',
+      description: '控制应用、文件、网络与系统设置；变更前提供只读预览，并按 action 风险审批。',
+      risk: ToolRisk.requiresConfirmation,
+      approvalPolicy: 'Root、危险系统开关、网络规则与不可逆操作需逐次明确批准；Root 变更须先预览。',
+      category: 'Android 设备',
+    ),
+    _ToolEntry(
+      name: 'android_automation',
+      displayName: 'Android 设备自动化',
+      description: '创建定时、连上 Wi-Fi、低电量触发的设备自动化规则；触发后只发通知，由你确认后执行。',
+      risk: ToolRisk.requiresConfirmation,
+      approvalPolicy: '创建/启用规则需确认；含 Root 或不可撤销动作的规则按危险操作审批。每次执行仍需在通知中确认。',
+      category: 'Android 设备',
+    ),
     _ToolEntry(
       name: 'web_search',
       displayName: '网页搜索 (Web Search)',
@@ -251,6 +415,8 @@ class _ToolListPageState extends State<ToolListPage> {
       'remember' => Icons.psychology_rounded,
       'sub_agent' => Icons.smart_toy_rounded,
       'generate_image' => Icons.palette_rounded,
+      'android_device' => Icons.phone_android_rounded,
+      'android_automation' => Icons.bolt_rounded,
       _ => Icons.handyman_rounded,
     };
   }
@@ -268,41 +434,22 @@ class _ToolListPageState extends State<ToolListPage> {
       '终端与执行' => AppPalette.danger,
       'Agent 与上下文' => AppPalette.lightTextMuted,
       '多模态' => AppPalette.danger,
+      '手机与本地文件' => AppPalette.brand,
       _ => AppPalette.lightTextMuted,
     };
   }
 
   void _showToolDetail(_ToolEntry tool) {
-    showModalBottomSheet(
+    showNexusSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Container(
-          decoration: BoxDecoration(
-            color: isDark ? AppPalette.darkSurface : Colors.white,
-            borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(AppTokens.radiusModal)),
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppPalette.darkHairline
-                        : AppPalette.lightHairline,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
               Row(
                 children: [
                   Container(
@@ -323,14 +470,14 @@ class _ToolListPageState extends State<ToolListPage> {
                         Text(
                           tool.displayName,
                           style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: AppTokens.fontSizeBodyLarge,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         Text(
                           '代码: ${tool.name} · 分类: ${tool.category}',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTokens.fontSizeBadge,
                             color: isDark
                                 ? AppPalette.darkTextMuted
                                 : AppPalette.lightTextMuted,
@@ -346,7 +493,7 @@ class _ToolListPageState extends State<ToolListPage> {
               Text(
                 tool.description,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTokens.fontSizeSubhead,
                   color: isDark ? AppPalette.darkText : AppPalette.lightText,
                   height: 1.45,
                 ),
@@ -366,7 +513,7 @@ class _ToolListPageState extends State<ToolListPage> {
                     Text(
                       '权限与审批策略',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: AppTokens.fontSizeCaption,
                         fontWeight: FontWeight.w500,
                         color: isDark ? Colors.white : Colors.black87,
                       ),
@@ -375,7 +522,7 @@ class _ToolListPageState extends State<ToolListPage> {
                     Text(
                       tool.approvalPolicy,
                       style: TextStyle(
-                        fontSize: 12.5,
+                        fontSize: AppTokens.fontSizeMeta,
                         color: isDark
                             ? AppPalette.darkTextMuted
                             : AppPalette.lightTextMuted,
@@ -392,7 +539,7 @@ class _ToolListPageState extends State<ToolListPage> {
                           size: 16,
                           color: tool.isSensitive
                               ? AppPalette.warning
-                              : AppPalette.brand,
+                              : AppPalette.brandTextFor(isDark),
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -401,7 +548,7 @@ class _ToolListPageState extends State<ToolListPage> {
                                 ? '敏感权限：涉及设备硬件或隐私操作，强制二次审批。'
                                 : '遵循全局当前生效的审批策略与沙箱安全边界。',
                             style: TextStyle(
-                              fontSize: 11.5,
+                              fontSize: AppTokens.fontSizeSubcaption,
                               color: tool.isSensitive
                                   ? AppPalette.warning
                                   : (isDark
@@ -429,7 +576,9 @@ class _ToolListPageState extends State<ToolListPage> {
                   onPressed: () => Navigator.pop(ctx),
                   child: const Text(
                     '我知道了',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                        fontSize: AppTokens.fontSizeBody,
+                        fontWeight: FontWeight.w500),
                   ),
                 ),
               ),
@@ -451,7 +600,7 @@ class _ToolListPageState extends State<ToolListPage> {
             label,
             style: TextStyle(
               color: color,
-              fontSize: 11,
+              fontSize: AppTokens.fontSizeBadge,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -517,6 +666,8 @@ class _ToolListPageState extends State<ToolListPage> {
               ),
             ],
           ),
+          const SettingsSectionTitle('免审批范围'),
+          SettingsGroupCard(children: _trustTiles()),
           // iOS Search Field
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -535,11 +686,11 @@ class _ToolListPageState extends State<ToolListPage> {
               child: TextField(
                 controller: _searchController,
                 onChanged: (_) => setState(() {}),
-                style: const TextStyle(fontSize: 14),
+                style: const TextStyle(fontSize: AppTokens.fontSizeSubhead),
                 decoration: InputDecoration(
                   hintText: '搜索工具名称、功能或分类…',
                   hintStyle: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: AppTokens.fontSizeBodySmall,
                     color: settingsMutedColor(context),
                   ),
                   prefixIcon: Icon(
@@ -634,7 +785,7 @@ class _ToolListPageState extends State<ToolListPage> {
       label: Text(
         label,
         style: TextStyle(
-          fontSize: 12.5,
+          fontSize: AppTokens.fontSizeMeta,
           fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
           color: selected
               ? Colors.white

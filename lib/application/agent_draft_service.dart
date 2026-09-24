@@ -54,7 +54,7 @@ class AgentDraftService {
       ..writeln('   constraints：字符串数组，3-5 条约束与边界，说明不做什么、必须遵守什么')
       ..writeln('   acceptance：字符串数组，2-4 条「怎样算完成」的验收条件')
       ..writeln('   tools：字符串数组，只从上面的工具清单里挑真正需要的；宁少勿多')
-      ..writeln('   maxSteps：整数，1-32')
+      ..writeln('   maxSteps：整数，1-100')
       ..writeln('   temperature：小数，0-2')
       ..writeln('3. constraints 必须包含「只使用已授权工具、需要额外权限先说明、不绕过审批」这类边界。')
       ..writeln('4. 你只是在设计智能体，不要声称已经执行过任何操作。');
@@ -128,7 +128,7 @@ class AgentDraftService {
       pendingTools: pending,
       unknownTools: unknown,
       maxSteps: _intInRange(decoded['maxSteps'],
-          min: 1, max: 32, fallback: AgentDraft.defaultMaxSteps),
+          min: 1, max: 100, fallback: AgentDraft.defaultMaxSteps),
       temperature: _doubleInRange(decoded['temperature'],
           min: 0, max: 2, fallback: AgentDraft.defaultTemperature),
       maxTokens: _intInRange(decoded['maxTokens'],
@@ -169,7 +169,9 @@ class AgentDraftService {
           messages: [
             ChatMessage(
               role: MessageRole.user,
-              parts: [MessagePart.text(buildPrompt(goal: trimmed, tools: tools))],
+              parts: [
+                MessagePart.text(buildPrompt(goal: trimmed, tools: tools))
+              ],
             ),
           ],
           // 结构化输出任务：低温更稳，且不需要长回答。
@@ -237,7 +239,7 @@ class AgentDraftService {
       systemPrompt: _fallbackPrompt(),
       grantedTools: {
         for (final tool in tools)
-          if (tool.risk == ToolRisk.safe) tool.name,
+          if (tool.risk == ToolRisk.safe && !_isSkillTool(tool.name)) tool.name,
       },
       pendingTools: [
         for (final tool in tools)
@@ -251,6 +253,9 @@ class AgentDraftService {
       fromModel: false,
     );
   }
+
+  bool _isSkillTool(String name) =>
+      name == 'skills_read' || name == 'skills_read_resource';
 
   String _fallbackPrompt() => '你是一个目标明确的 AI 助手。\n\n'
       '## 工作步骤\n'

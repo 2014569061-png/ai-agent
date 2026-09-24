@@ -79,11 +79,17 @@ class ProjectSettings {
   factory ProjectSettings.decode(String raw) {
     try {
       final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) return ProjectSettings.fromJson(decoded);
+      if (decoded is Map<String, dynamic>) {
+        return ProjectSettings.fromJson(decoded);
+      }
       if (decoded is Map) {
         return ProjectSettings.fromJson(Map<String, dynamic>.from(decoded));
       }
-    } catch (_) {}
+    } catch (_) {
+      // 存储的项目设置损坏时退化为默认值。这一点值得知道：用户会看到自己的
+      // 项目设置「自己变回默认了」，而这里不留任何痕迹。之所以仍然吞掉，是因为
+      // 调用方按「decode 永不抛」依赖它；要改得先给 decode 换契约。
+    }
     return const ProjectSettings();
   }
 

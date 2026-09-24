@@ -43,10 +43,7 @@ class _TerminalPageState extends State<TerminalPage> {
     super.initState();
     _terminal = Terminal(maxLines: 2000);
     _config = widget.initialConfig ?? const SSHTerminalConfig();
-    _session = SSHTerminalSession(
-      terminal: _terminal,
-      config: _config,
-    );
+    _session = _openSession(_config);
     _state = _session.state;
     _stateSub = _session.onStateChanged.listen((state) {
       if (mounted) {
@@ -56,6 +53,61 @@ class _TerminalPageState extends State<TerminalPage> {
       }
     });
     _bootstrap();
+  }
+
+  SSHTerminalSession _openSession(SSHTerminalConfig config) {
+    return SSHTerminalSession(
+      terminal: _terminal,
+      config: config,
+      confirmUnknownHostKey: _confirmUnknownHostKey,
+    );
+  }
+
+  Future<bool> _confirmUnknownHostKey(String fingerprint) async {
+    if (!mounted) return false;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: AppPalette.terminalSurface,
+          title: const Text(
+            '确认主机密钥',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '首次连接 ${_config.host}:${_config.port}。请核对 SHA256 指纹后再信任，否则第一次连接可能接受中间人密钥。',
+                style: const TextStyle(color: Colors.white70, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                fingerprint,
+                style: const TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: AppTokens.fontSizeCaption,
+                  color: AppPalette.darkBrandHover,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('拒绝'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('信任并连接'),
+            ),
+          ],
+        );
+      },
+    );
+    return accepted == true;
   }
 
   Future<void> _bootstrap() async {
@@ -68,10 +120,7 @@ class _TerminalPageState extends State<TerminalPage> {
           stored.password != _config.password) {
         _config = stored;
         await _session.disconnect();
-        _session = SSHTerminalSession(
-          terminal: _terminal,
-          config: _config,
-        );
+        _session = _openSession(_config);
       }
     }
 
@@ -168,7 +217,7 @@ class _TerminalPageState extends State<TerminalPage> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF101622),
+      backgroundColor: AppPalette.terminalSurface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -191,12 +240,13 @@ class _TerminalPageState extends State<TerminalPage> {
                     const Text(
                       'Termux / SSH 连接设置',
                       style: TextStyle(
-                        fontSize: 17,
+                        fontSize: AppTokens.fontSizeTitle,
                         fontWeight: FontWeight.w600,
                         color: Colors.white,
                       ),
                     ),
                     IconButton(
+                      tooltip: '关闭',
                       icon: const Icon(Icons.close, color: Colors.white70),
                       onPressed: () => Navigator.pop(ctx),
                     ),
@@ -206,7 +256,7 @@ class _TerminalPageState extends State<TerminalPage> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF182030),
+                    color: AppPalette.terminalSurfaceHover,
                     borderRadius:
                         BorderRadius.circular(AppTokens.radiusControl),
                     border:
@@ -223,7 +273,7 @@ class _TerminalPageState extends State<TerminalPage> {
                           Text(
                             'Termux SSH/PTY 首次配置命令（只需执行一次）',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: AppTokens.fontSizeCaption,
                               fontWeight: FontWeight.w600,
                               color: Colors.white,
                             ),
@@ -235,8 +285,8 @@ class _TerminalPageState extends State<TerminalPage> {
                         setupCommand,
                         style: TextStyle(
                           fontFamily: 'monospace',
-                          fontSize: 12,
-                          color: Color(0xFF38BDF8),
+                          fontSize: AppTokens.fontSizeFootnote,
+                          color: AppPalette.darkBrandHover,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -246,7 +296,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         '全屏终端使用 SSH PTY；环境检测使用 RUN_COMMAND 桥，'
                         '两者需要分别配置。',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: AppTokens.fontSizeFootnote,
                           height: 1.4,
                           color: Colors.white70,
                         ),
@@ -266,7 +316,7 @@ class _TerminalPageState extends State<TerminalPage> {
                           },
                           icon: const Icon(Icons.copy, size: 14),
                           label: const Text('复制命令',
-                              style: TextStyle(fontSize: 12)),
+                              style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
                         ),
                       ),
                     ],
@@ -280,7 +330,7 @@ class _TerminalPageState extends State<TerminalPage> {
                       child: TextField(
                         controller: hostCtrl,
                         style:
-                            const TextStyle(color: Colors.white, fontSize: 13),
+                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '主机 (Host)',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -295,7 +345,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         controller: portCtrl,
                         keyboardType: TextInputType.number,
                         style:
-                            const TextStyle(color: Colors.white, fontSize: 13),
+                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '端口 (Port)',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -312,7 +362,7 @@ class _TerminalPageState extends State<TerminalPage> {
                       child: TextField(
                         controller: userCtrl,
                         style:
-                            const TextStyle(color: Colors.white, fontSize: 13),
+                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '用户名（Termux whoami）',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -326,7 +376,7 @@ class _TerminalPageState extends State<TerminalPage> {
                         controller: passCtrl,
                         obscureText: true,
                         style:
-                            const TextStyle(color: Colors.white, fontSize: 13),
+                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '密码（先在 Termux 执行 passwd）',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -378,10 +428,7 @@ class _TerminalPageState extends State<TerminalPage> {
                           _config = updated;
                         });
                         await _session.disconnect();
-                        _session = SSHTerminalSession(
-                          terminal: _terminal,
-                          config: updated,
-                        );
+                        _session = _openSession(updated);
                         _reconnect();
                       }
                     },
@@ -445,7 +492,7 @@ class _TerminalPageState extends State<TerminalPage> {
               statusText,
               style: TextStyle(
                 color: dotColor,
-                fontSize: 11,
+                fontSize: AppTokens.fontSizeBadge,
                 fontFamily: 'monospace',
                 fontWeight: FontWeight.w600,
               ),
@@ -461,9 +508,10 @@ class _TerminalPageState extends State<TerminalPage> {
     return Scaffold(
       backgroundColor: AppPalette.terminalBg,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F141F),
+        backgroundColor: AppPalette.terminalHeaderBg,
         elevation: 0,
         leading: IconButton(
+          tooltip: '返回',
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
@@ -474,7 +522,7 @@ class _TerminalPageState extends State<TerminalPage> {
             const Text(
               'Linux 交互终端',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: AppTokens.fontSizeBodyLarge,
                 fontWeight: FontWeight.w600,
                 color: Colors.white,
               ),

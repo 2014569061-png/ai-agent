@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,12 +60,16 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   }
 
   Future<void> _import() async {
-    final result =
-        await FilePicker.platform.pickFiles(type: FileType.any, withData: true);
-    if (result == null || result.files.isEmpty || !mounted) return;
-    final bytes = result.files.first.bytes;
-    if (bytes == null) {
-      FloatingToast.show(context, '无法读取文件');
+    final picked = await FilePicker.pickFiles(type: FileType.any);
+    if (picked.isEmpty || !mounted) return;
+    final Uint8List bytes;
+    try {
+      if (await picked.first.xFile.length() > VaultLimits.maxCipherBytes) {
+        throw const FormatException('备份文件过大');
+      }
+      bytes = await picked.first.readAsBytes();
+    } catch (_) {
+      if (mounted) FloatingToast.show(context, '无法读取文件');
       return;
     }
     final password = await _askPassword('输入加密密码');

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -92,15 +94,19 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
   }
 
   Future<void> _uploadFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      withData: true,
+    final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['txt', 'md', 'csv', 'json'],
     );
-    if (result == null || !mounted) return;
-    for (final file in result.files) {
-      final bytes = file.bytes;
-      if (bytes == null) continue;
+    if (!mounted) return;
+    for (final file in picked) {
+      // file_picker 13 已移除 withData，字节改为按需读取。
+      final Uint8List bytes;
+      try {
+        bytes = await file.readAsBytes();
+      } catch (_) {
+        continue;
+      }
       final content = const DocumentExtractor()
               .extractText(fileName: file.name, bytes: bytes) ??
           '';
@@ -234,7 +240,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                     child: Text(
                       doc.name,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: AppTokens.fontSizeBody,
                         fontWeight: FontWeight.w600,
                       ),
                       maxLines: 1,
@@ -271,7 +277,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                     child: Text(
                       sourceLabel,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTokens.fontSizeBadge,
                         fontWeight: FontWeight.w500,
                         color: isDark
                             ? AppPalette.darkTextMuted
@@ -298,7 +304,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                     child: Text(
                       '${doc.chunkCount} 分块',
                       style: const TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTokens.fontSizeBadge,
                         fontWeight: FontWeight.w500,
                         color: AppPalette.brand,
                       ),
@@ -329,7 +335,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                         Text(
                           'BM25 已索引',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTokens.fontSizeBadge,
                             fontWeight: FontWeight.w500,
                             color: AppPalette.success,
                           ),
@@ -351,7 +357,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                   Text(
                     '更新于 ${_formatDate(doc.updatedAt)}',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTokens.fontSizeBadge,
                       color: isDark
                           ? AppPalette.darkTextMuted
                           : AppPalette.lightTextMuted,
@@ -401,11 +407,11 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 secondary: const Icon(Icons.library_books_outlined),
                 title: const Text(
                   '启用知识库检索',
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: AppTokens.fontSizeBody),
                 ),
                 subtitle: const Text(
                   '对话时自动注入相关片段（当前为 BM25 本地检索模式）',
-                  style: TextStyle(fontSize: 13),
+                  style: TextStyle(fontSize: AppTokens.fontSizeCaption),
                 ),
                 value: _enabled,
                 onChanged: _toggleEnabled,
@@ -424,7 +430,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
                 decoration: InputDecoration(
                   hintText: '搜索文档名称或来源...',
                   hintStyle: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTokens.fontSizeCaption,
                     color: isDark
                         ? AppPalette.darkTextMuted
                         : AppPalette.lightTextMuted,

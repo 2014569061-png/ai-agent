@@ -16,6 +16,7 @@ class AdaptiveLinuxRuntimeAdapter
   LinuxRuntimeAdapter? _selected;
   int _nextCandidate = 0;
   Future<LinuxRuntimeInfo>? _inspection;
+  int _stopRevision = 0;
 
   @override
   LinuxRuntimeKind get kind =>
@@ -25,11 +26,16 @@ class AdaptiveLinuxRuntimeAdapter
           : _candidates.first.kind);
 
   @override
-  bool get supportsShellSyntax => _selected?.supportsShellSyntax ?? true;
+  bool get supportsShellSyntax =>
+      _selected?.supportsShellSyntax ??
+      (_candidates.isNotEmpty &&
+          _candidates.every((c) => c.supportsShellSyntax));
 
   @override
   bool get supportsInterpreterEvaluation =>
-      _selected?.supportsInterpreterEvaluation ?? true;
+      _selected?.supportsInterpreterEvaluation ??
+      (_candidates.isNotEmpty &&
+          _candidates.every((c) => c.supportsInterpreterEvaluation));
 
   @override
   bool get isRunning => _selected?.isRunning ?? false;
@@ -49,7 +55,11 @@ class AdaptiveLinuxRuntimeAdapter
     required String workingDirectory,
     required Duration timeout,
   }) async {
+    final stopRevision = _stopRevision;
     final runtime = await _ensureSelected();
+    if (stopRevision != _stopRevision) {
+      return const CommandResult(output: '命令已取消。', exitCode: 130);
+    }
     if (runtime == null) {
       return const CommandResult(
         output: '没有可用的 Linux Runtime。',
@@ -67,6 +77,9 @@ class AdaptiveLinuxRuntimeAdapter
     _selected = null;
     _inspection = null;
     final next = await _ensureSelected();
+    if (stopRevision != _stopRevision) {
+      return const CommandResult(output: '命令已取消。', exitCode: 130);
+    }
     if (next == null) return result;
     return next.run(
       request,
@@ -77,6 +90,7 @@ class AdaptiveLinuxRuntimeAdapter
 
   @override
   void stop() {
+    _stopRevision++;
     _selected?.stop();
   }
 
@@ -88,8 +102,10 @@ class AdaptiveLinuxRuntimeAdapter
     required String ownerToken,
     required String logPath,
   }) async {
+    final stopRevision = _stopRevision;
     var runtime = await _ensureSelected();
     while (runtime != null) {
+      if (stopRevision != _stopRevision) return null;
       if (runtime is DetachedLinuxRuntimeAdapter) {
         final detachedRuntime = runtime as DetachedLinuxRuntimeAdapter;
         final handle = await detachedRuntime.startDetached(
@@ -99,6 +115,13 @@ class AdaptiveLinuxRuntimeAdapter
           ownerToken: ownerToken,
           logPath: logPath,
         );
+        if (stopRevision != _stopRevision) {
+          if (handle != null &&
+              !await detachedRuntime.stopDetached(handle.pid, ownerToken)) {
+            throw StateError('取消失败：后台进程 ${handle.pid} 尚未确认停止');
+          }
+          return null;
+        }
         if (handle != null) return handle;
         // 启动失败时允许下一个候选接管；与普通 run 的降级规则保持一致。
         _selected = null;
@@ -144,7 +167,7 @@ class AdaptiveLinuxRuntimeAdapter
 
   Future<LinuxRuntimeAdapter?> _ensureSelected() async {
     if (_selected != null) return _selected;
-    await _selectAvailable();
+    await inspect();
     return _selected;
   }
 

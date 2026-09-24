@@ -38,7 +38,7 @@ class NexusStatusBadge extends StatelessWidget {
     switch (tone) {
       case NexusBadgeTone.brand:
         bg = isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
-        fg = AppPalette.brand;
+        fg = isDark ? AppPalette.darkBrandText : AppPalette.brand;
         break;
       case NexusBadgeTone.success:
         bg = isDark ? AppPalette.darkSuccessSoft : AppPalette.lightSuccessSoft;

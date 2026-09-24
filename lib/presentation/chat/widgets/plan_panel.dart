@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_motion.dart';
 import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
@@ -10,6 +11,7 @@ import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/nexus_sheet.dart';
+import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_surface.dart';
 import '../../widgets/nexus_status_pill.dart';
 import '../../widgets/nexus_status_badge.dart';
@@ -95,9 +97,10 @@ class _PlanPanelState extends State<PlanPanel> {
     final panelContent = Material(
       color: Colors.transparent,
       borderRadius: cardRadius,
-      child: AnimatedSize(
+      child: NexusExpandSection(
+        expanded: true,
         duration: NexusMotion.durationBase(context),
-        curve: NexusMotion.curveStandard,
+        reverseDuration: NexusMotion.durationFast(context),
         alignment: Alignment.topCenter,
         child: _isCompleted && !_expanded
             ? _buildCompletedCompact(muted)
@@ -168,7 +171,7 @@ class _PlanPanelState extends State<PlanPanel> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTokens.fontSizeCaption,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.success,
                 ),
@@ -177,7 +180,7 @@ class _PlanPanelState extends State<PlanPanel> {
             const SizedBox(width: 4),
             Text('查看',
                 style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTokens.fontSizeFootnote,
                     color: Theme.of(context).colorScheme.primary)),
             const Icon(Icons.chevron_right_rounded, size: 16),
           ],
@@ -213,7 +216,7 @@ class _PlanPanelState extends State<PlanPanel> {
                       Text(
                         '进度 $done/$total',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: AppTokens.fontSizeBadge,
                           fontWeight: FontWeight.w500,
                           color: muted,
                         ),
@@ -231,7 +234,7 @@ class _PlanPanelState extends State<PlanPanel> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTokens.fontSizeCaption,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -240,7 +243,14 @@ class _PlanPanelState extends State<PlanPanel> {
             ),
             IconButton(
               tooltip: '展开计划',
-              icon: const Icon(Icons.expand_more_rounded, size: 20),
+              icon: AnimatedRotation(
+                turns: _expanded ? 0.5 : 0.0,
+                duration: MotionPreferences.shouldReduceMotion(context)
+                    ? Duration.zero
+                    : NexusMotion.fast,
+                curve: NexusMotion.curveStandard,
+                child: const Icon(Icons.expand_more_rounded, size: 20),
+              ),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -281,7 +291,7 @@ class _PlanPanelState extends State<PlanPanel> {
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w500,
-                          fontSize: 15,
+                          fontSize: AppTokens.fontSizeBody,
                         ),
                       ),
                     ),
@@ -298,7 +308,14 @@ class _PlanPanelState extends State<PlanPanel> {
               _threeDotMenu(muted),
               IconButton(
                 tooltip: '收起计划',
-                icon: const Icon(Icons.expand_less_rounded, size: 20),
+                icon: AnimatedRotation(
+                  turns: _expanded ? 0.5 : 0.0,
+                  duration: MotionPreferences.shouldReduceMotion(context)
+                      ? Duration.zero
+                      : NexusMotion.fast,
+                  curve: NexusMotion.curveStandard,
+                  child: const Icon(Icons.expand_more_rounded, size: 20),
+                ),
                 visualDensity: VisualDensity.compact,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -327,7 +344,7 @@ class _PlanPanelState extends State<PlanPanel> {
                 children: [
                   const Text('执行目标',
                       style: TextStyle(
-                          fontSize: 11,
+                          fontSize: AppTokens.fontSizeBadge,
                           fontWeight: FontWeight.w500,
                           color: AppPalette.brand)),
                   const SizedBox(height: 3),
@@ -336,7 +353,7 @@ class _PlanPanelState extends State<PlanPanel> {
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTokens.fontSizeCaption,
                       height: 1.3,
                       color: theme.colorScheme.onSurface,
                     ),
@@ -353,7 +370,7 @@ class _PlanPanelState extends State<PlanPanel> {
             children: [
               Text('完成度 $done/$total',
                   style: const TextStyle(
-                      fontSize: 12, fontWeight: FontWeight.w500)),
+                      fontSize: AppTokens.fontSizeFootnote, fontWeight: FontWeight.w500)),
               const SizedBox(width: 10),
               Expanded(
                 child: ClipRRect(
@@ -485,7 +502,7 @@ class _PlanPanelState extends State<PlanPanel> {
               Text(
                 'NEXUS 智能协同执行引擎',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTokens.fontSizeBadge,
                   fontWeight: FontWeight.w500,
                   color: AppTheme.mutedOnGlassLight,
                 ),
@@ -627,7 +644,7 @@ class _PlanPanelState extends State<PlanPanel> {
             child: Text(
               step.description,
               style: TextStyle(
-                fontSize: 13.5,
+                fontSize: AppTokens.fontSizeBodySmall,
                 color: isCurrent
                     ? AppTheme.brandBright
                     : (isDone

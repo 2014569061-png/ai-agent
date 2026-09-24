@@ -67,7 +67,8 @@ class WorkspaceFileEditor {
   }) {
     final lines = const LineSplitter().convert(buffer.content);
     final start = ((startLine ?? 1) - 1).clamp(0, lines.length);
-    final end = (endLine ?? startLine ?? lines.length).clamp(start + 1, lines.length);
+    final end =
+        (endLine ?? startLine ?? lines.length).clamp(start + 1, lines.length);
     return Future.value(FileCitation(
       projectId: projectId,
       relativePath: buffer.relativePath,
@@ -97,6 +98,7 @@ class WorkspaceFileEditor {
     final temp = File('${file.path}.nexus-tmp');
     await temp.writeAsString(normalized, flush: true);
     await temp.rename(file.path);
-    return open(workspacePath: workspacePath, relativePath: original.relativePath);
+    return open(
+        workspacePath: workspacePath, relativePath: original.relativePath);
   }
 }

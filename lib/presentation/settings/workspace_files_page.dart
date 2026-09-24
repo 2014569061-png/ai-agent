@@ -54,7 +54,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
       return;
     }
     try {
-      final selected = await FilePicker.platform.getDirectoryPath();
+      final selected = await FilePicker.getDirectoryPath();
       if (selected != null && mounted) {
         unawaited(
             ref.read(chatControllerProvider.notifier).setWorkspace(selected));
@@ -79,18 +79,18 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
         if (mounted) FloatingToast.show(context, '请先选择本地工作区');
         return;
       }
-      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-      if (result == null || result.files.isEmpty) return;
+      final picked = await FilePicker.pickFiles();
+      if (picked.isEmpty) return;
       final importDir = Directory('$workspace${Platform.pathSeparator}imports');
       await importDir.create(recursive: true);
       var imported = 0;
-      for (final picked in result.files) {
-        final path = picked.path;
+      for (final file in picked) {
+        final path = file.path;
         if (path == null) continue;
         final source = File(path);
         if (!await source.exists()) continue;
         await source
-            .copy('${importDir.path}${Platform.pathSeparator}${picked.name}');
+            .copy('${importDir.path}${Platform.pathSeparator}${file.name}');
         imported++;
       }
       if (mounted) {
@@ -150,7 +150,10 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
           for (final entity in entities) {
             try {
               entity.deleteSync(recursive: true);
-            } catch (_) {}
+            } catch (_) {
+              // 单个临时文件删不掉（被占用等）就继续删下一个；外层已经统计
+              // 结果并提示用户，不因一个失败中断整轮清理。
+            }
           }
         }
         if (mounted) {

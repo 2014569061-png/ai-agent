@@ -15,6 +15,8 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/glass_surface.dart';
+import '../widgets/nexus_content_box.dart';
+import '../widgets/nexus_page_header.dart';
 import 'linux_environment_page.dart';
 import 'tool_list_page.dart';
 import 'workspace_files_page.dart';
@@ -44,13 +46,22 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
       if (mounted) {
         setState(() => _mcpCount = servers.where((s) => s.enabled).length);
       }
-    } catch (_) {}
+    } catch (_) {
+      // 计数为 0 会被读成「没有启用任何 MCP 服务器」，因此失败要明说。
+      if (mounted) {
+        FloatingToast.show(context, 'MCP 服务器列表读取失败',
+            tone: ToastTone.warning);
+      }
+    }
 
     if (!kIsWeb) {
       try {
         final battery = await BatteryOptimization.isIgnoring();
         if (mounted) setState(() => _ignoringBattery = battery);
-      } catch (_) {}
+      } catch (_) {
+        // 电池优化状态探测失败时保持默认「未豁免」，这是保守取值：界面会提示
+        // 用户去申请豁免，而不是错误地宣称已经豁免。
+      }
     }
   }
 
@@ -79,135 +90,95 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
     final isFlat =
         AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Scaffold(
       backgroundColor: isFlat ? canvas : Colors.transparent,
+      appBar: const NexusPageHeader(
+        title: '扩展与环境',
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
+        top: false,
+        child: NexusContentBox(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              _buildSectionHeader('扩展协议与技能', textMuted),
+              _buildCard(
+                isDark: isDark,
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppPalette.darkSurface
-                          : AppPalette.lightSurfaceHover,
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      tooltip: '返回',
-                      icon: Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 16,
-                        color: textColor,
-                      ),
-                      onPressed: () => Navigator.maybePop(context),
-                      padding: EdgeInsets.zero,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '扩展与环境',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 36),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                children: [
-                  _buildSectionHeader('扩展协议与技能', textMuted),
-                  _buildCard(
+                  _buildRow(
+                    icon: Icons.dns_rounded,
+                    title: AppStrings.mcpServersSectionTitle,
+                    trailing: _mcpCount > 0 ? '$_mcpCount 个连接' : '未连接',
                     isDark: isDark,
-                    children: [
-                      _buildRow(
-                        icon: Icons.dns_rounded,
-                        title: AppStrings.mcpServersSectionTitle,
-                        trailing: _mcpCount > 0 ? '$_mcpCount 个连接' : '未连接',
-                        isDark: isDark,
-                        onTap: () => _openPage(const McpServersPage()),
-                      ),
-                      _buildDivider(isDark),
-                      _buildRow(
-                        icon: Icons.extension_rounded,
-                        title: AppStrings.skillsSectionTitle,
-                        trailing: '技能管理',
-                        isDark: isDark,
-                        onTap: () => _openPage(const PluginsPage()),
-                      ),
-                    ],
+                    onTap: () => _openPage(const McpServersPage()),
                   ),
-                  const SizedBox(height: 20),
-                  _buildSectionHeader('工具与运行时', textMuted),
-                  _buildCard(
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.extension_rounded,
+                    title: AppStrings.skillsSectionTitle,
+                    trailing: '技能管理',
                     isDark: isDark,
-                    children: [
-                      _buildRow(
-                        icon: Icons.build_rounded,
-                        title: AppStrings.toolListEntry,
-                        trailing: '清单与安全策略',
-                        isDark: isDark,
-                        onTap: () => _openPage(const ToolListPage()),
-                      ),
-                      _buildDivider(isDark),
-                      _buildRow(
-                        icon: Icons.folder_open_rounded,
-                        title: AppStrings.workspaceFilesEntry,
-                        trailing: '选择项目目录',
-                        isDark: isDark,
-                        onTap: () => _openPage(const WorkspaceFilesPage()),
-                      ),
-                      _buildDivider(isDark),
-                      _buildRow(
-                        icon: Icons.computer_rounded,
-                        title: AppStrings.linuxEnvironmentEntry,
-                        trailing: 'Termux / proot',
-                        isDark: isDark,
-                        onTap: () => _openPage(const LinuxEnvironmentPage()),
-                      ),
-                      _buildDivider(isDark),
-                      _buildRow(
-                        icon: Icons.analytics_outlined,
-                        title: '用量与可观测性',
-                        trailing: 'Token 水位分析',
-                        isDark: isDark,
-                        onTap: () => _openPage(const RunAnalysisPage()),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _buildSectionHeader('系统保活与权限', textMuted),
-                  _buildCard(
-                    isDark: isDark,
-                    children: [
-                      _buildRow(
-                        icon: Icons.battery_charging_full_rounded,
-                        title: AppStrings.batteryExemption,
-                        trailing: _ignoringBattery ? '已豁免' : '未允许',
-                        isDark: isDark,
-                        onTap: _requestBattery,
-                      ),
-                    ],
+                    onTap: () => _openPage(const PluginsPage()),
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 20),
+              _buildSectionHeader('工具与运行时', textMuted),
+              _buildCard(
+                isDark: isDark,
+                children: [
+                  _buildRow(
+                    icon: Icons.build_rounded,
+                    title: AppStrings.toolListEntry,
+                    trailing: '清单与安全策略',
+                    isDark: isDark,
+                    onTap: () => _openPage(const ToolListPage()),
+                  ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.folder_open_rounded,
+                    title: AppStrings.workspaceFilesEntry,
+                    trailing: '选择项目目录',
+                    isDark: isDark,
+                    onTap: () => _openPage(const WorkspaceFilesPage()),
+                  ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.computer_rounded,
+                    title: AppStrings.linuxEnvironmentEntry,
+                    trailing: 'Termux / proot',
+                    isDark: isDark,
+                    onTap: () => _openPage(const LinuxEnvironmentPage()),
+                  ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.analytics_outlined,
+                    title: '用量与可观测性',
+                    trailing: 'Token 水位分析',
+                    isDark: isDark,
+                    onTap: () => _openPage(const RunAnalysisPage()),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              _buildSectionHeader('系统保活与权限', textMuted),
+              _buildCard(
+                isDark: isDark,
+                children: [
+                  _buildRow(
+                    icon: Icons.battery_charging_full_rounded,
+                    title: AppStrings.batteryExemption,
+                    trailing: _ignoringBattery ? '已豁免' : '未允许',
+                    isDark: isDark,
+                    onTap: _requestBattery,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

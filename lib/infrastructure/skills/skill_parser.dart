@@ -89,52 +89,59 @@ SkillParseResult parseSkillMarkdown(String text) {
   final header = normalized.substring(4, end);
   final body = normalized.substring(end + 4).trim();
   final map = <String, String>{};
+  final listKeys = const {'tags', 'triggers', 'examples'};
+  String? activeListKey;
   final headerLines = header.split('\n');
   for (var index = 0; index < headerLines.length; index++) {
     final raw = headerLines[index];
     final line = raw.trim();
     if (line.isEmpty) continue;
-    final idx = line.indexOf(':');
-    if (idx > 0) {
-      final key = line.substring(0, idx).trim().toLowerCase();
-      if (_allowedKeys.contains(key)) {
-        var value = line.substring(idx + 1).trim();
-        if (key == 'description' &&
-            (value.startsWith('>') || value.startsWith('|'))) {
-          final continuation = <String>[];
-          var nextIndex = index + 1;
-          while (nextIndex < headerLines.length) {
-            final next = headerLines[nextIndex];
-            if (next.trim().isEmpty) {
-              continuation.add('');
-              nextIndex++;
-              continue;
-            }
-            if (!next.startsWith(' ') && !next.startsWith('\t')) break;
-            continuation.add(next.trim());
-            nextIndex++;
-          }
-          value = value.startsWith('>')
-              ? continuation.where((line) => line.isNotEmpty).join(' ')
-              : continuation.join('\n').trim();
-          index = nextIndex - 1;
-        }
-        if (key == 'tags') {
-          value = value.replaceFirst(RegExp(r'^\['), '');
-          value = value.replaceFirst(RegExp(r'\]$'), '');
-        }
-        map[key] = value;
+    if (line.startsWith('-') && activeListKey != null) {
+      final item = line.substring(1).trim();
+      if (item.isNotEmpty) {
+        final key = activeListKey;
+        final current = map[key] ?? '';
+        map[key] = current.isEmpty ? item : '$current,$item';
       }
-    } else if (line.startsWith('-') && map.containsKey('tags')) {
-      final tag = line.substring(1).trim();
-      if (tag.isNotEmpty) {
-        map['tags'] = map['tags']!.isEmpty ? tag : '${map['tags']},$tag';
-      }
+      continue;
     }
+    final idx = line.indexOf(':');
+    if (idx <= 0) {
+      activeListKey = null;
+      continue;
+    }
+    final key = line.substring(0, idx).trim().toLowerCase();
+    if (!_allowedKeys.contains(key)) {
+      activeListKey = null;
+      continue;
+    }
+    var value = line.substring(idx + 1).trim();
+    if (key == 'description' &&
+        (value.startsWith('>') || value.startsWith('|'))) {
+      final continuation = <String>[];
+      var nextIndex = index + 1;
+      while (nextIndex < headerLines.length) {
+        final next = headerLines[nextIndex];
+        if (next.trim().isEmpty) {
+          continuation.add('');
+          nextIndex++;
+          continue;
+        }
+        if (!next.startsWith(' ') && !next.startsWith('\t')) break;
+        continuation.add(next.trim());
+        nextIndex++;
+      }
+      value = value.startsWith('>')
+          ? continuation.where((line) => line.isNotEmpty).join(' ')
+          : continuation.join('\n').trim();
+      index = nextIndex - 1;
+    }
+    map[key] = value;
+    activeListKey = listKeys.contains(key) ? key : null;
   }
 
-  final name = (map['name'] ?? '').trim();
-  final description = (map['description'] ?? '').trim();
+  final name = _unquote((map['name'] ?? '').trim());
+  final description = _unquote((map['description'] ?? '').trim());
   if (!RegExp(r'^[a-z0-9_-]{1,64}$').hasMatch(name)) {
     throw SkillValidationException('name 必须为 1~64 位小写字母/数字/下划线/连字符');
   }
@@ -142,19 +149,17 @@ SkillParseResult parseSkillMarkdown(String text) {
     throw SkillValidationException(
         'description 必填且长度不超过 $kSkillMaxDescriptionChars 字符');
   }
-  final author = map['author']?.trim();
+  final author = map['author'] == null
+      ? null
+      : _unquote(map['author']!.trim());
   if (author != null && author.length > 100) {
     throw SkillValidationException('author 长度不能超过 100 字符');
   }
-  final version = map['version']?.trim() ?? '0.0.1';
+  final version = _unquote(map['version']?.trim() ?? '0.0.1');
   if (version.length > 32) {
     throw SkillValidationException('version 长度不能超过 32 字符');
   }
-  final tags = (map['tags'] ?? '')
-      .split(',')
-      .map((e) => e.trim())
-      .where((e) => e.isNotEmpty)
-      .toList();
+  final tags = _splitList(map['tags']);
   final triggers = _splitList(map['triggers']);
   final examples = _splitList(map['examples']);
   if (tags.length > 5) {
@@ -175,9 +180,54 @@ SkillParseResult parseSkillMarkdown(String text) {
   );
 }
 
-List<String> _splitList(String? value) => (value ?? '')
-    .split(',')
-    .map((item) => item.trim())
-    .where((item) => item.isNotEmpty)
-    .take(12)
-    .toList(growable: false);
+List<String> _splitList(String? value) {
+  var raw = (value ?? '').trim();
+  if (raw.startsWith('[') && raw.endsWith(']')) {
+    raw = raw.substring(1, raw.length - 1).trim();
+  }
+  if (raw.isEmpty) return const [];
+
+  // Split comma-separated YAML-ish values while preserving commas inside a
+  // quoted example. This is intentionally small, but handles the common
+  // Codex frontmatter forms without treating the whole bracket expression as
+  // one trigger.
+  final items = <String>[];
+  final current = StringBuffer();
+  String? quote;
+  for (var i = 0; i < raw.length; i++) {
+    final char = raw[i];
+    if ((char == '"' || char == "'") &&
+        (i == 0 || raw[i - 1] != '\\')) {
+      if (quote == null) {
+        quote = char;
+      } else if (quote == char) {
+        quote = null;
+      } else {
+        current.write(char);
+      }
+      continue;
+    }
+    if (char == ',' && quote == null) {
+      final item = _unquote(current.toString().trim());
+      if (item.isNotEmpty) items.add(item);
+      current.clear();
+      if (items.length >= 12) break;
+      continue;
+    }
+    current.write(char);
+  }
+  if (items.length < 12) {
+    final item = _unquote(current.toString().trim());
+    if (item.isNotEmpty) items.add(item);
+  }
+  return items.take(12).toList(growable: false);
+}
+
+String _unquote(String value) {
+  if (value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")))) {
+    return value.substring(1, value.length - 1).trim();
+  }
+  return value;
+}

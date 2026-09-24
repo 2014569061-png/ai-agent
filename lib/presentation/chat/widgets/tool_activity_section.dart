@@ -4,11 +4,14 @@ import 'package:flutter/services.dart';
 import '../../../application/chat_controller.dart';
 import '../../../domain/tool_result.dart';
 import '../../../infrastructure/tools/tool_humanizer.dart';
+import '../../motion/motion_preferences.dart';
+import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_execution_status.dart';
+import '../../widgets/nexus_sheet.dart';
 import '../../widgets/nexus_status_badge.dart';
 import '../../widgets/nexus_surface.dart';
 
@@ -51,6 +54,11 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
   /// 展开时的最大高度：内联位置不能无限增高，超出部分内部滚动。
   static const double _expandedMaxHeight = 280;
 
+  /// 顶部 Dock（compact）最多直接展示的最近条目数，更早的进「查看全部」。
+  /// Dock 本身已经在一个滚动容器里，这里不能再嵌一层内部滚动：以前两层
+  /// 滚动嵌套，最后一条会被裁掉、怎么滑也看不到。
+  static const int _compactVisibleCount = 3;
+
   /// null = 跟随默认（运行中或短轨迹展开、长轨迹完成后收起）；
   /// 用户手动切换后锁定，新一轮运行开始时重置。
   bool? _expandedOverride;
@@ -62,6 +70,18 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
   }
 
   bool get _collapsible => widget.activities.length > _collapsedThreshold;
+
+  /// compact 模式下直接展示的条目：最近 [_compactVisibleCount] 条，外加所有
+  /// 「等待确认」的条目（需要用户操作，不能被折叠进「查看全部」）。
+  List<ToolActivity> get _compactRows {
+    final all = widget.activities;
+    if (all.length <= _compactVisibleCount) return all;
+    final start = all.length - _compactVisibleCount;
+    return [
+      for (var index = 0; index < all.length; index++)
+        if (index >= start || all[index].status == '等待确认') all[index],
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,23 +101,93 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
           mainAxisSize: MainAxisSize.min,
           children: [
             _header(context, collapsible: collapsible, expanded: expanded),
-            if (expanded)
-              ConstrainedBox(
-                constraints:
-                    const BoxConstraints(maxHeight: _expandedMaxHeight),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final activity in widget.activities)
-                        _row(context, activity),
-                    ],
-                  ),
-                ),
-              ),
+            NexusExpandSection(
+              expanded: expanded,
+              child: widget.compact
+                  ? _compactList(context)
+                  : ConstrainedBox(
+                      constraints:
+                          const BoxConstraints(maxHeight: _expandedMaxHeight),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final activity in widget.activities)
+                              _row(context, activity),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// compact：只渲染最近几条，高度天然有界；更早的条目通过「查看全部」在
+  /// 底部抽屉里完整查看。
+  Widget _compactList(BuildContext context) {
+    final rows = _compactRows;
+    final hidden = widget.activities.length - rows.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final activity in rows) _row(context, activity),
+        if (hidden > 0)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: TextButton.icon(
+              key: const ValueKey('tool-activity-show-all'),
+              onPressed: () => _showAllSheet(context),
+              icon: const Icon(Icons.unfold_more_rounded, size: 16),
+              label: Text('查看全部 ${widget.activities.length} 条'),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 40),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showAllSheet(BuildContext context) {
+    HapticFeedback.selectionClick();
+    // 打开时的快照：抽屉是独立路由，不随 Dock 实时刷新。
+    final activities = List<ToolActivity>.of(widget.activities);
+    showNexusSheet<void>(
+      context: context,
+      maxHeightRatio: 0.85,
+      builder: (sheetContext) => Column(
+        key: const ValueKey('tool-activity-all-sheet'),
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
+            child: Text(
+              '全部执行步骤（${activities.length}）',
+              style: Theme.of(sheetContext)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+              children: [
+                for (final activity in activities)
+                  _row(sheetContext, activity),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -164,12 +254,17 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
             ),
           ),
           if (collapsible)
-            Icon(
-              expanded
-                  ? Icons.keyboard_arrow_up_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: semantic.textMuted,
+            AnimatedRotation(
+              turns: expanded ? 0.5 : 0.0,
+              duration: MotionPreferences.shouldReduceMotion(context)
+                  ? Duration.zero
+                  : NexusMotion.fast,
+              curve: NexusMotion.curveStandard,
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: semantic.textMuted,
+              ),
             ),
         ]),
       ),
@@ -254,7 +349,12 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
     };
 
     Widget? trailingWidget;
-    if (effectLabel != null) {
+    if (a.compressed) {
+      trailingWidget = const NexusStatusBadge(
+        label: '已压缩',
+        tone: NexusBadgeTone.neutral,
+      );
+    } else if (effectLabel != null) {
       trailingWidget = NexusStatusBadge(
         label: effectLabel,
         tone: effectTone,
@@ -337,12 +437,12 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
             margin: const EdgeInsets.only(top: 6),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isDark ? AppPalette.terminalBg : const Color(0xFF0F172A),
+              color: isDark ? AppPalette.terminalBg : AppPalette.terminalSurface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isDark
                     ? AppPalette.terminalBorder
-                    : const Color(0xFF334155),
+                    : AppPalette.lightHairline,
                 width: 0.8,
               ),
             ),
@@ -353,9 +453,9 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
                   '[Terminal Execution: ${a.call.name}]',
                   style: const TextStyle(
                     fontFamily: 'monospace',
-                    fontSize: 11,
+                    fontSize: AppTokens.fontSizeBadge,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF94A3B8),
+                    color: AppPalette.terminalTextMuted,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -363,11 +463,13 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
                   '工具: ${a.call.name}\n参数: $args',
                   style: const TextStyle(
                     fontFamily: 'monospace',
-                    fontSize: 11.5,
-                    color: Color(0xFFE2E8F0),
+                    fontSize: AppTokens.fontSizeSubcaption,
+                    color: AppPalette.terminalText,
                   ),
                 ),
-                if (a.result != null && a.result!.isNotEmpty) ...[
+                if (!a.compressed &&
+                    a.result != null &&
+                    a.result!.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     a.result!,
@@ -375,48 +477,73 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontFamily: 'monospace',
-                      fontSize: 11,
-                      color: Color(0xFFCBD5E1),
+                      fontSize: AppTokens.fontSizeBadge,
+                      color: AppPalette.terminalTextMuted,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (a.compressed &&
+                    a.originalResult != null &&
+                    a.originalResult!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '原始结果',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: AppTokens.fontSizeMetricSmall,
+                      fontWeight: FontWeight.w600,
+                      color: semantic.textMuted,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    a.originalResult!,
+                    maxLines: 12,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: AppTokens.fontSizeBadge,
+                      color: theme.colorScheme.onSurface,
                       height: 1.4,
                     ),
                   ),
                 ],
                 const SizedBox(height: 8),
-                const Divider(height: 1, color: Color(0xFF1E293B)),
+                const Divider(height: 1, color: AppPalette.terminalBorder),
                 const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Text(
-                      'Status: ${running ? "Running" : (done ? "Success" : (failed ? "Failed" : "Pending"))}',
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500,
-                        color: running
-                            ? const Color(0xFF60A5FA)
-                            : (done
-                                ? const Color(0xFF34D399)
-                                : (failed
-                                    ? const Color(0xFFF87171)
-                                    : const Color(0xFFFBBF24))),
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: running
-                            ? const Color(0xFF60A5FA)
-                            : (done
-                                ? const Color(0xFF34D399)
-                                : (failed
-                                    ? const Color(0xFFF87171)
-                                    : const Color(0xFFFBBF24))),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ],
+                Builder(
+                  builder: (context) {
+                    final statusColor = running
+                        ? (isDark ? AppPalette.darkBrandHover : AppPalette.brand)
+                        : (done
+                            ? (isDark ? AppPalette.darkSuccess : AppPalette.lightSuccess)
+                            : (failed
+                                ? (isDark ? AppPalette.darkDanger : AppPalette.lightDanger)
+                                : (isDark ? AppPalette.darkWarning : AppPalette.lightWarning)));
+                    return Row(
+                      children: [
+                        Text(
+                          'Status: ${running ? "Running" : (done ? "Success" : (failed ? "Failed" : "Pending"))}',
+                          style: TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: AppTokens.fontSizeMetricSmall,
+                            fontWeight: FontWeight.w500,
+                            color: statusColor,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),

@@ -1,6 +1,16 @@
+import 'dart:io';
+
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart' as http_io;
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_agent/domain/network_access_policy.dart';
 import 'package:mobile_agent/infrastructure/tools/core_tools.dart';
+import 'package:mobile_agent/infrastructure/tools/pinned_host_connector.dart';
+
+NetworkAccessPolicy publicDnsPolicy() => NetworkAccessPolicy(
+      lookupHost: (_) async => [InternetAddress('93.184.216.34')],
+    );
 
 /// SSRF 回归测试。
 ///
@@ -33,9 +43,7 @@ void main() {
         handler.resolve(Response<dynamic>(
           requestOptions: options,
           statusCode: statusCode,
-          headers: headers == null
-              ? null
-              : Headers.fromMap(headers),
+          headers: headers == null ? null : Headers.fromMap(headers),
           data: data,
         ));
       },
@@ -100,7 +108,7 @@ void main() {
 
     test('公网地址仍可正常请求（防止修得过头）', () async {
       final dio = buildDio(data: {'ok': true});
-      final tool = HttpRequestTool(dio: dio);
+      final tool = HttpRequestTool(dio: dio, policy: publicDnsPolicy());
       final result = await tool
           .execute({'url': 'https://api.example.com/v1/data', 'method': 'GET'});
 
@@ -114,11 +122,13 @@ void main() {
       // 第一跳是公网（校验通过），响应要求重定向到内网。
       final dio = buildDio(
         statusCode: 302,
-        headers: {'location': ['http://192.168.1.1/admin']},
+        headers: {
+          'location': ['http://192.168.1.1/admin']
+        },
       );
-      final tool = HttpRequestTool(dio: dio);
-      final result = await tool
-          .execute({'url': 'https://evil.example.com/redirect', 'method': 'GET'});
+      final tool = HttpRequestTool(dio: dio, policy: publicDnsPolicy());
+      final result = await tool.execute(
+          {'url': 'https://evil.example.com/redirect', 'method': 'GET'});
 
       // 关键断言：内网地址**从未被请求**。
       expect(
@@ -132,12 +142,15 @@ void main() {
     test('重定向到云元数据同样被拦截', () async {
       final dio = buildDio(
         statusCode: 307,
-        headers: {'location': ['http://169.254.169.254/latest/meta-data/']},
+        headers: {
+          'location': ['http://169.254.169.254/latest/meta-data/']
+        },
       );
-      final tool = HttpRequestTool(dio: dio);
+      final tool = HttpRequestTool(dio: dio, policy: publicDnsPolicy());
       await tool
           .execute({'url': 'https://evil.example.com/r', 'method': 'GET'});
-      expect(requestedUrls, isNot(contains('http://169.254.169.254/latest/meta-data/')));
+      expect(requestedUrls,
+          isNot(contains('http://169.254.169.254/latest/meta-data/')));
     });
 
     test('链式重定向到公网可完成，且每跳都被校验', () async {
@@ -165,7 +178,7 @@ void main() {
         },
       ));
 
-      final tool = HttpRequestTool(dio: dio);
+      final tool = HttpRequestTool(dio: dio, policy: publicDnsPolicy());
       final result = await tool
           .execute({'url': 'https://start.example.com/a', 'method': 'GET'});
 
@@ -192,7 +205,7 @@ void main() {
         },
       ));
 
-      final tool = HttpRequestTool(dio: dio);
+      final tool = HttpRequestTool(dio: dio, policy: publicDnsPolicy());
       final result = await tool
           .execute({'url': 'https://loop.example.com/', 'method': 'GET'});
 
@@ -200,5 +213,93 @@ void main() {
       // 上限 5 跳：首次 + 至多 5 次跟随，不应无限增长。
       expect(requestedUrls.length, lessThanOrEqualTo(6));
     });
+  });
+
+  group('已检查地址钉死，非 JSON 按文本返回', () {
+    test('公网请求记录已检查地址，且不改写原始 URL', () async {
+      String? pinned;
+      final dio = Dio(BaseOptions(followRedirects: false));
+      dio.interceptors.add(InterceptorsWrapper(
+        onRequest: (options, handler) {
+          requestedUrls.add(options.uri.toString());
+          pinned = options.extra['pinnedAddress'] as String?;
+          handler.resolve(Response<dynamic>(
+            requestOptions: options,
+            statusCode: 200,
+            data: 'ok',
+          ));
+        },
+      ));
+      final connector = PinnedHostConnector();
+      final tool = HttpRequestTool(
+        dio: dio,
+        policy: publicDnsPolicy(),
+        connector: connector,
+      );
+
+      final result = await tool.execute({
+        'url': 'https://api.example.com/v1/data',
+        'method': 'GET',
+      });
+
+      expect(result.ok, isTrue);
+      expect(requestedUrls, ['https://api.example.com/v1/data']);
+      expect(pinned, '93.184.216.34');
+      expect(connector.pinFor('api.example.com')?.address, '93.184.216.34');
+    });
+
+    test('HTML 响应按文本返回，而不是网络失败', () async {
+      final dio = buildDio(data: '<html>hello</html>');
+      final tool = HttpRequestTool(dio: dio, policy: publicDnsPolicy());
+      final result = await tool.execute({
+        'url': 'https://example.com/',
+        'method': 'GET',
+      });
+
+      expect(result.ok, isTrue);
+      expect(result.data?['text'], contains('<html>hello</html>'));
+    });
+  });
+
+  test('package:http connects to the policy-approved address', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(() => server.close(force: true));
+    final handled = server.first.then((request) async {
+      request.response
+        ..statusCode = 200
+        ..write('ok');
+      await request.response.close();
+    });
+    String? resolvedHost;
+    final connector = PinnedHostConnector(
+      requirePin: true,
+      resolveAddress: (uri) async {
+        resolvedHost = uri.host;
+        return InternetAddress.loopbackIPv4;
+      },
+    );
+
+    final response = await http.runWithClient(
+      () => http.get(Uri.parse('http://mcp.example.test:${server.port}/')),
+      () => http_io.IOClient(connector.createClient()),
+    );
+    await handled;
+
+    expect(response.body, 'ok');
+    expect(resolvedHost, 'mcp.example.test');
+  });
+
+  test('required pin rejects a host without an approved address', () async {
+    final connector = PinnedHostConnector(
+      requirePin: true,
+      resolveAddress: (_) async => null,
+    );
+    final client = http_io.IOClient(connector.createClient());
+    addTearDown(client.close);
+
+    await expectLater(
+      client.get(Uri.parse('http://mcp.example.test/')),
+      throwsA(isA<http.ClientException>()),
+    );
   });
 }

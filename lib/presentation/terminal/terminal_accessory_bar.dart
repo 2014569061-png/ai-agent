@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import '../motion/nexus_haptics.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
@@ -44,11 +44,12 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
   }
 
   void _tap(VoidCallback action) {
-    HapticFeedback.lightImpact();
+    NexusHaptics.light(context);
     action();
   }
 
   void _toggleCtrl() {
+    NexusHaptics.selection(context);
     setState(() {
       _ctrlActive = !_ctrlActive;
     });
@@ -60,7 +61,7 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    final barBg = isDark ? const Color(0xFF0F141F) : const Color(0xFFF1F5F9);
+    final barBg = isDark ? AppPalette.terminalHeaderBg : AppPalette.lightSurfaceHover;
     final borderColor = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     return Container(
@@ -84,25 +85,38 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
           _keyButton(
             label: 'TAB',
             onTap: () => _tap(() => widget.onSendInput('\t')),
-            highlight: true,
           ),
           _keyButton(
             label: 'CTRL',
             active: _ctrlActive,
-            onTap: () => _tap(_toggleCtrl),
+            highlight: true,
+            onTap: _toggleCtrl,
+          ),
+          _keyButton(
+            label: 'ALT',
+            onTap: () => _tap(() => widget.onSendInput('\x1b')),
           ),
           _keyButton(
             label: 'Ctrl+C',
             danger: true,
-            onTap: () => _tap(() => widget.onSendCtrl('C')),
+            onTap: () => _tap(() {
+              widget.onSendCtrl('C');
+              if (_ctrlActive) _toggleCtrl();
+            }),
           ),
           _keyButton(
-            label: '↑',
-            onTap: () => _tap(() => widget.onSendInput('\x1b[A')),
+            label: 'Ctrl+D',
+            onTap: () => _tap(() {
+              widget.onSendCtrl('D');
+              if (_ctrlActive) _toggleCtrl();
+            }),
           ),
           _keyButton(
-            label: '↓',
-            onTap: () => _tap(() => widget.onSendInput('\x1b[B')),
+            label: 'Ctrl+Z',
+            onTap: () => _tap(() {
+              widget.onSendCtrl('Z');
+              if (_ctrlActive) _toggleCtrl();
+            }),
           ),
           _keyButton(
             label: '←',
@@ -111,6 +125,14 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
           _keyButton(
             label: '→',
             onTap: () => _tap(() => widget.onSendInput('\x1b[C')),
+          ),
+          _keyButton(
+            label: '↑',
+            onTap: () => _tap(() => widget.onSendInput('\x1b[A')),
+          ),
+          _keyButton(
+            label: '↓',
+            onTap: () => _tap(() => widget.onSendInput('\x1b[B')),
           ),
           _keyButton(
             label: '/',
@@ -158,17 +180,17 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
       fg = Colors.white;
       border = AppPalette.brand;
     } else if (danger) {
-      bg = isDark ? const Color(0xFF2A1519) : const Color(0xFFFFECEE);
-      fg = AppPalette.danger;
-      border = AppPalette.danger.withValues(alpha: 0.3);
+      bg = isDark ? AppPalette.darkDangerSoft : AppPalette.lightDangerSoft;
+      fg = isDark ? AppPalette.darkDanger : AppPalette.lightDanger;
+      border = (isDark ? AppPalette.darkDanger : AppPalette.lightDanger).withValues(alpha: 0.3);
     } else if (highlight) {
-      bg = isDark ? const Color(0xFF1E283D) : const Color(0xFFE2E8F0);
-      fg = AppPalette.brand;
-      border = AppPalette.brand.withValues(alpha: 0.25);
+      bg = isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
+      fg = isDark ? AppPalette.darkBrandHover : AppPalette.brandAction;
+      border = (isDark ? AppPalette.darkBrandHover : AppPalette.brand).withValues(alpha: 0.25);
     } else {
-      bg = isDark ? const Color(0xFF171E2D) : const Color(0xFFFFFFFF);
-      fg = isDark ? const Color(0xFFE2E8F0) : const Color(0xFF334155);
-      border = isDark ? const Color(0xFF273248) : const Color(0xFFCBD5E1);
+      bg = isDark ? AppPalette.terminalSurface : AppPalette.lightCanvas;
+      fg = isDark ? AppPalette.terminalText : AppPalette.lightText;
+      border = isDark ? AppPalette.terminalBorder : AppPalette.lightHairline;
     }
 
     return Padding(

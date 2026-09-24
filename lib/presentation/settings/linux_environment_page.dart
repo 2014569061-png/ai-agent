@@ -101,7 +101,10 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
       if (prefs.getString(DevelopmentTargetX.storageKey) == null) {
         setState(() => _target = detectedTarget);
       }
-    } catch (_) {}
+    } catch (_) {
+      // 只是「按工作区猜一个开发目标」的便利功能：失败就沿用当前/默认目标，
+      // 用户仍可手动选择，因此不打断也不报错。
+    }
   }
 
   Future<void> _selectTarget() async {

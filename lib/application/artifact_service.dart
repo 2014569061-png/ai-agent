@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import 'development_verification.dart';
+import 'nexus_guard.dart';
 
 class ProjectArtifact {
   const ProjectArtifact({
@@ -56,7 +57,10 @@ class ProjectArtifact {
       try {
         final decoded = jsonDecode(raw);
         if (decoded is Map) inspection = Map<String, dynamic>.from(decoded);
-      } catch (_) {}
+      } catch (_) {
+        // inspectionJson 损坏时退化为空 inspection。这是「解析失败的兜底」而
+        // 不是错误吞没：制品记录本身仍能恢复出来，只是少了检查元数据。
+      }
     }
     return ProjectArtifact(
       id: json['id']?.toString() ?? '',
@@ -125,14 +129,16 @@ class ArtifactService {
       inspectionJson: inspection.toJson(),
     );
     await db.saveArtifactRecord(artifact.toJson());
-    try {
+    // 记录已经入库，所以这里一旦失败就会留下「有记录、没内容」的制品，而调用方
+    // 拿到的返回值看不出任何区别 —— 这种不一致最难排查，因此接入上报而不是静默。
+    await NexusGuard.silentlyAsync<void>('artifact.copyPayload', () async {
       final source = File(p.join(workspacePath, inspection.relativePath));
       if (await source.exists()) {
         final destDir = Directory(p.join((await _root()).path, artifact.id));
         await destDir.create(recursive: true);
         await source.copy(p.join(destDir.path, p.basename(source.path)));
       }
-    } catch (_) {}
+    });
     return artifact;
   }
 

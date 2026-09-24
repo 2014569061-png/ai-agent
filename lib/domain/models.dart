@@ -161,6 +161,7 @@ class PlanState {
 
 class ChatMessage {
   ChatMessage({
+    this.id,
     required this.role,
     required this.parts,
     this.toolCallId,
@@ -173,6 +174,7 @@ class ChatMessage {
     this.reasoningDuration,
   });
 
+  final String? id;
   final MessageRole role;
   final List<MessagePart> parts;
   final String? toolCallId;
@@ -190,6 +192,7 @@ class ChatMessage {
   final Duration? reasoningDuration;
 
   ChatMessage copyWith({
+    String? id,
     MessageRole? role,
     List<MessagePart>? parts,
     String? toolCallId,
@@ -199,8 +202,10 @@ class ChatMessage {
     Duration? elapsed,
     Duration? ttft,
     String? reasoning,
+    Duration? reasoningDuration,
   }) =>
       ChatMessage(
+        id: id ?? this.id,
         role: role ?? this.role,
         parts: parts ?? this.parts,
         toolCallId: toolCallId ?? this.toolCallId,
@@ -210,6 +215,7 @@ class ChatMessage {
         elapsed: elapsed ?? this.elapsed,
         ttft: ttft ?? this.ttft,
         reasoning: reasoning ?? this.reasoning,
+        reasoningDuration: reasoningDuration ?? this.reasoningDuration,
       );
 
   String get text => parts.map((part) {
@@ -234,6 +240,78 @@ class LiveReply {
   final int messageIndex;
   final String text;
   final String? reasoning;
+}
+
+/// 面向用户的运行进度阶段。
+///
+/// 这是“处理进度”而不是模型原始思维链：它只描述当前正在做什么，帮助用户
+/// 判断任务仍然存活，同时避免把不可验证的内部思考内容当成进度展示。
+enum ChatRunStage {
+  received,
+  preparing,
+  analyzing,
+  waitingModel,
+  reasoning,
+  waitingForTool,
+  waitingForUser,
+  executingTool,
+  generating,
+  paused,
+}
+
+/// 一次可见运行的轻量进度快照。
+///
+/// [startedAt] 和 [lastActivityAt] 由执行层写入；展示层可以本地计时，不需要
+/// 每秒让整个聊天页重建。阶段变化和真实流式输出才会更新这个快照。
+class ChatRunProgress {
+  const ChatRunProgress({
+    required this.stage,
+    required this.label,
+    required this.startedAt,
+    required this.lastActivityAt,
+    this.completedTools = 0,
+    this.generatedCharacters = 0,
+  });
+
+  factory ChatRunProgress.started({DateTime? now}) {
+    final timestamp = now ?? DateTime.now();
+    return ChatRunProgress(
+      stage: ChatRunStage.received,
+      label: '已收到请求',
+      startedAt: timestamp,
+      lastActivityAt: timestamp,
+    );
+  }
+
+  final ChatRunStage stage;
+  final String label;
+  final DateTime startedAt;
+  final DateTime lastActivityAt;
+  final int completedTools;
+  final int generatedCharacters;
+
+  ChatRunProgress copyWith({
+    ChatRunStage? stage,
+    String? label,
+    DateTime? startedAt,
+    DateTime? lastActivityAt,
+    int? completedTools,
+    int? generatedCharacters,
+  }) =>
+      ChatRunProgress(
+        stage: stage ?? this.stage,
+        label: label ?? this.label,
+        startedAt: startedAt ?? this.startedAt,
+        lastActivityAt: lastActivityAt ?? this.lastActivityAt,
+        completedTools: completedTools ?? this.completedTools,
+        generatedCharacters: generatedCharacters ?? this.generatedCharacters,
+      );
+
+  Duration elapsed([DateTime? now]) =>
+      (now ?? DateTime.now()).difference(startedAt);
+
+  Duration idleDuration([DateTime? now]) =>
+      (now ?? DateTime.now()).difference(lastActivityAt);
 }
 
 class Usage {
@@ -440,8 +518,13 @@ class UsageEvent extends UnifiedEvent {
     this.cachedTokens = 0,
     this.cacheWriteTokens = 0,
     this.reasoningTokens = 0,
+    this.usageReported = true,
     this.cacheStatsReported = false,
   });
+
+  /// Whether the provider actually supplied token statistics. Synthetic final
+  /// events must not turn missing usage into a measured zero.
+  final bool usageReported;
   final int promptTokens;
   final int completionTokens;
   final int cachedTokens;

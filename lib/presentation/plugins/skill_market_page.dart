@@ -1,14 +1,12 @@
-import 'dart:io';
+import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 
 import '../../application/providers.dart';
-import '../../infrastructure/database/app_database.dart';
-import '../../infrastructure/skills/skill_installer.dart';
-import '../../infrastructure/skills/skill_parser.dart';
-import '../../infrastructure/skills/skill_store.dart';
+import '../../application/skill_catalog.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
@@ -35,15 +33,26 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
   Object? _error;
   SkillPackPreview? _previewPack;
   List<SkillPack> _installed = [];
+  StreamSubscription<void>? _skillChangesSub;
+  bool _reloadPending = false;
 
   @override
   void initState() {
     super.initState();
+    _skillChangesSub = SkillCatalog.changes.listen((_) {
+      if (!mounted) return;
+      if (_loading) {
+        _reloadPending = true;
+      } else {
+        _load();
+      }
+    });
     _load();
   }
 
   @override
   void dispose() {
+    _skillChangesSub?.cancel();
     _urlController.dispose();
     super.dispose();
   }
@@ -56,11 +65,20 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     try {
       final db = await ref.read(databaseProvider.future);
       final packs = await _store.all(db);
+      // Validate installs while loading the manager so tampering is visible
+      // before the next chat run, not only after a tool read fails.
+      for (final pack in packs) {
+        _store.verifyIntegrity(pack);
+      }
       if (!mounted) return;
       setState(() {
         _installed = packs;
         _loading = false;
       });
+      if (_reloadPending && mounted) {
+        _reloadPending = false;
+        unawaited(_load());
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -95,17 +113,21 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
   }
 
   Future<void> _pickArchive() async {
-    final result = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['zip', 'gz', 'tgz'],
-      withData: true,
     );
-    final file = result?.files.singleOrNull;
+    final file = picked.singleOrNull;
     if (file == null) return;
     try {
-      final bytes = file.bytes ??
-          (file.path == null ? null : await File(file.path!).readAsBytes());
-      if (bytes == null || bytes.isEmpty) {
+      // file_picker 13 已移除 withData，字节按需读取。
+      final Uint8List? bytes;
+      try {
+        bytes = await file.readAsBytes();
+      } catch (_) {
+        throw SkillValidationException('无法读取所选压缩包');
+      }
+      if (bytes.isEmpty) {
         throw SkillValidationException('无法读取所选压缩包');
       }
       if (!mounted) return;
@@ -214,6 +236,81 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     }
   }
 
+  bool _isBuiltin(SkillPack pack) => pack.source.startsWith('builtin:');
+
+  Widget _buildFeaturedCard(bool isDark) {
+    final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    return SectionCard(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppPalette.brand.withValues(alpha: 0.12),
+                    borderRadius:
+                        BorderRadius.circular(AppTokens.radiusControl),
+                  ),
+                  child: const Icon(Icons.auto_awesome_rounded,
+                      size: 20, color: AppPalette.brandAction),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('热门精选',
+                          style: TextStyle(
+                              fontSize: AppTokens.fontSizeBody, fontWeight: FontWeight.w600)),
+                      SizedBox(height: 2),
+                      Text('随应用内置，离线即可使用', style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
+                    ],
+                  ),
+                ),
+                Text('${SkillCatalog.featuredCount} 款',
+                    style: TextStyle(fontSize: AppTokens.fontSizeFootnote, color: muted)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '覆盖开发、调试、审查、测试、接口、数据库、Git 和文档等常用场景。启用后可在聊天中自动匹配，也可通过 /技能名 主动调用。',
+              style: TextStyle(fontSize: AppTokens.fontSizeMeta, color: muted, height: 1.35),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final name in SkillCatalog.featuredNames)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      border: Border.all(
+                        color: isDark
+                            ? AppPalette.darkHairline
+                            : AppPalette.lightHairline,
+                      ),
+                    ),
+                    child: Text(name,
+                        style: TextStyle(fontSize: AppTokens.fontSizeBadge, color: muted)),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -297,239 +394,232 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
             loading: _loading,
             error: _error,
             onRetry: _load,
-            child: _installed.isEmpty
-                ? EmptyStateView(
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              itemCount: _installed.isEmpty ? 2 : _installed.length + 1,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                if (index == 0) return _buildFeaturedCard(isDark);
+                if (_installed.isEmpty) {
+                  return EmptyStateView(
                     icon: Icons.extension_outlined,
-                    title: '暂无 Skill',
-                    message: '粘贴 GitHub 地址或导入 ZIP / tar.gz 安装 Skill',
+                    title: '精选 Skill 正在准备',
+                    message: '也可以粘贴 GitHub 地址或导入 ZIP / tar.gz 安装',
                     actionLabel: '导入 Skill 压缩包',
                     onAction: _pickArchive,
-                  )
-                : ListView.separated(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    itemCount: _installed.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final pack = _installed[index];
-                      final isLocal = pack.source.startsWith('本地压缩包');
+                  );
+                }
+                final pack = _installed[index - 1];
+                final isBuiltin = _isBuiltin(pack);
+                final isLocal = pack.source.startsWith('本地压缩包') || isBuiltin;
+                final frozen = _store.isFrozen(pack);
 
-                      return SectionCard(
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                return SectionCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: pack.enabled
+                                    ? (isDark
+                                        ? AppPalette.brandSoftDark
+                                        : AppPalette.brandSoftLight)
+                                    : (isDark
+                                        ? AppPalette.darkSurface
+                                        : AppPalette.lightSurface),
+                                borderRadius: BorderRadius.circular(
+                                    AppTokens.radiusControl),
+                                border: Border.all(
+                                  color: pack.enabled
+                                      ? AppPalette.brand
+                                      : (isDark
+                                          ? AppPalette.darkHairline
+                                          : AppPalette.lightHairline),
+                                ),
+                              ),
+                              child: const Icon(Icons.menu_book_outlined,
+                                  size: 20, color: AppPalette.brandAction),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: pack.enabled
-                                          ? (isDark
-                                              ? AppPalette.brandSoftDark
-                                              : AppPalette.brandSoftLight)
-                                          : (isDark
-                                              ? AppPalette.darkSurface
-                                              : AppPalette.lightSurface),
-                                      borderRadius: BorderRadius.circular(
-                                          AppTokens.radiusControl),
-                                      border: Border.all(
-                                        color: pack.enabled
-                                            ? AppPalette.brand
-                                            : (isDark
-                                                ? AppPalette.darkHairline
-                                                : AppPalette.lightHairline),
-                                      ),
+                                  Text(
+                                    pack.name,
+                                    style: const TextStyle(
+                                      fontSize: AppTokens.fontSizeBody,
+                                      fontWeight: FontWeight.w500,
                                     ),
-                                    child: const Icon(Icons.menu_book_outlined,
-                                        size: 20,
-                                        color: AppPalette.brandAction),
                                   ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          pack.name,
-                                          style: const TextStyle(
-                                            fontSize: 15,
+                                  const SizedBox(height: 4),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: pack.enabled
+                                              ? AppPalette.success
+                                                  .withValues(alpha: 0.12)
+                                              : (isDark
+                                                  ? AppPalette.darkSurface
+                                                  : AppPalette.lightSurface),
+                                          borderRadius: BorderRadius.circular(
+                                              AppTokens.radiusPill),
+                                        ),
+                                        child: Text(
+                                          pack.enabled ? '已启用' : '已停用',
+                                          style: TextStyle(
+                                            fontSize: AppTokens.fontSizeMetricSmall,
                                             fontWeight: FontWeight.w500,
+                                            color: pack.enabled
+                                                ? AppPalette.success
+                                                : (isDark
+                                                    ? AppPalette.darkTextMuted
+                                                    : AppPalette
+                                                        .lightTextMuted),
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Wrap(
-                                          spacing: 6,
-                                          runSpacing: 4,
-                                          children: [
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 1.5),
-                                              decoration: BoxDecoration(
-                                                color: pack.enabled
-                                                    ? AppPalette.success
-                                                        .withValues(alpha: 0.12)
-                                                    : (isDark
-                                                        ? AppPalette.darkSurface
-                                                        : AppPalette
-                                                            .lightSurface),
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                        AppTokens.radiusPill),
-                                              ),
-                                              child: Text(
-                                                pack.enabled ? '已启用' : '已停用',
-                                                style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: pack.enabled
-                                                      ? AppPalette.success
-                                                      : (isDark
-                                                          ? AppPalette
-                                                              .darkTextMuted
-                                                          : AppPalette
-                                                              .lightTextMuted),
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 1.5),
-                                              decoration: BoxDecoration(
-                                                color: isDark
-                                                    ? AppPalette.darkSurface
-                                                    : AppPalette.lightSurface,
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                        AppTokens.radiusPill),
-                                                border: Border.all(
-                                                  color: isDark
-                                                      ? AppPalette.darkHairline
-                                                      : AppPalette
-                                                          .lightHairline,
-                                                ),
-                                              ),
-                                              child: Text(
-                                                isLocal ? '本地压缩包' : 'GitHub',
-                                                style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: isDark
-                                                      ? AppPalette.darkTextMuted
-                                                      : AppPalette
-                                                          .lightTextMuted,
-                                                ),
-                                              ),
-                                            ),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 1.5),
-                                              decoration: BoxDecoration(
-                                                color: AppPalette.brand
-                                                    .withValues(alpha: 0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                        AppTokens.radiusPill),
-                                              ),
-                                              child: const Text(
-                                                '纯指令静态资源',
-                                                style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: AppPalette.brand,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Switch(
-                                    value: pack.enabled,
-                                    onChanged: (v) => _toggle(pack, v),
-                                  ),
-                                  PopupMenuButton<String>(
-                                    icon: const Icon(Icons.more_vert_rounded,
-                                        size: 20),
-                                    tooltip: '更多操作',
-                                    onSelected: (action) {
-                                      if (action == 'update') {
-                                        _update(pack);
-                                      } else if (action == 'delete') {
-                                        _delete(pack);
-                                      }
-                                    },
-                                    itemBuilder: (ctx) => [
-                                      if (!isLocal)
-                                        const PopupMenuItem(
-                                          value: 'update',
-                                          child: Row(
-                                            children: [
-                                              Icon(Icons.refresh_rounded,
-                                                  size: 18),
-                                              SizedBox(width: 8),
-                                              Text('检查更新'),
-                                            ],
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: isDark
+                                              ? AppPalette.darkSurface
+                                              : AppPalette.lightSurface,
+                                          borderRadius: BorderRadius.circular(
+                                              AppTokens.radiusPill),
+                                          border: Border.all(
+                                            color: isDark
+                                                ? AppPalette.darkHairline
+                                                : AppPalette.lightHairline,
                                           ),
                                         ),
-                                      const PopupMenuItem(
-                                        value: 'delete',
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.delete_outline_rounded,
-                                                size: 18,
-                                                color: AppPalette.danger),
-                                            SizedBox(width: 8),
-                                            Text('删除 Skill',
-                                                style: TextStyle(
-                                                    color: AppPalette.danger)),
-                                          ],
+                                        child: Text(
+                                          isBuiltin
+                                              ? '官方精选'
+                                              : isLocal
+                                                  ? '本地压缩包'
+                                                  : 'GitHub',
+                                          style: TextStyle(
+                                            fontSize: AppTokens.fontSizeMetricSmall,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark
+                                                ? AppPalette.darkTextMuted
+                                                : AppPalette.lightTextMuted,
+                                          ),
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: AppPalette.brand
+                                              .withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(
+                                              AppTokens.radiusPill),
+                                        ),
+                                        child: const Text(
+                                          '纯指令静态资源',
+                                          style: TextStyle(
+                                            fontSize: AppTokens.fontSizeMetricSmall,
+                                            fontWeight: FontWeight.w500,
+                                            color: AppPalette.brand,
+                                          ),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ],
                               ),
-                              if (pack.description.isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  pack.description,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 12.5,
-                                    color: isDark
-                                        ? AppPalette.darkTextMuted
-                                        : AppPalette.lightTextMuted,
+                            ),
+                            Switch(
+                              value: pack.enabled,
+                              onChanged:
+                                  frozen ? null : (v) => _toggle(pack, v),
+                            ),
+                            PopupMenuButton<String>(
+                              icon:
+                                  const Icon(Icons.more_vert_rounded, size: 20),
+                              tooltip: '更多操作',
+                              onSelected: (action) {
+                                if (action == 'update') {
+                                  _update(pack);
+                                } else if (action == 'delete') {
+                                  _delete(pack);
+                                }
+                              },
+                              itemBuilder: (ctx) => [
+                                if (!isLocal)
+                                  const PopupMenuItem(
+                                    value: 'update',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.refresh_rounded, size: 18),
+                                        SizedBox(width: 8),
+                                        Text('检查更新'),
+                                      ],
+                                    ),
+                                  ),
+                                const PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.delete_outline_rounded,
+                                          size: 18, color: AppPalette.danger),
+                                      SizedBox(width: 8),
+                                      Text('删除 Skill',
+                                          style: TextStyle(
+                                              color: AppPalette.danger)),
+                                    ],
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 4),
-                              Text(
-                                '${pack.source} · v${pack.version}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? AppPalette.darkTextFaint
-                                      : AppPalette.lightTextMuted,
-                                ),
-                              ),
-                            ],
+                            ),
+                          ],
+                        ),
+                        if (pack.description.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            pack.description,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeMeta,
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 4),
+                        Text(
+                          frozen
+                              ? '安装状态无法确认 · 请检查更新或重新安装'
+                              : '${pack.source} · v${pack.version}',
+                          style: TextStyle(
+                            fontSize: AppTokens.fontSizeBadge,
+                            color: isDark
+                                ? AppPalette.darkTextFaint
+                                : AppPalette.lightTextMuted,
                           ),
                         ),
-                      );
-                    },
+                      ],
+                    ),
                   ),
+                );
+              },
+            ),
           ),
         ),
       ],
@@ -552,7 +642,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                   child: Text(
                     '${preview.metadata.name}  v${preview.metadata.version}',
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontSize: AppTokens.fontSizeBody,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -582,7 +672,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
             Text(
               preview.metadata.description,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppTokens.fontSizeCaption,
                 color: isDark ? AppPalette.darkText : AppPalette.lightText,
               ),
             ),
@@ -590,7 +680,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
             Text(
               '来源：${preview.source.label} · ${preview.fileList.length} 个文件 · ${(preview.totalBytes / 1024).toStringAsFixed(1)} KB',
               style: TextStyle(
-                fontSize: 11,
+                fontSize: AppTokens.fontSizeBadge,
                 color: isDark
                     ? AppPalette.darkTextMuted
                     : AppPalette.lightTextMuted,
@@ -610,7 +700,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                               : AppPalette.lightHairline,
                         ),
                         labelStyle: TextStyle(
-                          fontSize: 11,
+                          fontSize: AppTokens.fontSizeBadge,
                           color: isDark
                               ? AppPalette.darkTextMuted
                               : AppPalette.lightTextMuted,

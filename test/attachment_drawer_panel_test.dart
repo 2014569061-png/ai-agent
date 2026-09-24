@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:mobile_agent/domain/attachment_file.dart';
 import 'package:mobile_agent/presentation/chat/widgets/attachment_drawer_panel.dart';
 
 void main() {
@@ -18,9 +18,8 @@ void main() {
         home: Scaffold(
           body: AttachmentDrawerPanel(
             attachments: [
-              PlatformFile(
+              AttachmentFile(
                 name: 'preview.png',
-                size: imageBytes.length,
                 bytes: imageBytes,
               ),
             ],

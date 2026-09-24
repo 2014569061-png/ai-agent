@@ -585,8 +585,13 @@ class EnvironmentService {
     }
     if (kIsWeb) return null;
     try {
+      // 当前 path_provider 接口只能确认应用目录是否可访问，不能提供剩余字节数；
+      // 这里不把「目录可访问」伪装成一个空间数，freeBytes 保持未知。
       await getApplicationDocumentsDirectory().timeout(storageReadTimeout);
-    } catch (_) {}
+    } catch (_) {
+      // 目录探测失败同样只能表达为未知空间；调用方会按 null 展示，而不是误报
+      // 一个看似精确的可用空间。
+    }
     return null;
   }
 

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'foreground_run_lease.dart';
 
 /// 后台任务前台服务（C2）：Agent 执行中切后台/锁屏时保持进程存活，通知栏展示「正在运行」。
 ///
@@ -15,7 +16,8 @@ class ForegroundService {
   static const _channelName = 'NEXUS 正在运行';
 
   bool _initialized = false;
-  int _activeRuns = 0;
+  late final _leases = ForegroundRunLease(
+      startPlatform: _startPlatform, stopPlatform: _stopPlatform);
 
   /// 需要在 main() 里调用，初始化平台通道。
   static void initCommunicationPort() {
@@ -51,7 +53,10 @@ class ForegroundService {
   Future<bool> start(
       {String title = 'NEXUS 正在运行', String text = 'Agent 任务执行中…'}) async {
     if (kIsWeb) return false;
-    _activeRuns++;
+    return _leases.start(title: title, text: text);
+  }
+
+  Future<bool> _startPlatform(String title, String text) async {
     try {
       await _ensureInit();
       if (await FlutterForegroundTask.isRunningService) return true;
@@ -62,15 +67,17 @@ class ForegroundService {
         callback: startCallback,
       );
       if (result is ServiceRequestSuccess) return true;
-    } catch (_) {}
-    _activeRuns--;
+    } catch (_) {
+      // Platform failure is reported as false; the lease releases ownership.
+    }
     return false;
   }
 
   Future<void> stop() async {
-    if (kIsWeb || _activeRuns == 0) return;
-    _activeRuns--;
-    if (_activeRuns > 0) return;
+    if (!kIsWeb) await _leases.stop();
+  }
+
+  Future<void> _stopPlatform() async {
     try {
       if (await FlutterForegroundTask.isRunningService) {
         await FlutterForegroundTask.stopService();

@@ -9,35 +9,42 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_riverpod: ^2.6.1
+  flutter_riverpod: ^3.0.0
   dio: ^5.7.0
-  flutter_secure_storage: ^9.2.2
+  http: ^1.6.0
+  flutter_secure_storage: ^11.0.0
   drift: ^2.22.1
   sqlite3_flutter_libs: ^0.5.28
   path_provider: ^2.1.5
   path: ^1.9.0
   shared_preferences: ^2.3.5
-  file_picker: ^10.3.3
-  flutter_markdown: ^0.7.7+1
+  file_picker: ^13.1.0
   markdown: ^7.3.1
-  mcp_dart: 2.4.1
+  mcp_dart: ^2.4.2
   flutter_localizations:
     sdk: flutter
   image_picker: ^1.2.3
-  share_plus: ^12.0.2
-  receive_sharing_intent: 1.8.1
+  share_plus: ^13.0.0
+  receive_sharing_intent: ^1.9.0
   local_auth: ^3.0.2
+  # 钉在 9.28：9.30 的 android/build.gradle 用 `apply plugin: 'kotlin-android'`
+  # 的分支写法在 AGP 8.13 下不生效，release 变体的 Kotlin 源集为空 →
+  # :app:compileReleaseJavaWithJavac 找不到 SentryFlutterPlugin（实测确定性复现，
+  # 与 Gradle 缓存无关）。debug/profile 正常，仅 release 坏。
   sentry_flutter: 9.28.0
-  package_info_plus: ^9.0.1
-  # P1~P3 鏂板渚濊禆锛堣瑙?NEXUS_寮€鍙戞湡鎶€鏈柟妗坃P1-P3.md 搂10锛?
+  package_info_plus: ^10.0.0
+# P1~P3 阶段新增依赖（详见 NEXUS_开发期技术方案_P1-P3.md 第 10 节）。
   flutter_foreground_task: ^11.0.1
-  flutter_local_notifications: ^18.0.1
+  flutter_local_notifications: ^22.0.0
   cryptography: ^2.7.0
-  super_clipboard: 0.9.1
+  # 已移除 super_clipboard：全仓库零代码引用（剪贴板用的是 Flutter 自带
+  # Clipboard API）。它固定 0.9.1 会把 device_info_plus 钉在 <12 → win32 <6，
+  # 阻塞 package_info_plus / share_plus / file_picker / flutter_secure_storage
+  # 的 win32 ^6 升级簇。如需富剪贴板能力，应改用 super_clipboard 0.10+ 正式版。
   workmanager: ^0.10.9
   flutter_math_fork: ^0.7.3
   url_launcher: ^6.3.1
-  app_links: ^6.4.0
+  app_links: ^7.0.0
   permission_handler: ^13.0.1
   archive: ^4.2.0
   crypto: ^3.0.7
@@ -45,15 +52,37 @@ dependencies:
   flutter_tts: ^4.2.5
   xterm: ^4.0.0
   dartssh2: ^4.1.0
+  flutter_markdown_plus: ^1.0.12
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
   drift_dev: ^2.22.1
   build_runner: ^2.4.14
-  flutter_secure_storage_platform_interface: ^1.1.0
+  flutter_secure_storage_platform_interface: ^2.0.0
   path_provider_platform_interface: ^2.1.2
-  sqlite3: ^3.5.2
+  # 仅测试用：file_picker 13 的 PlatformFile 是抽象基类，其 xFile getter 的返回类型
+  # XFile 定义在 cross_file 里；测试要提供具体实现就必须显式引用该类型。
+  cross_file: ^0.3.4
+  # 钉在 3.6.0 以下：3.6.0 的 native-assets 产物哈希与 3.5.2 不同，升上去需要
+  # 重新联网取库。当前构建环境访问不到 github.com，冷缓存时必然失败（见文末
+  # hooks 段说明）。待放开下载源后再同步升到 `^3.6.0`。
+  sqlite3: ">=3.5.2 <3.6.0"
+
+# package:sqlite3 3.x 用 Dart native-assets hook 取预编译原生库，默认源是
+# github.com。本仓库的构建环境（含本机与受限网络）访问不到 github.com /
+# raw.githubusercontent.com，冷缓存时 `flutter build apk` / `flutter test` 会在
+# native-assets 阶段以 HandshakeException 失败：
+#   "failed (attempted to download .../sqlite3-3.5.2/libsqlite3.arm64.android.so)"
+# 这里改用可达的 GitHub 镜像作为下载源（官方支持的 url_pattern 覆盖方式，见
+# package:sqlite3 的 doc/hook.md）。安全性：下载文件仍会用包内 asset_hashes.dart
+# 内嵌的 SHA256 校验，校验不过 hook 直接报错，因此换源不降低供应链安全性。
+# 若构建环境本身能直连 github.com，可整段删除本 hooks 段。
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3
+      url_pattern: "https://ghfast.top/https://github.com/simolus3/sqlite3.dart/releases/download/$RELEASE_TAG/$FILENAME"
 
 flutter:
   uses-material-design: true
@@ -73,6 +102,14 @@ flutter:
     - assets/skills/android-build/SKILL.md
     - assets/skills/android-build/references/build.md
     - assets/skills/android-build/references/toolchain.md
+    - assets/skills/code-review/SKILL.md
+    - assets/skills/debugging/SKILL.md
+    - assets/skills/flutter-ui/SKILL.md
+    - assets/skills/api-integration/SKILL.md
+    - assets/skills/database-design/SKILL.md
+    - assets/skills/testing/SKILL.md
+    - assets/skills/git-workflow/SKILL.md
+    - assets/skills/technical-writing/SKILL.md
     - assets/linux/alpine-minirootfs-3.22.5-aarch64.tar.gz
     - assets/linux/libtalloc.so.2
 

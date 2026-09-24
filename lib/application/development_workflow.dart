@@ -250,14 +250,15 @@ class DevelopmentWorkflowRunner {
     }
     return DevelopmentVerificationPlan(
       project: detected.project,
-      primaryArtifactPath: workflow.artifactPath ?? detected.primaryArtifactPath,
+      primaryArtifactPath:
+          workflow.artifactPath ?? detected.primaryArtifactPath,
       steps: [
         for (final step in workflow.steps)
           VerificationStep(
             id: step.id,
             title: step.title ?? step.id,
-            command: step.command
-                .replaceFirst(RegExp(r'^\./gradlew\b'), 'gradlew'),
+            command:
+                step.command.replaceFirst(RegExp(r'^\./gradlew\b'), 'gradlew'),
             kind: step.kind,
             timeout: step.timeout,
             expectedArtifactPath: step.expectedArtifactPath,

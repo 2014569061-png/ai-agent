@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -80,6 +82,65 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
       if (mounted) FloatingToast.show(context, '定时任务已删除');
     } catch (error) {
       if (mounted) FloatingToast.show(context, '删除失败：$error');
+    }
+  }
+
+  Future<void> _showHistory(ScheduledTask task) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final logs = await db.scheduledTaskRunHistory(task.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('${task.name} · 执行记录'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: logs.isEmpty
+                ? const Text('暂无执行记录')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: logs.length,
+                    separatorBuilder: (_, __) => const Divider(height: 16),
+                    itemBuilder: (context, index) {
+                      final log = logs[index];
+                      Map<String, dynamic> detail;
+                      try {
+                        detail = Map<String, dynamic>.from(
+                            jsonDecode(log.detail) as Map);
+                      } catch (_) {
+                        detail = const {};
+                      }
+                      final result = detail['result']?.toString() ?? '';
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${detail['status'] ?? log.decision ?? '未知'} · '
+                            '${log.createdAt.toLocal().toString().substring(0, 19)}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          if (detail['durationMs'] is num)
+                            Text('耗时 ${detail['durationMs']} ms'),
+                          if (result.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            SelectableText(result),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '读取执行记录失败：$error');
     }
   }
 
@@ -387,7 +448,9 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                   final daysLabel = spec.days.isEmpty
                       ? AppStrings.everyDay
                       : spec.days
-                          .map((day) => AppStrings.weekdays[day] ?? AppStrings.weekday(day))
+                          .map((day) =>
+                              AppStrings.weekdays[day] ??
+                              AppStrings.weekday(day))
                           .join('/');
                   final timeLabel =
                       '${spec.hour.toString().padLeft(2, '0')}:${spec.minute.toString().padLeft(2, '0')}';
@@ -483,14 +546,28 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                           ],
                         ),
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: '删除任务',
-                        constraints: const BoxConstraints(
-                          minWidth: AppTokens.kMinTouchTarget,
-                          minHeight: AppTokens.kMinTouchTarget,
-                        ),
-                        onPressed: () => _delete(task),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.history_outlined),
+                            tooltip: '查看执行记录',
+                            constraints: const BoxConstraints(
+                              minWidth: AppTokens.kMinTouchTarget,
+                              minHeight: AppTokens.kMinTouchTarget,
+                            ),
+                            onPressed: () => _showHistory(task),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: '删除任务',
+                            constraints: const BoxConstraints(
+                              minWidth: AppTokens.kMinTouchTarget,
+                              minHeight: AppTokens.kMinTouchTarget,
+                            ),
+                            onPressed: () => _delete(task),
+                          ),
+                        ],
                       ),
                     ),
                   );

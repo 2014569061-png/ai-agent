@@ -33,6 +33,7 @@ class DashboardKpis {
   const DashboardKpis({
     required this.todayConversations,
     required this.todayTokens,
+    required this.todayPromptTokens,
     required this.todayCachedTokens,
     required this.runningTasks,
     required this.taskSuccessRate,
@@ -43,6 +44,7 @@ class DashboardKpis {
 
   final int todayConversations;
   final int todayTokens;
+  final int todayPromptTokens;
   final int todayCachedTokens;
   final int runningTasks;
 
@@ -52,9 +54,11 @@ class DashboardKpis {
   final double? taskFeedbackRate;
   final int taskFeedbackSamples;
 
-  double get cacheHitRate => todayTokens <= 0
-      ? 0.0
-      : (todayCachedTokens / todayTokens).clamp(0.0, 1.0);
+  // RunRecords 目前没有持久化 cacheStatsReported。零缓存既可能是未命中，
+  // 也可能是 Provider 未返回缓存统计；保守地隐藏，不能显示为确定的 0%。
+  double? get cacheHitRate => todayPromptTokens <= 0 || todayCachedTokens <= 0
+      ? null
+      : (todayCachedTokens / todayPromptTokens).clamp(0.0, 1.0);
 }
 
 /// 待办项类型（审批、计划确认、中断恢复）
@@ -154,6 +158,7 @@ class DashboardService {
 
     // 2. Token 用量与 7 天趋势（窗口 = 近 7 个自然日，含今日）
     int todayTokens = 0;
+    int todayPromptTokens = 0;
     int todayCachedTokens = 0;
     final dailyTokensMap = <String, _DailyTokenBucket>{};
     for (int i = 0; i < 7; i++) {
@@ -164,6 +169,7 @@ class DashboardService {
       final total = run.inputTokens + run.outputTokens;
       if (run.startedAt.isAfter(todayStart)) {
         todayTokens += total.toInt();
+        todayPromptTokens += run.inputTokens;
         todayCachedTokens += run.cachedTokens.toInt();
       }
       final dateKey = _dayKey(run.startedAt);
@@ -280,6 +286,7 @@ class DashboardService {
       kpis: DashboardKpis(
         todayConversations: todayConversations,
         todayTokens: todayTokens,
+        todayPromptTokens: todayPromptTokens,
         todayCachedTokens: todayCachedTokens,
         runningTasks: runningCount,
         taskSuccessRate: successRate,

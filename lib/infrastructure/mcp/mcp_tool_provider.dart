@@ -1,12 +1,16 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:mcp_dart/mcp_dart.dart' as mcp;
+import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart' as http_io;
 
 import '../../domain/models.dart';
 import '../../domain/network_access_policy.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import '../tools/tool_registry.dart';
+import '../tools/pinned_host_connector.dart';
 import 'mcp_server_config.dart';
 
 /// 管理 MCP 服务器连接，并把远端工具统一映射为 [AgentTool]。
@@ -58,7 +62,8 @@ class McpToolProvider {
   Future<bool> _isAllowed(McpServerConfig server) async {
     switch (server.kind) {
       case McpServerKind.http:
-        final decision = _policy.inspect(server.url?.trim() ?? '');
+        final decision =
+            await _policy.inspectResolved(server.url?.trim() ?? '');
         if (!decision.allowed) {
           _lastBlockReason = decision.reason;
           return false;
@@ -99,7 +104,7 @@ class McpToolProvider {
           if (url.isEmpty) {
             return (ok: false, toolCount: 0, error: '未配置 HTTP URL');
           }
-          final transport = mcp.StreamableHttpClientTransport(Uri.parse(url));
+          final transport = _httpTransport(url);
           await client.connect(transport);
         case McpServerKind.stdio:
           final transport = mcp.StdioClientTransport(
@@ -125,7 +130,10 @@ class McpToolProvider {
       if (client != null) {
         try {
           await client.close();
-        } catch (_) {}
+        } catch (_) {
+          // finally 里的关闭：连接可能已因错误断开，关闭失败没有补救动作，
+          // 也不该掩盖上面已经准备好的返回值。
+        }
       }
     }
   }
@@ -141,7 +149,7 @@ class McpToolProvider {
     switch (server.kind) {
       case McpServerKind.http:
         final url = server.url?.trim() ?? '';
-        final transport = mcp.StreamableHttpClientTransport(Uri.parse(url));
+        final transport = _httpTransport(url);
         await client.connect(transport);
       case McpServerKind.stdio:
         final transport = mcp.StdioClientTransport(
@@ -157,6 +165,25 @@ class McpToolProvider {
     return client;
   }
 
+  mcp.StreamableHttpClientTransport _httpTransport(String rawUrl) {
+    final connector = PinnedHostConnector(
+      requirePin: true,
+      resolveAddress: (uri) async {
+        final endpoint = await _policy.resolveForConnect(uri.toString());
+        if (!endpoint.decision.allowed || endpoint.address == null) {
+          throw SocketException(endpoint.decision.reason);
+        }
+        return endpoint.address;
+      },
+    );
+    // mcp_dart 当前通过 http.Client() 硬编码创建连接。
+    // runWithClient 将仅这个同步构造区间的 HTTP client 替换为带准入策略的 IO client。
+    return http.runWithClient(
+      () => mcp.StreamableHttpClientTransport(Uri.parse(rawUrl)),
+      () => http_io.IOClient(connector.createClient()),
+    );
+  }
+
   /// 对比最新启用列表，关闭已停用 / 已删除服务器的连接，
   /// 避免设置页开关或删除后旧连接泄漏。
   Future<void> syncServers(List<McpServerConfig> enabled) async {
@@ -168,7 +195,10 @@ class McpToolProvider {
       if (client != null) {
         try {
           await client.close();
-        } catch (_) {}
+        } catch (_) {
+          // 服务器已被移除，连接也已从 _clients 摘掉；关闭失败只影响资源释放
+          // 时机，不会让失效连接继续被使用。
+        }
       }
     }
   }
@@ -178,7 +208,10 @@ class McpToolProvider {
     for (final client in _clients.values) {
       try {
         await client.close();
-      } catch (_) {}
+      } catch (_) {
+        // ProviderScope 销毁时的收尾：无论关闭是否成功，紧随其后都会清空
+        // _clients，不会有连接被继续使用。
+      }
     }
     _clients.clear();
   }

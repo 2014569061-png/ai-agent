@@ -8,6 +8,8 @@ import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 import 'package:mobile_agent/infrastructure/tools/command_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/core_tools.dart';
 import 'package:mobile_agent/infrastructure/tools/image_gen_tool.dart';
+import 'package:mobile_agent/application/android_automation_tool.dart';
+import 'package:mobile_agent/infrastructure/tools/android_device_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/plan_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/skill_tools.dart';
 import 'package:mobile_agent/infrastructure/tools/sub_agent_tool.dart';
@@ -54,6 +56,10 @@ ToolRegistry _buildFullRegistry(AppDatabase db) {
   registry
       .register(SubAgentTool(onRun: (agentId, prompt, budget) async => 'ok'));
   registry.register(ManagePlanTool(onPlanUpdated: (steps) async {}));
+  registry.register(AndroidDeviceTool());
+  registry.register(AndroidAppPrivateDataPreviewTool());
+  registry.register(AndroidAppPrivateDataTool());
+  registry.register(AndroidAutomationTool());
 
   const workspace = '/tmp/nexus-sensitive-policy-test';
   final sandbox = WorkspaceSandbox(workspace);
@@ -150,6 +156,34 @@ void main() {
     );
     expect(
       SensitiveToolPolicy.redactArguments('edit_file', {'newText': 'k=1'}),
+      {'redacted': true},
+    );
+    expect(
+      SensitiveToolPolicy.redactArguments('android_app_private_data', {
+        'packageName': 'com.example.app',
+        'path': 'shared_prefs/settings.xml',
+      }),
+      {'redacted': true},
+    );
+    expect(
+      SensitiveToolPolicy.redactArguments('android_device', {
+        'action': 'write_root_file',
+        'content': 'token=secret',
+      }),
+      {'redacted': true},
+    );
+    expect(
+      SensitiveToolPolicy.redactResult(
+        'android_device',
+        ToolResult.text('token=secret'),
+      ).data,
+      {'redacted': true},
+    );
+    expect(
+      SensitiveToolPolicy.redactResult(
+        'android_app_private_data',
+        ToolResult.text('refresh_token=secret'),
+      ).data,
       {'redacted': true},
     );
     // 旧命名的 MCP 工具沿用远端口径，参数同样脱敏。

@@ -153,5 +153,50 @@ void main() {
     test('172.32.x.x 不在私网段内，应放行', () {
       expect(policy.inspect('http://172.32.0.1/').allowed, isTrue);
     });
+
+    test('CGNAT 100.64.0.0/10 被拒绝', () {
+      expect(policy.inspect('http://100.64.0.1/').allowed, isFalse);
+      expect(policy.inspect('http://100.127.255.254/').allowed, isFalse);
+      expect(policy.inspect('http://100.128.0.1/').allowed, isTrue);
+    });
+  });
+
+  group('DNS 解析后的地址也要检查', () {
+    test('主机名解析到私网时拒绝', () async {
+      final resolving = NetworkAccessPolicy(
+        lookupHost: (host) async => [InternetAddress('10.1.2.3')],
+      );
+      final decision =
+          await resolving.inspectResolved('https://rebind.example/mcp');
+      expect(decision.allowed, isFalse);
+      expect(decision.reason, contains('私网'));
+
+      final provider = McpToolProvider(policy: resolving, stdioEnabled: false);
+      final tools = await provider.connectAndListTools(
+        httpServer('https://rebind.example/mcp'),
+      );
+      expect(tools, isEmpty);
+      expect(provider.lastBlockReason, contains('私网'));
+    });
+
+    test('解析失败时拒绝，而不是放行', () async {
+      final resolving = NetworkAccessPolicy(
+        lookupHost: (host) async => throw const SocketException('dns failed'),
+      );
+      final decision =
+          await resolving.inspectResolved('https://missing.example/mcp');
+      expect(decision.allowed, isFalse);
+      expect(decision.reason, contains('无法解析'));
+    });
+
+    test('解析到公网地址时放行', () async {
+      final resolving = NetworkAccessPolicy(
+        lookupHost: (host) async => [InternetAddress('93.184.216.34')],
+      );
+      expect(
+        (await resolving.inspectResolved('https://example.com/')).allowed,
+        isTrue,
+      );
+    });
   });
 }

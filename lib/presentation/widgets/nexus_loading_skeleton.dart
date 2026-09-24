@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../motion/motion_preferences.dart';
+import '../motion/motion_lifecycle.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
@@ -14,7 +14,7 @@ class NexusLoadingSkeleton extends StatefulWidget {
 }
 
 class _NexusLoadingSkeletonState extends State<NexusLoadingSkeleton>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, MotionLifecycle<NexusLoadingSkeleton> {
   late final AnimationController _controller;
   late final Animation<double> _opacityAnimation;
 
@@ -30,7 +30,16 @@ class _NexusLoadingSkeletonState extends State<NexusLoadingSkeleton>
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
 
-    _controller.repeat(reverse: true);
+  }
+
+  @override
+  void onMotionActivityChanged() {
+    if (decorativeMotionActive) {
+      if (!_controller.isAnimating) _controller.repeat(reverse: true);
+    } else {
+      _controller.stop();
+      _controller.value = 1.0;
+    }
   }
 
   @override
@@ -41,7 +50,7 @@ class _NexusLoadingSkeletonState extends State<NexusLoadingSkeleton>
 
   @override
   Widget build(BuildContext context) {
-    if (MotionPreferences.shouldReduceMotion(context)) {
+    if (!decorativeMotionActive) {
       return widget.child;
     }
     return AnimatedBuilder(

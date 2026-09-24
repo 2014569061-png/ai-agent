@@ -146,7 +146,7 @@ void main() {
 
     final mode = tester.getRect(find.bySemanticsLabel('聊天模式'));
     final approval = tester.getRect(find.bySemanticsLabel('完全访问'));
-    final code = tester.getRect(find.bySemanticsLabel('插入代码块'));
+    final code = tester.getRect(find.byTooltip('更多输入工具'));
     final attach = tester.getRect(find.bySemanticsLabel('添加附件或更多工具'));
     final send = tester.getRect(find.bySemanticsLabel(RegExp('发送')));
 

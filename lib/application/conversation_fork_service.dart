@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
+import '../infrastructure/database/message_history_store.dart';
 
 class ConversationForkService {
   const ConversationForkService();
@@ -11,40 +12,31 @@ class ConversationForkService {
     required String sourceConversationId,
     required String forkMessageId,
     bool replaceSubsequent = false,
-  }) async {
-    final source = await db.findConversation(sourceConversationId);
-    if (source == null) {
-      throw StateError('原会话不存在');
-    }
-    final messages = await db.messagesFor(sourceConversationId);
-    final forkIndex = messages.indexWhere((item) => item.id == forkMessageId);
-    if (forkIndex < 0) {
-      throw StateError('找不到分叉消息');
-    }
-    final now = DateTime.now();
-    final tags = _decodeTags(source.tagsJson)
-      ..removeWhere((item) => item.startsWith('parent:') || item.startsWith('forkMessage:'))
-      ..add('parent:$sourceConversationId')
-      ..add('forkMessage:$forkMessageId');
-    final branch = source.copyWith(
-      id: UniqueId.generate('conv'),
-      title: '${source.title}（分支）',
-      tagsJson: jsonEncode(tags),
-      createdAt: now,
-      updatedAt: now,
-    );
-    await db.saveConversation(branch);
-    final copied = replaceSubsequent
-        ? messages.take(forkIndex + 1)
-        : messages.take(forkIndex + 1);
-    for (final message in copied) {
-      await db.saveMessage(message.copyWith(
-        id: UniqueId.generate('msg'),
-        conversationId: branch.id,
-      ));
-    }
-    return branch;
-  }
+  }) =>
+      db.transaction(() async {
+        final source = await db.findConversation(sourceConversationId);
+        if (source == null) {
+          throw StateError('原会话不存在');
+        }
+        final now = DateTime.now();
+        final tags = _decodeTags(source.tagsJson)
+          ..removeWhere((item) =>
+              item.startsWith('parent:') || item.startsWith('forkMessage:'))
+          ..add('parent:$sourceConversationId')
+          ..add('forkMessage:$forkMessageId');
+        final branch = source.copyWith(
+          id: UniqueId.generate('conv'),
+          title: '${source.title}（分支）',
+          tagsJson: jsonEncode(tags),
+          createdAt: now,
+          updatedAt: now,
+        );
+        await db.saveConversation(branch);
+        // Both legacy modes copy through the anchor; never replay tool effects.
+        await MessageHistoryStore(db)
+            .copyThrough(sourceConversationId, forkMessageId, branch.id);
+        return branch;
+      });
 
   List<String> _decodeTags(String raw) {
     try {
@@ -52,7 +44,10 @@ class ConversationForkService {
       if (decoded is List) {
         return decoded.map((item) => item.toString()).toList();
       }
-    } catch (_) {}
+    } catch (_) {
+      // 历史数据里的 tags JSON 可能来自旧版本或手工修改；分叉仍可继续，只是
+      // 在无法解析时从空标签集合开始。
+    }
     return <String>[];
   }
 }

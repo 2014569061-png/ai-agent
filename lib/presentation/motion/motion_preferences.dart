@@ -1,21 +1,51 @@
 import 'package:flutter/widgets.dart';
 
-/// 动效与无障碍偏好管理
+enum MotionLevel { full, reduced, off }
+
+/// One inherited policy for the app preference, including routes and overlays.
+class NexusMotionScope extends InheritedWidget {
+  const NexusMotionScope({super.key, required this.level, required super.child});
+  final MotionLevel level;
+  @override
+  bool updateShouldNotify(NexusMotionScope oldWidget) => level != oldWidget.level;
+}
+
 abstract final class MotionPreferences {
-  /// 判断当前上下文是否开启了「减少动态效果」
-  static bool shouldReduceMotion(BuildContext context) {
-    return MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+  static MotionLevel parse(String value) => switch (value) {
+        'off' => MotionLevel.off,
+        'reduced' => MotionLevel.reduced,
+        _ => MotionLevel.full,
+      };
+
+  /// Non-listening reads are for Navigator/gesture callbacks, not widget builds.
+  static MotionLevel levelOf(BuildContext context, {bool listen = true}) {
+    final media = listen
+        ? MediaQuery.maybeOf(context)
+        : context.getInheritedWidgetOfExactType<MediaQuery>()?.data;
+    if (media?.disableAnimations ?? false) return MotionLevel.off;
+    final scope = listen
+        ? context.dependOnInheritedWidgetOfExactType<NexusMotionScope>()
+        : context.getInheritedWidgetOfExactType<NexusMotionScope>();
+    return scope?.level ?? MotionLevel.full;
   }
 
-  /// 根据无障碍偏好调整动效时长：开启减少动态效果时返回 Duration.zero 或微秒级
-  static Duration adjustDuration(
-    BuildContext context,
-    Duration duration, {
-    Duration reducedDuration = Duration.zero,
+  static bool shouldReduceMotion(BuildContext context) =>
+      levelOf(context) != MotionLevel.full;
+
+  static bool animationsDisabled(BuildContext context) =>
+      levelOf(context) == MotionLevel.off;
+
+  static bool allowDecorativeMotion(BuildContext context) =>
+      levelOf(context) == MotionLevel.full;
+
+  static Duration adjustDuration(BuildContext context, Duration duration, {
+    Duration reducedDuration = const Duration(milliseconds: 120),
+    bool listen = true,
   }) {
-    if (shouldReduceMotion(context)) {
-      return reducedDuration;
-    }
-    return duration;
+    return switch (levelOf(context, listen: listen)) {
+      MotionLevel.off => Duration.zero,
+      MotionLevel.reduced => duration < reducedDuration ? duration : reducedDuration,
+      MotionLevel.full => duration,
+    };
   }
 }

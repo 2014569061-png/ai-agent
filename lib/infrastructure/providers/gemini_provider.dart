@@ -93,6 +93,7 @@ class GeminiProvider extends StreamingProviderBase {
     var completionTokens = 0;
     var cachedTokens = 0;
     var reasoningTokens = 0;
+    var usageReported = false;
     var cacheStatsReported = false;
     var stopReason = StopReason.unknown;
 
@@ -112,6 +113,11 @@ class GeminiProvider extends StreamingProviderBase {
       final thoughts = _asInt(usage['thoughtsTokenCount']) ??
           _asInt(usage['thoughts_token_count']);
       if (thoughts != null) reasoningTokens = thoughts;
+      usageReported = usageReported ||
+          prompt != null ||
+          completion != null ||
+          cached != null ||
+          thoughts != null;
     }
 
     List<UnifiedEvent> onFrame(String data) {
@@ -153,8 +159,8 @@ class GeminiProvider extends StreamingProviderBase {
                     : <String, dynamic>{
                         '_unparsed': jsonEncode(args),
                       };
-            final signature = part['thoughtSignature'] ??
-                functionCall['thoughtSignature'];
+            final signature =
+                part['thoughtSignature'] ?? functionCall['thoughtSignature'];
             pendingCalls.add(ToolCall(
               id: functionCall['id'] as String? ??
                   'gemini-call-${pendingCalls.length}',
@@ -181,6 +187,7 @@ class GeminiProvider extends StreamingProviderBase {
           completionTokens: completionTokens,
           cachedTokens: cachedTokens,
           reasoningTokens: reasoningTokens,
+          usageReported: usageReported,
           cacheStatsReported: cacheStatsReported));
       events.add(CompletedEvent(stopReason: stopReason));
       return events;

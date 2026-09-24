@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 
 import '../../infrastructure/providers/provider_config.dart';
@@ -325,7 +326,10 @@ class _ProviderTile extends StatelessWidget {
               const SizedBox(width: 8),
               IconButton(
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                constraints: const BoxConstraints(
+                  minWidth: AppTokens.kMinTouchTarget,
+                  minHeight: AppTokens.kMinTouchTarget,
+                ),
                 iconSize: 20,
                 tooltip: active ? '当前处于激活状态' : '设为激活',
                 icon: Icon(
@@ -339,7 +343,11 @@ class _ProviderTile extends StatelessWidget {
               ),
               PopupMenuButton<String>(
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                constraints: const BoxConstraints(
+                  minWidth: AppTokens.kMinTouchTarget,
+                  minHeight: AppTokens.kMinTouchTarget,
+                ),
+                tooltip: '更多选项',
                 iconSize: 18,
                 icon: Icon(
                   Icons.more_horiz_rounded,

@@ -76,7 +76,8 @@ abstract final class NexusGuard {
     try {
       return action();
     } catch (error, stackTrace) {
-      _logDegrade(phase, error, stackTrace, logger: logger, runId: runId, detail: detail);
+      _logDegrade(phase, error, stackTrace,
+          logger: logger, runId: runId, detail: detail);
       return null;
     }
   }
@@ -93,7 +94,8 @@ abstract final class NexusGuard {
     try {
       return await action();
     } catch (error, stackTrace) {
-      _logDegrade(phase, error, stackTrace, logger: logger, runId: runId, detail: detail);
+      _logDegrade(phase, error, stackTrace,
+          logger: logger, runId: runId, detail: detail);
       return null;
     }
   }
@@ -128,6 +130,24 @@ abstract final class NexusGuard {
       rethrow;
     }
   }
+
+  /// 已经 `catch` 到异常时的降级记录。
+  ///
+  /// 与 [degrade] 等价，区别只在用法：既有代码里大量的 `catch (_) {}` 已经把业务
+  /// 逻辑写在 try 里，把它们改写成 `degrade(..., () { ... })` 需要整体搬动 try 体，
+  /// 逐处手抄容易出错。这个入口只要求把静默的 `catch (_) {}` 换成留痕的 catch，
+  /// try 体一个字节都不用动，改动面最小，语义完全一致（该吞的仍然吞）。
+  static void degradeCaught(
+    String phase,
+    Object error,
+    StackTrace stackTrace, {
+    required void Function(String message, {Map<String, dynamic>? detail})
+        logger,
+    String? runId,
+    Map<String, dynamic>? detail,
+  }) =>
+      _logDegrade(phase, error, stackTrace,
+          logger: logger, runId: runId, detail: detail);
 
   static void _logDegrade(
     String phase,

@@ -75,7 +75,8 @@ class DevelopmentLoopFinalizer {
     final audit = RunAuditReport.fromEvents(events);
     final metadata = [
       for (final entry in audit.entries)
-        if (entry.effect == 'applied' || entry.metadata['fileOperation'] == true)
+        if (entry.effect == 'applied' ||
+            entry.metadata['fileOperation'] == true)
           {
             ...entry.metadata,
             if (entry.path != null) 'path': entry.path,
@@ -186,9 +187,11 @@ class DevelopmentLoopFinalizer {
       phase: (progress['phase'] ?? info?.status ?? 'review').toString(),
       extra: {
         'changeReview': review.toJson(),
-        if (verification != null) 'verificationPlan': verification.plan.toJson(),
+        if (verification != null)
+          'verificationPlan': verification.plan.toJson(),
         'executedSteps': [
-          for (final step in verification?.plan.steps ?? const <VerificationStep>[])
+          for (final step
+              in verification?.plan.steps ?? const <VerificationStep>[])
             if (step.status == VerificationStepStatus.passed ||
                 step.status == VerificationStepStatus.failed)
               step.id,

@@ -33,4 +33,41 @@ void main() {
     expect(await db.allAgents(limit: 2), hasLength(2));
     expect(await db.allModelProfiles(limit: 3), hasLength(3));
   });
+
+  test('history search applies filters and pages literal title matches',
+      () async {
+    final now = DateTime(2026, 9, 23);
+    for (final row in [
+      ('match', 'Release 100%_safe', true, false),
+      ('wildcard', 'Release 100XXsafe', true, false),
+      ('not-favorite', 'Release 100%_safe', false, false),
+    ]) {
+      await db.saveConversation(Conversation(
+        id: row.$1,
+        title: row.$2,
+        agentId: null,
+        mode: 'chat',
+        isPinned: row.$4,
+        isFavorite: row.$3,
+        tagsJson: '[]',
+        createdAt: now,
+        updatedAt: now,
+      ));
+    }
+
+    final firstPage = await db.searchConversations(
+      query: '100%_',
+      filter: 'favorite',
+      limit: 1,
+    );
+    final secondPage = await db.searchConversations(
+      query: '100%_',
+      filter: 'favorite',
+      limit: 1,
+      offset: 1,
+    );
+
+    expect(firstPage.map((item) => item.id), ['match']);
+    expect(secondPage, isEmpty);
+  });
 }

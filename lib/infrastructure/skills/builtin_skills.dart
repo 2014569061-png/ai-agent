@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show AssetBundle, rootBundle;
 import '../database/app_database.dart';
 import 'skill_installer.dart';
 import 'skill_parser.dart';
+import 'skill_store.dart';
 
 /// 内置技能清单：随 APK 分发的 assets/skills/*，首次启动自动安装；
 /// 版本或内容变化时原地更新（install 按 name upsert，保留同一 id）。
@@ -22,6 +23,38 @@ const List<BuiltinSkill> kBuiltinSkills = [
       'references/toolchain.md':
           'assets/skills/android-build/references/toolchain.md',
     },
+  ),
+  BuiltinSkill(
+    name: 'code-review',
+    assetPath: 'assets/skills/code-review/SKILL.md',
+  ),
+  BuiltinSkill(
+    name: 'debugging',
+    assetPath: 'assets/skills/debugging/SKILL.md',
+  ),
+  BuiltinSkill(
+    name: 'flutter-ui',
+    assetPath: 'assets/skills/flutter-ui/SKILL.md',
+  ),
+  BuiltinSkill(
+    name: 'api-integration',
+    assetPath: 'assets/skills/api-integration/SKILL.md',
+  ),
+  BuiltinSkill(
+    name: 'database-design',
+    assetPath: 'assets/skills/database-design/SKILL.md',
+  ),
+  BuiltinSkill(
+    name: 'testing',
+    assetPath: 'assets/skills/testing/SKILL.md',
+  ),
+  BuiltinSkill(
+    name: 'git-workflow',
+    assetPath: 'assets/skills/git-workflow/SKILL.md',
+  ),
+  BuiltinSkill(
+    name: 'technical-writing',
+    assetPath: 'assets/skills/technical-writing/SKILL.md',
   ),
 ];
 
@@ -77,7 +110,8 @@ class BuiltinSkillSeeder {
         final existing = await db.findSkillPackByName(skill.name);
         if (existing != null &&
             existing.version == parsed.metadata.version &&
-            existing.sha256 == sha256Hex) {
+            existing.sha256 == sha256Hex &&
+            SkillStore().verifyIntegrity(existing)) {
           continue;
         }
 

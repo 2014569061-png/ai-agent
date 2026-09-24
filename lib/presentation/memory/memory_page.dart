@@ -230,7 +230,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                     child: Text(
                       typeLabel,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTokens.fontSizeBadge,
                         fontWeight: FontWeight.w500,
                         color: isPreference
                             ? AppPalette.brand
@@ -260,7 +260,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                         const Text(
                           '重要度 ',
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTokens.fontSizeBadge,
                             fontWeight: FontWeight.w500,
                             color: AppPalette.warning,
                           ),
@@ -268,7 +268,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                         Text(
                           '${memory.importance}/5',
                           style: const TextStyle(
-                            fontSize: 11,
+                            fontSize: AppTokens.fontSizeBadge,
                             fontWeight: FontWeight.w500,
                             color: AppPalette.warning,
                           ),
@@ -280,7 +280,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                   Text(
                     isAuto ? '自动沉淀' : '手动录入',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTokens.fontSizeBadge,
                       color: isDark
                           ? AppPalette.darkTextMuted
                           : AppPalette.lightTextMuted,
@@ -307,7 +307,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               SelectableText(
                 memory.content,
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTokens.fontSizeSubhead,
                   fontWeight: FontWeight.w400,
                   height: 1.45,
                 ),
@@ -324,7 +324,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                   Text(
                     '更新于 ${_formatDate(memory.updatedAt)}',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTokens.fontSizeBadge,
                       color: isDark
                           ? AppPalette.darkTextMuted
                           : AppPalette.lightTextMuted,
@@ -418,7 +418,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                         decoration: InputDecoration(
                           hintText: '搜索记忆内容或分类...',
                           hintStyle: TextStyle(
-                            fontSize: 13,
+                            fontSize: AppTokens.fontSizeCaption,
                             color: isDark
                                 ? AppPalette.darkTextMuted
                                 : AppPalette.lightTextMuted,
@@ -476,7 +476,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                         decoration: InputDecoration(
                           hintText: '搜索记忆内容或分类...',
                           hintStyle: TextStyle(
-                            fontSize: 13,
+                            fontSize: AppTokens.fontSizeCaption,
                             color: isDark
                                 ? AppPalette.darkTextMuted
                                 : AppPalette.lightTextMuted,
@@ -520,12 +520,12 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                 ),
                 title: const Text(
                   AppStrings.memoryEnabled,
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 15),
+                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: AppTokens.fontSizeBody),
                 ),
                 subtitle: Text(
                   AppStrings.memoryEnabledHint,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTokens.fontSizeCaption,
                     color: isDark
                         ? AppPalette.darkTextMuted
                         : AppPalette.lightTextMuted,
@@ -539,7 +539,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             Text(
               AppStrings.memoryHint,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppTokens.fontSizeCaption,
                 color: isDark
                     ? AppPalette.darkTextMuted
                     : AppPalette.lightTextMuted,

@@ -27,12 +27,20 @@ class _FakeChatController extends ChatController {
   }
 }
 
-class _UnexpectedDirectPicker extends FilePicker {
+/// 守住「目录导入必须走 WorkspaceService 的权限感知流程」：任何直接从
+/// `FilePicker` 走捷径的实现都会在这里抛错。
+///
+/// file_picker 13 的 `FilePicker` 是不可继承的静态外观，注入点改为
+/// `FilePickerPlatform.instance`。
+class _UnexpectedDirectPicker extends FilePickerPlatform {
   @override
   Future<String?> getDirectoryPath({
     String? dialogTitle,
-    bool lockParentWindow = false,
     String? initialDirectory,
+    AndroidOptions androidOptions = const AndroidOptions(),
+    WindowsOptions windowsOptions = const WindowsOptions(),
+    LinuxOptions linuxOptions = const LinuxOptions(),
+    WebOptions webOptions = const WebOptions(),
   }) async {
     throw StateError(
         'ProjectPickerPage bypassed WorkspaceService.pickDirectory');
@@ -48,7 +56,7 @@ void main() {
     final directory = Directory('assets').absolute;
     final db = AppDatabase(NativeDatabase.memory());
     late _FakeChatController controller;
-    FilePicker.platform = _UnexpectedDirectPicker();
+    FilePickerPlatform.instance = _UnexpectedDirectPicker();
 
     addTearDown(() async {
       await db.close();

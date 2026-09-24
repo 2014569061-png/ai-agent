@@ -13,7 +13,8 @@ class RemoteHandshake {
   final int freeBytes;
   final int maxConcurrency;
 
-  factory RemoteHandshake.fromJson(Map<String, dynamic> json) => RemoteHandshake(
+  factory RemoteHandshake.fromJson(Map<String, dynamic> json) =>
+      RemoteHandshake(
         protocolVersion: json['protocolVersion']?.toString() ?? '',
         arch: json['arch']?.toString() ?? '',
         toolchain: (json['toolchain'] as List? ?? const [])

@@ -2,17 +2,21 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show debugPrint, defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'application/approval_bridge.dart';
+import 'application/device_automation_service.dart';
 import 'application/onboarding_service.dart';
 import 'infrastructure/background/foreground_service.dart';
 import 'application/scheduled_task_runner.dart';
+import 'infrastructure/notifications/notification_intent.dart';
 import 'infrastructure/notifications/notification_service.dart';
 import 'infrastructure/observability/sentry_service.dart';
 import 'infrastructure/share/deep_link_service.dart';
@@ -25,6 +29,7 @@ import 'presentation/theme/app_palette.dart';
 import 'presentation/theme/app_theme.dart';
 import 'presentation/theme/app_theme_controller.dart';
 import 'presentation/theme/app_appearance_controller.dart';
+import 'presentation/theme/app_presentation_preferences.dart';
 import 'presentation/widgets/brand_mark.dart';
 import 'presentation/widgets/nexus_background.dart';
 
@@ -66,10 +71,23 @@ Future<void> _initializeServices() async {
     // Cold-start sharing is buffered; hot sharing is listened to in parallel.
     unawaited(SharingService.instance.init());
     // E3 local notifications are optional for the foreground experience.
-    // 同时注册锁屏审批的后台动作入口：动作回调在独立 isolate 里按 callback handle
-    // 调用，所以这里必须传顶层函数，不能传闭包。
-    unawaited(NotificationService.instance
-        .init(onBackgroundResponse: handleApprovalNotificationAction));
+    // 同时接上两个入口：点击通知（前台/热启动）走 onResponse 做页面路由；锁屏审批
+    // 动作走 onBackgroundResponse，它在独立 isolate 里按 callback handle 调用，
+    // 所以必须传顶层函数，不能传闭包。
+    unawaited(_initNotifications());
+    // 设备自动化：接通知点击回调 + 把规则同步给原生触发器。
+    unawaited(_initDeviceAutomation());
+
+    // app_links emits the initial URI on this stream as well. Subscribe before
+    // slow background setup; do not also call getInitialLink (duplicate route).
+    try {
+      AppLinks().uriLinkStream.listen(
+            DeepLinkService.instance.handleUri,
+            onError: (Object error) => debugPrint('深链监听失败: $error'),
+          );
+    } catch (error) {
+      debugPrint('深链监听失败: $error');
+    }
 
     // C5 periodic background task registration.
     if (!kIsWeb) {
@@ -91,21 +109,6 @@ Future<void> _initializeServices() async {
       }
     }
 
-    // E4 deep links. Cold-start lookup is bounded; hot links are independent.
-    final appLinks = AppLinks();
-    try {
-      final initial =
-          await appLinks.getInitialLink().timeout(const Duration(seconds: 2));
-      if (initial != null) DeepLinkService.instance.handleUri(initial);
-    } catch (error) {
-      debugPrint('深链冷启动读取失败: $error');
-    }
-    try {
-      appLinks.uriLinkStream.listen(DeepLinkService.instance.handleUri);
-    } catch (error) {
-      debugPrint('深链监听失败: $error');
-    }
-
     // Initialize crash reporting after the first frame.
     try {
       await SentryService.init();
@@ -117,6 +120,57 @@ Future<void> _initializeServices() async {
   }
 }
 
+/// 通知点击（前台 / 热启动）入口。
+///
+/// 只把 payload 转成意图投递给 [NotificationIntentRouter]，**不在回调里导航**：
+/// 点击可能发生在启动早期，或用户正停在任意页面上，导航必须由持有 `Navigator`
+/// 的页面（ChatPage）统一消费。
+void _handleNotificationResponse(NotificationResponse response) {
+  final intent = NotificationIntent.parse(response.payload);
+  if (intent != null) NotificationIntentRouter.dispatch(intent);
+}
+
+/// 初始化通知插件并接上两个入口。
+///
+/// 冷启动（应用是被点击通知拉起的）不会触发 `onResponse`，必须单独读取
+/// `getNotificationAppLaunchDetails()`，否则「点通知打开应用」这条路径会丢意图，
+/// 用户点完通知只会看到首页而没有任何跳转。
+Future<void> _initNotifications() async {
+  await NotificationService.instance.init(
+    onResponse: _handleNotificationResponse,
+    onBackgroundResponse: handleApprovalNotificationAction,
+  );
+  final launchIntent = NotificationIntent.parse(
+    await NotificationService.instance.notificationLaunchPayload(),
+  );
+  if (launchIntent != null) NotificationIntentRouter.dispatch(launchIntent);
+}
+
+/// 设备自动化通知点击 → 投递 `automation:<fireId>` 意图，由 ChatPage 打开确认页。
+///
+/// 冷启动时原生侧把 fireId 写入 launch fire；运行中则通过 automationFired 回调，
+/// 两条路径都会清除 launch fire，避免重复打开。
+Future<void> _initDeviceAutomation() async {
+  if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+  const bridge = DeviceAutomationBridge();
+  void dispatch(String fireId) => NotificationIntentRouter.dispatch(
+        NotificationIntent(NotificationIntentKind.automation, fireId),
+      );
+  try {
+    DeviceAutomationBridge.listen((fireId) {
+      unawaited(bridge.consumeLaunchFire().catchError((_) => null));
+      dispatch(fireId);
+    });
+    final launchFire = await bridge.consumeLaunchFire();
+    if (launchFire != null && launchFire.isNotEmpty) dispatch(launchFire);
+    final service = DeviceAutomationService();
+    await service.syncToNative();
+    await bridge.evaluateNow();
+  } catch (error) {
+    debugPrint('设备自动化初始化失败: $error');
+  }
+}
+
 class MobileAgentApp extends StatelessWidget {
   const MobileAgentApp({super.key, this.showOnboarding});
 
@@ -124,7 +178,9 @@ class MobileAgentApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<double>(
+    return ValueListenableBuilder<String>(
+      valueListenable: AppAppearanceController.effects,
+      builder: (context, effects, _) => ValueListenableBuilder<double>(
       valueListenable: AppAppearanceController.glassIntensity,
       builder: (context, _, __) => ValueListenableBuilder<ThemeMode>(
         valueListenable: AppThemeController.mode,
@@ -143,35 +199,23 @@ class MobileAgentApp extends StatelessWidget {
             theme: AppTheme.light(),
             darkTheme: AppTheme.dark(),
             themeMode: themeMode,
+            themeAnimationDuration: effects == 'off' ? Duration.zero
+                : effects == 'reduced' ? const Duration(milliseconds: 120)
+                : kThemeChangeDuration,
             builder: (context, child) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
-              return ValueListenableBuilder<double>(
-                valueListenable: AppAppearanceController.fontScale,
-                builder: (context, fontScale, child) {
-                  final mediaQuery = MediaQuery.of(context);
-                  final systemScale = mediaQuery.textScaler.scale(1.0);
-                  return MediaQuery(
-                    data: mediaQuery.copyWith(
-                      textScaler: TextScaler.linear(systemScale * fontScale),
-                    ),
-                    child: AnnotatedRegion<SystemUiOverlayStyle>(
-                      value: SystemUiOverlayStyle(
-                        statusBarColor: Colors.transparent,
-                        systemNavigationBarColor: Colors.transparent,
-                        statusBarIconBrightness:
-                            isDark ? Brightness.light : Brightness.dark,
-                        systemNavigationBarIconBrightness:
-                            isDark ? Brightness.light : Brightness.dark,
-                        systemStatusBarContrastEnforced: false,
-                        systemNavigationBarContrastEnforced: false,
-                      ),
-                      child: NexusBackground(
-                        child: child ?? const SizedBox.shrink(),
-                      ),
-                    ),
-                  );
-                },
-                child: child,
+              return AppPresentationPreferences(
+                child: AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: SystemUiOverlayStyle(
+                    statusBarColor: Colors.transparent,
+                    systemNavigationBarColor: Colors.transparent,
+                    statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                    systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+                    systemStatusBarContrastEnforced: false,
+                    systemNavigationBarContrastEnforced: false,
+                  ),
+                  child: NexusBackground(child: child ?? const SizedBox.shrink()),
+                ),
               );
             },
             home: showOnboarding == null
@@ -180,6 +224,7 @@ class MobileAgentApp extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

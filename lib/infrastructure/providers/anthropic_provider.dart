@@ -56,6 +56,8 @@ class AnthropicProvider extends StreamingProviderBase {
     var cacheCreationTokens = 0;
     var cacheReadTokens = 0;
     var outputTokens = 0;
+    var usageReported = false;
+    var cacheStatsReported = false;
     var stopReason = StopReason.unknown;
 
     void updateUsage(Map<String, dynamic> usage) {
@@ -67,6 +69,13 @@ class AnthropicProvider extends StreamingProviderBase {
       if (cacheRead != null) cacheReadTokens = cacheRead;
       final output = _asInt(usage['output_tokens']);
       if (output != null) outputTokens = output;
+      usageReported = usageReported ||
+          input != null ||
+          output != null ||
+          cacheCreation != null ||
+          cacheRead != null;
+      cacheStatsReported =
+          cacheStatsReported || cacheCreation != null || cacheRead != null;
     }
 
     List<UnifiedEvent> onFrame(String data) {
@@ -141,9 +150,9 @@ class AnthropicProvider extends StreamingProviderBase {
           completionTokens: outputTokens,
           cachedTokens: cacheReadTokens,
           cacheWriteTokens: cacheCreationTokens,
-          // Anthropic 的 usage 总是携带 cache_read/cache_creation 字段
-          //（未命中时为 0），因此 0 命中可以如实解读为“未命中”。
-          cacheStatsReported: true));
+          usageReported: usageReported,
+          // Compatible endpoints may omit cache fields entirely.
+          cacheStatsReported: cacheStatsReported));
       events.add(CompletedEvent(stopReason: stopReason));
       return events;
     }
@@ -210,8 +219,8 @@ class AnthropicProvider extends StreamingProviderBase {
 
     // Older Claude 4.5 models use manual extended thinking.  Newer Claude
     // 4.6+ / 5 models use adaptive thinking and reject `type: enabled`.
-    final thinking = _buildThinking(request.model,
-        request.reasoningEffort, maxTokens: request.maxTokens);
+    final thinking = _buildThinking(request.model, request.reasoningEffort,
+        maxTokens: request.maxTokens);
     final isAdaptiveThinking = thinking?['type'] == 'adaptive';
     return {
       'model': request.model,
@@ -350,8 +359,8 @@ class AnthropicProvider extends StreamingProviderBase {
   ///
   /// The budget is capped below [maxTokens] because Anthropic rejects a
   /// request when the two values are equal or the budget is larger.
-  static Map<String, dynamic>? _buildThinking(String model,
-      ReasoningEffort effort,
+  static Map<String, dynamic>? _buildThinking(
+      String model, ReasoningEffort effort,
       {required int maxTokens}) {
     if (effort == ReasoningEffort.auto ||
         effort == ReasoningEffort.off ||
@@ -391,18 +400,19 @@ class AnthropicProvider extends StreamingProviderBase {
   }
 
   static bool _supportsThinking(String model) {
-    final normalized = model.toLowerCase().replaceAll('.', '-').replaceAll('_', '-');
+    final normalized =
+        model.toLowerCase().replaceAll('.', '-').replaceAll('_', '-');
     return RegExp(r'claude-(?:opus|sonnet|haiku)-(?:4|5)(?:-|$)')
         .hasMatch(normalized);
   }
 
   static bool _usesAdaptiveThinking(String model) {
-    final normalized = model.toLowerCase().replaceAll('.', '-').replaceAll('_', '-');
+    final normalized =
+        model.toLowerCase().replaceAll('.', '-').replaceAll('_', '-');
     return normalized.contains('4-6') ||
         normalized.contains('4-7') ||
         normalized.contains('4-8') ||
-        RegExp(r'claude-(?:opus|sonnet|haiku)-5(?:-|$)')
-            .hasMatch(normalized);
+        RegExp(r'claude-(?:opus|sonnet|haiku)-5(?:-|$)').hasMatch(normalized);
   }
 }
 

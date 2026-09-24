@@ -15,7 +15,11 @@ class UpdateService {
   static const _apkName = 'nexus_update.apk';
   static const _partName = 'nexus_update.apk.part';
 
-  final Dio _dio = Dio();
+  /// [dio] 可注入是为了让「下载 → 校验 → 安装」这条安全关键路径可测：此前
+  /// Dio 写死在字段里，导致该分支只能靠人工在真机上验，覆盖率长期停在 19%。
+  UpdateService({Dio? dio}) : _dio = dio ?? Dio();
+
+  final Dio _dio;
 
   /// Returns whether a newer GitHub release with an APK is available.
   Future<UpdateCheckResult> checkUpdate() async {
@@ -119,24 +123,38 @@ class UpdateService {
 
   /// Downloads and starts the platform installer. The bool API is kept for
   /// callers that only need to know whether the installer was launched.
+  ///
+  /// 校验参数必须显式转发：这个便利入口曾经既不收也不传 [expectedSha256]，
+  /// 于是任何走它的调用方都会在「只验 ZIP 魔数」的状态下安装一个 APK。
   Future<bool> downloadAndInstall(
     String url, {
     void Function(double progress)? onProgress,
+    String? expectedSha256,
+    bool requireSha256 = true,
   }) async {
     final result = await downloadAndInstallDetailed(
       url,
       onProgress: onProgress,
+      expectedSha256: expectedSha256,
+      requireSha256: requireSha256,
     );
     return result.success;
   }
 
   /// Downloads to a temporary file, validates the APK header, then atomically
   /// moves it to the final path before asking Android to install it.
+  ///
+  /// [requireSha256] 默认 true（fail-closed）。安装 APK 是本应用能发起的最高
+  /// 权限动作，「没有摘要」必须被当作失败，而不是「跳过校验继续装」。
+  ///
+  /// 应用自更新这条路总是有摘要：`checkForUpdate` 在摘要缺失时就已经返回失败，
+  /// 界面也显式传了 true，所以这个默认值不会改变它的行为。只有确实拿不到可信
+  /// 摘要的第三方来源才该显式传 false，并且调用方必须自己把风险告诉用户。
   Future<UpdateInstallResult> downloadAndInstallDetailed(
     String url, {
     void Function(double progress)? onProgress,
     String? expectedSha256,
-    bool requireSha256 = false,
+    bool requireSha256 = true,
   }) async {
     if (kIsWeb) {
       return const UpdateInstallResult.failure('Web 平台不支持应用内更新');
@@ -153,8 +171,11 @@ class UpdateService {
     try {
       final dir = await getApplicationSupportDirectory();
       await dir.create(recursive: true);
-      final apkFile = File('${dir.path}${Platform.pathSeparator}$_apkName');
-      partFile = File('${dir.path}${Platform.pathSeparator}$_partName');
+      final updates = Directory('${dir.path}${Platform.pathSeparator}updates');
+      await updates.create(recursive: true);
+      final apkFile =
+          File('${updates.path}${Platform.pathSeparator}$_apkName');
+      partFile = File('${updates.path}${Platform.pathSeparator}$_partName');
 
       if (await partFile.exists()) {
         await partFile.delete();
@@ -183,11 +204,17 @@ class UpdateService {
         return const UpdateInstallResult.failure('下载的更新文件无效，请重试');
       }
       final normalizedExpectedSha256 = _normalizeSha256(expectedSha256);
+      String? reportedSha256;
       if (normalizedExpectedSha256 != null) {
         final actual = await _sha256(partFile);
         if (actual != normalizedExpectedSha256) {
           return const UpdateInstallResult.failure('更新文件校验失败，请重新检测更新');
         }
+        reportedSha256 = actual;
+      } else {
+        // 未校验路径同样算出实测摘要：调用方要把它显示给用户自行核对，
+        // 否则「不校验」就等于「完全不知道装进去的是什么文件」。
+        reportedSha256 = await _sha256(partFile);
       }
 
       if (await apkFile.exists()) {
@@ -200,7 +227,7 @@ class UpdateService {
         'installApk',
         {'path': apkFile.path},
       );
-      final result = _parseInstallResult(raw);
+      final result = _parseInstallResult(raw, sha256: reportedSha256);
       if (!result.success && result.message == null) {
         return const UpdateInstallResult.failure('系统安装器未能启动，请重试');
       }
@@ -248,11 +275,16 @@ class UpdateService {
     return digest.toString();
   }
 
-  static UpdateInstallResult _parseInstallResult(dynamic raw) {
-    if (raw == true) return const UpdateInstallResult.started();
+  static UpdateInstallResult _parseInstallResult(
+    dynamic raw, {
+    String? sha256,
+  }) {
+    if (raw == true) return UpdateInstallResult.started(sha256: sha256);
     if (raw is Map) {
       final status = raw['status']?.toString();
-      if (status == 'started') return const UpdateInstallResult.started();
+      if (status == 'started') {
+        return UpdateInstallResult.started(sha256: sha256);
+      }
       if (status == 'permission_required') {
         return const UpdateInstallResult.permissionRequired();
       }
@@ -364,9 +396,11 @@ class UpdateInstallResult {
     required this.success,
     this.permissionRequired = false,
     this.message,
+    this.sha256,
   });
 
-  const UpdateInstallResult.started() : this._(success: true);
+  const UpdateInstallResult.started({String? sha256})
+      : this._(success: true, sha256: sha256);
 
   const UpdateInstallResult.permissionRequired()
       : this._(
@@ -381,4 +415,10 @@ class UpdateInstallResult {
   final bool success;
   final bool permissionRequired;
   final String? message;
+
+  /// 下载文件的 SHA-256 实测值。
+  ///
+  /// 校验通过时它就是用于比对的期望值；调用方显式关闭校验时它依然被算出，
+  /// 用于把「即将安装的是哪个文件」告诉用户自行核对。
+  final String? sha256;
 }

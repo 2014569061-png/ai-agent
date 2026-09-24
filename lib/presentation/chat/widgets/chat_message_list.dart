@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../../../domain/models.dart';
+import '../../../domain/history_load_result.dart';
+import '../../motion/motion_preferences.dart';
+import '../../motion/nexus_motion.dart';
 import 'message_bubble.dart';
 
 /// 长会话消息列表：完整消息仍由上层持有，列表只按窗口构建可见消息。
@@ -12,10 +15,13 @@ class ChatMessageList extends StatefulWidget {
     required this.messages,
     required this.controller,
     required this.running,
+    this.runProgress,
     required this.onLongPress,
     required this.onRegenerate,
+    this.onStop,
     this.onEditPrompt,
     this.onSwitchModel,
+    this.onResumeRun,
     this.onSpeak,
     this.speakingListenable,
     this.selectionIndex,
@@ -24,16 +30,22 @@ class ChatMessageList extends StatefulWidget {
     this.sessionKey,
     this.liveReply,
     this.onLoadOlder,
+    this.onLoadHistory,
     this.padding,
   });
 
   final List<ChatMessage> messages;
   final ScrollController controller;
   final bool running;
+  final ChatRunProgress? runProgress;
   final ValueChanged<int> onLongPress;
   final VoidCallback onRegenerate;
+  final VoidCallback? onStop;
   final VoidCallback? onEditPrompt;
   final VoidCallback? onSwitchModel;
+
+  /// 暂停提示卡上的「继续执行」（从断点续跑）。
+  final VoidCallback? onResumeRun;
 
   /// 长按朗读（G1）：仅助手消息、且平台支持 TTS 时非空。
   final ValueChanged<int>? onSpeak;
@@ -49,18 +61,21 @@ class ChatMessageList extends StatefulWidget {
   /// 内存窗口耗尽（_start 到 0）后向 DB 拉更早一页的回调（B-2 键集分页）。
   /// 返回 true 表示有新页已前插进 [messages]；null/false 表示无更早或未接线。
   final Future<bool> Function()? onLoadOlder;
+  final Future<HistoryLoadResult> Function()? onLoadHistory;
 
   final EdgeInsetsGeometry? padding;
 
   @override
-  State<ChatMessageList> createState() => _ChatMessageListState();
+  State<ChatMessageList> createState() => ChatMessageListState();
 }
 
-class _ChatMessageListState extends State<ChatMessageList> {
+class ChatMessageListState extends State<ChatMessageList> {
   static const _initialWindow = 40;
   static const _pageSize = 20;
   late int _start;
   bool _loadingOlder = false;
+  int _loadEpoch = 0;
+  final Set<int> _enteringMessageIndices = <int>{};
 
   @override
   void initState() {
@@ -72,8 +87,22 @@ class _ChatMessageListState extends State<ChatMessageList> {
   @override
   void didUpdateWidget(covariant ChatMessageList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final sessionChanged =
-        widget.sessionKey != null && widget.sessionKey != oldWidget.sessionKey;
+    final sessionChanged = widget.sessionKey != oldWidget.sessionKey;
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller.removeListener(_onScroll);
+      widget.controller.addListener(_onScroll);
+      if (!sessionChanged) _loadEpoch++;
+      _loadingOlder = false;
+    }
+    if (sessionChanged) {
+      _loadEpoch++;
+      _loadingOlder = false;
+      _dbExhausted = false;
+      _messageKeys.clear();
+    } else if (!identical(widget.messages, oldWidget.messages)) {
+      final retainedIds = widget.messages.map((message) => message.id).toSet();
+      _messageKeys.removeWhere((id, _) => !retainedIds.contains(id));
+    }
     final countDecreased = widget.messages.length < oldWidget.messages.length;
     // DB「加载更早」会把新页前插：窗口起点同步前移，才能保持同一条消息的
     // 全局索引（= ValueKey）恒定、Element 继续复用。用 identical 识别前插，
@@ -84,9 +113,20 @@ class _ChatMessageListState extends State<ChatMessageList> {
         widget.messages.length > delta &&
         identical(widget.messages[delta], oldWidget.messages[0]);
     if (sessionChanged || countDecreased) {
+      _enteringMessageIndices.clear();
       _resetWindow();
     } else if (prepended) {
       _start += delta;
+    } else if (delta > 0 &&
+        (widget.running || oldWidget.running) &&
+        delta <= 2) {
+      // 仅给本轮运行中新追加的消息播放一次。历史加载、分页前插和流式
+      // 文本更新均不进这里，避免用户阅读中的内容反复闪动。
+      for (var index = oldWidget.messages.length;
+          index < widget.messages.length;
+          index++) {
+        _enteringMessageIndices.add(index);
+      }
     }
   }
 
@@ -102,6 +142,44 @@ class _ChatMessageListState extends State<ChatMessageList> {
   }
 
   bool _dbExhausted = false;
+  final Map<String, GlobalKey> _messageKeys = {};
+
+  void scrollToMessageId(String? messageId) {
+    if (messageId == null) {
+      if (widget.controller.hasClients) {
+        final duration = MotionPreferences.adjustDuration(
+            context, NexusMotion.base,
+            listen: false);
+        final target = widget.controller.position.maxScrollExtent;
+        if (duration == Duration.zero) {
+          widget.controller.jumpTo(target);
+        } else {
+          widget.controller.animateTo(target,
+              duration: duration, curve: NexusMotion.curveStandard);
+        }
+      }
+      return;
+    }
+    final index =
+        widget.messages.indexWhere((message) => message.id == messageId);
+    if (index < 0) {
+      scrollToMessageId(null);
+      return;
+    }
+    if (index < _start) setState(() => _start = index);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _messageKeys[messageId]?.currentContext;
+      if (mounted && target != null) {
+        Scrollable.ensureVisible(
+          target,
+          duration: MotionPreferences.adjustDuration(context, NexusMotion.base,
+              listen: false),
+          curve: NexusMotion.curveStandard,
+          alignment: 0.15,
+        );
+      }
+    });
+  }
 
   void _onScroll() {
     if (!widget.controller.hasClients ||
@@ -111,11 +189,16 @@ class _ChatMessageListState extends State<ChatMessageList> {
     }
     if (_start == 0) {
       // 内存窗口已全部展示：转 DB 键集翻页（未接线或已到底则静默停止）。
-      if (widget.onLoadOlder == null || _dbExhausted) return;
+      if ((widget.onLoadOlder == null && widget.onLoadHistory == null) ||
+          _dbExhausted) {
+        return;
+      }
       _fetchOlderFromDb();
       return;
     }
     _loadingOlder = true;
+    final epoch = _loadEpoch;
+    final controller = widget.controller;
     final oldStart = _start;
     final oldExtent = widget.controller.position.maxScrollExtent;
     final oldPixels = widget.controller.position.pixels;
@@ -123,7 +206,10 @@ class _ChatMessageListState extends State<ChatMessageList> {
       _start = (oldStart - _pageSize).clamp(0, oldStart);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && widget.controller.hasClients) {
+      if (!mounted || epoch != _loadEpoch || controller != widget.controller) {
+        return;
+      }
+      if (controller.hasClients) {
         final newExtent = widget.controller.position.maxScrollExtent;
         final delta = newExtent - oldExtent;
         if (delta > 0) {
@@ -137,30 +223,42 @@ class _ChatMessageListState extends State<ChatMessageList> {
 
   Future<void> _fetchOlderFromDb() async {
     _loadingOlder = true;
-    final oldExtent = widget.controller.hasClients
-        ? widget.controller.position.maxScrollExtent
-        : 0.0;
-    final oldPixels =
-        widget.controller.hasClients ? widget.controller.position.pixels : 0.0;
-    bool hadMore;
+    final epoch = _loadEpoch;
+    final controller = widget.controller;
+    final oldExtent =
+        controller.hasClients ? controller.position.maxScrollExtent : 0.0;
+    final oldPixels = controller.hasClients ? controller.position.pixels : 0.0;
     try {
-      hadMore = await widget.onLoadOlder!();
-    } catch (_) {
-      hadMore = false;
-    }
-    if (!mounted) return;
-    if (!hadMore) {
-      setState(() => _dbExhausted = true);
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !widget.controller.hasClients) return;
-      final delta = widget.controller.position.maxScrollExtent - oldExtent;
-      if (delta > 0) {
-        widget.controller.jumpTo((oldPixels + delta)
-            .clamp(0.0, widget.controller.position.maxScrollExtent));
+      final result = widget.onLoadHistory != null
+          ? await widget.onLoadHistory!()
+          : (await widget.onLoadOlder!()
+              ? HistoryLoadResult.loaded
+              : HistoryLoadResult.exhausted);
+      if (!mounted || epoch != _loadEpoch || controller != widget.controller) {
+        return;
       }
-      if (mounted) _loadingOlder = false;
-    });
+      if (result == HistoryLoadResult.exhausted) {
+        setState(() => _dbExhausted = true);
+      }
+      if (result != HistoryLoadResult.loaded) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            epoch != _loadEpoch ||
+            controller != widget.controller ||
+            !controller.hasClients) {
+          return;
+        }
+        final delta = controller.position.maxScrollExtent - oldExtent;
+        if (delta > 0) {
+          controller.jumpTo((oldPixels + delta)
+              .clamp(0.0, controller.position.maxScrollExtent));
+        }
+      });
+    } catch (_) {
+      // A load failure is retryable; it must never mark the database exhausted.
+    } finally {
+      if (mounted && epoch == _loadEpoch) _loadingOlder = false;
+    }
   }
 
   @override
@@ -193,30 +291,208 @@ class _ChatMessageListState extends State<ChatMessageList> {
                 elapsed: storedMessage.elapsed,
                 ttft: storedMessage.ttft,
                 reasoning: live.reasoning,
+                reasoningDuration: storedMessage.reasoningDuration,
               )
             : storedMessage;
-        return MessageBubble(
-          // 用全局索引（= _start + localIndex）作 key：窗口只会改变 localIndex
-          // （加载更早消息时 _start 前移），同一条消息的全局索引恒定，因此该 key
-          // 跨重建稳定，可让 Element 复用、避免整屏气泡重建。
-          key: ValueKey<int>(index),
+        final shouldAnimate = _enteringMessageIndices.contains(index);
+        final isLast = index == widget.messages.length - 1;
+        final selecting = widget.selectionIndex == index;
+        final bubble = MessageBubble(
           message: message,
-          isLast: index == widget.messages.length - 1,
+          isLast: isLast,
           running: widget.running,
+          runProgress: widget.runProgress,
           onLongPress: () => widget.onLongPress(index),
-          onRegenerate: widget.onRegenerate,
-          onEditPrompt: widget.onEditPrompt,
-          onSwitchModel: widget.onSwitchModel,
+          // Cached bubbles must dispatch to the current parent callbacks.
+          onRegenerate: () => widget.onRegenerate(),
+          onStop: widget.onStop == null ? null : () => widget.onStop?.call(),
+          onEditPrompt: widget.onEditPrompt == null
+              ? null
+              : () => widget.onEditPrompt?.call(),
+          onSwitchModel: widget.onSwitchModel == null
+              ? null
+              : () => widget.onSwitchModel?.call(),
+          onResumeRun: widget.onResumeRun == null
+              ? null
+              : () => widget.onResumeRun?.call(),
           // 朗读只对助手正文开放（工具气泡与用户消息不提供该读屏动作）。
           onSpeak:
               message.role == MessageRole.assistant && widget.onSpeak != null
-                  ? () => widget.onSpeak!(index)
+                  ? () => widget.onSpeak?.call(index)
                   : null,
           speakingListenable: widget.speakingListenable,
-          selecting: widget.selectionIndex == index,
-          onExitSelection: widget.onExitSelection,
+          selecting: selecting,
+          onExitSelection: widget.onExitSelection == null
+              ? null
+              : () => widget.onExitSelection?.call(),
+        );
+        final liveIndex = live?.messageIndex;
+        final child = liveIndex == index
+            ? bubble
+            : _StableHistoryBubble(
+                signature: (
+                  // ChatMessage is replaced via copyWith when content/metadata
+                  // changes. Identity covers attachments, tool arguments and
+                  // usage too, without rescanning historical Markdown each frame.
+                  storedMessage,
+                  widget.sessionKey,
+                  index,
+                  isLast,
+                  selecting,
+                  widget.running,
+                  isLast ? widget.runProgress : null,
+                  widget.onStop != null,
+                  widget.onEditPrompt != null,
+                  widget.onSwitchModel != null,
+                  widget.onResumeRun != null,
+                  widget.onSpeak != null,
+                  widget.onExitSelection != null,
+                  widget.speakingListenable,
+                  Theme.of(context),
+                  MediaQuery.textScalerOf(context),
+                ),
+                child: bubble,
+              );
+        return _MessageEntrance(
+          key: message.id == null
+              ? ValueKey<int>(index)
+              : _messageKeys.putIfAbsent(message.id!, GlobalKey.new),
+          animate: shouldAnimate,
+          onCompleted: shouldAnimate
+              ? () {
+                  if (mounted) {
+                    setState(() => _enteringMessageIndices.remove(index));
+                  }
+                }
+              : null,
+          child: child,
         );
       },
+    );
+  }
+}
+
+/// 历史气泡在 liveReply 刷新时保持同一个 child。
+/// 签名不变就跳过 Markdown 重建；正在流式输出的那一条不走这里。
+class _StableHistoryBubble extends StatefulWidget {
+  const _StableHistoryBubble({
+    required this.signature,
+    required this.child,
+  });
+
+  final Object signature;
+  final Widget child;
+
+  @override
+  State<_StableHistoryBubble> createState() => _StableHistoryBubbleState();
+}
+
+class _StableHistoryBubbleState extends State<_StableHistoryBubble> {
+  late Widget _child;
+  late Object _signature;
+
+  @override
+  void initState() {
+    super.initState();
+    _child = widget.child;
+    _signature = widget.signature;
+  }
+
+  @override
+  void didUpdateWidget(covariant _StableHistoryBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.signature != _signature) {
+      _signature = widget.signature;
+      _child = widget.child;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _child;
+}
+
+/// A one-shot entrance for a newly appended live message. It deliberately owns
+/// no list layout state, so pagination and streaming updates do not replay it.
+class _MessageEntrance extends StatefulWidget {
+  const _MessageEntrance({
+    super.key,
+    required this.animate,
+    required this.child,
+    this.onCompleted,
+  });
+
+  final bool animate;
+  final Widget child;
+  final VoidCallback? onCompleted;
+
+  @override
+  State<_MessageEntrance> createState() => _MessageEntranceState();
+}
+
+class _MessageEntranceState extends State<_MessageEntrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: NexusMotion.base,
+    );
+    _controller.value = widget.animate ? 0.0 : 1.0;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration = MotionPreferences.adjustDuration(
+      context,
+      NexusMotion.base,
+    );
+    if (!widget.animate || MotionPreferences.shouldReduceMotion(context)) {
+      _controller
+        ..stop()
+        ..value = 1.0;
+    } else if (_controller.value == 0.0 && !_controller.isAnimating) {
+      _controller.forward().whenComplete(widget.onCompleted ?? () {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _MessageEntrance oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.animate) {
+      _controller
+        ..stop()
+        ..value = 1.0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.animate) {
+      return widget.child;
+    }
+    final curve = CurvedAnimation(
+      parent: _controller,
+      curve: NexusMotion.curveEnter,
+    );
+    return FadeTransition(
+      opacity: curve,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.025),
+          end: Offset.zero,
+        ).animate(curve),
+        child: widget.child,
+      ),
     );
   }
 }

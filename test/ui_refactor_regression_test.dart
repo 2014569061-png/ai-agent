@@ -3,8 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage_platform_interface/flutter_secure_storage_platform_interface.dart';
 import 'package:mobile_agent/domain/models.dart';
+import 'package:mobile_agent/domain/context_insights.dart';
+import 'package:mobile_agent/domain/session_metrics.dart';
 import 'package:mobile_agent/presentation/chat/widgets/capsule_top_bar.dart';
+import 'package:mobile_agent/presentation/chat/widgets/chat_message_list.dart';
 import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.dart';
+import 'package:mobile_agent/presentation/chat/widgets/session_metrics_sheet.dart';
 import 'package:mobile_agent/presentation/settings/provider_list_page.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 import 'package:mobile_agent/presentation/widgets/empty_state_view.dart';
@@ -141,6 +145,90 @@ void main() {
         expect(find.text('模型提供商'), findsOneWidget);
       });
     }
+  });
+
+  group('Chat textScale 1.3 overflow guards', () {
+    testWidgets('chat message column fits 360x800', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final controller = ScrollController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light(),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(360, 800))
+              .copyWith(textScaler: const TextScaler.linear(1.3)),
+          child: Scaffold(
+            body: ChatMessageList(
+              messages: [
+                ChatMessage(
+                  role: MessageRole.user,
+                  parts: const [
+                    MessagePart.text('请分析这个较长的问题，并给出清晰、完整且可执行的建议。')
+                  ],
+                ),
+                ChatMessage(
+                  role: MessageRole.assistant,
+                  parts: const [MessagePart.text('这是用于验证大字号聊天主列布局的较长回复内容。')],
+                ),
+              ],
+              controller: controller,
+              running: false,
+              onLongPress: (_) {},
+              onRegenerate: () {},
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('session metrics sheet fits 360x800', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final snapshot = ContextSnapshot(
+        parts: const [ContextPart(type: ContextPartType.user, tokens: 20000)],
+        usedTokens: 20000,
+        contextWindow: 32000,
+        reservedOutputTokens: 2048,
+        updatedAt: DateTime(2026),
+      );
+
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.light(),
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(360, 800))
+              .copyWith(textScaler: const TextScaler.linear(1.3)),
+          child: Scaffold(
+            body: SessionMetricsSheet(
+              metrics: const SessionMetrics(
+                rounds: 2,
+                steps: 3,
+                llmTime: Duration(seconds: 12),
+                toolTime: Duration(seconds: 3),
+                avgTtft: Duration(seconds: 1),
+                tokensPerSecond: 42,
+                cacheHitRate: .3,
+                promptTokens: 20000,
+                completionTokens: 1000,
+              ),
+              liveContextTokens: 20000,
+              contextLimit: 32000,
+              contextSnapshot: snapshot,
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.bySemanticsLabel('关闭会话指标'), findsOneWidget);
+    });
   });
 
   group('Touch target size regression tests (>= 48x48)', () {

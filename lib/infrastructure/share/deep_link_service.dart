@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 ///
 /// 这三个 host 同时被「长按图标的应用快捷方式」使用（见
 /// android/app/src/main/res/xml/shortcuts.xml），因此改这里等于改系统级入口的行为。
-class DeepLinkService {
+class DeepLinkService extends ChangeNotifier {
   DeepLinkService._();
 
   static final DeepLinkService instance = DeepLinkService._();
@@ -24,15 +24,20 @@ class DeepLinkService {
     if (uri.scheme != 'nexus') return;
     switch (uri.host) {
       case 'new-chat':
-        pendingPrompt = uri.queryParameters['prompt'];
+        pendingPrompt = uri.queryParameters['prompt'] ?? '';
       case 'new-agent':
         pendingNewAgent = true;
       case 'memory':
         pendingMemory = true;
       default:
-        pendingPrompt = uri.queryParameters['prompt'];
+        // 未知 host 不能当成提示词预填。否则 nexus://evil?prompt= 会注入输入框。
+        return;
     }
+    notifyListeners();
   }
+
+  bool get hasPending =>
+      pendingPrompt != null || pendingNewAgent || pendingMemory;
 
   String? drainPrompt() {
     final p = pendingPrompt;

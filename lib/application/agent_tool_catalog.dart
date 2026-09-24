@@ -4,6 +4,7 @@ import '../infrastructure/database/database_provider.dart';
 import '../infrastructure/mcp/mcp_tool_provider.dart';
 import '../infrastructure/plugins/plugin_store.dart';
 import '../infrastructure/tools/core_tools.dart';
+import '../infrastructure/tools/skill_tools.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import 'mcp_service.dart';
 
@@ -26,11 +27,15 @@ Future<List<AgentTool>> loadAvailableAgentTools(
     WebSearchTool(apiKey: ''),
   ];
 
+  AppDatabase? db;
   try {
-    final db = await (database ?? DatabaseProvider.instance.database);
+    db = await (database ?? DatabaseProvider.instance.database);
+    // Skill 读取是只读的核心能力，编辑器和运行时都应看到同一份目录。
+    tools.add(SkillsReadTool(database: db));
+    tools.add(SkillsReadResourceTool(database: db));
     tools.addAll(await PluginStore().loadDeclarativeTools(db));
   } catch (_) {
-    // 插件读取失败不影响内置工具可用。
+    // 数据库/插件读取失败不影响其它内置工具可用。
   }
 
   final provider = McpToolProvider();

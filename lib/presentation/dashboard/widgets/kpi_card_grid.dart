@@ -17,9 +17,9 @@ class KpiCardGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasTokenData = kpis.todayTokens > 0;
+    final cacheRate = kpis.cacheHitRate;
     final cachePct =
-        hasTokenData ? (kpis.cacheHitRate * 100).toStringAsFixed(0) : null;
+        cacheRate == null ? null : (cacheRate * 100).toStringAsFixed(0);
     final successRate = kpis.taskSuccessRate;
     final successColor = successRate == null
         ? null
@@ -62,7 +62,6 @@ class KpiCardGrid extends StatelessWidget {
                 color: cachePct == null
                     ? null
                     : (int.parse(cachePct) >= 30 ? AppPalette.success : null),
-                onTap: () {},
               ),
             ),
 

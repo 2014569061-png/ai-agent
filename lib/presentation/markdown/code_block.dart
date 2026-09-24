@@ -1,9 +1,11 @@
+import 'dart:async';
+import '../motion/nexus_haptics.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import 'markdown_render_metrics.dart';
@@ -14,10 +16,10 @@ import 'markdown_render_metrics.dart';
 /// 基础高亮，无需引入重量级高亮库。
 class SimpleSyntaxHighlighter implements SyntaxHighlighter {
   const SimpleSyntaxHighlighter({
-    this.keywordColor = const Color(0xFFA626A4),
-    this.stringColor = const Color(0xFF50A14F),
-    this.commentColor = const Color(0xFF9DA0A6),
-    this.numberColor = const Color(0xFF986801),
+    this.keywordColor = AppSyntaxPalette.lightKeyword,
+    this.stringColor = AppSyntaxPalette.lightString,
+    this.commentColor = AppSyntaxPalette.lightComment,
+    this.numberColor = AppSyntaxPalette.lightNumber,
   });
 
   final Color keywordColor;
@@ -196,21 +198,23 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   // 都重新构造 SimpleSyntaxHighlighter（原先在 build 内 new，每帧一个实例）。
   static const SimpleSyntaxHighlighter _lightHighlighter =
       SimpleSyntaxHighlighter(
-    keywordColor: Color(0xFFA626A4),
-    stringColor: Color(0xFF50A14F),
-    commentColor: Color(0xFF9DA0A6),
-    numberColor: Color(0xFF986801),
+    keywordColor: AppSyntaxPalette.lightKeyword,
+    stringColor: AppSyntaxPalette.lightString,
+    commentColor: AppSyntaxPalette.lightComment,
+    numberColor: AppSyntaxPalette.lightNumber,
   );
   static const SimpleSyntaxHighlighter _darkHighlighter =
       SimpleSyntaxHighlighter(
-    keywordColor: Color(0xFFC678DD),
-    stringColor: Color(0xFF98C379),
-    commentColor: Color(0xFF5C6773),
-    numberColor: Color(0xFFD19A66),
+    keywordColor: AppSyntaxPalette.darkKeyword,
+    stringColor: AppSyntaxPalette.darkString,
+    commentColor: AppSyntaxPalette.darkComment,
+    numberColor: AppSyntaxPalette.darkNumber,
   );
 
   bool _highlighted = false;
   bool _codeMetricRecorded = false;
+  bool _copied = false;
+  Timer? _copyTimer;
   TextSpan? _highlightedSpan;
   ScrollPosition? _scrollPosition;
 
@@ -270,6 +274,7 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
 
   @override
   void dispose() {
+    _copyTimer?.cancel();
     _detachScrollListener();
     super.dispose();
   }
@@ -299,7 +304,7 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
         border: Border.all(color: border, width: 0.8),
       ),
       child: Column(
@@ -320,10 +325,10 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                 Text(
                   _formatHeaderTitle(widget.language, isDiff),
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTokens.fontSizeFootnote,
                     color: isDiff ? (dark ? Colors.white : AppPalette.lightText) : headerText,
                     fontWeight: FontWeight.w600,
-                    fontFamily: 'monospace',
+                    fontFamily: AppTokens.fontFamilyMono,
                   ),
                 ),
                 const Spacer(),
@@ -333,9 +338,14 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                     borderRadius:
                         BorderRadius.circular(AppTokens.radiusControl),
                     onTap: () {
-                      HapticFeedback.lightImpact();
+                      NexusHaptics.light(context);
                       Clipboard.setData(ClipboardData(text: trimmed));
                       FloatingToast.show(context, '代码已复制');
+                      _copyTimer?.cancel();
+                      setState(() => _copied = true);
+                      _copyTimer = Timer(AppTokens.durationFast * 10, () {
+                        if (mounted) setState(() => _copied = false);
+                      });
                     },
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -343,11 +353,20 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.copy_rounded, size: 13, color: headerText),
+                          Icon(
+                            _copied ? Icons.check_rounded : Icons.copy_rounded,
+                            size: 13,
+                            color: _copied ? AppPalette.success : headerText,
+                          ),
                           const SizedBox(width: 4),
-                          Text('复制',
-                              style:
-                                  TextStyle(fontSize: 11.5, color: headerText)),
+                          Text(
+                            _copied ? '已复制' : '复制',
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeSubcaption,
+                              fontWeight: _copied ? FontWeight.w500 : FontWeight.w400,
+                              color: _copied ? AppPalette.success : headerText,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -358,16 +377,40 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
           ),
           isDiff
               ? _buildDiffView(trimmed, codeColor, dark)
-              : Scrollbar(
-                  thumbVisibility: false,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.all(12),
-                    child: _highlighted
-                        ? _buildHighlighted(
-                            highlighter, trimmed, codeColor, longFallback)
-                        : _buildPlain(trimmed, codeColor),
-                  ),
+              : Stack(
+                  children: [
+                    Scrollbar(
+                      thumbVisibility: false,
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.all(12),
+                        child: _highlighted
+                            ? _buildHighlighted(
+                                highlighter, trimmed, codeColor, longFallback)
+                            : _buildPlain(trimmed, codeColor),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      bottom: 0,
+                      right: 0,
+                      width: 16,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.centerLeft,
+                              end: Alignment.centerRight,
+                              colors: [
+                                background.withValues(alpha: 0.0),
+                                background.withValues(alpha: 0.65),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
         ],
       ),
@@ -387,7 +430,7 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   Widget _buildDiffView(String code, Color codeColor, bool isDark) {
     final lines = code.split('\n');
     return Container(
-      color: isDark ? const Color(0xFF090D14) : const Color(0xFFF8FAFC),
+      color: isDark ? AppPalette.terminalBg : AppPalette.lightSurface,
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -408,7 +451,7 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
               : isRemove
                   ? AppPalette.diffRemovedText
                   : isHeader
-                      ? (isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB))
+                      ? (isDark ? AppPalette.darkBrandHover : AppPalette.brand)
                       : codeColor;
 
           return Container(

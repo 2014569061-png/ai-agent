@@ -79,6 +79,18 @@ void main() {
     expect(DateTime.tryParse(stamp!), isNotNull);
   });
 
+  test('concurrent backup publication uses unique complete files', () async {
+    final root = await Directory.systemTemp.createTemp('nexus-publish-');
+    addTearDown(() => root.delete(recursive: true));
+    final paths = await Future.wait(
+        List.generate(8, (i) => publishAutomaticBackup(root, 'encrypted-$i')));
+    expect(paths.toSet(), hasLength(8));
+    for (var i = 0; i < paths.length; i++) {
+      expect(await File(paths[i]).readAsString(), 'encrypted-$i');
+    }
+    expect(root.listSync().whereType<Directory>(), isEmpty);
+  });
+
   test('备份保留上限只保留最近的若干份快照', () async {
     final dir = await Directory.systemTemp.createTemp('nexus-backup-prune-');
     addTearDown(() async {

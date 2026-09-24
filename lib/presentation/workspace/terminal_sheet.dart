@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 
 import '../../infrastructure/tools/command_tool.dart';
 import '../terminal/terminal_page.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/floating_toast.dart';
 import 'file_tree_sheet.dart';
 import 'terminal_job_panel.dart';
 
@@ -45,14 +48,15 @@ class _TerminalSheetState extends State<TerminalSheet> {
   @override
   void initState() {
     super.initState();
-    _service =
-        widget.sharedService ?? TerminalCommandService(workspacePath: widget.workspacePath);
+    _service = widget.sharedService ??
+        TerminalCommandService(workspacePath: widget.workspacePath);
     unawaited(_bootstrap());
   }
 
   Future<void> _bootstrap() async {
     final info = await _service.inspectRuntime();
-    final session = await _service.openSession(workingDirectory: widget.workspacePath);
+    final session =
+        await _service.openSession(workingDirectory: widget.workspacePath);
     if (!mounted) return;
     setState(() {
       _sessionId = session.id;
@@ -133,9 +137,10 @@ class _TerminalSheetState extends State<TerminalSheet> {
     _lastSequence = -1;
     setState(() {
       _output = '';
-      _running = !_service.listJobs()
-          .firstWhere((job) => job.jobId == jobId, orElse: () =>
-              const TerminalJobSnapshot(
+      _running = !_service
+          .listJobs()
+          .firstWhere((job) => job.jobId == jobId,
+              orElse: () => const TerminalJobSnapshot(
                   jobId: '', command: '', completed: true))
           .completed;
     });
@@ -155,10 +160,10 @@ class _TerminalSheetState extends State<TerminalSheet> {
     });
   }
 
-  void _cancelJob(String jobId) {
-    unawaited(_service.cancelJob(jobId));
-    if (jobId == _activeJobId && mounted) {
-      setState(() => _running = false);
+  Future<void> _cancelJob(String jobId) async {
+    final stopped = await _service.cancelJob(jobId);
+    if (!stopped && mounted) {
+      FloatingToast.show(context, '运行时无法确认作业已停止，请检查终端输出');
     }
   }
 
@@ -250,8 +255,8 @@ class _TerminalSheetState extends State<TerminalSheet> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 color: theme.brightness == Brightness.dark
-                    ? const Color(0xFF10151D)
-                    : const Color(0xFF17202A),
+                    ? AppPalette.terminalSurface
+                    : AppPalette.terminalSurfaceHover,
                 child: SingleChildScrollView(
                   controller: _scrollController,
                   child: SelectableText(
@@ -259,9 +264,9 @@ class _TerminalSheetState extends State<TerminalSheet> {
                         ? '可运行 git、flutter、dart、python、node 等受限命令'
                         : _output,
                     style: const TextStyle(
-                        color: Color(0xFFE2E8F0),
+                        color: AppPalette.terminalText,
                         fontFamily: 'monospace',
-                        fontSize: 12,
+                        fontSize: AppTokens.fontSizeFootnote,
                         height: 1.4),
                   ),
                 ),

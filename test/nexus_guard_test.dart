@@ -102,6 +102,34 @@ void main() {
     });
   });
 
+  group('NexusGuard.degradeCaught', () {
+    test('把已捕获的异常按降级记录，字段与 degrade 一致', () {
+      Map<String, dynamic>? captured;
+      try {
+        throw StateError('原始失败正文');
+      } catch (error, stackTrace) {
+        NexusGuard.degradeCaught('chat.loadSettings', error, stackTrace,
+            logger: (message, {detail}) => captured = detail);
+      }
+
+      expect(captured!['phase'], 'chat.loadSettings');
+      expect(captured!['errorType'], 'StateError');
+      // 安全约束：异常正文不得进入 detail。
+      expect(captured.toString(), isNot(contains('原始失败正文')));
+    });
+
+    test('与 degrade 共用去重：同一 phase + errorType 只记一次', () {
+      var count = 0;
+      void log(String message, {Map<String, dynamic>? detail}) => count++;
+      for (var i = 0; i < 3; i++) {
+        NexusGuard.degradeCaught(
+            'chat.saveReasoningMode', StateError('x'), StackTrace.current,
+            logger: log);
+      }
+      expect(count, 1);
+    });
+  });
+
   group('NexusGuard.report', () {
     test('影响用户的失败会记录并重新抛出', () {
       Map<String, dynamic>? captured;

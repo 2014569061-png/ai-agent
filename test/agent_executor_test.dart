@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:mobile_agent/application/agent_executor.dart';
 import 'package:mobile_agent/application/context_window.dart';
+import 'package:mobile_agent/application/run_controller.dart';
+import 'package:mobile_agent/domain/context_insights.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/domain/tool_codes.dart';
 import 'package:mobile_agent/domain/tool_result.dart';
@@ -28,6 +30,7 @@ void main() {
     await for (final event in executor.run(
       history: [
         ChatMessage(
+          id: 'input-user',
           role: MessageRole.user,
           parts: [const MessagePart.text('你好')],
         ),
@@ -92,6 +95,47 @@ void main() {
     expect(statuses, isNot(contains(RunStatus.cancelled)));
     expect(rejected?.code, ToolCodes.approvalRejected);
     expect(rejected?.ok, isFalse);
+  });
+
+  test('action-level dangerous approvals override trusted full access',
+      () async {
+    final tool = _ApprovalGateTool();
+    final executor = AgentExecutor(
+      provider: _ApprovalGateProvider(),
+      tools: ToolRegistry()..register(tool),
+    );
+    var approvals = 0;
+    var approvalEvents = 0;
+
+    await for (final event in executor.run(
+      history: [
+        ChatMessage(
+          role: MessageRole.user,
+          parts: [const MessagePart.text('delete')],
+        ),
+      ],
+      model: 'test',
+      approvalMode: ApprovalMode.fullAccess,
+      isToolTrusted: (name, risk) => true,
+      approveTool: (call, risk, sensitive) async {
+        approvals++;
+        expect(risk, ToolRisk.dangerous);
+        expect(call.arguments['_approvalDetails'], isA<Map>());
+        return ToolApproval.allowOnce;
+      },
+    )) {
+      if (event is ApprovalRequiredEvent) {
+        approvalEvents++;
+        expect(event.risk, ToolRisk.dangerous);
+        expect(event.call.arguments['_approvalDetails'], isA<Map>());
+      }
+    }
+
+    expect(approvalEvents, 1);
+    expect(approvals, 1);
+    expect(tool.authorizationCount, 1);
+    expect(tool.executionCount, 1);
+    expect(tool.receivedTicket, isTrue);
   });
 
   test('dangerous sensitive tool always requires approval even in full access',
@@ -270,6 +314,64 @@ void main() {
         isTrue);
   });
 
+  test('emits estimated context changes between model requests', () async {
+    final registry = ToolRegistry()..register(CalculatorTool());
+    final changes = <AgentContextChangeEvent>[];
+    await for (final event in AgentExecutor(
+      provider: _MultiToolProvider(),
+      tools: registry,
+    ).run(
+      history: [
+        ChatMessage(
+            role: MessageRole.user,
+            parts: [const MessagePart.text('calculate')])
+      ],
+      model: 'test',
+    )) {
+      if (event is AgentContextChangeEvent) changes.add(event);
+    }
+
+    expect(changes, isNotEmpty);
+    expect(changes.every((event) => event.step == 2), isTrue);
+    expect(changes.any((event) => event.kind == 'context_inject'), isTrue);
+    expect(changes.any((event) => event.category == 'toolResult'), isTrue);
+  });
+
+  test('applies approved compression before the next model request', () async {
+    final runController = AgentRunController();
+    AgentContextCompressionEvent? compression;
+    ContextSnapshotEvent? compressedSnapshot;
+    await for (final event in AgentExecutor(
+      provider: _LargeToolProvider(),
+      tools: ToolRegistry()..register(_LargeResultTool()),
+    ).run(
+      history: [
+        ChatMessage(
+          id: 'input-user',
+          role: MessageRole.user,
+          parts: const [MessagePart.text('calculate')],
+        ),
+      ],
+      model: 'test',
+      runController: runController,
+    )) {
+      if (event is ToolResultEvent && event.call.id == 'large-result') {
+        expect(runController.queueCompression(['large-result']), isTrue);
+      }
+      if (event is AgentContextCompressionEvent) compression = event;
+      if (event is ContextSnapshotEvent && event.step == 2) {
+        compressedSnapshot = event;
+      }
+    }
+
+    expect(compression, isNotNull);
+    expect(compression!.candidateCount, 1);
+    expect(compression.toolCallIds, ['large-result']);
+    expect(compressedSnapshot?.anchorMessageId, 'input-user');
+    expect(compression.estimatedSavedTokens, greaterThan(0));
+    expect(compressedSnapshot?.snapshot.omittedParts, contains('工具结果'));
+  });
+
   test('rejects tool calls attached to an output-limited model turn', () async {
     final tool = _CountingTool();
     final registry = ToolRegistry()..register(tool);
@@ -383,6 +485,26 @@ void main() {
     expect(request.topP, 0.8);
   });
 
+  test('clamps output reservation to the total context window', () async {
+    final provider = _RecordingProvider();
+    await for (final _ in AgentExecutor(
+      provider: provider,
+      tools: ToolRegistry(),
+    ).run(
+      history: [
+        ChatMessage(
+          role: MessageRole.user,
+          parts: [const MessagePart.text('hi')],
+        ),
+      ],
+      model: 'test',
+      maxTokens: 2000,
+      contextBudgetTokens: 1000,
+    )) {}
+
+    expect(provider.lastRequest?.maxTokens, 1000);
+  });
+
   test('tool execution failure yields a failed result without throwing',
       () async {
     final registry = ToolRegistry()..register(_ExplodingTool());
@@ -410,6 +532,8 @@ void main() {
     final registry = ToolRegistry()..register(CalculatorTool());
     final executor = AgentExecutor(provider: _UsageProvider(), tools: registry);
     AgentUsageEvent? usage;
+    ContextSnapshotEvent? snapshot;
+    AgentStepUsageEvent? stepUsage;
     await for (final event in executor.run(
       history: [
         ChatMessage(
@@ -418,6 +542,8 @@ void main() {
       model: 'test',
     )) {
       if (event is AgentUsageEvent) usage = event;
+      if (event is ContextSnapshotEvent) snapshot = event;
+      if (event is AgentStepUsageEvent) stepUsage = event;
     }
     expect(usage, isNotNull);
     expect(usage!.promptTokens, 100);
@@ -427,6 +553,11 @@ void main() {
     // Provider 返回了 usage 但没有缓存字段：这不算“未命中”。
     expect(usage.usageReported, isTrue);
     expect(usage.cacheStatsReported, isFalse);
+    expect(snapshot?.step, 1);
+    expect(snapshot?.snapshot.usedTokens, greaterThan(0));
+    expect(stepUsage?.step, 1);
+    expect(stepUsage?.usage.promptTokens, 100);
+    expect(stepUsage?.usage.completionTokens, 50);
   });
 
   test('drops older turns once the context budget is exceeded', () async {
@@ -451,6 +582,31 @@ void main() {
             m.text == 'old message that should be dropped'),
         isFalse);
     expect(sent.any((m) => m.text == 'new'), isTrue);
+  });
+
+  test('emits a budget warning before a high-context request', () async {
+    final provider = _RequestRecorderProvider();
+    ContextBudgetWarningEvent? warning;
+    await for (final event in AgentExecutor(
+      provider: provider,
+      tools: ToolRegistry(),
+    ).run(
+      history: [
+        ChatMessage(
+          role: MessageRole.user,
+          parts: [MessagePart.text('x' * 2000)],
+        ),
+      ],
+      model: 'test',
+      contextBudgetTokens: 100,
+    )) {
+      if (event is ContextBudgetWarningEvent) warning = event;
+    }
+
+    expect(warning, isNotNull);
+    expect(warning!.level, ContextBudgetLevel.critical);
+    expect(warning.remainingTokens, 0);
+    expect(provider.requests, isNotEmpty);
   });
 
   test('retries a failed request when nothing has been emitted yet', () async {
@@ -862,6 +1018,39 @@ class _MultiToolProvider implements LlmProvider {
   }
 }
 
+class _LargeToolProvider implements LlmProvider {
+  final requests = <UnifiedRequest>[];
+
+  @override
+  Stream<UnifiedEvent> stream(UnifiedRequest request,
+      {CancelToken? cancelToken}) async* {
+    requests.add(request);
+    if (requests.length == 1) {
+      yield const ToolCallEvent(
+        ToolCall(id: 'large-result', name: 'large_result', arguments: {}),
+      );
+      yield const CompletedEvent(stopReason: StopReason.toolUse);
+      return;
+    }
+    yield const TextDeltaEvent('done');
+    yield const CompletedEvent(stopReason: StopReason.endOfTurn);
+  }
+}
+
+class _LargeResultTool implements AgentTool {
+  @override
+  final manifest = const UnifiedTool(
+    name: 'large_result',
+    description: 'returns a large result for compression tests',
+    parametersSchema: {'type': 'object'},
+    risk: ToolRisk.safe,
+  );
+
+  @override
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async =>
+      ToolResult.text('x' * 4000);
+}
+
 class _ToolLoopProvider implements LlmProvider {
   @override
   Stream<UnifiedEvent> stream(UnifiedRequest request,
@@ -890,6 +1079,90 @@ class _ToolRequestProvider implements LlmProvider {
       {CancelToken? cancelToken}) async* {
     yield const ToolCallEvent(ToolCall(id: '1', name: 'risky', arguments: {}));
     yield const CompletedEvent(stopReason: StopReason.toolUse);
+  }
+}
+
+class _ApprovalGateProvider implements LlmProvider {
+  var _requests = 0;
+
+  @override
+  Stream<UnifiedEvent> stream(
+    UnifiedRequest request, {
+    CancelToken? cancelToken,
+  }) async* {
+    if (_requests++ == 0) {
+      yield const ToolCallEvent(ToolCall(
+        id: 'approval-gate-1',
+        name: 'approval_gate_fixture',
+        arguments: {'action': 'delete', 'planId': 'plan-1'},
+      ));
+      yield const CompletedEvent(stopReason: StopReason.toolUse);
+      return;
+    }
+    yield const TextDeltaEvent('done');
+    yield const CompletedEvent(stopReason: StopReason.endOfTurn);
+  }
+}
+
+class _ApprovalGateTool implements AgentTool, ToolApprovalGate {
+  var authorizationCount = 0;
+  var executionCount = 0;
+  var receivedTicket = false;
+
+  @override
+  final manifest = const UnifiedTool(
+    name: 'approval_gate_fixture',
+    description: 'test action-specific approval',
+    parametersSchema: {
+      'type': 'object',
+      'properties': {
+        'action': {'type': 'string'},
+        'planId': {'type': 'string'},
+      },
+      'required': ['action', 'planId'],
+    },
+    risk: ToolRisk.safe,
+  );
+
+  @override
+  ToolRisk riskForArguments(Map<String, dynamic> arguments) =>
+      arguments['action'] == 'delete' ? ToolRisk.dangerous : ToolRisk.safe;
+
+  @override
+  bool requiresPreviewPlan(Map<String, dynamic> arguments) =>
+      arguments['action'] == 'delete';
+
+  @override
+  Map<String, dynamic>? approvalDetailsFor(
+    Map<String, dynamic> arguments,
+  ) =>
+      arguments['planId'] == 'plan-1'
+          ? {
+              'target': '/data/local/tmp/report.txt',
+              'scope': 'single file',
+              'impact': 'permanent deletion',
+              'command': 'su -c rm',
+              'executionPlan': 'delete only the listed file',
+              'reversible': false,
+            }
+          : null;
+
+  @override
+  Map<String, dynamic> authorizeAfterApproval(
+    Map<String, dynamic> arguments,
+  ) {
+    authorizationCount++;
+    return {...arguments, 'previewId': 'issued-after-approval'};
+  }
+
+  @override
+  void rejectApproval(Map<String, dynamic> arguments) {}
+
+  @override
+  Future<ToolResult> execute(Map<String, dynamic> arguments) async {
+    executionCount++;
+    receivedTicket = arguments['previewId'] == 'issued-after-approval';
+    return ToolResult.text('executed');
   }
 }
 

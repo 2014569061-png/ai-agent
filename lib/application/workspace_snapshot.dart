@@ -115,7 +115,8 @@ class WorkspaceSnapshotService {
 
   Future<String?> currentHash(String workspacePath, String relativePath) async {
     try {
-      final file = File(WorkspaceSandbox(workspacePath).resolvePath(relativePath));
+      final file =
+          File(WorkspaceSandbox(workspacePath).resolvePath(relativePath));
       if (!await file.exists()) return null;
       final bytes = await file.length();
       if (bytes > maxFileBytes) return 'too-large';

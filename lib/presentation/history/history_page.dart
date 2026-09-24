@@ -52,6 +52,11 @@ class _HistoryPageState extends State<HistoryPage> {
   bool _loadingMore = false;
   bool _hasMore = false;
   bool _pagedMode = false;
+  int _reloadGeneration = 0;
+  Timer? _searchDebounce;
+
+  bool get _usesDatabasePages =>
+      widget.loadConversations == null && widget.loadConversationPage == null;
 
   @override
   void initState() {
@@ -60,14 +65,22 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _reload() async {
-    if (mounted) setState(() => _loading = true);
+    _searchDebounce?.cancel();
+    final generation = ++_reloadGeneration;
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _loadingMore = false;
+      });
+    }
     try {
-      final paged = widget.loadConversations == null &&
-          _query.trim().isEmpty &&
-          _filterType == 'all';
+      final paged = _usesDatabasePages ||
+          (widget.loadConversations == null &&
+              _query.trim().isEmpty &&
+              _filterType == 'all');
       final conversations =
           paged ? await _loadPage(offset: 0) : await _loadAll();
-      if (!mounted) return;
+      if (!mounted || generation != _reloadGeneration) return;
       setState(() {
         _conversations = _repairTitles(conversations);
         _pagedMode = paged;
@@ -75,7 +88,7 @@ class _HistoryPageState extends State<HistoryPage> {
         _loading = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _reloadGeneration) return;
       setState(() => _loading = false);
       FloatingToast.error(context, '加载历史会话失败', rawDetail: error.toString());
     }
@@ -92,8 +105,12 @@ class _HistoryPageState extends State<HistoryPage> {
     if (loader != null) {
       return loader(limit: _pageSize, offset: offset);
     }
-    return (await DatabaseProvider.instance.database)
-        .recentConversations(limit: _pageSize, offset: offset);
+    return (await DatabaseProvider.instance.database).searchConversations(
+      query: _query,
+      filter: _filterType,
+      limit: _pageSize,
+      offset: offset,
+    );
   }
 
   List<Conversation> _repairTitles(List<Conversation> conversations) =>
@@ -105,25 +122,31 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Future<void> _loadMore() async {
     if (!_pagedMode || !_hasMore || _loadingMore) return;
+    final generation = _reloadGeneration;
     setState(() => _loadingMore = true);
     try {
       final page = await _loadPage(offset: _conversations.length);
-      if (!mounted) return;
+      if (!mounted || generation != _reloadGeneration) return;
       setState(() {
         _conversations = [..._conversations, ..._repairTitles(page)];
         _hasMore = page.length >= _pageSize;
         _loadingMore = false;
       });
     } catch (error) {
-      if (!mounted) return;
+      if (!mounted || generation != _reloadGeneration) return;
       setState(() => _loadingMore = false);
       FloatingToast.error(context, '加载更多会话失败', rawDetail: error.toString());
     }
   }
 
   void _onQueryChanged(String value) {
+    _reloadGeneration++;
+    _searchDebounce?.cancel();
     setState(() => _query = value);
-    unawaited(_reload());
+    _searchDebounce = Timer(
+      AppTokens.durationBase,
+      () => unawaited(_reload()),
+    );
   }
 
   List<Conversation> get _filtered {
@@ -642,6 +665,8 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _reloadGeneration++;
     _searchController.dispose();
     super.dispose();
   }

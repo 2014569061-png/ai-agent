@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mobile_agent/application/draft_service.dart';
 import 'package:mobile_agent/application/project_kind.dart';
+import 'package:mobile_agent/application/project_kind_detector.dart';
 import 'package:mobile_agent/application/project_service.dart';
 import 'package:mobile_agent/application/project_settings.dart';
 import 'package:mobile_agent/application/project_template_service.dart';
@@ -35,8 +36,8 @@ void main() {
     }
   });
 
-  test('schemaVersion is 24', () {
-    expect(db.schemaVersion, 24);
+  test('schemaVersion is 25', () {
+    expect(db.schemaVersion, 25);
   });
 
   test('creates a static web project from template', () async {
@@ -114,6 +115,27 @@ void main() {
     );
   });
 
+  test('rejects an archive entry over the uncompressed size limit', () async {
+    final archive = Archive()
+      ..addFile(ArchiveFile(
+        'demo/large.bin',
+        ProjectService.maxArchiveBytes + 1,
+        [1],
+      ));
+    final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+    await expectLater(
+      service.importArchive(ImportArchiveRequest(
+        archivePath: 'large.zip',
+        name: 'large',
+        bytes: bytes,
+        parentDirectory: temp.path,
+      )),
+      throwsA(isA<ProjectException>()),
+    );
+    expect(Directory(p.join(temp.path, 'large')).existsSync(), isFalse);
+  });
+
   test('imports a zip into a new project directory', () async {
     final archive = Archive()
       ..addFile(ArchiveFile.string('demo/index.html', '<h1>ok</h1>'))
@@ -127,6 +149,35 @@ void main() {
     expect(File(p.join(project.canonicalRootPath, 'index.html')).existsSync(),
         isTrue);
     expect(project.sourceKind, 'archive');
+  });
+
+  test('removes published files when project registration fails', () async {
+    final failingService = ProjectService(
+      db: db,
+      detector: _FailingProjectKindDetector(),
+    );
+    final archive = Archive()
+      ..addFile(ArchiveFile.string('demo/index.html', '<h1>ok</h1>'));
+    final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+    final target = Directory(p.join(temp.path, 'failed-import'));
+
+    await expectLater(
+      failingService.importArchive(ImportArchiveRequest(
+        archivePath: 'demo.zip',
+        name: 'failed-import',
+        bytes: bytes,
+        parentDirectory: temp.path,
+      )),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(await target.exists(), isFalse);
+    expect(
+      await db.findProjectByCanonicalPath(
+        ProjectService.canonicalizePath(target.path),
+      ),
+      isNull,
+    );
   });
 
   test('opening a missing directory reports inaccessible', () async {
@@ -189,4 +240,11 @@ void main() {
         await db.customSelect('PRAGMA table_info(conversations)').get();
     expect(columns.map((row) => row.data['name']), contains('project_id'));
   });
+}
+
+class _FailingProjectKindDetector extends ProjectKindDetector {
+  @override
+  Future<ProjectKindDetection> detect(String workspacePath) async {
+    throw StateError('simulated registration failure');
+  }
 }

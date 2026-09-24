@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -113,11 +114,17 @@ class _DeclarativePluginsViewState
   }
 
   Future<void> _import() async {
-    final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom, allowedExtensions: ['json'], withData: true);
-    if (result == null || result.files.isEmpty || !mounted) return;
-    final bytes = result.files.first.bytes;
-    if (bytes == null) return;
+    final picked = await FilePicker.pickFiles(
+        type: FileType.custom, allowedExtensions: ['json']);
+    if (picked.isEmpty || !mounted) return;
+    final Uint8List bytes;
+    try {
+      bytes = await picked.first.readAsBytes();
+    } catch (_) {
+      return;
+    }
+    // 读字节是异步的，中间可能已经离场。
+    if (!mounted) return;
     final manifest = utf8.decode(bytes);
     final store = PluginStore();
     final manifestError = store.manifestError(manifest);

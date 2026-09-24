@@ -6,14 +6,17 @@ import 'package:dio/dio.dart' show CancelToken;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform, visibleForTesting;
 import 'package:drift/drift.dart' show Value;
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'attachment_policy.dart';
 import 'mojibake_repair.dart';
 import 'autonomous_delegation.dart';
 
+import '../domain/attachment_file.dart';
+import '../domain/context_insights.dart';
 import '../domain/models.dart';
+import '../domain/message_display_metadata.dart';
 import '../domain/model_failure.dart';
 import '../domain/tool_codes.dart';
 import '../domain/tool_result.dart';
@@ -24,6 +27,7 @@ import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
 import '../infrastructure/providers/provider_factory.dart';
 import '../infrastructure/tools/core_tools.dart';
+import '../infrastructure/tools/android_device_tool.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/tools/sub_agent_tool.dart';
 import '../infrastructure/tools/plan_tool.dart';
@@ -32,7 +36,13 @@ import '../infrastructure/tools/workspace_tools.dart';
 import '../infrastructure/tools/command_tool.dart';
 import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
+import 'audit_service.dart';
+import 'android_automation_tool.dart';
+import 'device_automation_service.dart';
+import '../domain/device_automation.dart';
 import 'run_coordinator.dart';
+import 'context_insights_history.dart';
+import 'context_compression_planner.dart';
 import 'context_window.dart';
 import 'error_humanizer.dart';
 import 'reasoning_policy.dart';
@@ -41,6 +51,7 @@ import 'knowledge_service.dart';
 import 'memory_service.dart';
 import 'providers.dart';
 import 'log_service.dart';
+import 'nexus_guard.dart';
 import 'run_event_tracker.dart';
 import 'run_controller.dart';
 import '../domain/sensitive_tool_policy.dart';
@@ -51,6 +62,8 @@ import 'workspace_snapshot.dart';
 import 'project_kind.dart';
 import 'project_kind_detector.dart';
 import 'conversation_fork_service.dart';
+import 'conversation_history_pager.dart';
+import '../domain/history_load_result.dart';
 import 'file_citation.dart';
 import 'project_context_service.dart';
 import 'project_service.dart';
@@ -67,323 +80,24 @@ import '../infrastructure/notifications/notification_service.dart';
 import '../infrastructure/background/foreground_service.dart';
 
 part 'chat_run_execution.dart';
+part 'chat_state.dart';
 
 // ignore_for_file: curly_braces_in_flow_control_structures
 
-/// 单次工具调用的运行时展示状态类
-class ToolActivity {
-  const ToolActivity(
-      {required this.call,
-      required this.risk,
-      this.sensitive = false,
-      this.status = '等待执行',
-      this.result,
-      this.ok,
-      this.code,
-      this.effect,
-      this.executionMs = 0,
-      this.runningSince});
-  final ToolCall call;
-  final ToolRisk risk;
-  final bool sensitive;
-  final String status;
-  final String? result;
-  final bool? ok;
-  final String? code;
-  final ToolEffect? effect;
-
-  /// 状态常量：只有落在「执行中」区间内的时长才计入 [executionMs]。
-  static const statusRunning = '执行中';
-
-  /// 已累计的「真实执行」时长（毫秒）。
-  ///
-  /// 只在 `status == '执行中'` 的区间内累计——工具调用从
-  /// 「等待执行 → 等待确认 → 执行中 → 已完成」流转，审批停留期间不计时，
-  /// 因此指标里的「工具调用耗时」不会混入用户自己的审批等待时间。
-  final int executionMs;
-
-  /// 当前执行区间的起算时刻；仅当处于「执行中」时非空。
-  final DateTime? runningSince;
-
-  Duration get duration => Duration(milliseconds: executionMs);
-
-  ToolActivity copyWith({
-    bool? sensitive,
-    String? status,
-    String? result,
-    bool? ok,
-    String? code,
-    ToolEffect? effect,
-    DateTime? now,
-  }) {
-    final nextStatus = status ?? this.status;
-    final clock = now ?? DateTime.now();
-
-    var ms = executionMs;
-    DateTime? running = runningSince;
-
-    if (nextStatus != this.status) {
-      // 离开「执行中」：结算这一段，避免把审批等待算进去。
-      if (this.status == statusRunning && running != null) {
-        final delta = clock.difference(running).inMilliseconds;
-        if (delta > 0) ms += delta;
-        running = null;
-      }
-      // 进入「执行中」：开始计时（此前若有等待审批，天然被排除在外）。
-      if (nextStatus == statusRunning) {
-        running = clock;
-      }
-    }
-
-    return ToolActivity(
-      call: call,
-      risk: risk,
-      sensitive: sensitive ?? this.sensitive,
-      status: nextStatus,
-      result: result ?? this.result,
-      ok: ok ?? this.ok,
-      code: code ?? this.code,
-      effect: effect ?? this.effect,
-      executionMs: ms,
-      runningSince: running,
-    );
-  }
-}
-
-/// 「设置 → 工具」页面的全局工具开关快照，由 [_loadToolSettings] 从
-/// SharedPreferences（settings.tool.*）读取并在此处统一消费。
-/// 关闭的开关会对应地从工具注册表中剔除对应工具。
-class ToolSettings {
-  const ToolSettings({
-    this.webBrowsing = false,
-    this.workspaceFiles = true,
-    this.terminal = true,
-  });
-
-  /// 网页浏览（web_search）。默认关闭，避免普通聊天隐式携带联网工具。
-  final bool webBrowsing;
-
-  /// 工作区内的文件读取、创建和编辑工具。
-  final bool workspaceFiles;
-
-  /// 在已选择工作区内执行命令的工具。
-  final bool terminal;
-}
-
-class SessionSkillInstruction {
-  const SessionSkillInstruction({
-    required this.id,
-    required this.name,
-    required this.content,
-  });
-
-  final String id;
-  final String name;
-  final String content;
-}
-
-/// 聊天页的完整不可变状态
-class ChatState {
-  const ChatState({
-    this.messages = const [],
-    this.running = false,
-    this.paused = false,
-    this.loading = true,
-    this.conversationId,
-    this.conversationTitle = '新会话',
-    this.agentName = '通用助手',
-    this.systemPrompt = '你是一个有帮助的 AI Agent。',
-    this.sessionSkillInstructions = const [],
-    this.agentId,
-    this.toolActivities = const [],
-    this.activityLog = const [],
-    this.activeModel = '',
-    this.activeProviderName = '',
-    this.activeProviderId = '',
-    this.contextTokens = 128000,
-    this.liveContextTokens = 0,
-    this.liveReply,
-    this.totalSteps = 0,
-    this.activeReasoningEffort = ReasoningEffort.auto,
-    this.reasoningMode = ReasoningMode.standard,
-    this.webSearchEnabled = false,
-    this.providerConfigured = false,
-    this.modelServiceStatus = ModelServiceStatus.online,
-    this.planMode = false,
-    ChatMode? mode,
-    this.approvalMode = ApprovalMode.ask,
-    this.planState,
-    this.currentWorkspacePath,
-    this.currentProjectId,
-    this.currentProjectName,
-    this.currentTaskId,
-    this.currentRunId,
-    this.pendingCitations = const [],
-    this.omittedContext = const [],
-  }) : mode = mode ?? (planMode ? ChatMode.plan : ChatMode.chat);
-
-  final List<ChatMessage> messages;
-  final bool running;
-  final bool paused;
-  final bool loading;
-  final String? conversationId;
-  final String conversationTitle;
-  final String agentName;
-  final String systemPrompt;
-
-  /// Explicitly loaded Skill bodies for the current in-memory conversation.
-  /// They are intentionally never persisted or used as a global Skill switch.
-  final List<SessionSkillInstruction> sessionSkillInstructions;
-  final String? agentId;
-  final List<ToolActivity> toolActivities;
-  final List<String> activityLog;
-  final String activeModel;
-  final String activeProviderName;
-  final String activeProviderId;
-
-  /// G1 激活 Provider 的上下文窗口(供 HUD 与执行预算同源显示)。
-  final int contextTokens;
-
-  /// 当前请求的实时上下文估算；流式输出期间也会持续刷新。
-  final int liveContextTokens;
-  final LiveReply? liveReply;
-
-  /// 本次会话累计的 agent 循环步数（= 模型调用次数）。
-  ///
-  /// 由 [ChatController] 在每一次 `RunStatus.waitingModel` 时 +1 —— agent 循环
-  /// 每迭代一步都会先进入 waitingModel，因此这个计数精确等于「带工具调用的
-  /// agent 循环」的迭代次数，而不是消息条数（一轮对话只落一条最终 assistant 消息）。
-  final int totalSteps;
-  final ReasoningEffort activeReasoningEffort;
-  final ReasoningMode reasoningMode;
-  final bool webSearchEnabled;
-  final bool providerConfigured;
-  final ModelServiceStatus modelServiceStatus;
-  final bool planMode;
-  final ChatMode mode;
-  final ApprovalMode approvalMode;
-  final PlanState? planState;
-  final String? currentWorkspacePath;
-  final String? currentProjectId;
-  final String? currentProjectName;
-  final String? currentTaskId;
-  final String? currentRunId;
-  final List<FileCitation> pendingCitations;
-  final List<String> omittedContext;
-
-  ChatState copyWith({
-    List<ChatMessage>? messages,
-    bool? running,
-    bool? paused,
-    bool? loading,
-    String? conversationId,
-    String? conversationTitle,
-    String? agentName,
-    String? systemPrompt,
-    List<SessionSkillInstruction>? sessionSkillInstructions,
-    String? agentId,
-    List<ToolActivity>? toolActivities,
-    List<String>? activityLog,
-    String? activeModel,
-    String? activeProviderName,
-    String? activeProviderId,
-    int? contextTokens,
-    int? liveContextTokens,
-    LiveReply? liveReply,
-    int? totalSteps,
-    ReasoningEffort? activeReasoningEffort,
-    ReasoningMode? reasoningMode,
-    bool? webSearchEnabled,
-    bool? providerConfigured,
-    ModelServiceStatus? modelServiceStatus,
-    bool? planMode,
-    ChatMode? mode,
-    ApprovalMode? approvalMode,
-    PlanState? planState,
-    String? currentWorkspacePath,
-    String? currentProjectId,
-    String? currentProjectName,
-    String? currentTaskId,
-    String? currentRunId,
-    List<FileCitation>? pendingCitations,
-    List<String>? omittedContext,
-    bool clearWorkspace = false,
-    bool clearProject = false,
-    bool clearTask = false,
-    bool clearConversationId = false,
-    bool clearAgentId = false,
-    bool clearPlanState = false,
-    bool clearLiveReply = false,
-    bool clearSessionSkillInstructions = false,
-  }) {
-    // Keep the old planMode named argument source-compatible for callers that
-    // still use the plan toggle, while making ChatMode the public source of
-    // truth for the new three-way selector.
-    final nextMode = mode ??
-        (planMode == null
-            ? this.mode
-            : planMode
-                ? ChatMode.plan
-                : (this.mode == ChatMode.plan ? ChatMode.chat : this.mode));
-    final nextPlanMode =
-        mode == null ? (planMode ?? this.planMode) : mode == ChatMode.plan;
-    return ChatState(
-      messages: messages ?? this.messages,
-      running: running ?? this.running,
-      paused: paused ?? this.paused,
-      loading: loading ?? this.loading,
-      conversationId:
-          clearConversationId ? null : (conversationId ?? this.conversationId),
-      conversationTitle: conversationTitle ?? this.conversationTitle,
-      agentName: agentName ?? this.agentName,
-      systemPrompt: systemPrompt ?? this.systemPrompt,
-      sessionSkillInstructions: clearSessionSkillInstructions
-          ? const []
-          : (sessionSkillInstructions ?? this.sessionSkillInstructions),
-      agentId: clearAgentId ? null : (agentId ?? this.agentId),
-      toolActivities: toolActivities ?? this.toolActivities,
-      activityLog: activityLog ?? this.activityLog,
-      activeModel: activeModel ?? this.activeModel,
-      activeProviderName: activeProviderName ?? this.activeProviderName,
-      activeProviderId: activeProviderId ?? this.activeProviderId,
-      contextTokens: contextTokens ?? this.contextTokens,
-      liveContextTokens: liveContextTokens ?? this.liveContextTokens,
-      liveReply: clearLiveReply ? null : (liveReply ?? this.liveReply),
-      totalSteps: totalSteps ?? this.totalSteps,
-      activeReasoningEffort:
-          activeReasoningEffort ?? this.activeReasoningEffort,
-      reasoningMode: reasoningMode ?? this.reasoningMode,
-      webSearchEnabled: webSearchEnabled ?? this.webSearchEnabled,
-      providerConfigured: providerConfigured ?? this.providerConfigured,
-      modelServiceStatus: modelServiceStatus ?? this.modelServiceStatus,
-      planMode: nextPlanMode,
-      mode: nextMode,
-      approvalMode: approvalMode ?? this.approvalMode,
-      planState: clearPlanState ? null : (planState ?? this.planState),
-      currentWorkspacePath: clearWorkspace
-          ? null
-          : (currentWorkspacePath ?? this.currentWorkspacePath),
-      currentProjectId:
-          clearProject ? null : (currentProjectId ?? this.currentProjectId),
-      currentProjectName:
-          clearProject ? null : (currentProjectName ?? this.currentProjectName),
-      currentTaskId: clearTask ? null : (currentTaskId ?? this.currentTaskId),
-      currentRunId: clearTask ? null : (currentRunId ?? this.currentRunId),
-      pendingCitations: pendingCitations ?? this.pendingCitations,
-      omittedContext: omittedContext ?? this.omittedContext,
-    );
-  }
-}
-
-/// Chat orchestration controller.
 class ChatController extends Notifier<ChatState> {
-  static const _maxAttachmentBytes = 8 * 1024 * 1024;
+  static const _maxAttachmentBytes = maxAttachmentBytes;
   static const _maxTextAttachmentChars = 100000;
   static const _documentExtractor = DocumentExtractor();
 
   DateTime? _cancelRequestedAt;
   final Set<String> _resumingTaskIds = <String>{};
   final Set<String> _inflightRequestIds = <String>{};
+  String? _contextRunsLoadedConversationId;
+  String? _contextRunsLoadingConversationId;
+  int? _contextRunsLoadingRevision;
+  Future<List<ContextRunHistory>>? _contextRunsLoading;
+  var _contextRunsRevision = 0;
+  var _conversationSwitchGeneration = 0;
   int? _activePlanGeneration;
 
   /// 单次运行的代次 / 取消 / 预算断点状态（见 RunCoordinator）。
@@ -398,6 +112,63 @@ class ChatController extends Notifier<ChatState> {
   ChatState get _currentState => state;
   set _currentState(ChatState value) => state = value;
 
+  /// 容器读写入口。Riverpod 3 把 `Notifier.ref` 也标记为 protected，而
+  /// [ChatRunExecution] 是 extension（不在子类继承链上），直接访问会触发
+  /// `invalid_use_of_protected_member`。与其在 11 处调用点各加忽略，不如像
+  /// `_currentState` 一样提供一个库内转发器，语义与可读性都保持一致。
+  Ref get _ref => ref;
+
+  /// 容器是否仍然挂载。
+  ///
+  /// Riverpod 3 起，对已销毁的容器读写 ref / state 会抛 `UnmountedRefException`
+  /// （2.x 只是静默忽略）。因此任何在 `build()` 之后分离执行、且跨越 await 的
+  /// 异步工作（见 [_initialize]），在每次触达 ref / 提交状态之前都必须先确认容器
+  /// 还在——否则用户离开页面或 scope 被销毁的瞬间，一次迟到的初始化写入就会从
+  /// 「静默无效」升级成「未捕获异常」。
+  bool get _mounted => ref.mounted;
+
+  /// 写入面向用户的运行摘要。只在真实阶段变化或服务端流量到达时触发，
+  /// 不靠伪造的循环文案制造“模型正在工作”的错觉。
+  void _setRunProgress({
+    required int runGeneration,
+    required String? conversationId,
+    required ChatRunStage stage,
+    required String label,
+    int? completedTools,
+    int? generatedCharacters,
+    bool touch = true,
+  }) {
+    if (!_runs.ownsRun(runGeneration, conversationId) ||
+        !_runs.isVisible(conversationId)) {
+      return;
+    }
+    final now = DateTime.now();
+    final current = state.runProgress ?? ChatRunProgress.started(now: now);
+    final nextStage = stage;
+    final nextLabel = label;
+    final nextTools = completedTools ?? current.completedTools;
+    final nextCharacters = generatedCharacters ?? current.generatedCharacters;
+    final meaningfulChange = nextStage != current.stage ||
+        nextLabel != current.label ||
+        nextTools != current.completedTools ||
+        nextCharacters != current.generatedCharacters;
+    // 流式 token 可能每几十毫秒到达一次；进度心跳最多每秒写一次，避免
+    // 为了更新“最后活动时间”而让顶栏和工具面板跟着每个 token 重建。
+    final shouldTouch = touch &&
+        (meaningfulChange ||
+            now.difference(current.lastActivityAt) >=
+                const Duration(seconds: 1));
+    if (!meaningfulChange && !shouldTouch && state.runProgress != null) return;
+    final next = current.copyWith(
+      stage: nextStage,
+      label: nextLabel,
+      lastActivityAt: shouldTouch ? now : current.lastActivityAt,
+      completedTools: nextTools,
+      generatedCharacters: nextCharacters,
+    );
+    state = state.copyWith(runProgress: next);
+  }
+
   @override
   ChatState build() {
     Future.microtask(_initialize);
@@ -407,6 +178,9 @@ class ChatController extends Notifier<ChatState> {
   // --- 初始化 ---
 
   Future<void> _initialize() async {
+    // build() 把初始化拆到 microtask 执行，因此这里可能在容器已销毁后才开始或
+    // 恢复；第一步就要确认还挂载着，否则下面的 ref.read 本身就会抛。
+    if (!_mounted) return;
     try {
       // 四路互不依赖的读取并发执行（F-5），替代逐个串行等待。
       // Workspace is managed via state.currentWorkspacePath
@@ -435,7 +209,12 @@ class ChatController extends Notifier<ChatState> {
         );
         webSearchEnabled =
             preferences.getBool('settings.tool.web_browsing') ?? false;
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        // 读取失败会静默退回默认设置：用户看到的「深度思考/联网」开关状态
+        // 可能与上次保存的不一致，必须留痕。
+        NexusGuard.degradeCaught('chat.loadSettings', error, stackTrace,
+            logger: _logDegrade);
+      }
       // 历史脏数据修复：统一修复早期版本遗留的乱码文本。
       // F-5：版本位短路 —— 完整跑过一次后不再每次启动全表扫描。
       await _healMojibakeAgents(database);
@@ -447,6 +226,10 @@ class ChatController extends Notifier<ChatState> {
       final storedPage = await _loadConversationPage(database, conversation.id);
       _trackLoadedWindow(storedPage);
       final storedMessages = storedPage.map((e) => e.$1).toList();
+      final contextSteps = await ContextInsightsHistory.latestForConversation(
+        database,
+        conversation.id,
+      );
       if (agents.isEmpty) {
         final now = DateTime.now();
         await database.insertAgent(AgentsCompanion.insert(
@@ -457,30 +240,55 @@ class ChatController extends Notifier<ChatState> {
         ));
         agents = await database.allAgents(limit: 200);
       }
-      final activeAgent = agents.first;
+      Agent? activeAgent;
+      if (conversation.agentId != null) {
+        for (final agent in agents) {
+          if (agent.id == conversation.agentId) {
+            activeAgent = agent;
+            break;
+          }
+        }
+      }
       final restored = _restoreFromMessages(storedMessages);
+      final latestSnapshot =
+          contextSteps.isEmpty ? null : contextSteps.last.snapshot;
+      final restoredMessageTokens = restored.$1.fold<int>(
+          0, (sum, message) => sum + ContextWindow.estimateTokens(message));
+      // 上面每个 await 都可能让容器在该点已被销毁，写状态前必须再确认一次。
+      if (!_mounted) return;
       state = state.copyWith(
         loading: false,
         conversationId: conversation.id,
         conversationTitle: MojibakeRepair.repair(conversation.title),
-        agentName: MojibakeRepair.repair(activeAgent.name),
-        systemPrompt: activeAgent.systemPrompt,
-        agentId: activeAgent.id,
+        agentName: activeAgent == null
+            ? '通用助手'
+            : MojibakeRepair.repair(activeAgent.name),
+        systemPrompt: activeAgent?.systemPrompt ?? '你是一个有帮助的 AI Agent。',
+        agentId: activeAgent?.id,
+        clearAgentId: activeAgent == null,
         messages: restored.$1,
         toolActivities: restored.$2,
         activeModel: config.model,
         activeProviderName: config.name,
         activeProviderId: config.id,
         contextTokens: config.contextTokens,
+        contextReservedOutputTokens: activeAgent?.maxTokens ?? 2048,
         activeReasoningEffort: config.reasoningEffort,
         reasoningMode: reasoningMode,
         webSearchEnabled: webSearchEnabled,
         providerConfigured: config.isConfigured,
         currentWorkspacePath: activeWorkspace,
+        liveContextTokens: latestSnapshot?.usedTokens ?? restoredMessageTokens,
+        contextSteps: contextSteps,
+        contextSnapshot: latestSnapshot,
       );
       unawaited(_hydrateActiveProject(database, conversation));
     } catch (_) {
       // 初始化失败时降级为空会话，避免首屏永久显示加载状态。
+      //
+      // 容器销毁后 state 的 setter 会抛 UnmountedRefException；这里若再写一次，
+      // 就会把一个「早退」变成未捕获异常（Riverpod 3 起不再静默容忍）。
+      if (!_mounted) return;
       state = state.copyWith(loading: false);
     }
   }
@@ -522,14 +330,17 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  Future<Conversation> _createConversation(AppDatabase database) async {
+  Future<Conversation> _createConversation(
+    AppDatabase database, {
+    ChatMode? modeOverride,
+  }) async {
     final now = DateTime.now();
     final conversation = Conversation(
       id: UniqueId.generate('conversation', now: now),
       title: '新会话',
       agentId: null,
       projectId: state.currentProjectId,
-      mode: state.mode.name,
+      mode: (modeOverride ?? state.mode).name,
       providerProfileId:
           state.activeProviderId.isEmpty ? null : state.activeProviderId,
       isPinned: false,
@@ -542,15 +353,20 @@ class ChatController extends Notifier<ChatState> {
     return conversation;
   }
 
-  ChatMessage _toDomainMessage(Message message) => ChatMessage(
-        role: MessageRole.values.firstWhere((role) => role.name == message.role,
-            orElse: () => MessageRole.assistant),
-        toolCallId: message.toolCallId,
-        parts: [MessagePart.text(MojibakeRepair.repair(message.content))],
-        reasoning: message.reasoningContent == null
-            ? null
-            : MojibakeRepair.repair(message.reasoningContent!),
-      );
+  ChatMessage _toDomainMessage(Message message) =>
+      MessageDisplayMetadata.restore(
+          ChatMessage(
+            id: message.id,
+            role: MessageRole.values.firstWhere(
+                (role) => role.name == message.role,
+                orElse: () => MessageRole.assistant),
+            toolCallId: message.toolCallId,
+            parts: [MessagePart.text(MojibakeRepair.repair(message.content))],
+            reasoning: message.reasoningContent == null
+                ? null
+                : MojibakeRepair.repair(message.reasoningContent!),
+          ),
+          message.displayMetadataJson);
 
   /// Restore persisted messages and tool cards.
   (List<ChatMessage>, List<ToolActivity>) _restoreFromMessages(
@@ -569,8 +385,18 @@ class ChatController extends Notifier<ChatState> {
         final index =
             activities.lastIndexWhere((a) => a.call.id == message.toolCallId);
         if (index >= 0) {
-          activities[index] =
-              _restoreToolActivityResult(activities[index], message.content);
+          final compressed =
+              message.content.contains(ContextWindow.compressedToolResultMark);
+          final original = compressed
+              ? message.content
+                  .replaceFirst(ContextWindow.compressedToolResultMark, '')
+                  .trimLeft()
+              : message.content;
+          activities[index] = _restoreToolActivityResult(
+            activities[index],
+            original,
+            compressed: compressed,
+          );
         }
       } else {
         messages.add(_toDomainMessage(message));
@@ -580,7 +406,11 @@ class ChatController extends Notifier<ChatState> {
   }
 
   /// 会话恢复也保留 ToolResult 的结构化语义，避免历史工具卡退化成文本输出。
-  ToolActivity _restoreToolActivityResult(ToolActivity activity, String value) {
+  ToolActivity _restoreToolActivityResult(
+    ToolActivity activity,
+    String value, {
+    bool compressed = false,
+  }) {
     try {
       final decoded = jsonDecode(value);
       if (decoded is Map) {
@@ -592,6 +422,9 @@ class ChatController extends Notifier<ChatState> {
         };
         return activity.copyWith(
           result: decoded['message']?.toString() ?? value,
+          compressed: compressed,
+          originalResult:
+              compressed ? decoded['message']?.toString() ?? value : null,
           ok: decoded['ok'] == true,
           code: decoded['code']?.toString(),
           effect: effect,
@@ -600,7 +433,34 @@ class ChatController extends Notifier<ChatState> {
     } catch (_) {
       // 兼容 ToolResult 迁移前保存的纯文本工具结果。
     }
-    return activity.copyWith(result: value);
+    return activity.copyWith(
+      result: value,
+      compressed: compressed,
+      originalResult: compressed ? value : null,
+    );
+  }
+
+  Future<void> _persistCompressionMarkers(
+    String? conversationId,
+    Iterable<String> toolCallIds,
+  ) async {
+    if (conversationId == null) return;
+    final ids = toolCallIds.toSet();
+    if (ids.isEmpty) return;
+    final database = await ref.read(databaseProvider.future);
+    final stored = await database.messagesFor(conversationId);
+    for (final message in stored) {
+      if (message.role != 'tool' ||
+          message.toolCallId == null ||
+          !ids.contains(message.toolCallId) ||
+          message.content.contains(ContextWindow.compressedToolResultMark)) {
+        continue;
+      }
+      await database.saveMessage(message.copyWith(
+        content:
+            '${ContextWindow.compressedToolResultMark}\n${message.content}',
+      ));
+    }
   }
 
   List<(ToolCall, ToolRisk)> _decodeToolCalls(String json) {
@@ -623,6 +483,18 @@ class ChatController extends Notifier<ChatState> {
     } catch (_) {
       return const [];
     }
+  }
+
+  /// 降级日志出口。走 LogService 而不是 print：日志才会进诊断页、可导出。
+  ///
+  /// `LogService.warning` 自身把写库包在 try/catch 里并立即返回，因此它不会把
+  /// 「已吞掉的失败」重新变成抛出的异常。
+  void _logDegrade(String message, {Map<String, dynamic>? detail}) {
+    // 容器销毁后 ref 会抛；降级日志绝不能反过来造成新的异常。
+    if (!_mounted) return;
+    unawaited(_ref
+        .read(logServiceProvider)
+        .warning(message, category: 'chat', detail: detail));
   }
 
   Future<void> _persistMessage(ChatMessage message,
@@ -648,12 +520,13 @@ class ChatController extends Notifier<ChatState> {
       }
     }
     await database.insertMessage(MessagesCompanion.insert(
-      id: UniqueId.generate('message'),
+      id: message.id ?? UniqueId.generate('message'),
       conversationId: targetId,
       role: message.role.name,
       content: content,
       toolCallId: Value(message.toolCallId),
       reasoningContent: Value(message.reasoning),
+      displayMetadataJson: Value(MessageDisplayMetadata.encode(message)),
       createdAt: DateTime.now(),
     ));
   }
@@ -712,6 +585,15 @@ class ChatController extends Notifier<ChatState> {
     if (settings.webBrowsing && enabledTools.contains('web_search')) {
       registry.register(WebSearchTool(apiKey: tavilyKey));
     }
+    if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
+      registry.register(AndroidDevicePreviewTool());
+      registry.register(AndroidDeviceTool());
+      registry.register(AndroidAppPrivateDataPreviewTool());
+      registry.register(AndroidAppPrivateDataTool());
+      registry.register(AndroidAutomationTool(
+        service: ref.read(deviceAutomationServiceProvider),
+      ));
+    }
     if (enabledTools.contains('generate_image')) {
       registry.register(ImageGenTool(config: config));
     }
@@ -723,12 +605,19 @@ class ChatController extends Notifier<ChatState> {
     ));
     registry.register(MemoryGetTool(onGet: _onMemoryGet));
     registry.register(MemoryWriteTool(onWrite: _onMemoryWrite));
-    try {
-      final database = await ref.read(databaseProvider.future);
-      registry.register(SkillsReadTool(database: database));
-      registry.register(SkillsReadResourceTool(database: database));
-    } catch (_) {
-      // 数据库尚未就绪时，当前回合不暴露 Skill 读取工具。
+    if (enabledTools.contains('skills_read') ||
+        enabledTools.contains('skills_read_resource')) {
+      try {
+        final database = await ref.read(databaseProvider.future);
+        if (enabledTools.contains('skills_read')) {
+          registry.register(SkillsReadTool(database: database));
+        }
+        if (enabledTools.contains('skills_read_resource')) {
+          registry.register(SkillsReadResourceTool(database: database));
+        }
+      } catch (_) {
+        // 数据库尚未就绪时，当前回合不暴露 Skill 读取工具。
+      }
     }
     // 子 Agent：走统一后台入口，safe 工具才放行。
     // 风险由自主委派开关决定：开启 → safe（自动放行），关闭 → requiresConfirmation（走审批）。
@@ -846,8 +735,9 @@ class ChatController extends Notifier<ChatState> {
     );
     final tavilyKey = await store.readToolKey('tavily');
     var enabledTools = <String>{'calculator', 'get_time', 'json_query'};
-    // 前台单次预算默认提高到 16，预算耗尽现在是可恢复的暂停而非失败。
-    var maxSteps = 16;
+    // 前台单次预算默认 40 轮；最近有进展时执行器还会自动续跑 2 次（见
+    // chat_run_execution 的 autoContinueLimit）。预算耗尽是可恢复的暂停。
+    var maxSteps = 40;
     var temperature = 0.7;
     var maxTokens = 2048;
     var topP = 1.0;
@@ -982,12 +872,18 @@ class ChatController extends Notifier<ChatState> {
     final hasDevelopmentTarget = RegExp(
       r'html|网页|网站|页面|项目|代码|程序|应用|文件|exe|flutter|react|vue|python|go|node|file|app',
     ).hasMatch(normalized);
-    return hasAction && hasDevelopmentTarget;
+    final isDeviceAction = RegExp(
+      r'打开.{0,12}(应用|软件|微信|支付宝|相机|设置|浏览器)|'
+      r'(搜索|查找|找一下|找找).{0,16}(本地|手机|文件|照片|图片|pdf)|'
+      r'(本地|手机).{0,10}(搜索|查找|找一下|找找).{0,12}(文件|照片|图片|pdf)|'
+      r'找.{0,10}(本地|手机)?(文件|照片|图片)',
+    ).hasMatch(normalized);
+    return (hasAction && hasDevelopmentTarget) || isDeviceAction;
   }
 
   Future<void> send({
     required String text,
-    required List<PlatformFile> attachments,
+    required List<AttachmentFile> attachments,
     required ToolApprovalCallback approveTool,
     String taskType = 'general',
     String sourceType = 'manual',
@@ -1008,21 +904,18 @@ class ChatController extends Notifier<ChatState> {
     final conversationId = state.conversationId;
     final workspacePath = state.currentWorkspacePath;
     final runGeneration = _runs.beginRun();
+    _invalidateContextRuns(clearState: true);
 
     final parts = <MessagePart>[MessagePart.text(trimmed)];
     for (final file in attachments) {
       final bytes = file.bytes;
-      final mime = file.extension == 'png'
-          ? 'image/png'
-          : file.extension == 'jpg' || file.extension == 'jpeg'
-              ? 'image/jpeg'
-              : null;
+      // 类型判定与选择器共用 attachment_policy.dart 的名单，避免「能选不能发」。
+      final mime = imageMimeForExtension(file.extension);
       if (bytes != null && bytes.length > _maxAttachmentBytes) {
         parts.add(MessagePart.text('\n\n附件 ${file.name} 超过 8MB，已跳过'));
         continue;
       }
-      final isTextAttachment = const {'txt', 'md', 'csv', 'json'}
-          .contains(file.extension?.toLowerCase());
+      final isTextAttachment = isTextAttachmentExtension(file.extension);
       if (bytes != null && mime != null) {
         parts.add(MessagePart.image('data:$mime;base64,${base64Encode(bytes)}',
             mimeType: mime));
@@ -1043,7 +936,11 @@ class ChatController extends Notifier<ChatState> {
       continue;
     }
 
-    final userMessage = ChatMessage(role: MessageRole.user, parts: parts);
+    final userMessage = ChatMessage(
+      id: UniqueId.generate('message'),
+      role: MessageRole.user,
+      parts: parts,
+    );
     final initialContextTokens = [
       ...state.messages,
       userMessage,
@@ -1060,18 +957,24 @@ class ChatController extends Notifier<ChatState> {
         ...state.messages,
         userMessage,
         ChatMessage(
-            role: MessageRole.assistant,
-            parts: [const MessagePart.text('')],
-            reasoning: '正在思考…')
+          id: UniqueId.generate('message'),
+          role: MessageRole.assistant,
+          parts: [const MessagePart.text('')],
+        )
       ],
       running: true,
       paused: false,
+      runProgress: ChatRunProgress.started(),
       conversationTitle: newTitle,
       currentTaskId: null,
       currentRunId: null,
       toolActivities: const [],
       activityLog: const [],
       liveContextTokens: initialContextTokens,
+      timingSnapshot: TimingSnapshot.empty,
+      clearContextSnapshot: true,
+      clearContextSteps: true,
+      clearContextRuns: true,
       clearLiveReply: true,
     );
 
@@ -1079,16 +982,22 @@ class ChatController extends Notifier<ChatState> {
     try {
       final database = await ref.read(databaseProvider.future);
       if (!_runs.ownsRun(runGeneration, conversationId)) return;
-      try {
-        await _persistMessage(userMessage);
-        if (conversationId != null) {
-          final current = await database.findConversation(conversationId);
-          if (current != null) {
-            await database.saveConversation(
-                current.copyWith(title: newTitle, updatedAt: DateTime.now()));
+      // 用户消息没落库才是真正的数据丢失：仍然不阻断对话（外层 catch 继续兜住），
+      // 但必须留下可导出、可统计的痕迹。
+      await NexusGuard.degradeAsync<void>(
+        'chat.persistUserMessage',
+        () async {
+          await _persistMessage(userMessage);
+          if (conversationId != null) {
+            final current = await database.findConversation(conversationId);
+            if (current != null) {
+              await database.saveConversation(
+                  current.copyWith(title: newTitle, updatedAt: DateTime.now()));
+            }
           }
-        }
-      } catch (_) {}
+        },
+        logger: _logDegrade,
+      );
 
       final prep = await _prepareRun(database, taskType: taskType);
       if (!_runs.ownsRun(runGeneration, conversationId)) return;
@@ -1099,7 +1008,11 @@ class ChatController extends Notifier<ChatState> {
         if (workspacePath != null && workspacePath.trim().isNotEmpty) {
           project = await const ProjectKindDetector().detect(workspacePath);
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        // 探测失败只让任务快照少一个 projectKind，不影响本次执行。
+        NexusGuard.degradeCaught('chat.detectProjectKind', error, stackTrace,
+            logger: _logDegrade);
+      }
       try {
         final existing =
             await TaskService().findByRequestId(database, requestId);
@@ -1112,7 +1025,11 @@ class ChatController extends Notifier<ChatState> {
             pendingCitations: const [],
           );
         }
-      } catch (_) {}
+      } catch (error, stackTrace) {
+        // 断点恢复登记失败：App 被杀后无法提示继续，属于可降级但需可查。
+        NexusGuard.degradeCaught('chat.restoreRunningTask', error, stackTrace,
+            logger: _logDegrade);
+      }
       try {
         if (runningTaskId != null) {
           // clientRequestId 已创建过任务，不再插入第二条。
@@ -1155,7 +1072,12 @@ class ChatController extends Notifier<ChatState> {
               snapshotJson = (await const WorkspaceSnapshotService()
                       .capture(workspacePath))
                   .toJson();
-            } catch (_) {}
+            } catch (error, stackTrace) {
+              // 快照缺失只让「断点恢复」的信息变少，不该影响本次执行。
+              NexusGuard.degradeCaught(
+                  'chat.captureWorkspaceSnapshot', error, stackTrace,
+                  logger: _logDegrade);
+            }
           }
           await TaskService().updateProgress(
             database,
@@ -1170,7 +1092,11 @@ class ChatController extends Notifier<ChatState> {
           );
         }
         state = state.copyWith(pendingCitations: const []);
-      } catch (_) {} // 任务登记失败不阻断执行。
+      } catch (error, stackTrace) {
+        // 任务登记失败不阻断执行，但必须留痕。
+        NexusGuard.degradeCaught('chat.registerRunningTask', error, stackTrace,
+            logger: _logDegrade);
+      }
 
       if (!_runs.ownsRun(runGeneration, conversationId)) return;
       await _runAgent(
@@ -1190,16 +1116,21 @@ class ChatController extends Notifier<ChatState> {
     } catch (error) {
       if (_runs.ownsRun(runGeneration, conversationId)) {
         final failed = ChatMessage(
+          id: UniqueId.generate('message'),
           role: MessageRole.assistant,
           parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
         );
         state = _withMessageAt(state, assistantIndex, failed).copyWith(
           running: false,
           clearLiveReply: true,
+          clearRunProgress: true,
         );
-        try {
-          await _persistMessage(failed);
-        } catch (_) {}
+        // 会话历史是用户数据：写库失败必须留痕，否则这条失败消息会静默消失。
+        await NexusGuard.degradeAsync<void>(
+          'chat.persistFailedReply',
+          () => _persistMessage(failed),
+          logger: _logDegrade,
+        );
       }
     } finally {
       _inflightRequestIds.remove(requestId);
@@ -1207,29 +1138,59 @@ class ChatController extends Notifier<ChatState> {
   }
 
   Future<void> regenerate({required ToolApprovalCallback approveTool}) async {
-    if (state.running || state.loading) return;
+    if (state.running || state.loading || state.restoringConversation) return;
     if (state.messages.isEmpty ||
         state.messages.last.role != MessageRole.assistant) {
       return;
     }
 
-    final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
+    final switchGeneration = _conversationSwitchGeneration;
+    bool current() =>
+        _mounted &&
+        switchGeneration == _conversationSwitchGeneration &&
+        state.conversationId == conversationId;
+    final database = await ref.read(databaseProvider.future);
+    if (!_mounted ||
+        switchGeneration != _conversationSwitchGeneration ||
+        state.conversationId != conversationId ||
+        state.running) return;
     final runGeneration = _runs.beginRun();
-    if (conversationId != null) {
-      await database.deleteTrailingAssistantAndTool(conversationId);
+    state = state.copyWith(running: true);
+    try {
+      if (conversationId != null) {
+        await database.deleteTrailingAssistantAndTool(conversationId);
+      }
+    } catch (error) {
+      if (current() && _runs.ownsRun(runGeneration, conversationId)) {
+        state = state.copyWith(
+            running: false,
+            activityLog: [...state.activityLog, '重新生成未能保存，已取消：$error']);
+      }
+      return;
     }
-    final assistantIndex = state.messages.length - 1;
+    if (!current() || !_runs.ownsRun(runGeneration, conversationId)) return;
+    _invalidateContextRuns(clearState: true);
+    // 库侧会删掉最后一条用户消息之后的整段 assistant/tool。内存也要切整段，
+    // 不能只替换最后一条，否则同一秒写入的 tool 记录会留在新回复前面。
+    var cut = state.messages.length;
+    while (cut > 0) {
+      final role = state.messages[cut - 1].role;
+      if (role != MessageRole.assistant && role != MessageRole.tool) break;
+      cut--;
+    }
+    final assistantIndex = cut;
     state = state.copyWith(
       messages: [
-        ...state.messages.sublist(0, assistantIndex),
+        ...state.messages.sublist(0, cut),
         ChatMessage(
+            id: UniqueId.generate('message'),
             role: MessageRole.assistant,
-            parts: [const MessagePart.text('')],
-            reasoning: '正在思考…')
+            parts: [const MessagePart.text('')])
       ],
       running: true,
       paused: false,
+      runProgress: ChatRunProgress.started(),
       toolActivities: const [],
       activityLog: const [],
       clearLiveReply: true,
@@ -1237,7 +1198,7 @@ class ChatController extends Notifier<ChatState> {
 
     try {
       final prep = await _prepareRun(database);
-      if (!_runs.ownsRun(runGeneration, conversationId)) return;
+      if (!current() || !_runs.ownsRun(runGeneration, conversationId)) return;
       await _runAgent(
           assistantIndex,
           prep.model,
@@ -1253,18 +1214,23 @@ class ChatController extends Notifier<ChatState> {
           runGeneration,
           conversationId);
     } catch (error) {
-      if (_runs.ownsRun(runGeneration, conversationId)) {
+      if (current() && _runs.ownsRun(runGeneration, conversationId)) {
         final failed = ChatMessage(
+          id: UniqueId.generate('message'),
           role: MessageRole.assistant,
           parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
         );
         state = _withMessageAt(state, assistantIndex, failed).copyWith(
           running: false,
           clearLiveReply: true,
+          clearRunProgress: true,
         );
-        try {
-          await _persistMessage(failed);
-        } catch (_) {}
+        // 会话历史是用户数据：写库失败必须留痕，否则这条失败消息会静默消失。
+        await NexusGuard.degradeAsync<void>(
+          'chat.persistFailedReply',
+          () => _persistMessage(failed),
+          logger: _logDegrade,
+        );
       }
     }
   }
@@ -1273,12 +1239,27 @@ class ChatController extends Notifier<ChatState> {
   /// 再基于编辑后的消息重新运行 Agent。
   Future<void> editAndResend({
     required int messageIndex,
+    String? messageId,
+    String? expectedConversationId,
     required String newText,
     required ToolApprovalCallback approveTool,
   }) async {
-    if (state.running || state.loading) return;
+    if (state.running || state.loading || state.restoringConversation) return;
+    final conversationId = state.conversationId;
+    final switchGeneration = _conversationSwitchGeneration;
+    bool current() =>
+        _mounted &&
+        switchGeneration == _conversationSwitchGeneration &&
+        state.conversationId == conversationId;
+    if (expectedConversationId != null &&
+        expectedConversationId != conversationId) return;
+    if (messageId != null) {
+      messageIndex =
+          state.messages.indexWhere((message) => message.id == messageId);
+    }
     if (messageIndex < 0 || messageIndex >= state.messages.length) return;
     final target = state.messages[messageIndex];
+    if (target.id == null) return;
     if (target.role != MessageRole.user) return;
     final trimmed = newText.trim();
     if (trimmed.isEmpty) return;
@@ -1286,33 +1267,41 @@ class ChatController extends Notifier<ChatState> {
     final imageParts =
         target.parts.where((part) => part.type != 'text').toList();
     final editedMessage = ChatMessage(
+        id: target.id,
         role: MessageRole.user,
         parts: [MessagePart.text(trimmed), ...imageParts]);
 
-    // state 中的用户消息与库中 role=user 的行按出现顺序一一对应，
-    // 以第 ordinal 条用户行作为锚点，更新内容并截断其后所有行。
     final database = await ref.read(databaseProvider.future);
-    final conversationId = state.conversationId;
+    if (!_mounted ||
+        switchGeneration != _conversationSwitchGeneration ||
+        state.conversationId != conversationId ||
+        state.running) return;
+    // A pending page may have prepended rows while awaiting the database.
+    messageIndex =
+        state.messages.indexWhere((message) => message.id == target.id);
+    if (messageIndex < 0) return;
     final runGeneration = _runs.beginRun();
+    state = state.copyWith(running: true);
     if (conversationId != null) {
-      var ordinal = 0;
-      for (var i = 0; i <= messageIndex; i++) {
-        if (state.messages[i].role == MessageRole.user) ordinal++;
-      }
-      final userRows = (await database.messagesFor(conversationId))
-          .where((row) => row.role == 'user')
-          .toList(growable: false);
-      if (userRows.length < ordinal) return;
-      final anchor = userRows[ordinal - 1];
       try {
         await database.editMessageAndTruncate(
-            conversationId, anchor.id, _contentForPersist(editedMessage));
+            conversationId, target.id!, _contentForPersist(editedMessage));
       } catch (_) {
-        // 持久化失败不阻断重发。
+        if (current() && _runs.ownsRun(runGeneration, conversationId)) {
+          state = state.copyWith(
+            running: false,
+            activityLog: [
+              ...state.activityLog,
+              '编辑未能保存，已取消重发',
+            ],
+          );
+        }
+        return;
       }
     }
 
-    if (!_runs.ownsRun(runGeneration, conversationId)) return;
+    if (!current() || !_runs.ownsRun(runGeneration, conversationId)) return;
+    _invalidateContextRuns(clearState: true);
 
     final assistantIndex = messageIndex + 1;
     state = state.copyWith(
@@ -1321,12 +1310,13 @@ class ChatController extends Notifier<ChatState> {
         editedMessage,
         // 与 send/regenerate 一致：占位助手消息由 _runAgent 按 assistantIndex 就地更新。
         ChatMessage(
+            id: UniqueId.generate('message'),
             role: MessageRole.assistant,
-            parts: [const MessagePart.text('')],
-            reasoning: '正在思考…')
+            parts: [const MessagePart.text('')])
       ],
       running: true,
       paused: false,
+      runProgress: ChatRunProgress.started(),
       toolActivities: const [],
       activityLog: const [],
       clearLiveReply: true,
@@ -1334,7 +1324,7 @@ class ChatController extends Notifier<ChatState> {
 
     try {
       final prep = await _prepareRun(database);
-      if (!_runs.ownsRun(runGeneration, conversationId)) return;
+      if (!current() || !_runs.ownsRun(runGeneration, conversationId)) return;
       await _runAgent(
           assistantIndex,
           prep.model,
@@ -1350,18 +1340,23 @@ class ChatController extends Notifier<ChatState> {
           runGeneration,
           conversationId);
     } catch (error) {
-      if (_runs.ownsRun(runGeneration, conversationId)) {
+      if (current() && _runs.ownsRun(runGeneration, conversationId)) {
         final failed = ChatMessage(
+          id: UniqueId.generate('message'),
           role: MessageRole.assistant,
           parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
         );
         state = _withMessageAt(state, assistantIndex, failed).copyWith(
           running: false,
           clearLiveReply: true,
+          clearRunProgress: true,
         );
-        try {
-          await _persistMessage(failed);
-        } catch (_) {}
+        // 会话历史是用户数据：写库失败必须留痕，否则这条失败消息会静默消失。
+        await NexusGuard.degradeAsync<void>(
+          'chat.persistFailedReply',
+          () => _persistMessage(failed),
+          logger: _logDegrade,
+        );
       }
     }
   }
@@ -1426,6 +1421,7 @@ class ChatController extends Notifier<ChatState> {
         state = state.copyWith(
           running: true,
           paused: false,
+          runProgress: ChatRunProgress.started(),
           toolActivities: const [],
           activityLog: const [],
           clearPlanState: true,
@@ -1520,13 +1516,22 @@ class ChatController extends Notifier<ChatState> {
             terminal: null,
             runVerification: false,
           );
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          NexusGuard.degradeCaught(
+              'chat.finalizeDevelopmentLoop', error, stackTrace,
+              logger: _logDegrade);
+        }
       }
 
       if (ownsRun()) {
-        state =
-            state.copyWith(running: false, paused: false, clearLiveReply: true);
+        state = state.copyWith(
+          running: false,
+          paused: false,
+          clearLiveReply: true,
+          clearRunProgress: true,
+        );
         final assistantMessage = ChatMessage(
+          id: UniqueId.generate('message'),
           role: MessageRole.assistant,
           parts: [MessagePart.text(resultText)],
           modelName: config.isConfigured ? config.model : '演示模型',
@@ -1536,10 +1541,13 @@ class ChatController extends Notifier<ChatState> {
             messages: [...state.messages, assistantMessage],
             clearLiveReply: true,
           );
-          try {
-            await _persistMessage(assistantMessage,
-                conversationId: uiConversationId);
-          } catch (_) {}
+          // 助手回复是用户数据：写库失败必须留痕，否则刷新后回复会凭空消失。
+          await NexusGuard.degradeAsync<void>(
+            'chat.persistAssistantReply',
+            () => _persistMessage(assistantMessage,
+                conversationId: uiConversationId),
+            logger: _logDegrade,
+          );
         }
       }
     } catch (error) {
@@ -1552,12 +1560,20 @@ class ChatController extends Notifier<ChatState> {
             status: 'failed',
             summary: error.toString(),
           );
-        } catch (_) {}
+        } catch (error, stackTrace) {
+          // 在错误处理里标记任务失败又失败：任务会停在「运行中」，必须留痕。
+          NexusGuard.degradeCaught('chat.markTaskFailed', error, stackTrace,
+              logger: _logDegrade);
+        }
       }
       if (runGeneration != 0 &&
           _runs.ownsRunUnbound(runGeneration, uiConversationId)) {
-        state =
-            state.copyWith(running: false, paused: false, clearLiveReply: true);
+        state = state.copyWith(
+          running: false,
+          paused: false,
+          clearLiveReply: true,
+          clearRunProgress: true,
+        );
       }
     } finally {
       _resumingTaskIds.remove(taskId);
@@ -1581,6 +1597,7 @@ class ChatController extends Notifier<ChatState> {
     final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
     final runGeneration = _runs.beginRun();
+    _invalidateContextRuns(clearState: true);
     // 追加一个助手占位消息承载续跑输出；实际模型输入用保存的上下文。
     final assistantIndex = state.messages.length;
     final pausedPlan = state.planState;
@@ -1591,10 +1608,13 @@ class ChatController extends Notifier<ChatState> {
       messages: [
         ...state.messages,
         ChatMessage(
-            role: MessageRole.assistant, parts: const [MessagePart.text('')]),
+            id: UniqueId.generate('message'),
+            role: MessageRole.assistant,
+            parts: const [MessagePart.text('')]),
       ],
       running: true,
       paused: false,
+      runProgress: ChatRunProgress.started(),
       toolActivities: const [],
       activityLog: const [],
       clearLiveReply: true,
@@ -1621,16 +1641,21 @@ class ChatController extends Notifier<ChatState> {
     } catch (error) {
       if (_runs.ownsRun(runGeneration, conversationId)) {
         final failed = ChatMessage(
+          id: UniqueId.generate('message'),
           role: MessageRole.assistant,
           parts: [MessagePart.text(formatErrorForMessage(error.toString()))],
         );
         state = _withMessageAt(state, assistantIndex, failed).copyWith(
           running: false,
           clearLiveReply: true,
+          clearRunProgress: true,
         );
-        try {
-          await _persistMessage(failed);
-        } catch (_) {}
+        // 会话历史是用户数据：写库失败必须留痕，否则这条失败消息会静默消失。
+        await NexusGuard.degradeAsync<void>(
+          'chat.persistFailedReply',
+          () => _persistMessage(failed),
+          logger: _logDegrade,
+        );
       }
     }
   }
@@ -1705,12 +1730,15 @@ class ChatController extends Notifier<ChatState> {
 
   Future<void> _hydrateActiveProject(
       AppDatabase database, Conversation conversation) async {
+    // 由 _initialize 以 unawaited 分离调用，启动早期就可能撞上容器销毁。
+    if (!_mounted) return;
     try {
       final projectService = ProjectService(
         db: database,
-        workspace: ref.read(workspaceServiceProvider),
+        workspace: _ref.read(workspaceServiceProvider),
       );
       await projectService.migrateLegacyWorkspaces();
+      if (!_mounted) return;
       Project? project;
       if (conversation.projectId != null &&
           conversation.projectId!.isNotEmpty) {
@@ -1718,14 +1746,20 @@ class ChatController extends Notifier<ChatState> {
       }
       project ??= await projectService.activeProject();
       if (project == null) return;
+      if (!_mounted) return;
       await _applyOpenedProject(project, bindConversation: false);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      // 启动时恢复项目失败：界面退化为「未选择项目」，原因要可查。
+      NexusGuard.degradeCaught('chat.openActiveProject', error, stackTrace,
+          logger: _logDegrade);
+    }
   }
 
   Future<void> _applyOpenedProject(
     Project project, {
     required bool bindConversation,
   }) async {
+    if (!_mounted) return;
     state = state.copyWith(
       currentWorkspacePath: project.canonicalRootPath,
       currentProjectId: project.id,
@@ -1735,14 +1769,18 @@ class ChatController extends Notifier<ChatState> {
     final conversationId = state.conversationId;
     if (conversationId == null) return;
     try {
-      final database = await ref.read(databaseProvider.future);
+      final database = await _ref.read(databaseProvider.future);
       final conversation = await database.findConversation(conversationId);
       if (conversation == null) return;
       await database.saveConversation(conversation.copyWith(
         projectId: Value(project.id),
         updatedAt: DateTime.now(),
       ));
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      NexusGuard.degradeCaught(
+          'chat.bindConversationProject', error, stackTrace,
+          logger: _logDegrade);
+    }
   }
 
   void setPlanMode(bool value) {
@@ -1774,7 +1812,11 @@ class ChatController extends Notifier<ChatState> {
       // Retain a compatible value for older settings/export paths.
       await preferences.setBool(
           'settings.llm.deep_reasoning', mode != ReasoningMode.standard);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      // state 已更新但没落盘：界面显示已切换，重启后会退回旧值。
+      NexusGuard.degradeCaught('chat.saveReasoningMode', error, stackTrace,
+          logger: _logDegrade);
+    }
   }
 
   Future<void> setWebSearchEnabled(bool value) async {
@@ -1782,7 +1824,11 @@ class ChatController extends Notifier<ChatState> {
     try {
       final preferences = await SharedPreferences.getInstance();
       await preferences.setBool('settings.tool.web_browsing', value);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      // 同 saveReasoningMode：开关看起来生效了，重启后却会回退。
+      NexusGuard.degradeCaught('chat.saveWebSearchEnabled', error, stackTrace,
+          logger: _logDegrade);
+    }
   }
 
   /// remember 工具回调：异步懒加载 DB 并写入一条手动来源记忆。
@@ -1931,7 +1977,11 @@ class ChatController extends Notifier<ChatState> {
           systemPrompt = agent.systemPrompt;
         }
       }
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      // 取不到 Agent 的自定义系统提示词：会用默认提示词，回答风格会不一致。
+      NexusGuard.degradeCaught('chat.loadAgentPrompt', error, stackTrace,
+          logger: _logDegrade);
+    }
     try {
       final database = await ref.read(databaseProvider.future);
       final store = ref.read(providerConfigStoreProvider);
@@ -2209,6 +2259,7 @@ class ChatController extends Notifier<ChatState> {
         activityLog: const [],
         clearPlanState: true,
         clearLiveReply: true,
+        clearRunProgress: true,
       );
     }
   }
@@ -2238,6 +2289,7 @@ class ChatController extends Notifier<ChatState> {
         activityLog: const [],
         clearPlanState: true,
         clearLiveReply: true,
+        clearRunProgress: true,
       );
     }
   }
@@ -2286,14 +2338,22 @@ class ChatController extends Notifier<ChatState> {
     return (costCents: cost, savedCostCents: saved);
   }
 
-  /// 暂停只在下一个 Agent 检查点生效，不打断当前模型流或工具调用。
+  /// 任务真正发起前申请通知权限（任务跑完要通知用户），失败静默降级。
+  /// 放在控制器里，展示层就不必直接依赖通知基础设施（见 layering_test）。
+  Future<void> ensureNotificationPermissionOnce() =>
+      NotificationService.instance.ensurePermissionOnce();
+
+  /// 暂停：正在流式输出的模型回复会被立即中断；正在执行的工具先跑完当前
+  /// 命令，再停在下一个检查点。这里立刻把 UI 切到暂停态（露出继续/停止），
+  /// 避免以前「点了暂停没反应、再点也没用」的问题。
   bool pause() {
     final controller = _runs.runController;
     if (controller == null || !controller.pause()) return false;
     unawaited(_persistControl(TaskControlKind.pause));
     if (_runs.isVisible(state.conversationId)) {
       state = state.copyWith(
-        activityLog: [...state.activityLog, '运行已暂停，等待检查点'],
+        paused: true,
+        activityLog: [...state.activityLog, '正在暂停：当前步骤结束后停下'],
       );
     }
     return true;
@@ -2346,7 +2406,11 @@ class ChatController extends Notifier<ChatState> {
           payload: payload,
         ),
       );
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      // 控制请求没入库：后台执行者收不到这条指令，属于必须留痕的降级。
+      NexusGuard.degradeCaught('chat.sendControlRequest', error, stackTrace,
+          logger: _logDegrade);
+    }
   }
 
   void stop() {
@@ -2417,154 +2481,276 @@ class ChatController extends Notifier<ChatState> {
     );
   }
 
+  bool approveContextCompression(ContextCompressionPlan plan) {
+    if (!state.running || state.loading || !plan.shouldSuggest) return false;
+    final runController = _runs.runController;
+    if (runController == null) return false;
+    final toolCallIds = <String>{};
+    for (final candidate in plan.candidates) {
+      final toolCallId = candidate.toolCallId;
+      if (toolCallId == null || toolCallId.isEmpty) return false;
+      toolCallIds.add(toolCallId);
+    }
+    return runController.queueCompression(toolCallIds);
+  }
+
   // --- 浼氳瘽 / Agent / Provider 操作 ---
 
   Future<void> newConversation() async {
     _detachVisibleRun();
+    _invalidateContextRuns(clearState: true);
+    final switchGeneration = ++_conversationSwitchGeneration;
     final newGeneration = _runs.generation;
-    final database = await ref.read(databaseProvider.future);
-    final conversation = await _createConversation(database);
-    if (newGeneration != _runs.generation) return;
-    state = state.copyWith(
-      conversationId: conversation.id,
-      conversationTitle: conversation.title,
-      messages: const [],
-      toolActivities: const [],
-      activityLog: const [],
-      liveContextTokens: 0,
-      // 步数不落库，新会话即归零。
-      totalSteps: 0,
-      mode: ChatMode.chat,
-      planMode: false,
-      clearPlanState: true,
-      clearLiveReply: true,
-      clearSessionSkillInstructions: true,
-    );
-    _oldestLoadedAt = null;
-    _olderExhausted = true;
-  }
-
-  /// --- 长会话键集分页（B-2 UI 接线）---
-  ///
-  /// 初始只把会话最新 [_conversationPageSize] 条载入内存；用户滚到顶部时由
-  /// UI 回调 [loadOlderMessages] 按 (conversationId, createdAt) 键集翻上一页。
-  /// DB 层已有完整键集支持，这里只维护「当前已加载窗口」的游标。
-  static const _conversationPageSize = 200;
-  static const _olderPageSize = 100;
-  DateTime? _oldestLoadedAt;
-  int? _oldestLoadedRowId;
-  bool _olderExhausted = false;
-
-  Future<List<(Message, int)>> _loadConversationPage(
-      AppDatabase database, String conversationId) {
-    return database.messagesPage(conversationId, limit: _conversationPageSize);
-  }
-
-  void _trackLoadedWindow(List<(Message, int)> page) {
-    if (page.isEmpty) {
-      _oldestLoadedAt = null;
-      _oldestLoadedRowId = null;
-      _olderExhausted = true;
-      return;
-    }
-    _oldestLoadedAt = page.first.$1.createdAt;
-    _oldestLoadedRowId = page.first.$2;
-    _olderExhausted = page.length < _conversationPageSize;
-  }
-
-  /// 加载更早一页并前插到消息列表。返回 true 表示本次有新页入列
-  /// （可能仍有更早）；false 表示没有更早消息或当前不可加载。
-  ///
-  /// 运行中不加载：前插会使 LiveReply.messageIndex 指错消息（流式绑定按
-  /// 索引定位），且滚顶行为与流式跟手冲突。
-  Future<bool> loadOlderMessages() async {
-    final conversationId = state.conversationId;
-    final oldest = _oldestLoadedAt;
-    if (conversationId == null || oldest == null || _olderExhausted) {
-      return false;
-    }
-    if (state.running) return false;
+    state = state.copyWith(restoringConversation: true);
     try {
       final database = await ref.read(databaseProvider.future);
-      final older = await database.messagesPage(conversationId,
-          before: oldest,
-          beforeRowId: _oldestLoadedRowId,
-          limit: _olderPageSize);
-      if (older.isEmpty) {
-        _olderExhausted = true;
-        return false;
+      final conversation = await _createConversation(
+        database,
+        modeOverride: ChatMode.chat,
+      );
+      if (newGeneration != _runs.generation) return;
+      state = state.copyWith(
+        conversationId: conversation.id,
+        conversationTitle: conversation.title,
+        agentName: '通用助手',
+        systemPrompt: '你是一个有帮助的 AI Agent。',
+        clearAgentId: true,
+        contextReservedOutputTokens: 2048,
+        messages: const [],
+        toolActivities: const [],
+        activityLog: const [],
+        liveContextTokens: 0,
+        timingSnapshot: TimingSnapshot.empty,
+        clearContextSnapshot: true,
+        clearContextSteps: true,
+        clearContextRuns: true,
+        // 步数不落库，新会话即归零。
+        totalSteps: 0,
+        mode: ChatMode.chat,
+        planMode: false,
+        clearPlanState: true,
+        clearLiveReply: true,
+        clearSessionSkillInstructions: true,
+      );
+      _historyPager.track(const []);
+    } finally {
+      if (switchGeneration == _conversationSwitchGeneration) {
+        state = state.copyWith(restoringConversation: false);
       }
-      if (older.length < _olderPageSize) _olderExhausted = true;
-      _oldestLoadedAt = older.first.$1.createdAt;
-      _oldestLoadedRowId = older.first.$2;
-      final restored = _restoreFromMessages(older.map((e) => e.$1).toList());
+    }
+  }
+
+  final _historyPager = ConversationHistoryPager();
+  int? _loadingHistoryGeneration;
+
+  Future<List<(Message, int)>> _loadConversationPage(
+          AppDatabase database, String conversationId) =>
+      database.messagesPage(conversationId,
+          limit: ConversationHistoryPager.initialSize);
+
+  void _trackLoadedWindow(List<(Message, int)> page) =>
+      _historyPager.track(page);
+
+  // Compatibility for existing callers; the UI consumes the explicit result.
+  Future<bool> loadOlderMessages() async =>
+      await loadOlderHistory() == HistoryLoadResult.loaded;
+
+  Future<HistoryLoadResult> loadOlderHistory() async {
+    final conversationId = state.conversationId;
+    final generation = _conversationSwitchGeneration;
+    if (conversationId == null ||
+        state.running ||
+        state.restoringConversation ||
+        _loadingHistoryGeneration == generation) return HistoryLoadResult.busy;
+    _loadingHistoryGeneration = generation;
+    bool current() =>
+        _mounted &&
+        generation == _conversationSwitchGeneration &&
+        state.conversationId == conversationId &&
+        !state.running &&
+        !state.restoringConversation;
+    try {
+      final database = await ref.read(databaseProvider.future);
+      if (!current()) return HistoryLoadResult.stale;
+      final (result, older) =
+          await _historyPager.load(database, conversationId, current);
+      if (!current()) return HistoryLoadResult.stale;
+      if (result != HistoryLoadResult.loaded) return result;
+      final restored = _restoreFromMessages(older);
       state = state.copyWith(
         messages: [...restored.$1, ...state.messages],
         toolActivities: [...restored.$2, ...state.toolActivities],
       );
-      return true;
-    } catch (_) {
-      return false;
+      return HistoryLoadResult.loaded;
+    } finally {
+      if (_loadingHistoryGeneration == generation)
+        _loadingHistoryGeneration = null;
+    }
+  }
+
+  /// Loads historical context telemetry only when the metrics sheet needs it.
+  ///
+  /// Switching conversations restores the latest snapshot because that is all
+  /// the chat HUD needs. The full run list is comparatively expensive: each run
+  /// may contain up to 2,000 events and its metadata must be decoded. Keep that
+  /// work off the conversation-switch path and cache it for the current session.
+  Future<List<ContextRunHistory>> loadContextRuns() async {
+    while (true) {
+      final conversationId = state.conversationId;
+      if (conversationId == null || conversationId.isEmpty) return const [];
+      if (_contextRunsLoadedConversationId == conversationId) {
+        return state.contextRuns;
+      }
+
+      final revision = _contextRunsRevision;
+      final loading = _contextRunsLoading;
+      if (_contextRunsLoadingConversationId == conversationId &&
+          _contextRunsLoadingRevision == revision &&
+          loading != null) {
+        await loading;
+        if (state.conversationId != conversationId) return const [];
+        if (_contextRunsLoadedConversationId == conversationId) {
+          return state.contextRuns;
+        }
+        // The request was invalidated while it was in flight. Retry against
+        // the current revision instead of returning stale telemetry.
+        continue;
+      }
+
+      final request = () async {
+        final database = await ref.read(databaseProvider.future);
+        final histories = await ContextInsightsHistory.recentForConversation(
+          database,
+          conversationId,
+        );
+        if (state.conversationId == conversationId &&
+            revision == _contextRunsRevision) {
+          _contextRunsLoadedConversationId = conversationId;
+          state = state.copyWith(contextRuns: histories);
+        }
+        return histories;
+      }();
+      _contextRunsLoadingConversationId = conversationId;
+      _contextRunsLoadingRevision = revision;
+      _contextRunsLoading = request;
+      try {
+        await request;
+      } finally {
+        if (identical(_contextRunsLoading, request)) {
+          _contextRunsLoading = null;
+          _contextRunsLoadingConversationId = null;
+          _contextRunsLoadingRevision = null;
+        }
+      }
+      if (state.conversationId != conversationId) return const [];
+      if (_contextRunsLoadedConversationId == conversationId) {
+        return state.contextRuns;
+      }
+      // A new run or conversation switch invalidated this request. Loop once
+      // more so callers never receive the obsolete result from this attempt.
+    }
+  }
+
+  void _invalidateContextRuns({bool clearState = false}) {
+    _contextRunsRevision++;
+    _contextRunsLoadedConversationId = null;
+    if (clearState) {
+      state = state.copyWith(clearContextRuns: true);
     }
   }
 
   Future<void> switchConversation(Conversation conversation) async {
     _detachVisibleRun();
-    final switchGeneration = _runs.generation;
-    final database = await ref.read(databaseProvider.future);
-    final storedPage = await _loadConversationPage(database, conversation.id);
-    _trackLoadedWindow(storedPage);
-    final stored = storedPage.map((e) => e.$1).toList();
-    if (switchGeneration != _runs.generation) return;
-    var agentName = state.agentName;
-    var systemPrompt = state.systemPrompt;
-    var agentId = conversation.agentId;
-    if (agentId != null) {
-      final agent = await database.findAgent(agentId);
-      if (agent != null) {
-        agentName = agent.name;
-        systemPrompt = agent.systemPrompt;
+    _invalidateContextRuns(clearState: true);
+    final switchGeneration = ++_conversationSwitchGeneration;
+    final runGeneration = _runs.generation;
+    state = state.copyWith(restoringConversation: true);
+    try {
+      final database = await ref.read(databaseProvider.future);
+      final storedPage = await _loadConversationPage(database, conversation.id);
+      final stored = storedPage.map((e) => e.$1).toList();
+      if (switchGeneration != _conversationSwitchGeneration ||
+          runGeneration != _runs.generation) return;
+      _trackLoadedWindow(storedPage);
+      var agentName = '通用助手';
+      var systemPrompt = '你是一个有帮助的 AI Agent。';
+      final agentId = conversation.agentId;
+      var reservedOutputTokens = 2048;
+      if (agentId != null) {
+        final agent = await database.findAgent(agentId);
+        if (agent != null) {
+          agentName = agent.name;
+          systemPrompt = agent.systemPrompt;
+          reservedOutputTokens = agent.maxTokens;
+        }
+      }
+      if (switchGeneration != _conversationSwitchGeneration ||
+          runGeneration != _runs.generation) return;
+      final restored = _restoreFromMessages(stored);
+      // 会话切换只需要恢复最新一轮的上下文快照；完整历史由上下文面板按需加载。
+      // 不要在这里读取最近 12 个 run 的全部事件，否则一次切换最坏会解码约
+      // 24,000 条事件，拖慢中低端设备上的首屏恢复。
+      final contextSteps = await ContextInsightsHistory.latestForConversation(
+        database,
+        conversation.id,
+      );
+      if (switchGeneration != _conversationSwitchGeneration ||
+          runGeneration != _runs.generation) return;
+      final latestSnapshot =
+          contextSteps.isEmpty ? null : contextSteps.last.snapshot;
+      final restoredMessageTokens = restored.$1.fold<int>(
+          0, (sum, message) => sum + ContextWindow.estimateTokens(message));
+      String? workspacePath = state.currentWorkspacePath;
+      String? projectId = conversation.projectId ?? state.currentProjectId;
+      String? projectName = state.currentProjectName;
+      if (conversation.projectId != null &&
+          conversation.projectId!.isNotEmpty) {
+        try {
+          final project = await database.findProject(conversation.projectId!);
+          if (project != null) {
+            projectId = project.id;
+            projectName = project.name;
+            workspacePath = project.canonicalRootPath;
+          }
+        } catch (error, stackTrace) {
+          NexusGuard.degradeCaught(
+              'chat.resolveConversationProject', error, stackTrace,
+              logger: _logDegrade);
+        }
+      }
+      state = state.copyWith(
+        conversationId: conversation.id,
+        conversationTitle: conversation.title,
+        agentId: agentId,
+        currentProjectId: projectId,
+        currentProjectName: projectName,
+        currentWorkspacePath: workspacePath,
+        agentName: agentName,
+        systemPrompt: systemPrompt,
+        messages: restored.$1,
+        toolActivities: restored.$2,
+        activityLog: const [],
+        contextReservedOutputTokens: reservedOutputTokens,
+        liveContextTokens: latestSnapshot?.usedTokens ?? restoredMessageTokens,
+        timingSnapshot: TimingSnapshot.empty,
+        contextSteps: contextSteps,
+        clearContextRuns: true,
+        contextSnapshot: latestSnapshot,
+        // 步数（agent 循环迭代数）未持久化，切回历史会话时从 0 重新累计。
+        totalSteps: 0,
+        mode: conversation.agentId == null ? ChatMode.chat : ChatMode.agent,
+        planMode: false,
+        clearAgentId: agentId == null,
+        clearPlanState: true,
+        clearLiveReply: true,
+        clearSessionSkillInstructions: true,
+      );
+      _restoreVisibleRunIfNeeded(conversation.id);
+    } finally {
+      if (switchGeneration == _conversationSwitchGeneration) {
+        state = state.copyWith(restoringConversation: false);
       }
     }
-    if (switchGeneration != _runs.generation) return;
-    final restored = _restoreFromMessages(stored);
-    String? workspacePath = state.currentWorkspacePath;
-    String? projectId = conversation.projectId ?? state.currentProjectId;
-    String? projectName = state.currentProjectName;
-    if (conversation.projectId != null && conversation.projectId!.isNotEmpty) {
-      try {
-        final project = await database.findProject(conversation.projectId!);
-        if (project != null) {
-          projectId = project.id;
-          projectName = project.name;
-          workspacePath = project.canonicalRootPath;
-        }
-      } catch (_) {}
-    }
-    state = state.copyWith(
-      conversationId: conversation.id,
-      conversationTitle: conversation.title,
-      agentId: agentId,
-      currentProjectId: projectId,
-      currentProjectName: projectName,
-      currentWorkspacePath: workspacePath,
-      agentName: agentName,
-      systemPrompt: systemPrompt,
-      messages: restored.$1,
-      toolActivities: restored.$2,
-      activityLog: const [],
-      liveContextTokens: restored.$1.fold<int>(
-          0, (sum, message) => sum + ContextWindow.estimateTokens(message)),
-      // 步数（agent 循环迭代数）未持久化，切回历史会话时从 0 重新累计。
-      totalSteps: 0,
-      mode: conversation.agentId == null ? ChatMode.chat : ChatMode.agent,
-      planMode: false,
-      clearAgentId: agentId == null,
-      clearPlanState: true,
-      clearLiveReply: true,
-      clearSessionSkillInstructions: true,
-    );
-    _restoreVisibleRunIfNeeded(conversation.id);
   }
 
   Future<TaskHandle> enqueueRepairFollowUp({
@@ -2590,22 +2776,41 @@ class ChatController extends Notifier<ChatState> {
     return handle;
   }
 
-  Future<Conversation> forkFromMessage(int messageIndex) async {
+  Future<Conversation> forkFromMessage(int messageIndex,
+      {String? messageId, String? expectedConversationId}) async {
     final conversationId = state.conversationId;
-    if (conversationId == null) {
-      throw StateError('当前没有会话');
+    final generation = _conversationSwitchGeneration;
+    if (conversationId == null ||
+        state.running ||
+        state.restoringConversation ||
+        (expectedConversationId != null &&
+            expectedConversationId != conversationId)) {
+      throw StateError('会话已变化或正在运行');
     }
-    final database = await ref.read(databaseProvider.future);
-    final stored = await database.messagesFor(conversationId);
-    if (messageIndex < 0 || messageIndex >= stored.length) {
+    if (messageId != null) {
+      messageIndex =
+          state.messages.indexWhere((message) => message.id == messageId);
+    }
+    if (messageIndex < 0 || messageIndex >= state.messages.length) {
       throw StateError('找不到分叉消息');
     }
+    final anchor = state.messages[messageIndex].id;
+    if (anchor == null) throw StateError('消息尚未保存');
+    final database = await ref.read(databaseProvider.future);
+    if (!_mounted ||
+        generation != _conversationSwitchGeneration ||
+        state.running) {
+      throw StateError('会话已变化或正在运行');
+    }
     final branch = await const ConversationForkService().fork(
-      db: database,
-      sourceConversationId: conversationId,
-      forkMessageId: stored[messageIndex].id,
-    );
-    await switchConversation(branch);
+        db: database,
+        sourceConversationId: conversationId,
+        forkMessageId: anchor);
+    if (_mounted &&
+        generation == _conversationSwitchGeneration &&
+        !state.running) {
+      await switchConversation(branch);
+    }
     return branch;
   }
 
@@ -2626,6 +2831,7 @@ class ChatController extends Notifier<ChatState> {
         agentId: agent.id,
         agentName: agent.name,
         systemPrompt: agent.systemPrompt,
+        contextReservedOutputTokens: agent.maxTokens,
         mode: ChatMode.agent,
         planMode: false,
         clearPlanState: true);
@@ -2645,7 +2851,11 @@ class ChatController extends Notifier<ChatState> {
     try {
       activeWorkspace =
           await ref.read(workspaceServiceProvider).getActiveWorkspace();
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      // 读不到当前工作区：切换 Provider 后工作区规则会退化为「未选择工作区」。
+      NexusGuard.degradeCaught('chat.readActiveWorkspace', error, stackTrace,
+          logger: _logDegrade);
+    }
     final store = ref.read(providerConfigStoreProvider);
     await store.save(profile);
     final config = await store.load();
@@ -2702,7 +2912,8 @@ class ChatController extends Notifier<ChatState> {
 
   ChatState _withMessageAt(ChatState s, int index, ChatMessage message) {
     final messages = List<ChatMessage>.of(s.messages);
-    messages[index] = message;
+    messages[index] =
+        message.id == null ? message.copyWith(id: messages[index].id) : message;
     return s.copyWith(messages: messages);
   }
 
@@ -2725,6 +2936,8 @@ class ChatController extends Notifier<ChatState> {
     String callId, {
     String? status,
     String? result,
+    bool? compressed,
+    String? originalResult,
     bool? ok,
     String? code,
     ToolEffect? effect,
@@ -2734,6 +2947,8 @@ class ChatController extends Notifier<ChatState> {
             ? a.copyWith(
                 status: status,
                 result: result,
+                compressed: compressed,
+                originalResult: originalResult,
                 ok: ok,
                 code: code,
                 effect: effect,

@@ -132,6 +132,44 @@ void main() {
     );
   });
 
+  test('knowledge index refreshes after database backup replacement writes',
+      () async {
+    await knowledgeService.ingest(
+      db: db,
+      name: 'old',
+      sourceType: 'text',
+      content: 'legacy marker',
+    );
+    expect(
+      await knowledgeService.buildInjectionBlock(db, 'legacy'),
+      contains('legacy marker'),
+    );
+
+    await db.clearAllUserData();
+    final now = DateTime.now();
+    await db.saveKnowledgeDoc(KnowledgeDoc(
+      id: 'restored-doc',
+      name: 'restored',
+      sourceType: 'text',
+      chunkCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    ));
+    await db.saveKnowledgeChunk(const KnowledgeChunk(
+      id: 'restored-doc:chunk:0',
+      docId: 'restored-doc',
+      content: 'restored marker',
+      embeddingJson: null,
+      index: 0,
+    ));
+
+    expect(await knowledgeService.buildInjectionBlock(db, 'legacy'), isEmpty);
+    expect(
+      await knowledgeService.buildInjectionBlock(db, 'restored'),
+      contains('restored marker'),
+    );
+  });
+
   test('memory_get exposes revision and pagination cursor', () async {
     for (var i = 0; i < 3; i++) {
       await db.saveMemory(Memory(

@@ -9,6 +9,11 @@ import 'chat_execution_stage.dart';
 /// 顶栏统一高度常量 (56px)
 const double kCapsuleTopBarHeight = AppTokens.kTopBarHeight;
 
+/// Reserve the same space in the overlay and message list at large text sizes.
+double capsuleTopBarHeight(BuildContext context) =>
+    kCapsuleTopBarHeight +
+    (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0.0, 48.0) * 2;
+
 /// 首页 / 对话页顶部栏（对标 DeepSeek App）。
 ///
 /// 与 DeepSeek 一致的三点：
@@ -78,8 +83,9 @@ class CapsuleTopBar extends StatelessWidget {
         : '';
     final metaParts = [
       if (model.isNotEmpty) model,
-      if (workspace.isNotEmpty) workspace,
-      if (contextUsage.isNotEmpty) contextUsage,
+      if (maxContextTokens > 0 &&
+          currentContextTokens / maxContextTokens >= 0.85)
+        '上下文偏高',
     ];
     final contextLabel = metaParts.join(' · ');
     final metaColor =
@@ -95,7 +101,7 @@ class CapsuleTopBar extends StatelessWidget {
             : (isDark ? AppPalette.brand : AppPalette.brandAction);
 
     final content = SizedBox(
-      height: kCapsuleTopBarHeight,
+      height: capsuleTopBarHeight(context),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Row(
@@ -248,41 +254,47 @@ class CapsuleTopBar extends StatelessWidget {
                           ],
                           if (contextLabel.isNotEmpty)
                             Flexible(
-                              child: GestureDetector(
-                                onTap: onContextGaugeTap ??
-                                    onTitleTap ??
-                                    onModelTap ??
-                                    onWorkspaceTap,
-                                behavior: HitTestBehavior.opaque,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (maxContextTokens > 0)
-                                      Container(
-                                        width: 5,
-                                        height: 5,
-                                        margin: const EdgeInsets.only(right: 4),
-                                        decoration: BoxDecoration(
-                                          color: gaugeDotColor,
-                                          shape: BoxShape.circle,
+                              child: Tooltip(
+                                message: [model, workspace, contextUsage]
+                                    .where((v) => v.isNotEmpty)
+                                    .join(' · '),
+                                child: GestureDetector(
+                                  onTap: onContextGaugeTap ??
+                                      onTitleTap ??
+                                      onModelTap ??
+                                      onWorkspaceTap,
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      if (maxContextTokens > 0)
+                                        Container(
+                                          width: 5,
+                                          height: 5,
+                                          margin:
+                                              const EdgeInsets.only(right: 4),
+                                          decoration: BoxDecoration(
+                                            color: gaugeDotColor,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      Flexible(
+                                        child: Text(
+                                          contextLabel,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w400,
+                                            height: 1.25,
+                                            color: metaColor,
+                                          ),
                                         ),
                                       ),
-                                    Flexible(
-                                      child: Text(
-                                        contextLabel,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w400,
-                                          height: 1.25,
-                                          color: metaColor,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -382,7 +394,7 @@ class CapsuleTopBar extends StatelessWidget {
 
     if (glassIntensity == GlassIntensity.flat) {
       return Container(
-        height: kCapsuleTopBarHeight,
+        height: capsuleTopBarHeight(context),
         decoration: BoxDecoration(
           color: canvas,
           borderRadius: BorderRadius.circular(AppTokens.radiusPill),

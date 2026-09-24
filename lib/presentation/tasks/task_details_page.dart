@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/change_review.dart';
+import '../../application/artifact_service.dart';
 import '../../application/development_verification.dart';
 import '../../application/providers.dart';
 import '../../application/run_audit_report.dart';
@@ -58,6 +59,9 @@ class TaskDetailsPage extends ConsumerStatefulWidget {
 class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   late DevelopmentTaskInfo _task;
   RunRecord? _run;
+  List<ProjectArtifact> _artifacts = const [];
+  bool _artifactsLoading = false;
+  Object? _artifactsError;
   RunAuditReport? _auditReport;
   bool _auditLoading = false;
   Object? _auditError;
@@ -70,8 +74,37 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     super.initState();
     _task = widget.task;
     _loadAudit();
+    _loadArtifacts();
     _loadFeedback();
     _checkWorkspace();
+  }
+
+  Future<void> _loadArtifacts() async {
+    final projectId = _task.projectId;
+    if (projectId == null || projectId.isEmpty) return;
+    setState(() {
+      _artifactsLoading = true;
+      _artifactsError = null;
+    });
+    try {
+      final db = await ref.read(databaseProvider.future);
+      final artifacts = await const ArtifactService().list(
+        db,
+        projectId: projectId,
+        taskId: _task.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _artifacts = artifacts;
+        _artifactsLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _artifactsError = error;
+        _artifactsLoading = false;
+      });
+    }
   }
 
   Future<void> _checkWorkspace() async {
@@ -238,6 +271,15 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
         ..writeln('## 结果摘要')
         ..writeln(summary)
         ..writeln();
+    }
+
+    if (_artifacts.isNotEmpty) {
+      buffer.writeln('## 交付产物');
+      for (final artifact in _artifacts) {
+        buffer.writeln(
+            '- ${artifact.relativePath} · ${artifact.kind} · ${artifact.bytes} bytes · SHA-256 `${artifact.hash}`');
+      }
+      buffer.writeln();
     }
 
     if (structured != null) {
@@ -547,6 +589,82 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     ),
                   ],
 
+                  if (_artifactsLoading ||
+                      _artifactsError != null ||
+                      _artifacts.isNotEmpty)
+                    NexusSection(
+                      title: '交付产物',
+                      child: SectionCard(
+                        padding: const EdgeInsets.all(16),
+                        child: _artifactsLoading
+                            ? const Center(
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : _artifactsError != null
+                                ? Text('产物加载失败：$_artifactsError')
+                                : Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      for (final artifact in _artifacts) ...[
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Icon(
+                                              artifact.kind == 'apk'
+                                                  ? Icons.android_outlined
+                                                  : Icons.inventory_2_outlined,
+                                              size: 18,
+                                              color: theme.colorScheme.primary,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  SelectableText(
+                                                    artifact.relativePath,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    '${artifact.kind} · ${artifact.bytes} bytes',
+                                                    style: TextStyle(
+                                                      fontSize: AppTokens
+                                                          .fontSizeFootnote,
+                                                      color: theme.colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  SelectableText(
+                                                    'SHA-256  ${artifact.hash}',
+                                                    style: TextStyle(
+                                                      fontSize: AppTokens
+                                                          .fontSizeFootnote,
+                                                      color: theme.colorScheme
+                                                          .onSurfaceVariant,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        if (artifact != _artifacts.last)
+                                          const Divider(height: 24),
+                                      ],
+                                    ],
+                                  ),
+                      ),
+                    ),
+
                   if (structured != null) ...[
                     NexusSection(
                       title: '结构化产物',
@@ -563,7 +681,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                   SizedBox(width: 6),
                                   Text('关键发现',
                                       style: TextStyle(
-                                          fontSize: 13,
+                                          fontSize: AppTokens.fontSizeCaption,
                                           fontWeight: FontWeight.w500)),
                                 ],
                               ),
@@ -586,7 +704,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                       Expanded(
                                           child: SelectableText(text,
                                               style: const TextStyle(
-                                                  fontSize: 13))),
+                                                  fontSize: AppTokens
+                                                      .fontSizeCaption))),
                                     ],
                                   ),
                                 );
@@ -601,7 +720,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                   SizedBox(width: 6),
                                   Text('建议采取动作',
                                       style: TextStyle(
-                                          fontSize: 13,
+                                          fontSize: AppTokens.fontSizeCaption,
                                           fontWeight: FontWeight.w500)),
                                 ],
                               ),
@@ -619,7 +738,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                         Expanded(
                                             child: SelectableText(a,
                                                 style: const TextStyle(
-                                                    fontSize: 13))),
+                                                    fontSize: AppTokens
+                                                        .fontSizeCaption))),
                                       ],
                                     ),
                                   )),
@@ -633,7 +753,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                   SizedBox(width: 6),
                                   Text('下一步实施计划',
                                       style: TextStyle(
-                                          fontSize: 13,
+                                          fontSize: AppTokens.fontSizeCaption,
                                           fontWeight: FontWeight.w500)),
                                 ],
                               ),
@@ -651,7 +771,8 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                         Expanded(
                                             child: SelectableText(s,
                                                 style: const TextStyle(
-                                                    fontSize: 13))),
+                                                    fontSize: AppTokens
+                                                        .fontSizeCaption))),
                                       ],
                                     ),
                                   )),
@@ -902,25 +1023,34 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
               children: [
                 Text(
                   '输入 ${metrics.promptTokens} tok',
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                      fontSize: AppTokens.fontSizeFootnote,
+                      fontFamily: 'monospace'),
                 ),
                 Text(
                   '输出 ${metrics.completionTokens} tok',
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                      fontSize: AppTokens.fontSizeFootnote,
+                      fontFamily: 'monospace'),
                 ),
                 Text(
                   '缓存 ${metrics.cachedTokens} tok',
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                      fontSize: AppTokens.fontSizeFootnote,
+                      fontFamily: 'monospace'),
                 ),
                 Text(
                   '重试 ${metrics.retryCount} 次',
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(
+                      fontSize: AppTokens.fontSizeFootnote,
+                      fontFamily: 'monospace'),
                 ),
                 if (metrics.estimatedCostCents != null)
                   Text(
                     '预计 ${metrics.estimatedCostCents} 分',
-                    style:
-                        const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote,
+                        fontFamily: 'monospace'),
                   ),
               ],
             ),
@@ -953,7 +1083,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
             const SizedBox(height: 8),
             if (report.entries.isEmpty)
               const Text('本次运行没有记录到文件、终端或设备副作用。',
-                  style: TextStyle(fontSize: 12.5))
+                  style: TextStyle(fontSize: AppTokens.fontSizeMeta))
             else
               ...report.entries.map((entry) => _auditEntry(entry)),
           ],
@@ -1016,7 +1146,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                 Text(
                   '${entry.tool} · effect=${entry.effect}',
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTokens.fontSizeCaption,
                     fontWeight: FontWeight.w500,
                     fontFamily: 'monospace',
                   ),
@@ -1026,8 +1156,9 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     details,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style:
-                        const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote,
+                        fontFamily: 'monospace'),
                   ),
               ],
             ),
@@ -1089,7 +1220,7 @@ class _PipelineTimelineCard extends StatelessWidget {
                     child: Text(
                       '工作区：$workspacePath',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTokens.fontSizeFootnote,
                         color: isDark
                             ? AppPalette.darkTextMuted
                             : AppPalette.lightTextMuted,
@@ -1128,7 +1259,7 @@ class _PipelineTimelineCard extends StatelessWidget {
                         child: Text(
                           isRunning ? '正在运行工具执行变更…' : '阶段执行就绪',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: AppTokens.fontSizeFootnote,
                             color: isDark
                                 ? AppPalette.darkTextMuted
                                 : AppPalette.lightTextMuted,
@@ -1171,27 +1302,33 @@ class _PipelineTimelineCard extends StatelessWidget {
     Color lineColor;
     switch (status) {
       case _StepStatus.done:
+        final doneColor =
+            isDark ? AppPalette.darkSuccess : AppPalette.lightSuccess;
         nodeIcon = Container(
           width: 22,
           height: 22,
-          decoration: const BoxDecoration(
-            color: Color(0xFF00E676),
+          decoration: BoxDecoration(
+            color: doneColor,
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.check, size: 14, color: Colors.black),
+          child: const Icon(Icons.check, size: 14, color: Colors.white),
         );
-        lineColor = const Color(0xFF00E676);
+        lineColor = doneColor;
       case _StepStatus.active:
+        final activeColor =
+            isDark ? AppPalette.darkBrandHover : AppPalette.brandAction;
+        final activeHalo =
+            isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
         nodeIcon = Container(
           width: 22,
           height: 22,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: const Color(0xFF00E5FF).withValues(alpha: 0.2),
-            border: Border.all(color: const Color(0xFF00E5FF), width: 2),
+            color: activeHalo,
+            border: Border.all(color: activeColor, width: 2),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+                color: activeColor.withValues(alpha: 0.35),
                 blurRadius: 8,
               ),
             ],
@@ -1200,8 +1337,8 @@ class _PipelineTimelineCard extends StatelessWidget {
             child: Container(
               width: 8,
               height: 8,
-              decoration: const BoxDecoration(
-                color: Color(0xFF00E5FF),
+              decoration: BoxDecoration(
+                color: activeColor,
                 shape: BoxShape.circle,
               ),
             ),
@@ -1209,11 +1346,13 @@ class _PipelineTimelineCard extends StatelessWidget {
         );
         lineColor = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
       case _StepStatus.failed:
+        final failColor =
+            isDark ? AppPalette.darkDanger : AppPalette.lightDanger;
         nodeIcon = Container(
           width: 22,
           height: 22,
-          decoration: const BoxDecoration(
-            color: Color(0xFFFF5252),
+          decoration: BoxDecoration(
+            color: failColor,
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.close, size: 14, color: Colors.white),
@@ -1262,10 +1401,12 @@ class _PipelineTimelineCard extends StatelessWidget {
                   Text(
                     'Step $stepNum',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: AppTokens.fontSizeBadge,
                       fontWeight: FontWeight.w600,
                       color: status == _StepStatus.active
-                          ? const Color(0xFF00E5FF)
+                          ? (isDark
+                              ? AppPalette.darkBrandHover
+                              : AppPalette.brandAction)
                           : muted,
                     ),
                   ),
@@ -1273,7 +1414,7 @@ class _PipelineTimelineCard extends StatelessWidget {
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: AppTokens.fontSizeSubhead,
                       fontWeight: FontWeight.w500,
                       color: text,
                     ),
@@ -1330,7 +1471,9 @@ class _CodeDiffCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
+              color: isDark
+                  ? AppPalette.darkSurfaceHover
+                  : AppPalette.lightSurfaceHover,
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(8)),
             ),
@@ -1405,7 +1548,7 @@ class _CodeDiffCard extends StatelessWidget {
                     line,
                     style: TextStyle(
                       fontFamily: 'monospace',
-                      fontSize: 11.5,
+                      fontSize: AppTokens.fontSizeSubcaption,
                       color: textColor,
                       height: 1.4,
                     ),
@@ -1448,12 +1591,13 @@ class _ChangeReviewCard extends StatelessWidget {
                     child: Text(
                       file.path,
                       style: const TextStyle(
-                          fontFamily: 'monospace', fontSize: 12),
+                          fontFamily: 'monospace',
+                          fontSize: AppTokens.fontSizeFootnote),
                     ),
                   ),
                   Text(
                     '${file.operation} +${file.linesAdded}/-${file.linesRemoved}',
-                    style: const TextStyle(fontSize: 11),
+                    style: const TextStyle(fontSize: AppTokens.fontSizeBadge),
                   ),
                 ],
               ),
@@ -1471,7 +1615,7 @@ class _ChangeReviewCard extends StatelessWidget {
                 child: Text(
                   '${step.title} · ${step.status.label}'
                   '${step.command.isEmpty ? '' : ' · ${step.command}'}',
-                  style: const TextStyle(fontSize: 12),
+                  style: const TextStyle(fontSize: AppTokens.fontSizeFootnote),
                 ),
               ),
           ],

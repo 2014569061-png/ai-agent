@@ -13,9 +13,14 @@ import '../observability/sentry_service.dart';
 import '../providers/provider_config.dart';
 import '../providers/provider_config_store.dart';
 import 'local_crypto_service.dart';
+import 'vault_manifest.dart';
+import 'vault_snapshot_reader.dart';
+import 'vault_skill_staging.dart';
+export 'vault_manifest.dart'
+    show VaultRestoreReport, VaultLimits, encodeVaultJson;
 
 /// G3 隐私保险箱：把全量本地数据打包为单个 AES-256-GCM 加密文件（.nexusvault）。
-/// 导入时先备份现有库再覆盖写入，密码丢失无法恢复。
+/// 导入先校验并暂存文件，数据库事务失败时回滚文件；密码丢失无法恢复。
 /// v2 起额外包含 Provider 配置（含 API Key）、工具密钥与 MCP 服务器配置；
 /// 旧版备份文件缺少这些段时按原样跳过。
 
@@ -23,7 +28,7 @@ Future<String?> exportVaultFile(AppDatabase db, String password,
     {bool includeSecrets = false}) async {
   try {
     final json = await buildVaultJson(db, includeSecrets: includeSecrets);
-    final plaintext = jsonEncode(json);
+    final plaintext = await encodeVaultJson(json);
     final cipher =
         await LocalCryptoService().encryptWithPassword(plaintext, password);
     final dir = await getApplicationDocumentsDirectory();
@@ -44,128 +49,129 @@ Future<String?> exportVaultFile(AppDatabase db, String password,
 Future<String> importVaultBytes(
     AppDatabase db, Uint8List bytes, String password,
     {ProviderConfigStore? providerStore}) async {
+  if (bytes.length > VaultLimits.maxCipherBytes) {
+    throw const FormatException('备份文件过大');
+  }
   final cipher = utf8.decode(bytes);
   final plaintext =
       await LocalCryptoService().decryptWithPassword(cipher, password);
+  if (utf8.encode(plaintext).length > VaultLimits.maxJsonBytes) {
+    throw const FormatException('备份内容过大');
+  }
   final json = jsonDecode(plaintext) as Map<String, dynamic>;
-  if (json['version'] is! int) throw const FormatException('无效的备份文件');
-  await restoreVault(db, json, providerStore: providerStore);
-  final conv = (json['conversations'] as List?)?.length ?? 0;
-  final msg = (json['messages'] as List?)?.length ?? 0;
-  final providers = (json['providerProfiles'] as List?)?.length ?? 0;
-  final mcp = (json['mcpServers'] as List?)?.length ?? 0;
-  final extras = [
-    if (providers > 0) '$providers 个 Provider 配置',
-    if (mcp > 0) '$mcp 台 MCP 服务器',
-  ];
-  return [
-    '已恢复 $conv 个会话、$msg 条消息',
-    if (extras.isNotEmpty) '（含 ${extras.join('、')}）',
-  ].join();
+  final report = await restoreVault(db, json, providerStore: providerStore);
+  return report.summary;
 }
 
 Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
     {ProviderConfigStore? providerStore, bool includeSecrets = false}) async {
-  final store = providerStore ?? ProviderConfigStore();
-  final conversations = await db.recentConversations();
-  final messages = <Map<String, dynamic>>[];
-  for (final c in conversations) {
-    final rows = await db.messagesFor(c.id);
-    final toolNamesById = <String, String>{};
-    for (final row in rows) {
-      if (row.role != 'assistant' || row.toolCallsJson == null) continue;
+  return db.transaction(() async {
+    final reader = VaultSnapshotReader(db);
+    final store = providerStore ?? ProviderConfigStore();
+    final profiles =
+        includeSecrets ? await store.loadAll() : const <ProviderConfig>[];
+    final data = <String, dynamic>{
+      'version': 2,
+      'conversations':
+          await reader.rows(db.conversations, (row) => row.toJson()),
+      'messages': await reader.rows(db.messages, (row) => row.toJson()),
+      'memories': await reader.rows(db.memories, (row) => row.toJson()),
+      'agents': await reader.rows(db.agents, (row) => row.toJson()),
+      'prompts': await reader.rows(db.promptTemplates, (row) => row.toJson()),
+      'modelProfiles':
+          await reader.rows(db.modelProfiles, (row) => row.toJson()),
+      'knowledgeDocs':
+          await reader.rows(db.knowledgeDocs, (row) => row.toJson()),
+      'knowledgeChunks':
+          await reader.rows(db.knowledgeChunks, (row) => row.toJson()),
+      'scheduledTasks':
+          await reader.rows(db.scheduledTasks, (row) => row.toJson()),
+      'plugins': await reader.rows(db.plugins, (row) => row.toJson()),
+      'skillPacks': await reader.rows(db.skillPacks, (row) => row.toJson()),
+      'projects': await reader.rows(db.projects, (row) => row.toJson()),
+      'drafts': await reader.rows(db.drafts, (row) => row.toJson()),
+      'runControls': await reader.rows(db.runControls, (row) => row.toJson()),
+      'executionLeases':
+          await reader.rows(db.executionLeases, (row) => row.toJson()),
+      'tasks': await reader.rows(db.tasks, (row) => row.toJson()),
+      'taskFeedback': await reader.rows(db.taskFeedback, (row) => row.toJson()),
+      'collaborationRuns':
+          await reader.rows(db.collaborationRuns, (row) => row.toJson()),
+      'collaborationAgentRuns':
+          await reader.rows(db.collaborationAgentRuns, (row) => row.toJson()),
+      'collaborationArtifacts':
+          await reader.rows(db.collaborationArtifacts, (row) => row.toJson()),
+      'collaborationMessages':
+          await reader.rows(db.collaborationMessages, (row) => row.toJson()),
+      'auditLogs': await reader.rows(db.auditLogs, (row) => row.toJson()),
+      'runRecords': await reader.rows(db.runRecords, (row) => row.toJson()),
+      'runEvents': await reader.rows(db.runEvents, (row) => row.toJson()),
+      'logRecords': await reader.rows(db.logRecords, (row) => row.toJson()),
+      'mcpServers': await reader.rows(db.mcpServers, (row) => row.toJson()),
+      'artifacts': await reader.artifacts(),
+      'skillFiles': await _collectSkillFiles(db),
+      if (includeSecrets && profiles.isNotEmpty)
+        'activeProviderId': (await store.load()).id,
+      if (includeSecrets)
+        'providerProfiles': profiles
+            .map((p) => {
+                  'id': p.id,
+                  'name': p.name,
+                  'baseUrl': p.baseUrl,
+                  'model': p.model,
+                  'type': p.type.name,
+                  'apiKey': p.apiKey,
+                  'reasoningEffort': p.reasoningEffort.name,
+                  'contextTokens': p.contextTokens,
+                  if (p.inputPricePerMillionCents != null)
+                    'inputPricePerMillionCents': p.inputPricePerMillionCents,
+                  if (p.outputPricePerMillionCents != null)
+                    'outputPricePerMillionCents': p.outputPricePerMillionCents,
+                  if (p.cachedPricePerMillionCents != null)
+                    'cachedPricePerMillionCents': p.cachedPricePerMillionCents,
+                })
+            .toList(),
+      if (includeSecrets)
+        'toolKeys': {
+          'tavily': await store.readToolKey('tavily'),
+        },
+    };
+    final names = <String, Map<String, String>>{};
+    for (final row in (data['messages'] as List).cast<Map<String, dynamic>>()) {
+      final calls = row['toolCallsJson'];
+      if (row['role'] != 'assistant' || calls == null) continue;
       try {
-        final calls = jsonDecode(row.toolCallsJson!);
-        if (calls is List) {
-          for (final call in calls.whereType<Map>()) {
-            final id = call['id']?.toString();
-            final name = call['name']?.toString();
-            if (id != null && name != null) toolNamesById[id] = name;
-          }
+        for (final call
+            in (jsonDecode(calls as String) as List).whereType<Map>()) {
+          names.putIfAbsent(row['conversationId'] as String,
+              () => {})[call['id'].toString()] = call['name'].toString();
         }
       } catch (_) {
-        // 可忽略：toolCallsJson 损坏时只跳过「工具名映射」这一步，消息本身
-        // 仍会导出（下方的脱敏会退化为按敏感工具策略整体兜底）。
+        // Malformed tool metadata must not leak raw arguments into a backup.
+        row['toolCallsJson'] = '[]';
       }
     }
-    messages.addAll(rows
-        .map((row) => _redactPersistedMessage(row.toJson(), toolNamesById)));
-  }
-  final profiles = await store.loadAll();
-  return {
-    'version': 2,
-    'conversations': conversations.map((c) => c.toJson()).toList(),
-    'messages': messages,
-    'memories': (await db.allMemories()).map((m) => m.toJson()).toList(),
-    'agents': (await db.allAgents()).map((a) => a.toJson()).toList(),
-    'prompts': (await db.allPromptTemplates()).map((p) => p.toJson()).toList(),
-    'modelProfiles':
-        (await db.allModelProfiles()).map((p) => p.toJson()).toList(),
-    'knowledgeDocs':
-        (await db.allKnowledgeDocs()).map((d) => d.toJson()).toList(),
-    'knowledgeChunks':
-        (await db.allKnowledgeChunks()).map((c) => c.toJson()).toList(),
-    'scheduledTasks':
-        (await db.allScheduledTasks()).map((t) => t.toJson()).toList(),
-    'plugins': (await db.allPlugins()).map((p) => p.toJson()).toList(),
-    'skillPacks': (await db.allSkillPacks()).map((s) => s.toJson()).toList(),
-    'skillFiles': await _collectSkillFiles(db),
-    'projects': (await db.allProjects(includeArchived: true))
-        .map((t) => t.toJson())
-        .toList(),
-    'drafts': (await db.select(db.drafts).get()).map((t) => t.toJson()).toList(),
-    'artifacts': await db.allArtifactRecords(),
-    'runControls':
-        (await db.select(db.runControls).get()).map((t) => t.toJson()).toList(),
-    'executionLeases': (await db.select(db.executionLeases).get())
-        .map((t) => t.toJson())
-        .toList(),
-    'tasks': (await db.allTasks(limit: 2000)).map((t) => t.toJson()).toList(),
-    'taskFeedback':
-        (await db.allTaskFeedback()).map((t) => t.toJson()).toList(),
-    'collaborationRuns':
-        (await db.allCollaborationRuns(limit: 2000)).map((t) => t.toJson()).toList(),
-    'collaborationAgentRuns':
-        (await db.allCollaborationAgentRuns()).map((t) => t.toJson()).toList(),
-    'collaborationArtifacts':
-        (await db.allCollaborationArtifacts()).map((t) => t.toJson()).toList(),
-    'collaborationMessages':
-        (await db.allCollaborationMessages()).map((t) => t.toJson()).toList(),
-    'auditLogs': (await db.allAuditLogs())
-        .map((t) => _redactAuditLog(t.toJson()))
-        .toList(),
-    'runRecords': (await db.allRunRecords()).map((t) => t.toJson()).toList(),
-    'runEvents': (await db.allRunEvents())
-        .map((t) => _redactRunEvent(t.toJson()))
-        .toList(),
-    'logRecords': (await db.allLogRecords())
-        .map((t) => _redactLogRecord(t.toJson()))
-        .toList(),
-    if (includeSecrets)
-      'providerProfiles': profiles
-          .map((p) => {
-                'id': p.id,
-                'name': p.name,
-                'baseUrl': p.baseUrl,
-                'model': p.model,
-                'type': p.type.name,
-                'apiKey': p.apiKey,
-                'reasoningEffort': p.reasoningEffort.name,
-                'contextTokens': p.contextTokens,
-                if (p.inputPricePerMillionCents != null)
-                  'inputPricePerMillionCents': p.inputPricePerMillionCents,
-                if (p.outputPricePerMillionCents != null)
-                  'outputPricePerMillionCents': p.outputPricePerMillionCents,
-                if (p.cachedPricePerMillionCents != null)
-                  'cachedPricePerMillionCents': p.cachedPricePerMillionCents,
-              })
-          .toList(),
-    if (includeSecrets)
-      'toolKeys': {
-        'tavily': await store.readToolKey('tavily'),
-      },
-    'mcpServers': (await db.allMcpServers()).map((s) => s.toJson()).toList(),
-  };
+    data['messages'] = [
+      for (final row in (data['messages'] as List).cast<Map<String, dynamic>>())
+        _redactPersistedMessage(row, names[row['conversationId']] ?? const {})
+    ];
+    data['auditLogs'] = (data['auditLogs'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(_redactAuditLog)
+        .toList();
+    data['runEvents'] = (data['runEvents'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(_redactRunEvent)
+        .toList();
+    data['logRecords'] = (data['logRecords'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(_redactLogRecord)
+        .toList();
+    final sealed = await sealVault(data);
+    await encodeVaultJson(
+        sealed); // Enforce encoded-size budget before returning a snapshot.
+    return sealed;
+  });
 }
 
 Map<String, dynamic> _redactPersistedMessage(
@@ -247,111 +253,199 @@ Map<String, dynamic> _redactLogRecord(Map<String, dynamic> raw) {
   return result;
 }
 
-Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
+// SQLite cannot serialize directory publication. Keep restores ordered within
+// this isolate so one rollback never removes another restore's new files.
+Future<void> _restoreTail = Future<void>.value();
+
+Future<VaultRestoreReport> restoreVault(
+    AppDatabase db, Map<String, dynamic> json,
+    {ProviderConfigStore? providerStore}) {
+  final previous = _restoreTail;
+  final complete = Completer<void>();
+  _restoreTail = complete.future;
+  return () async {
+    await previous;
+    try {
+      return await _restoreVault(db, json, providerStore: providerStore);
+    } finally {
+      complete.complete();
+    }
+  }();
+}
+
+Future<VaultRestoreReport> _restoreVault(
+    AppDatabase db, Map<String, dynamic> json,
     {ProviderConfigStore? providerStore}) async {
-  // Validate optional secret payload before clearing the database. A malformed
-  // profile must not turn a later restore failure into data loss.
-  _providerConfigsFromJson(json['providerProfiles']);
-  await db.transaction(() async {
-    await db.clearAllUserData();
-    await _restoreOptionalRows(
-        json['projects'], db.saveProject, Project.fromJson);
-    await _restoreOptionalRows(json['drafts'], db.saveDraft, Draft.fromJson);
-    if (json['artifacts'] is List) {
-      for (final raw in (json['artifacts'] as List).whereType<Map>()) {
-        await db.saveArtifactRecord(Map<String, dynamic>.from(raw));
+  await validateVault(json);
+  final profiles = _providerConfigsFromJson(json['providerProfiles']);
+  final activeId = json['activeProviderId'];
+  if (activeId != null && !profiles.any((p) => p.id == activeId)) {
+    throw const FormatException('备份中的激活配置不存在');
+  }
+  // Work on a private copy: staged installRoot rewrites must not change the caller's manifest.
+  json = jsonDecode(await encodeVaultJson(json)) as Map<String, dynamic>;
+  final store = providerStore ?? ProviderConfigStore();
+  final oldProfiles =
+      json['providerProfiles'] is List ? await store.loadAll() : null;
+  final oldActiveId = oldProfiles != null && oldProfiles.isNotEmpty
+      ? (await store.load()).id
+      : null;
+  final oldKeys = <String, String>{};
+  if (json['toolKeys'] is Map) {
+    for (final key in (json['toolKeys'] as Map).keys.cast<String>()) {
+      oldKeys[key] = await store.readToolKey(key);
+    }
+  }
+  final stage = await VaultSkillStaging.prepare(json);
+  var secretsStarted = false;
+  var preserveStage = false;
+  var committed = false;
+  try {
+    await stage.publish();
+    await db.transaction(() async {
+      await db.clearAllUserData();
+      await _restoreOptionalRows(
+          json['projects'], db.saveProject, Project.fromJson);
+      await _restoreOptionalRows(json['drafts'], db.saveDraft, Draft.fromJson);
+      if (json['artifacts'] is List) {
+        for (final raw in (json['artifacts'] as List).whereType<Map>()) {
+          await db.saveArtifactRecord(Map<String, dynamic>.from(raw));
+        }
       }
-    }
-    for (final m in (json['conversations'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      final row = Map<String, dynamic>.from(m);
-      row['mode'] ??= 'chat';
-      await db.saveConversation(Conversation.fromJson(row));
-    }
-    for (final m in (json['messages'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.saveMessage(Message.fromJson(m));
-    }
-    for (final m in (json['memories'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.saveMemory(Memory.fromJson(m));
-    }
-    for (final m
-        in (json['agents'] as List? ?? const []).cast<Map<String, dynamic>>()) {
-      await db.saveAgent(Agent.fromJson(m));
-    }
-    for (final m in (json['prompts'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.savePromptTemplate(PromptTemplate.fromJson(m));
-    }
-    for (final m in (json['modelProfiles'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.saveModelProfile(ModelProfile.fromJson(m));
-    }
-    for (final m in (json['knowledgeDocs'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.saveKnowledgeDoc(KnowledgeDoc.fromJson(m));
-    }
-    for (final m in (json['knowledgeChunks'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.saveKnowledgeChunk(KnowledgeChunk.fromJson(m));
-    }
-    for (final m in (json['scheduledTasks'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.saveScheduledTask(ScheduledTask.fromJson(m));
-    }
-    for (final m in (json['plugins'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.savePlugin(Plugin.fromJson(m));
-    }
-    for (final s in (json['skillPacks'] as List? ?? const [])
-        .cast<Map<String, dynamic>>()) {
-      await db.saveSkillPack(SkillPack.fromJson(s));
-    }
-    await _restoreOptionalRows(json['tasks'], db.saveTask, (row) {
-      final mapped = Map<String, dynamic>.from(row);
-      mapped['stateRevision'] ??= 0;
-      return Task.fromJson(mapped);
+      for (final m in (json['conversations'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        final row = Map<String, dynamic>.from(m);
+        row['mode'] ??= 'chat';
+        await db.saveConversation(Conversation.fromJson(row));
+      }
+      for (final m in (json['messages'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveMessage(Message.fromJson(m));
+      }
+      for (final m in (json['memories'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveMemory(Memory.fromJson(m));
+      }
+      for (final m in (json['agents'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveAgent(Agent.fromJson(m));
+      }
+      for (final m in (json['prompts'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.savePromptTemplate(PromptTemplate.fromJson(m));
+      }
+      for (final m in (json['modelProfiles'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveModelProfile(ModelProfile.fromJson(m));
+      }
+      for (final m in (json['knowledgeDocs'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveKnowledgeDoc(KnowledgeDoc.fromJson(m));
+      }
+      for (final m in (json['knowledgeChunks'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveKnowledgeChunk(KnowledgeChunk.fromJson(m));
+      }
+      for (final m in (json['scheduledTasks'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveScheduledTask(ScheduledTask.fromJson(m));
+      }
+      for (final m in (json['plugins'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.savePlugin(Plugin.fromJson(m));
+      }
+      for (final s in (json['skillPacks'] as List? ?? const [])
+          .cast<Map<String, dynamic>>()) {
+        await db.saveSkillPack(SkillPack.fromJson(s));
+      }
+      await _restoreOptionalRows(json['tasks'], db.saveTask, (row) {
+        final mapped = Map<String, dynamic>.from(row);
+        mapped['stateRevision'] ??= 0;
+        return Task.fromJson(mapped);
+      });
+      await _restoreOptionalRows(
+          json['runControls'], db.saveRunControl, RunControl.fromJson);
+      await _restoreOptionalRows(json['executionLeases'], db.saveExecutionLease,
+          ExecutionLease.fromJson);
+      await _restoreOptionalRows(json['taskFeedback'], db.saveTaskFeedbackRow,
+          TaskFeedbackData.fromJson);
+      await _restoreOptionalRows(json['collaborationRuns'],
+          db.saveCollaborationRun, CollaborationRun.fromJson);
+      await _restoreOptionalRows(json['collaborationAgentRuns'],
+          db.saveCollaborationAgentRun, CollaborationAgentRun.fromJson);
+      await _restoreOptionalRows(json['collaborationArtifacts'],
+          db.saveCollaborationArtifact, CollaborationArtifact.fromJson);
+      await _restoreOptionalRows(json['collaborationMessages'],
+          db.saveCollaborationMessage, CollaborationMessage.fromJson);
+      await _restoreOptionalRows(
+          json['auditLogs'], db.saveAuditLog, AuditLog.fromJson);
+      await _restoreOptionalRows(
+          json['runRecords'], db.saveRunRecordRow, RunRecord.fromJson);
+      await _restoreOptionalRows(
+          json['runEvents'], db.saveRunEventRow, RunEvent.fromJson);
+      await _restoreOptionalRows(
+          json['logRecords'], db.saveLogRecordRow, LogRecord.fromJson);
+      // MCP 配置的正式来源是数据库；仅当备份含该段（v2+）时覆盖。
+      if (json['mcpServers'] is List) {
+        await db.clearMcpServers();
+        for (final m
+            in (json['mcpServers'] as List).cast<Map<String, dynamic>>()) {
+          await db.saveMcpServer(McpServer.fromJson(m));
+        }
+      }
+      secretsStarted = true;
+      await _restoreProviderSecrets(db, json, store);
     });
-    await _restoreOptionalRows(
-        json['runControls'], db.saveRunControl, RunControl.fromJson);
-    await _restoreOptionalRows(json['executionLeases'], db.saveExecutionLease,
-        ExecutionLease.fromJson);
-    await _restoreOptionalRows(
-        json['taskFeedback'], db.saveTaskFeedbackRow, TaskFeedbackData.fromJson);
-    await _restoreOptionalRows(json['collaborationRuns'],
-        db.saveCollaborationRun, CollaborationRun.fromJson);
-    await _restoreOptionalRows(json['collaborationAgentRuns'],
-        db.saveCollaborationAgentRun, CollaborationAgentRun.fromJson);
-    await _restoreOptionalRows(json['collaborationArtifacts'],
-        db.saveCollaborationArtifact, CollaborationArtifact.fromJson);
-    await _restoreOptionalRows(json['collaborationMessages'],
-        db.saveCollaborationMessage, CollaborationMessage.fromJson);
-    await _restoreOptionalRows(json['auditLogs'], db.saveAuditLog, AuditLog.fromJson);
-    await _restoreOptionalRows(
-        json['runRecords'], db.saveRunRecordRow, RunRecord.fromJson);
-    await _restoreOptionalRows(
-        json['runEvents'], db.saveRunEventRow, RunEvent.fromJson);
-    await _restoreOptionalRows(
-        json['logRecords'], db.saveLogRecordRow, LogRecord.fromJson);
-    // MCP 配置的正式来源是数据库；仅当备份含该段（v2+）时覆盖。
-    if (json['mcpServers'] is List) {
-      await db.clearMcpServers();
-      for (final m
-          in (json['mcpServers'] as List).cast<Map<String, dynamic>>()) {
-        await db.saveMcpServer(McpServer.fromJson(m));
+    committed = true;
+    final warnings = <String>[];
+    try {
+      await stage.dispose();
+    } catch (error, stack) {
+      // The database already committed: cleanup failure is not restore failure.
+      warnings.add('数据已恢复，但临时文件清理失败');
+      unawaited(SentryService.reportException(error, stack));
+    }
+    return VaultRestoreReport({
+      for (final entry in json.entries)
+        if (entry.value is List) entry.key: (entry.value as List).length,
+    }, stage.fileCount, warnings: warnings);
+  } catch (error, stack) {
+    Object? fileRollbackError;
+    try {
+      await stage.rollback();
+    } catch (rollbackError, rollbackStack) {
+      // Preserve backups if compensation fails; still attempt secret rollback.
+      preserveStage = true;
+      fileRollbackError = rollbackError;
+      unawaited(SentryService.reportException(rollbackError, rollbackStack));
+    }
+    if (secretsStarted) {
+      try {
+        if (oldProfiles != null) {
+          await store.restoreProfiles(oldProfiles, activeId: oldActiveId);
+        }
+        for (final key in oldKeys.entries) {
+          await store.saveToolKey(key.key, key.value);
+        }
+      } catch (rollbackError, rollbackStack) {
+        // Secure storage is outside SQLite. Surface compensation failure, never claim success.
+        unawaited(SentryService.reportException(rollbackError, rollbackStack));
+        throw StateError('恢复失败且密钥回滚失败，请保留原备份并重新恢复');
       }
     }
-  });
-  await _restoreSkillFiles(db, json);
-  await _restoreProviderSecrets(
-      db, json, providerStore ?? ProviderConfigStore());
+    if (fileRollbackError != null) {
+      throw StateError('恢复失败且文件回滚失败；恢复材料保留于 ${stage.temp?.path}');
+    }
+    Error.throwWithStackTrace(error, stack);
+  } finally {
+    if (!committed && !preserveStage) await stage.dispose();
+  }
 }
 
 List<ProviderConfig> _providerConfigsFromJson(Object? raw) {
   if (raw is! List) return const [];
-  return raw
-      .whereType<Map<String, dynamic>>()
+  final configs = raw
+      .cast<Map<String, dynamic>>()
       .map((item) => ProviderConfig(
             id: item['id'] as String? ?? 'default',
             name: item['name'] as String? ?? 'Provider',
@@ -372,8 +466,12 @@ List<ProviderConfig> _providerConfigsFromJson(Object? raw) {
             cachedPricePerMillionCents:
                 (item['cachedPricePerMillionCents'] as num?)?.toInt(),
           ))
-      .where((config) => config.model.trim().isNotEmpty)
       .toList();
+  if (configs.any((p) => p.id.isEmpty) ||
+      configs.map((p) => p.id).toSet().length != configs.length) {
+    throw const FormatException('备份中的配置 ID 为空或重复');
+  }
+  return configs;
 }
 
 /// 恢复 Provider 配置（含 API Key）与工具密钥到安全存储；旧版备份无该段时跳过。
@@ -383,15 +481,9 @@ Future<void> _restoreOptionalRows<T>(
   T Function(Map<String, dynamic> json) fromJson,
 ) async {
   if (raw is! List) return;
-  for (final item in raw.whereType<Map>()) {
-    try {
-      await save(fromJson(Map<String, dynamic>.from(item)));
-    } catch (error, stackTrace) {
-      // 可忽略（有意降级）：单行损坏不阻断整份备份恢复——整份回滚会让用户
-      // 在「一条坏数据」与「全部丢失」之间被迫二选一。上报以统计损坏率，
-      // 便于判断备份格式是否在退化。
-      unawaited(SentryService.reportException(error, stackTrace));
-    }
+  for (final item in raw.cast<Map>()) {
+    // A partial restore must fail the enclosing transaction, not report input counts as success.
+    await save(fromJson(Map<String, dynamic>.from(item)));
   }
 }
 
@@ -400,17 +492,15 @@ Future<void> _restoreProviderSecrets(AppDatabase db, Map<String, dynamic> json,
   final profilesJson = json['providerProfiles'];
   if (profilesJson is List) {
     final configs = _providerConfigsFromJson(profilesJson);
-    if (configs.isNotEmpty) {
-      // 导出时 profiles 首个不一定是激活项，但备份快照顺序即 loadAll 顺序
-      // （首项为激活配置），恢复后保持一致。
-      await store.restoreProfiles(configs, activeId: configs.first.id);
-    }
+    await store.restoreProfiles(configs,
+        activeId:
+            json['activeProviderId'] as String? ?? configs.firstOrNull?.id);
   }
   final toolKeys = json['toolKeys'];
   if (toolKeys is Map) {
     for (final entry in toolKeys.entries) {
       final value = entry.value;
-      if (value is String && value.isNotEmpty) {
+      if (value is String) {
         await store.saveToolKey(entry.key, value);
       }
     }
@@ -422,59 +512,39 @@ Future<Map<String, Map<String, String>>> _collectSkillFiles(
     AppDatabase db) async {
   final packs = await db.allSkillPacks();
   final out = <String, Map<String, String>>{};
+  var totalBytes = 0;
+  var count = 0;
   for (final pack in packs) {
+    validateVaultName(pack.name);
     final files = <String, String>{};
     final root = Directory(pack.installRoot);
-    if (root.existsSync()) {
-      await for (final entity in root.list(recursive: true)) {
-        if (entity is File) {
-          final rel = p.relative(entity.path, from: root.path);
-          try {
-            files[rel] = base64Encode(await entity.readAsBytes());
-          } catch (error, stackTrace) {
-            // 可忽略（有意降级）：单个文件读取失败不影响整体导出（如权限、
-            // 文件被占用）。缺失文件在恢复后表现为技能文件不全，属可接受降级。
-            unawaited(SentryService.reportException(error, stackTrace));
-          }
-        }
+    if (await FileSystemEntity.type(root.path, followLinks: false) ==
+        FileSystemEntityType.link) {
+      throw const FormatException('不能备份符号链接技能目录');
+    }
+    if (!await root.exists()) {
+      throw const FormatException('技能目录缺失，备份未生成');
+    }
+    await for (final entity in root.list(recursive: true, followLinks: false)) {
+      if (entity is Link) throw const FormatException('不能备份符号链接技能文件');
+      if (entity is! File) continue;
+      final rel =
+          validateVaultRelativePath(p.relative(entity.path, from: root.path));
+      final before = await entity.stat();
+      totalBytes += before.size;
+      if (++count > VaultLimits.maxFiles ||
+          before.size > VaultLimits.maxFileBytes ||
+          totalBytes > VaultLimits.maxSkillBytes) {
+        throw const FormatException('技能超过备份容量上限');
       }
+      final content = await entity.readAsBytes();
+      final after = await entity.stat();
+      if (content.length != before.size || after.modified != before.modified) {
+        throw const FormatException('备份期间技能文件发生变化，请重试');
+      }
+      files[rel] = base64Encode(content);
     }
     out[pack.id] = files;
   }
   return out;
-}
-
-/// 恢复 skill 文件到当前设备的技能目录，并修正 installRoot（换机后旧路径失效）。
-Future<void> _restoreSkillFiles(
-    AppDatabase db, Map<String, dynamic> json) async {
-  final packs = await db.allSkillPacks();
-  if (packs.isEmpty) return;
-  final String docDir;
-  try {
-    docDir = (await getApplicationDocumentsDirectory()).path;
-  } catch (_) {
-    // path_provider 不可用（如单测环境）时跳过文件恢复，不影响数据库导入。
-    return;
-  }
-  final filesMap = (json['skillFiles'] as Map?) ?? const {};
-  for (final pack in packs) {
-    final files = (filesMap[pack.id] as Map?)?.cast<String, dynamic>() ?? {};
-    try {
-      final installRoot = p.join(docDir, 'skills', pack.name);
-      final root = Directory(installRoot);
-      await root.create(recursive: true);
-      for (final e in files.entries) {
-        final rel = e.key;
-        if (rel.contains('..') || p.isAbsolute(rel)) continue;
-        final f = File(p.join(root.path, rel));
-        await f.parent.create(recursive: true);
-        await f.writeAsBytes(base64Decode(e.value as String? ?? ''));
-      }
-      if (pack.installRoot != installRoot) {
-        await db.saveSkillPack(pack.copyWith(installRoot: installRoot));
-      }
-    } catch (_) {
-      // 恢复单包失败不阻断整体。
-    }
-  }
 }

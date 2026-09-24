@@ -50,25 +50,28 @@ class ExecutionLeaseService {
     });
   }
 
-  Future<void> heartbeat({
+  /// 刷新成功返回 true。租约已被别人拿走或行已消失时返回 false，
+  /// 调用方必须停掉仍在写工作区的 run。数据库错误继续抛出。
+  Future<bool> heartbeat({
     required AppDatabase db,
     required ExecutionLease lease,
     Duration ttl = const Duration(minutes: 2),
   }) async {
-    await db.transaction(() async {
+    return db.transaction(() async {
       final current = await db.findExecutionLease(lease.resourceKey);
       // A stale heartbeat must never resurrect a lease already taken by a
       // newer run after the original lease expired.
       if (current == null ||
           current.ownerToken != lease.ownerToken ||
           current.generation != lease.generation) {
-        return;
+        return false;
       }
       final now = DateTime.now();
       await db.saveExecutionLease(lease.copyWith(
         heartbeatAt: now,
         expiresAt: now.add(ttl),
       ));
+      return true;
     });
   }
 

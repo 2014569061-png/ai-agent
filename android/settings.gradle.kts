@@ -19,6 +19,9 @@ pluginManagement {
 
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
+    // Keep the toolchain compatible with Flutter 3.47.2 and the current
+    // Flutter Gradle plugin. The build script skips only Flutter's redundant
+    // version warning after these versions are pinned and validated here.
     id("com.android.application") version "8.13.0" apply false
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
 }

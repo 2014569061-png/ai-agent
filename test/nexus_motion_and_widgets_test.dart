@@ -11,6 +11,8 @@ import 'package:mobile_agent/presentation/widgets/nexus_execution_status.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_loading_skeleton.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_status_badge.dart';
 import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
+import 'package:mobile_agent/presentation/widgets/liquid_segmented_control.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_pressable.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_sheet.dart';
 
 void main() {
@@ -76,13 +78,16 @@ void main() {
       final detailRoute = NexusPageRoute.detail(
         builder: (_) => const SizedBox(),
       );
-      expect(detailRoute.transitionDuration, const Duration(milliseconds: 150));
-      expect(detailRoute.reverseTransitionDuration, const Duration(milliseconds: 150));
+      expect(detailRoute.transitionDuration, const Duration(milliseconds: 250));
+      expect(
+        detailRoute.reverseTransitionDuration,
+        const Duration(milliseconds: 180),
+      );
 
       final fadeRoute = NexusPageRoute.fade(
         builder: (_) => const SizedBox(),
       );
-      expect(fadeRoute.transitionDuration, const Duration(milliseconds: 150));
+      expect(fadeRoute.transitionDuration, const Duration(milliseconds: 220));
     });
 
     testWidgets('glass page routes do not fade or snapshot backdrop filters',
@@ -181,7 +186,8 @@ void main() {
       expect(retried, isTrue);
     });
 
-    testWidgets('renders normal content when loaded successfully', (tester) async {
+    testWidgets('renders normal content when loaded successfully',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -198,7 +204,8 @@ void main() {
   });
 
   group('AsyncStateView Tests', () {
-    testWidgets('renders spinner during loading when no skeleton provided', (tester) async {
+    testWidgets('renders spinner during loading when no skeleton provided',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -234,7 +241,8 @@ void main() {
       expect(find.text('Content'), findsNothing);
     });
 
-    testWidgets('renders partial error banner while retaining content', (tester) async {
+    testWidgets('renders partial error banner while retaining content',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -252,7 +260,8 @@ void main() {
       expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
     });
 
-    testWidgets('renders refreshing progress bar while retaining content', (tester) async {
+    testWidgets('renders refreshing progress bar while retaining content',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -288,7 +297,8 @@ void main() {
       expect(find.text('耗时 1.2s'), findsOneWidget);
     });
 
-    testWidgets('renders waitingForUser with approve and reject actions', (tester) async {
+    testWidgets('renders waitingForUser with approve and reject actions',
+        (tester) async {
       var approved = false;
       var rejected = false;
 
@@ -379,7 +389,8 @@ void main() {
       expect(find.text('已连接'), findsOneWidget);
     });
 
-    testWidgets('renders NexusBackToLatestButton and responds to tap', (tester) async {
+    testWidgets('renders NexusBackToLatestButton and responds to tap',
+        (tester) async {
       var tapped = false;
       await tester.pumpWidget(
         MaterialApp(
@@ -402,7 +413,9 @@ void main() {
   });
 
   group('Reduced Motion Compliance Tests', () {
-    testWidgets('showNexusSheet skips SlideTransition when reduced motion is enabled', (tester) async {
+    testWidgets(
+        'showNexusSheet skips SlideTransition when reduced motion is enabled',
+        (tester) async {
       await tester.pumpWidget(
         MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
@@ -434,7 +447,9 @@ void main() {
       expect(sheetSlide, findsNothing);
     });
 
-    testWidgets('showNexusDialog skips ScaleTransition when reduced motion is enabled', (tester) async {
+    testWidgets(
+        'showNexusDialog skips ScaleTransition when reduced motion is enabled',
+        (tester) async {
       await tester.pumpWidget(
         MediaQuery(
           data: const MediaQueryData(disableAnimations: true),
@@ -464,6 +479,125 @@ void main() {
         matching: find.byType(ScaleTransition),
       );
       expect(dialogScale, findsNothing);
+    });
+  });
+
+  group('HarmonyOS Motion System Tests', () {
+    test('NexusMotion tokens provide calibrated curves', () {
+      expect(NexusMotion.curveSheetEnter,
+          equals(const Cubic(0.16, 1.0, 0.3, 1.0)));
+      expect(
+          NexusMotion.curveResponsive, equals(const Cubic(0.2, 0.0, 0.2, 1.0)));
+      expect(NexusMotion.curveBreathing, equals(Curves.easeInOutSine));
+    });
+
+    testWidgets('NexusPressable applies 0.97 spring press scale physics',
+        (tester) async {
+      var pressed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: NexusPressable(
+                onTap: () => pressed = true,
+                child: const Text('Tap Me'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final pressableFinder = find.byType(NexusPressable);
+      expect(pressableFinder, findsOneWidget);
+      final initialScale =
+          tester.widget<AnimatedScale>(find.byType(AnimatedScale));
+      expect(initialScale.scale, 1.0);
+
+      final gesture = await tester.createGesture();
+      await gesture.down(tester.getCenter(find.text('Tap Me')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final pressedWidget = tester.widget<NexusPressable>(pressableFinder);
+      expect(pressedWidget.pressedScale, 0.97);
+
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(pressed, isTrue);
+    });
+
+    testWidgets('LiquidSegmentedControl defaults to stretchEffect enabled',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: LiquidSegmentedControl<String>(
+              segments: const [
+                LiquidSegment(value: 'a', label: 'A'),
+                LiquidSegment(value: 'b', label: 'B'),
+              ],
+              selected: 'a',
+              onSelected: (_) {},
+            ),
+          ),
+        ),
+      );
+
+      final control = tester.widget<LiquidSegmentedControl<String>>(
+        find.byType(LiquidSegmentedControl<String>),
+      );
+      expect(control.stretchEffect, isTrue);
+    });
+
+    testWidgets('LiquidSegmentedControl stops when motion is reduced',
+        (tester) async {
+      addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+      Widget host(MotionLevel level, String selected) => MaterialApp(
+            home: NexusMotionScope(
+              level: level,
+              child: Scaffold(
+                body: LiquidSegmentedControl<String>(
+                  segments: const [
+                    LiquidSegment(value: 'a', label: 'A'),
+                    LiquidSegment(value: 'b', label: 'B'),
+                  ],
+                  selected: selected,
+                  onSelected: (_) {},
+                ),
+              ),
+            ),
+          );
+
+      await tester.pumpWidget(host(MotionLevel.full, 'a'));
+      await tester.pumpWidget(host(MotionLevel.full, 'b'));
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(tester.binding.transientCallbackCount, greaterThan(0));
+
+      await tester.pumpWidget(host(MotionLevel.reduced, 'b'));
+      await tester.pump();
+      expect(tester.binding.transientCallbackCount, 0);
+    });
+
+    testWidgets('NexusDisclosure incorporates cascade spatial translation',
+        (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: NexusDisclosure(
+              title: Text('Cascade Title'),
+              child: Text('Cascade Content'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Cascade Title'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(FractionalTranslation), findsWidgets);
+      await tester.pumpAndSettle();
+      expect(find.text('Cascade Content'), findsOneWidget);
     });
   });
 }

@@ -161,7 +161,8 @@ class ProjectEnvironmentPolicy {
     }
   }
 
-  List<ProjectToolRequirement> requirementsForTemplate(ProjectTemplate template) {
+  List<ProjectToolRequirement> requirementsForTemplate(
+      ProjectTemplate template) {
     final extras = <ProjectToolRequirement>[];
     if (template.settings.previewCommand?.trim().isNotEmpty == true) {
       extras.add(ProjectToolRequirement(
@@ -173,8 +174,8 @@ class ProjectEnvironmentPolicy {
     }
     return [
       ...requirementsFor(template.kind),
-      ...extras.where((item) =>
-          !requirementsFor(template.kind).any((existing) => existing.id == item.id)),
+      ...extras.where((item) => !requirementsFor(template.kind)
+          .any((existing) => existing.id == item.id)),
     ];
   }
 

@@ -19,8 +19,8 @@ class ProjectKindDetector {
       final pubspec = await _readText(sandbox, 'pubspec.yaml') ??
           await _readText(sandbox, 'pubspec.yml') ??
           '';
-      final flutterSdk = RegExp(r'^\s*flutter\s*:', multiLine: true)
-          .hasMatch(pubspec);
+      final flutterSdk =
+          RegExp(r'^\s*flutter\s*:', multiLine: true).hasMatch(pubspec);
       if (flutterSdk) {
         signals.add(const ProjectKindSignal(
           path: 'pubspec.yaml',
@@ -75,7 +75,10 @@ class ProjectKindDetector {
       try {
         final raw = jsonDecode(packageJson);
         if (raw is Map<String, dynamic>) decoded = raw;
-      } catch (_) {}
+      } catch (_) {
+        // package.json 解析失败时退化为空 map：项目类型仍能靠文件名等其它信号
+        // 识别，只是少一条 scripts 信号。属于解析兜底，不是错误吞没。
+      }
       final scripts = decoded['scripts'] is Map
           ? Map<String, dynamic>.from(decoded['scripts'] as Map)
           : const <String, dynamic>{};
@@ -141,8 +144,7 @@ class ProjectKindDetector {
         path: 'AndroidManifest.xml',
         reason: '检测到无 Gradle 的小型 Java APK 模板',
       ));
-      final manifest =
-          await _readText(sandbox, 'AndroidManifest.xml') ?? '';
+      final manifest = await _readText(sandbox, 'AndroidManifest.xml') ?? '';
       return ProjectKindDetection(
         kind: ProjectKind.javaApk,
         confidence: 0.8,
@@ -200,7 +202,8 @@ class ProjectKindDetector {
       expected.any(names.contains);
 
   String? _yamlField(String source, String key) {
-    final match = RegExp('^$key:\\s*(.+)\$', multiLine: true).firstMatch(source);
+    final match =
+        RegExp('^$key:\\s*(.+)\$', multiLine: true).firstMatch(source);
     return match?.group(1)?.trim();
   }
 

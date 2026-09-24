@@ -39,11 +39,28 @@ abstract final class AppTokens {
   static const fontSizeDisplay2 = 28.0;
   static const fontSizeHeadline = 22.0;
   static const fontSizeTitle = 17.0;
+  static const fontSizeHeading = 18.0;
+  static const fontSizeSection = 19.0;
+  static const fontSizeMetric = 20.0;
+  static const fontSizeBodyLarge = 16.0;
   static const fontSizeBody = 15.0;
   static const fontSizeSubhead = 14.0;
+  static const fontSizeBodySmall = 13.5;
   static const fontSizeCaption = 13.0;
+  static const fontSizeMeta = 12.5;
   static const fontSizeFootnote = 12.0;
+  static const fontSizeSubcaption = 11.5;
   static const fontSizeBadge = 11.0;
+  static const fontSizeMetricSmall = 10.5;
+
+  /// 统一等宽字体（消除各处裸写 'monospace' 或未打包的 'JetBrains Mono'）
+  static const fontFamilyMono = 'monospace';
+
+  // 统一响应式断点常量 (P1-11)
+  static const bpCompact = 320.0;
+  static const bpMedium = 420.0;
+  static const bpWide = 700.0;
+  static const kContentMaxWidth = 700.0;
 
   // 微环境光遮蔽阴影 Token（Ambient Occlusion，防内容穿透）
   static const shadowFloatingBlur = 20.0;
@@ -79,22 +96,44 @@ abstract final class AppTokens {
   @Deprecated('请改用 kTopBarHeight')
   static const kCapsuleTopBarHeight = kTopBarHeight;
 
-  // 动效时长 Token (90 / 150 / 220 / 300ms)
-  static const Duration durationInstant = Duration(milliseconds: 90);
+  // 动效时长 Token：按交互范围分层，而不是让所有动效共享同一时长。
+  // HarmonyOS 动效指南给出的可感知基准是：短动效约 150ms、局部布局约
+  // 200~250ms、全屏/复杂转场不超过 350ms。
+  static const _durationInstantMs = 100;
+  static const _durationPageMs = 250;
+  static const _durationPageExitMs = 180;
+  static const _durationSheetMs = 300;
+  static const _durationToastMs = 220;
+  static const _durationImeSettleMs = 400;
+  static const Duration durationInstant =
+      Duration(milliseconds: _durationInstantMs);
   static const Duration durationFast = Duration(milliseconds: 150);
   static const Duration durationBase = Duration(milliseconds: 220);
   static const Duration durationExpand = Duration(milliseconds: 300);
-  @Deprecated('请改用 durationExpand (300ms)')
-  static const Duration durationModal = Duration(milliseconds: 300);
-  @Deprecated('请改用 durationExpand (300ms)')
-  static const Duration durationSlow = Duration(milliseconds: 300);
+  static const Duration durationPage = Duration(milliseconds: _durationPageMs);
+  static const Duration durationPageExit =
+      Duration(milliseconds: _durationPageExitMs);
+  static const Duration durationSheet =
+      Duration(milliseconds: _durationSheetMs);
+  static const Duration durationToast =
+      Duration(milliseconds: _durationToastMs);
 
-  // 动效曲线 Token (统一 Curves.easeOutCubic)
-  static const Curve curveStandard = Curves.easeOutCubic;
-  @Deprecated('回弹曲线已废弃，统一为 easeOutCubic')
-  static const Curve curveEnter = Curves.easeOutCubic;
-  @Deprecated('统一为 easeOutCubic')
-  static const Curve curveExpand = Curves.easeOutCubic;
-  @Deprecated('统一为 easeOutCubic')
-  static const Curve curveDecelerate = Curves.easeOutCubic;
+  /// 输入法收起动画的最长可接受时长：输入框失焦后，键盘 inset 超过这个时长
+  /// 仍未归零，就视为系统残留的过期 inset（见 KeyboardInsetScope）。
+  static const Duration durationImeSettle =
+      Duration(milliseconds: _durationImeSettleMs);
+  @Deprecated('请改用 durationExpand (300ms)')
+  static const Duration durationModal = durationExpand;
+  @Deprecated('请改用 durationExpand (300ms)')
+  static const Duration durationSlow = durationExpand;
+
+  // 动效曲线 Token：对应 HarmonyOS 的标准 / 减速 / 加速曲线。
+  // 标准曲线用于同屏状态变化；减速曲线用于新元素进场；加速曲线用于退场。
+  static const Curve curveStandard = Cubic(0.4, 0.0, 0.2, 1.0);
+  static const Curve curveDecelerate = Cubic(0.0, 0.0, 0.2, 1.0);
+  static const Curve curveAccelerate = Cubic(0.0, 0.0, 0.0, 1.0);
+  @Deprecated('请改用 curveDecelerate')
+  static const Curve curveEnter = curveDecelerate;
+  @Deprecated('请改用 curveStandard')
+  static const Curve curveExpand = curveStandard;
 }

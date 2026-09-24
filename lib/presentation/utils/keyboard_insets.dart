@@ -1,6 +1,12 @@
 import 'package:flutter/widgets.dart';
 
+import 'keyboard_avoider.dart';
+
 /// 当前键盘弹出的逻辑高度（0 表示键盘未弹出）。
+///
+/// 位于 [KeyboardInsetScope] 之内时返回它给出的**有效**键盘高度：按输入焦点
+/// 门控、过滤残留 inset，并注册依赖，调用方会随键盘开合重建。不在 scope 内时
+/// 直接向 platform view 取值（不订阅变化）。
 ///
 /// ⚠️ **不要改回 `MediaQuery.viewInsetsOf(context).bottom`**。
 ///
@@ -17,6 +23,8 @@ import 'package:flutter/widgets.dart';
 ///
 /// 直接向 platform view 取值可以绕过这层作用域，在 Scaffold 内外都成立。
 double keyboardInset(BuildContext context) {
+  final scoped = KeyboardInsetScope.maybeOf(context);
+  if (scoped != null) return scoped;
   final view = View.of(context);
   return view.viewInsets.bottom / view.devicePixelRatio;
 }

@@ -77,6 +77,60 @@ void main() {
     expect(find.textContaining('工具链安装命令'), findsNothing);
     expect(find.textContaining('下载并安装 Termux'), findsNothing);
   });
+
+  testWidgets('Termux 安装前必须告知该包来自第三方且无法校验；取消后不下载',
+      (tester) async {
+    const channel = MethodChannel('nexus/termux_bridge');
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'isTermuxInstalled') return false;
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          environmentServiceProvider.overrideWithValue(
+            _HangingEnvironmentService(),
+          ),
+        ],
+        child: const MaterialApp(home: EnvironmentSheet()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final installButton = find.widgetWithText(FilledButton, '下载并安装 Termux');
+    expect(installButton, findsOneWidget);
+    await tester.ensureVisible(installButton);
+    await tester.pump();
+
+    await tester.tap(installButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // 这个 APK 来自第三方镜像、拿不到可离线固定的校验值。既然无法验证，
+    // 就必须让用户知道自己在装什么，而不是静默按「只验 ZIP 魔数」放行。
+    expect(find.text('安装未校验的 Termux'), findsOneWidget);
+    expect(find.textContaining('无法校验该安装包的完整性'), findsOneWidget);
+    expect(find.text('继续下载'), findsOneWidget);
+
+    await tester.tap(find.text('取消'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('安装未校验的 Termux'), findsNothing);
+    expect(
+      find.textContaining('正在下载 Termux'),
+      findsNothing,
+      reason: '用户取消之后不能有任何下载动作',
+    );
+
+    // 让环境检测那条独立超时跑完，避免留下未完成的定时器。
+    await tester.pump(const Duration(seconds: 11));
+  });
 }
 
 class _HangingEnvironmentService extends EnvironmentService {

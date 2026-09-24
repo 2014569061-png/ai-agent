@@ -1,4 +1,7 @@
 import 'dart:typed_data';
+import 'vault_manifest.dart';
+export 'vault_manifest.dart'
+    show VaultRestoreReport, VaultLimits, encodeVaultJson;
 
 import '../database/app_database.dart';
 import '../providers/provider_config_store.dart';
@@ -13,7 +16,8 @@ Future<String> importVaultBytes(
   throw UnsupportedError('浏览器暂不支持隐私保险箱');
 }
 
-Future<void> restoreVault(AppDatabase db, Map<String, dynamic> json,
+Future<VaultRestoreReport> restoreVault(
+    AppDatabase db, Map<String, dynamic> json,
     {ProviderConfigStore? providerStore}) async {
   throw UnsupportedError('浏览器暂不支持恢复本机备份');
 }

@@ -5,27 +5,60 @@ import 'motion_preferences.dart';
 /// NEXUS 统一动效系统标准定义
 abstract final class NexusMotion {
   // --- 标准时间常量 (不受 Context 约束的物理值) ---
-  /// 即时反馈 (90ms): 按压、图标切换、选中态
+  /// 即时反馈 (100ms): 按压、图标切换、选中态
   static const Duration instant = AppTokens.durationInstant;
 
   /// 控件状态 (150ms): 按钮、Chip、输入框、筛选切换
   static const Duration fast = AppTokens.durationFast;
 
-  /// 容器变化 (220ms): 展开、浮层、页面推进进入
+  /// 容器变化 (220ms): 局部展开、浮层、内容切换
   static const Duration base = AppTokens.durationBase;
 
   /// 内容布局 (300ms): 大段内容展开、复杂面板切换
   static const Duration expand = AppTokens.durationExpand;
 
-  /// 容器退出与返回 (150ms): 弹窗关闭、返回上一页
-  static const Duration exit = Duration(milliseconds: 150);
+  /// 页面进入：新元素需要更长的末尾减速来建立空间关系。
+  static const Duration page = AppTokens.durationPage;
+
+  /// 页面退出：已在视线中的元素应更快离场，减少等待感。
+  static const Duration pageExit = AppTokens.durationPageExit;
+
+  /// 底部 Sheet 的完整进入 / 回弹时长。
+  static const Duration sheet = AppTokens.durationSheet;
+
+  /// 用户主动将聊天列表滚动到最新消息。
+  static const Duration scrollToTarget = Duration(milliseconds: 260);
+
+  /// 新消息完成后，聊天列表轻量跟随尾部。
+  static const Duration tailFollow = Duration(milliseconds: 180);
+
+  /// 聊天列表滚动使用的减速曲线。
+  static const Curve curveScroll = Curves.easeOutCubic;
+
+  /// 容器退出与返回。
+  static const Duration exit = AppTokens.durationPageExit;
 
   // --- 标准曲线 ---
-  /// 统一缓动曲线: easeOutCubic
+  /// 同屏状态变化：cubic-bezier(0.40, 0.00, 0.20, 1.00)
   static const Curve curveStandard = AppTokens.curveStandard;
 
-  /// 退出缓动曲线
-  static const Curve curveExit = Curves.easeInCubic;
+  /// 新元素进场：cubic-bezier(0.00, 0.00, 0.20, 1.00)
+  static const Curve curveEnter = AppTokens.curveDecelerate;
+
+  /// 已在视线中的元素退场：cubic-bezier(0.00, 0.00, 0.00, 1.00)
+  static const Curve curveExit = AppTokens.curveAccelerate;
+
+  /// 底部抽屉进场：高阻尼弹簧减速曲线 (HarmonyOS ArkUI 风格)
+  static const Curve curveSheetEnter = Cubic(0.16, 1.0, 0.3, 1.0);
+
+  /// 高响应交互：cubic-bezier(0.20, 0.00, 0.20, 1.00) (HarmonyOS ArkUI 风格，用于分段器、Tab 连续切换)
+  static const Curve curveResponsive = Cubic(0.2, 0.0, 0.2, 1.0);
+
+  /// 手势未达到阈值时的克制回弹，避免全局动画出现果冻感。
+  static const Curve curveSpring = Curves.easeOutBack;
+
+  /// 连续循环呼吸曲线：平滑双向正弦过渡 (用于状态胶囊、执行中呼吸灯)
+  static const Curve curveBreathing = Curves.easeInOutSine;
 
   // --- 考虑无障碍「减少动态效果」后的自适应时间 ---
   static Duration durationInstant(BuildContext context) =>
@@ -73,7 +106,8 @@ abstract final class NexusMotion {
     return FadeTransition(
       opacity: curved,
       child: SlideTransition(
-        position: Tween<Offset>(begin: beginOffset, end: Offset.zero).animate(curved),
+        position:
+            Tween<Offset>(begin: beginOffset, end: Offset.zero).animate(curved),
         child: child,
       ),
     );

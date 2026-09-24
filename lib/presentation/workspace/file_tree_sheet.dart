@@ -262,7 +262,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
                                 _currentLabel,
                                 style: TextStyle(
                                     fontSize: 11,
-                                    fontFamily: 'JetBrains Mono',
+                                    fontFamily: AppTokens.fontFamilyMono,
                                     color: theme.colorScheme.onSurfaceVariant),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -380,7 +380,7 @@ class _FileTreeSheetState extends State<FileTreeSheet> {
         '$kb KB',
         style: const TextStyle(
           fontSize: 11,
-          fontFamily: 'JetBrains Mono',
+          fontFamily: AppTokens.fontFamilyMono,
           color: AppPalette.darkTextMuted,
         ),
       );

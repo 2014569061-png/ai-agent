@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_tokens.dart';
 import 'glass_surface.dart';
 
 /// 统一的二级页面头部组件 (NexusPageHeader)
@@ -97,8 +98,8 @@ class NexusPageHeader extends StatelessWidget implements PreferredSizeWidget {
           (canPop
               ? Center(
                   child: Container(
-                    width: 40,
-                    height: 40,
+                    width: AppTokens.kMinTouchTarget,
+                    height: AppTokens.kMinTouchTarget,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isDark

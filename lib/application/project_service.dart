@@ -94,7 +94,8 @@ class ProjectService {
               'com/nexus/starter', packageName.replaceAll('.', '/'));
         }
         if (request.appName != null && request.appName!.trim().isNotEmpty) {
-          contents = contents.replaceAll('NexusStarter', request.appName!.trim());
+          contents =
+              contents.replaceAll('NexusStarter', request.appName!.trim());
         }
         final dest = File(p.join(target.path, relativePath));
         await dest.parent.create(recursive: true);
@@ -113,7 +114,7 @@ class ProjectService {
         settings: settings,
       );
     } catch (error) {
-      await _deleteIfEmptyOrCreated(target);
+      await _deleteQuietly(target);
       rethrow;
     }
   }
@@ -169,34 +170,37 @@ class ProjectService {
     if (request.bytes.length > maxArchiveBytes) {
       throw const ProjectException('压缩包超过 80MB 上限');
     }
-    final archive = _decodeZip(Uint8List.fromList(request.bytes));
-    final extracted = _extractSafeEntries(archive);
+    final archive = _decodeZip(request.bytes);
     final name = _sanitizeName(
       request.name ?? p.basenameWithoutExtension(request.archivePath),
     );
     final parent = await _resolveParent(request.parentDirectory);
-    final stagingParent =
-        Directory(p.join(parent, '.nexus-import-${DateTime.now().microsecondsSinceEpoch}'));
+    final stagingParent = Directory(p.join(
+        parent, '.nexus-import-${DateTime.now().microsecondsSinceEpoch}'));
     final staging = Directory(p.join(stagingParent.path, name));
     await staging.create(recursive: true);
+    Directory? publishedTarget;
+    var registered = false;
     try {
-      for (final entry in extracted.entries) {
-        final dest = File(p.join(staging.path, entry.key));
-        await dest.parent.create(recursive: true);
-        await dest.writeAsBytes(entry.value, flush: true);
-      }
+      await _extractSafeEntries(archive, staging);
       final target = Directory(p.join(parent, name));
       if (await target.exists()) {
         throw ProjectException('目标目录已存在：$name');
       }
       await staging.rename(target.path);
+      publishedTarget = target;
       await _deleteQuietly(stagingParent);
-      return await registerExistingDirectory(
+      final project = await registerExistingDirectory(
         directoryPath: target.path,
         name: name,
         sourceKind: 'archive',
       );
+      registered = true;
+      return project;
     } catch (error) {
+      if (!registered && publishedTarget != null) {
+        await _deleteQuietly(publishedTarget);
+      }
       await _deleteQuietly(stagingParent);
       rethrow;
     }
@@ -240,9 +244,8 @@ class ProjectService {
     if (project == null) {
       throw const ProjectException('项目不存在');
     }
-    final accessible = kIsWeb
-        ? true
-        : await Directory(project.canonicalRootPath).exists();
+    final accessible =
+        kIsWeb ? true : await Directory(project.canonicalRootPath).exists();
     if (accessible) {
       await _workspace.setActiveWorkspace(project.canonicalRootPath);
       final prefs = await SharedPreferences.getInstance();
@@ -256,7 +259,8 @@ class ProjectService {
     );
   }
 
-  Future<void> updateSettings(String projectId, ProjectSettings settings) async {
+  Future<void> updateSettings(
+      String projectId, ProjectSettings settings) async {
     final project = await db.findProject(projectId);
     if (project == null) throw const ProjectException('项目不存在');
     await db.saveProject(project.copyWith(
@@ -339,7 +343,7 @@ class ProjectService {
     return cleaned;
   }
 
-  Archive _decodeZip(Uint8List bytes) {
+  Archive _decodeZip(List<int> bytes) {
     try {
       return ZipDecoder().decodeBytes(bytes);
     } catch (_) {
@@ -347,9 +351,9 @@ class ProjectService {
     }
   }
 
-  Map<String, Uint8List> _extractSafeEntries(Archive archive) {
-    final files = <String, Uint8List>{};
+  Future<void> _extractSafeEntries(Archive archive, Directory staging) async {
     var total = 0;
+    var fileCount = 0;
     final rootPrefix = _commonRootPrefix(archive);
     for (final file in archive) {
       final rawName = file.name.replaceAll('\\', '/');
@@ -380,18 +384,30 @@ class ProjectService {
       if (!file.isFile) {
         throw ProjectException('压缩包包含不支持的条目：$relative');
       }
-      if (files.length >= maxArchiveFiles) {
+      if (++fileCount > maxArchiveFiles) {
         throw const ProjectException('压缩包文件数超过上限');
       }
-      final data = file.readBytes() ?? Uint8List(0);
-      total += data.length;
-      if (total > maxArchiveBytes) {
+      if (file.size < 0 || file.size > maxArchiveBytes - total) {
         throw const ProjectException('解压后体积超过上限');
       }
-      files[relative] = data;
+      final destination = File(p.join(staging.path, relative));
+      await destination.parent.create(recursive: true);
+      final output = _LimitedOutputFileStream(
+        destination.path,
+        maxBytes: maxArchiveBytes - total,
+      );
+      try {
+        file.writeContent(output, freeMemory: true);
+        output.flush();
+        total += output.writtenBytes;
+        if (output.writtenBytes != file.size) {
+          throw ProjectException('压缩包条目大小不匹配：$relative');
+        }
+      } finally {
+        await output.close();
+      }
     }
-    if (files.isEmpty) throw const ProjectException('压缩包是空的');
-    return files;
+    if (fileCount == 0) throw const ProjectException('压缩包是空的');
   }
 
   String _commonRootPrefix(Archive archive) {
@@ -406,20 +422,96 @@ class ProjectService {
         : '';
   }
 
-  Future<void> _deleteIfEmptyOrCreated(Directory directory) async {
-    try {
-      if (await directory.exists()) {
-        await directory.delete(recursive: true);
-      }
-    } catch (_) {}
-  }
-
+  /// 尽力删除一个目录：失败不改变调用方对结果的判定。
+  ///
+  /// 两处调用点都是「清理自己刚刚创建/重命名的中间目录」：模板创建失败时回滚，
+  /// 以及压缩包解压后清掉暂存目录。删不掉只会留下一个空目录，没有补救动作。
+  /// 此前这里是两个函数体逐字相同的私有方法，已合并为一处。
   Future<void> _deleteQuietly(Directory directory) async {
     try {
       if (await directory.exists()) {
         await directory.delete(recursive: true);
       }
-    } catch (_) {}
+    } catch (_) {
+      // 名字即约定：尽力删除，失败不改变调用方对结果的判定。
+    }
+  }
+}
+
+class _LimitedOutputFileStream extends OutputStream {
+  _LimitedOutputFileStream(
+    String path, {
+    required this.maxBytes,
+  })  : _output = OutputFileStream(path, bufferSize: 64 * 1024),
+        super(byteOrder: ByteOrder.littleEndian);
+
+  final int maxBytes;
+  final OutputFileStream _output;
+  int _writtenBytes = 0;
+
+  int get writtenBytes => _writtenBytes;
+
+  @override
+  int get length => _writtenBytes;
+
+  @override
+  bool get isOpen => _output.isOpen;
+
+  void _reserve(int length) {
+    if (length < 0 || length > maxBytes - _writtenBytes) {
+      throw const ProjectException('解压后体积超过上限');
+    }
+    _writtenBytes += length;
+  }
+
+  @override
+  void writeByte(int value) {
+    _reserve(1);
+    _output.writeByte(value);
+  }
+
+  @override
+  void writeBytes(List<int> bytes, {int? length}) {
+    _reserve(length ?? bytes.length);
+    _output.writeBytes(bytes, length: length);
+  }
+
+  @override
+  void writeStream(InputStream stream) {
+    var remaining = stream.length;
+    const chunkSize = 64 * 1024;
+    while (remaining > 0) {
+      final chunkLength = remaining > chunkSize ? chunkSize : remaining;
+      writeBytes(stream.readBytes(chunkLength).toUint8List());
+      remaining -= chunkLength;
+    }
+  }
+
+  @override
+  Uint8List subset(int start, [int? end]) => _output.subset(start, end);
+
+  @override
+  void flush() => _output.flush();
+
+  @override
+  void clear() {
+    _output.closeSync();
+    _writtenBytes = 0;
+  }
+
+  @override
+  void closeSync() => _output.closeSync();
+
+  @override
+  Future<void> close() => _output.close();
+
+  @override
+  void open() => _output.open();
+
+  @override
+  void writeBackReference(int distance, int count) {
+    _reserve(count);
+    _output.writeBackReference(distance, count);
   }
 }
 

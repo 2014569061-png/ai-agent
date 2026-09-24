@@ -8,6 +8,7 @@ import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/section_card.dart';
+import '../../chat/widgets/context_budget_bar.dart';
 import 'token_numbers.dart';
 
 /// 今日 Token 用量与座舱遥测 Hero（对标效果图 2）
@@ -40,11 +41,18 @@ class TokenUsageHero extends StatelessWidget {
     final total = prompt + completion;
     final calls = hasData ? today.calls : 0;
     final costYuan = formatCostYuan(hasData ? today.costCents : 0);
-    final cacheRate = hasData && total > 0 ? cached / total : null;
-
-    // 默认上下文预算标尺 128k
-    const maxBudget = 131072;
-    final progress = (total / maxBudget).clamp(0.0, 1.0);
+    // Historical daily rows cannot distinguish a cache miss from a provider
+    // that omitted cache statistics. Do not render unknown data as 0%.
+    final cacheRate =
+        hasData && prompt > 0 && cached > 0 ? cached / prompt : null;
+    final weeklyPeak = days.fold<int>(0, (peak, day) {
+      final value = day.promptTokens + day.completionTokens;
+      return value > peak ? value : peak;
+    });
+    final progress =
+        weeklyPeak <= 0 ? 0.0 : (total / weeklyPeak).clamp(0.0, 1.0);
+    final liveColor = isDark ? AppPalette.darkSuccess : AppPalette.lightSuccess;
+    final liveSoft = isDark ? AppPalette.darkSuccessSoft : AppPalette.lightSuccessSoft;
 
     return SectionCard(
       glass: true,
@@ -60,7 +68,7 @@ class TokenUsageHero extends StatelessWidget {
               Text(
                 'Console & Telemetry',
                 style: TextStyle(
-                  fontSize: 13.5,
+                  fontSize: AppTokens.fontSizeBodySmall,
                   fontWeight: FontWeight.w600,
                   color: muted,
                   letterSpacing: 0.2,
@@ -70,10 +78,10 @@ class TokenUsageHero extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00E676).withValues(alpha: 0.15),
+                  color: liveSoft,
                   borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                   border: Border.all(
-                    color: const Color(0xFF00E676).withValues(alpha: 0.4),
+                    color: liveColor.withValues(alpha: 0.3),
                   ),
                 ),
                 child: Row(
@@ -82,18 +90,18 @@ class TokenUsageHero extends StatelessWidget {
                     Container(
                       width: 6,
                       height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF00E676),
+                      decoration: BoxDecoration(
+                        color: liveColor,
                         shape: BoxShape.circle,
                       ),
                     ),
                     const SizedBox(width: 5),
-                    const Text(
+                    Text(
                       'LIVE',
                       style: TextStyle(
-                        fontSize: 10.5,
+                        fontSize: AppTokens.fontSizeMetricSmall,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF00E676),
+                        color: liveColor,
                         letterSpacing: 0.5,
                       ),
                     ),
@@ -114,8 +122,8 @@ class TokenUsageHero extends StatelessWidget {
                   progress: progress,
                   isDark: isDark,
                   trackColor: isDark
-                      ? const Color(0xFF1E2330)
-                      : const Color(0xFFE2E8F0),
+                      ? AppPalette.darkSurfaceHover
+                      : AppPalette.lightHairline,
                 ),
                 child: Center(
                   child: Column(
@@ -124,7 +132,7 @@ class TokenUsageHero extends StatelessWidget {
                       Text(
                         'Token 消耗',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: AppTokens.fontSizeMetricSmall,
                           fontWeight: FontWeight.w500,
                           color: muted,
                         ),
@@ -133,7 +141,7 @@ class TokenUsageHero extends StatelessWidget {
                       Text(
                         formatExact(total),
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: AppTokens.fontSizeHeading,
                           height: 1.1,
                           fontWeight: FontWeight.bold,
                           color: text,
@@ -142,9 +150,9 @@ class TokenUsageHero extends StatelessWidget {
                       ),
                       const SizedBox(height: 1),
                       Text(
-                        '/ 128k (${(progress * 100).toStringAsFixed(0)}%)',
+                        '/ 7日峰值 ${formatCompact(weeklyPeak)}',
                         style: TextStyle(
-                          fontSize: 9.5,
+                          fontSize: AppTokens.fontSizeBadge,
                           color: faint,
                           fontFeatures: const [FontFeature.tabularFigures()],
                         ),
@@ -155,16 +163,18 @@ class TokenUsageHero extends StatelessWidget {
                             horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? const Color(0xFF13222B)
-                              : const Color(0xFFE6F8FB),
+                              ? AppPalette.darkBrandSoft
+                              : AppPalette.lightBrandSoft,
                           borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
                           costYuan != null ? '¥$costYuan' : '¥0.00',
-                          style: const TextStyle(
-                            fontSize: 10,
+                          style: TextStyle(
+                            fontSize: AppTokens.fontSizeMetricSmall,
                             fontWeight: FontWeight.w600,
-                            color: Color(0xFF00E5FF),
+                            color: isDark
+                                ? AppPalette.darkText
+                                : AppPalette.brandOnSoft,
                           ),
                         ),
                       ),
@@ -184,12 +194,12 @@ class TokenUsageHero extends StatelessWidget {
                   label: '活跃 Agent',
                   value: calls > 0 ? '$calls 任务' : '就绪',
                   icon: Icons.sensors_rounded,
-                  iconColor: const Color(0xFF00E676),
+                  iconColor: liveColor,
                   trailing: Container(
                     width: 6,
                     height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF00E676),
+                    decoration: BoxDecoration(
+                      color: liveColor,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -201,7 +211,9 @@ class TokenUsageHero extends StatelessWidget {
                   label: '缓存命中率',
                   value: cacheRate != null ? formatPercent(cacheRate) : '--',
                   icon: Icons.bolt_rounded,
-                  iconColor: const Color(0xFF00E5FF),
+                  iconColor: isDark
+                      ? AppPalette.darkBrandHover
+                      : AppPalette.brand,
                 ),
               ),
             ],
@@ -209,10 +221,28 @@ class TokenUsageHero extends StatelessWidget {
           const SizedBox(height: 14),
 
           // 分段比例条：输入(未缓存) / 缓存 / 输出
-          _TokenSegmentBar(
-            freshInput: freshInput,
-            cached: cached,
-            completion: completion,
+          ContextBudgetBar(
+            key: const ValueKey('dashboard-token-budget'),
+            segments: [
+              ContextBudgetSegment(
+                tokens: freshInput,
+                color: isDark
+                    ? AppPalette.darkTextFaint
+                    : AppPalette.lightTextMuted,
+              ),
+              ContextBudgetSegment(
+                tokens: cached,
+                color: isDark
+                    ? AppPalette.darkBrandSoft
+                    : AppPalette.lightBrandSoft,
+              ),
+              ContextBudgetSegment(
+                tokens: completion,
+                color: AppPalette.brand,
+              ),
+            ],
+            limit: total,
+            height: 8,
           ),
           const SizedBox(height: 10),
 
@@ -261,14 +291,14 @@ class TokenUsageHero extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 '${AppStrings.callsLabel} $calls',
-                style: TextStyle(fontSize: 13, color: muted),
+                style: TextStyle(fontSize: AppTokens.fontSizeCaption, color: muted),
               ),
               const Spacer(),
               if (costYuan != null)
                 Text(
                   '${AppStrings.costLabel} ¥$costYuan',
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTokens.fontSizeCaption,
                     fontWeight: FontWeight.w500,
                     color: text,
                     fontFeatures: const [FontFeature.tabularFigures()],
@@ -323,7 +353,10 @@ class _TelemetryStatCard extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10.5, color: muted),
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeMetricSmall,
+                    color: muted,
+                  ),
                 ),
               ),
               if (trailing != null) trailing!,
@@ -333,7 +366,7 @@ class _TelemetryStatCard extends StatelessWidget {
           Text(
             value,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: AppTokens.fontSizeCaption,
               fontWeight: FontWeight.w600,
               color: text,
             ),
@@ -374,14 +407,14 @@ class _TelemetryGaugePainter extends CustomPainter {
     // 渐变进度圆弧
     if (progress > 0) {
       final sweepAngle = 2 * math.pi * progress.clamp(0.03, 1.0);
-      const gradient = SweepGradient(
+      final gradient = SweepGradient(
         startAngle: -math.pi / 2,
         endAngle: 3 * math.pi / 2,
         colors: [
-          Color(0xFF00E5FF),
-          Color(0xFF7C4DFF),
-          Color(0xFFE040FB),
-          Color(0xFF00E5FF),
+          isDark ? AppPalette.darkBrandHover : AppPalette.brand,
+          isDark ? AppPalette.brandAction : AppPalette.lightBrandHover,
+          isDark ? AppPalette.darkBrandActive : AppPalette.lightBrandActive,
+          isDark ? AppPalette.darkBrandHover : AppPalette.brand,
         ],
       );
 
@@ -410,54 +443,6 @@ class _TelemetryGaugePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _TelemetryGaugePainter oldDelegate) =>
       oldDelegate.progress != progress || oldDelegate.isDark != isDark;
-}
-
-/// 三段式比例条：输入(未缓存) / 缓存 / 输出。
-/// 纯色块堆叠，无渐变无投影，符合禁用清单。
-class _TokenSegmentBar extends StatelessWidget {
-  const _TokenSegmentBar({
-    required this.freshInput,
-    required this.cached,
-    required this.completion,
-  });
-
-  final int freshInput;
-  final int cached;
-  final int completion;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    Widget segment(int value, Color color) {
-      if (value <= 0) return const SizedBox.shrink();
-      return Expanded(
-        flex: value,
-        child: Container(
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
-      child: SizedBox(
-        height: 8,
-        child: Row(
-          children: [
-            segment(freshInput,
-                isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted),
-            segment(cached,
-                isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft),
-            segment(completion, AppPalette.brand),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 /// 图例项：色点 + 标签 + 精确数字。
@@ -492,13 +477,13 @@ class _SegmentLegend extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: muted),
+            style: TextStyle(fontSize: AppTokens.fontSizeFootnote, color: muted),
           ),
           const SizedBox(width: 6),
           Text(
             value,
             style: TextStyle(
-              fontSize: 12,
+              fontSize: AppTokens.fontSizeFootnote,
               fontWeight: FontWeight.w500,
               color: text,
               fontFeatures: const [FontFeature.tabularFigures()],

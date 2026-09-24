@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../application/install_job_service.dart';
+import '../motion/nexus_motion.dart';
+import '../motion/motion_preferences.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/nexus_list_tile.dart';
 import '../widgets/section_card.dart';
@@ -22,6 +24,10 @@ class InstallJobSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final sizeMb = (job.estimatedBytes / (1024 * 1024)).toStringAsFixed(0);
+    final motionDuration = MotionPreferences.adjustDuration(
+      context,
+      NexusMotion.fast,
+    );
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -74,7 +80,32 @@ class InstallJobSheet extends StatelessWidget {
                 if (job.status != 'completed' && job.steps.isNotEmpty)
                   FilledButton(
                     onPressed: busy ? null : onStart,
-                    child: Text(busy ? '安装中…' : '开始安装'),
+                    child: AnimatedSwitcher(
+                      duration: motionDuration,
+                      switchInCurve: NexusMotion.curveEnter,
+                      switchOutCurve: NexusMotion.curveExit,
+                      child: Row(
+                        key: ValueKey(busy),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (busy) ...[
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ] else ...[
+                            const Icon(Icons.download_rounded, size: 18),
+                            const SizedBox(width: 8),
+                          ],
+                          Text(busy ? '安装中…' : '开始安装'),
+                        ],
+                      ),
+                    ),
                   ),
               ],
             ),

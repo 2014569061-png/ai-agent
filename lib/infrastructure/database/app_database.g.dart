@@ -601,6 +601,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
   late final GeneratedColumn<String> reasoningContent = GeneratedColumn<String>(
       'reasoning_content', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _displayMetadataJsonMeta =
+      const VerificationMeta('displayMetadataJson');
+  @override
+  late final GeneratedColumn<String> displayMetadataJson =
+      GeneratedColumn<String>('display_metadata_json', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -616,6 +622,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         toolCallId,
         toolCallsJson,
         reasoningContent,
+        displayMetadataJson,
         createdAt
       ];
   @override
@@ -671,6 +678,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
           reasoningContent.isAcceptableOrUnknown(
               data['reasoning_content']!, _reasoningContentMeta));
     }
+    if (data.containsKey('display_metadata_json')) {
+      context.handle(
+          _displayMetadataJsonMeta,
+          displayMetadataJson.isAcceptableOrUnknown(
+              data['display_metadata_json']!, _displayMetadataJsonMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -700,6 +713,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
           .read(DriftSqlType.string, data['${effectivePrefix}tool_calls_json']),
       reasoningContent: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}reasoning_content']),
+      displayMetadataJson: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}display_metadata_json']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
     );
@@ -719,6 +734,7 @@ class Message extends DataClass implements Insertable<Message> {
   final String? toolCallId;
   final String? toolCallsJson;
   final String? reasoningContent;
+  final String? displayMetadataJson;
   final DateTime createdAt;
   const Message(
       {required this.id,
@@ -728,6 +744,7 @@ class Message extends DataClass implements Insertable<Message> {
       this.toolCallId,
       this.toolCallsJson,
       this.reasoningContent,
+      this.displayMetadataJson,
       required this.createdAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -744,6 +761,9 @@ class Message extends DataClass implements Insertable<Message> {
     }
     if (!nullToAbsent || reasoningContent != null) {
       map['reasoning_content'] = Variable<String>(reasoningContent);
+    }
+    if (!nullToAbsent || displayMetadataJson != null) {
+      map['display_metadata_json'] = Variable<String>(displayMetadataJson);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -764,6 +784,9 @@ class Message extends DataClass implements Insertable<Message> {
       reasoningContent: reasoningContent == null && nullToAbsent
           ? const Value.absent()
           : Value(reasoningContent),
+      displayMetadataJson: displayMetadataJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(displayMetadataJson),
       createdAt: Value(createdAt),
     );
   }
@@ -779,6 +802,8 @@ class Message extends DataClass implements Insertable<Message> {
       toolCallId: serializer.fromJson<String?>(json['toolCallId']),
       toolCallsJson: serializer.fromJson<String?>(json['toolCallsJson']),
       reasoningContent: serializer.fromJson<String?>(json['reasoningContent']),
+      displayMetadataJson:
+          serializer.fromJson<String?>(json['displayMetadataJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -793,6 +818,7 @@ class Message extends DataClass implements Insertable<Message> {
       'toolCallId': serializer.toJson<String?>(toolCallId),
       'toolCallsJson': serializer.toJson<String?>(toolCallsJson),
       'reasoningContent': serializer.toJson<String?>(reasoningContent),
+      'displayMetadataJson': serializer.toJson<String?>(displayMetadataJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -805,6 +831,7 @@ class Message extends DataClass implements Insertable<Message> {
           Value<String?> toolCallId = const Value.absent(),
           Value<String?> toolCallsJson = const Value.absent(),
           Value<String?> reasoningContent = const Value.absent(),
+          Value<String?> displayMetadataJson = const Value.absent(),
           DateTime? createdAt}) =>
       Message(
         id: id ?? this.id,
@@ -817,6 +844,9 @@ class Message extends DataClass implements Insertable<Message> {
         reasoningContent: reasoningContent.present
             ? reasoningContent.value
             : this.reasoningContent,
+        displayMetadataJson: displayMetadataJson.present
+            ? displayMetadataJson.value
+            : this.displayMetadataJson,
         createdAt: createdAt ?? this.createdAt,
       );
   Message copyWithCompanion(MessagesCompanion data) {
@@ -835,6 +865,9 @@ class Message extends DataClass implements Insertable<Message> {
       reasoningContent: data.reasoningContent.present
           ? data.reasoningContent.value
           : this.reasoningContent,
+      displayMetadataJson: data.displayMetadataJson.present
+          ? data.displayMetadataJson.value
+          : this.displayMetadataJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -849,6 +882,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('toolCallId: $toolCallId, ')
           ..write('toolCallsJson: $toolCallsJson, ')
           ..write('reasoningContent: $reasoningContent, ')
+          ..write('displayMetadataJson: $displayMetadataJson, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -856,7 +890,7 @@ class Message extends DataClass implements Insertable<Message> {
 
   @override
   int get hashCode => Object.hash(id, conversationId, role, content, toolCallId,
-      toolCallsJson, reasoningContent, createdAt);
+      toolCallsJson, reasoningContent, displayMetadataJson, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -868,6 +902,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.toolCallId == this.toolCallId &&
           other.toolCallsJson == this.toolCallsJson &&
           other.reasoningContent == this.reasoningContent &&
+          other.displayMetadataJson == this.displayMetadataJson &&
           other.createdAt == this.createdAt);
 }
 
@@ -879,6 +914,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> toolCallId;
   final Value<String?> toolCallsJson;
   final Value<String?> reasoningContent;
+  final Value<String?> displayMetadataJson;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -889,6 +925,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.toolCallId = const Value.absent(),
     this.toolCallsJson = const Value.absent(),
     this.reasoningContent = const Value.absent(),
+    this.displayMetadataJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -900,6 +937,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.toolCallId = const Value.absent(),
     this.toolCallsJson = const Value.absent(),
     this.reasoningContent = const Value.absent(),
+    this.displayMetadataJson = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   })  : id = Value(id),
@@ -915,6 +953,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? toolCallId,
     Expression<String>? toolCallsJson,
     Expression<String>? reasoningContent,
+    Expression<String>? displayMetadataJson,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -926,6 +965,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (toolCallId != null) 'tool_call_id': toolCallId,
       if (toolCallsJson != null) 'tool_calls_json': toolCallsJson,
       if (reasoningContent != null) 'reasoning_content': reasoningContent,
+      if (displayMetadataJson != null)
+        'display_metadata_json': displayMetadataJson,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -939,6 +980,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       Value<String?>? toolCallId,
       Value<String?>? toolCallsJson,
       Value<String?>? reasoningContent,
+      Value<String?>? displayMetadataJson,
       Value<DateTime>? createdAt,
       Value<int>? rowid}) {
     return MessagesCompanion(
@@ -949,6 +991,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       toolCallId: toolCallId ?? this.toolCallId,
       toolCallsJson: toolCallsJson ?? this.toolCallsJson,
       reasoningContent: reasoningContent ?? this.reasoningContent,
+      displayMetadataJson: displayMetadataJson ?? this.displayMetadataJson,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -978,6 +1021,10 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (reasoningContent.present) {
       map['reasoning_content'] = Variable<String>(reasoningContent.value);
     }
+    if (displayMetadataJson.present) {
+      map['display_metadata_json'] =
+          Variable<String>(displayMetadataJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -997,6 +1044,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('toolCallId: $toolCallId, ')
           ..write('toolCallsJson: $toolCallsJson, ')
           ..write('reasoningContent: $reasoningContent, ')
+          ..write('displayMetadataJson: $displayMetadataJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -14210,7 +14258,11 @@ class $$ConversationsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$ConversationsTable, Conversation>(table),
+                    BaseReferences<_$AppDatabase, $ConversationsTable,
+                        Conversation>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -14239,6 +14291,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> toolCallId,
   Value<String?> toolCallsJson,
   Value<String?> reasoningContent,
+  Value<String?> displayMetadataJson,
   required DateTime createdAt,
   Value<int> rowid,
 });
@@ -14250,6 +14303,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> toolCallId,
   Value<String?> toolCallsJson,
   Value<String?> reasoningContent,
+  Value<String?> displayMetadataJson,
   Value<DateTime> createdAt,
   Value<int> rowid,
 });
@@ -14284,6 +14338,10 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get reasoningContent => $composableBuilder(
       column: $table.reasoningContent,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get displayMetadataJson => $composableBuilder(
+      column: $table.displayMetadataJson,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
@@ -14323,6 +14381,10 @@ class $$MessagesTableOrderingComposer
       column: $table.reasoningContent,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get displayMetadataJson => $composableBuilder(
+      column: $table.displayMetadataJson,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 }
@@ -14356,6 +14418,9 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get reasoningContent => $composableBuilder(
       column: $table.reasoningContent, builder: (column) => column);
+
+  GeneratedColumn<String> get displayMetadataJson => $composableBuilder(
+      column: $table.displayMetadataJson, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -14391,6 +14456,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String?> toolCallId = const Value.absent(),
             Value<String?> toolCallsJson = const Value.absent(),
             Value<String?> reasoningContent = const Value.absent(),
+            Value<String?> displayMetadataJson = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -14402,6 +14468,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             toolCallId: toolCallId,
             toolCallsJson: toolCallsJson,
             reasoningContent: reasoningContent,
+            displayMetadataJson: displayMetadataJson,
             createdAt: createdAt,
             rowid: rowid,
           ),
@@ -14413,6 +14480,7 @@ class $$MessagesTableTableManager extends RootTableManager<
             Value<String?> toolCallId = const Value.absent(),
             Value<String?> toolCallsJson = const Value.absent(),
             Value<String?> reasoningContent = const Value.absent(),
+            Value<String?> displayMetadataJson = const Value.absent(),
             required DateTime createdAt,
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -14424,11 +14492,16 @@ class $$MessagesTableTableManager extends RootTableManager<
             toolCallId: toolCallId,
             toolCallsJson: toolCallsJson,
             reasoningContent: reasoningContent,
+            displayMetadataJson: displayMetadataJson,
             createdAt: createdAt,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$MessagesTable, Message>(table),
+                    BaseReferences<_$AppDatabase, $MessagesTable, Message>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -14673,7 +14746,11 @@ class $$AgentsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$AgentsTable, Agent>(table),
+                    BaseReferences<_$AppDatabase, $AgentsTable, Agent>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -14889,7 +14966,11 @@ class $$PromptTemplatesTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$PromptTemplatesTable, PromptTemplate>(table),
+                    BaseReferences<_$AppDatabase, $PromptTemplatesTable,
+                        PromptTemplate>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -15077,7 +15158,11 @@ class $$ModelProfilesTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$ModelProfilesTable, ModelProfile>(table),
+                    BaseReferences<_$AppDatabase, $ModelProfilesTable,
+                        ModelProfile>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -15307,7 +15392,11 @@ class $$MemoriesTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$MemoriesTable, Memory>(table),
+                    BaseReferences<_$AppDatabase, $MemoriesTable, Memory>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -15565,7 +15654,11 @@ class $$TasksTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$TasksTable, Task>(table),
+                    BaseReferences<_$AppDatabase, $TasksTable, Task>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -15827,7 +15920,11 @@ class $$ProjectsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$ProjectsTable, Project>(table),
+                    BaseReferences<_$AppDatabase, $ProjectsTable, Project>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -16028,7 +16125,11 @@ class $$DraftsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$DraftsTable, Draft>(table),
+                    BaseReferences<_$AppDatabase, $DraftsTable, Draft>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -16272,7 +16373,11 @@ class $$RunControlsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$RunControlsTable, RunControl>(table),
+                    BaseReferences<_$AppDatabase, $RunControlsTable,
+                        RunControl>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -16473,7 +16578,11 @@ class $$ExecutionLeasesTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$ExecutionLeasesTable, ExecutionLease>(table),
+                    BaseReferences<_$AppDatabase, $ExecutionLeasesTable,
+                        ExecutionLease>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -16646,7 +16755,11 @@ class $$TaskFeedbackTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$TaskFeedbackTable, TaskFeedbackData>(table),
+                    BaseReferences<_$AppDatabase, $TaskFeedbackTable,
+                        TaskFeedbackData>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -16829,7 +16942,11 @@ class $$SyncMetaTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$SyncMetaTable, SyncMetaData>(table),
+                    BaseReferences<_$AppDatabase, $SyncMetaTable, SyncMetaData>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -17014,7 +17131,11 @@ class $$KnowledgeDocsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$KnowledgeDocsTable, KnowledgeDoc>(table),
+                    BaseReferences<_$AppDatabase, $KnowledgeDocsTable,
+                        KnowledgeDoc>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -17189,7 +17310,11 @@ class $$KnowledgeChunksTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$KnowledgeChunksTable, KnowledgeChunk>(table),
+                    BaseReferences<_$AppDatabase, $KnowledgeChunksTable,
+                        KnowledgeChunk>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -17438,7 +17563,11 @@ class $$ScheduledTasksTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$ScheduledTasksTable, ScheduledTask>(table),
+                    BaseReferences<_$AppDatabase, $ScheduledTasksTable,
+                        ScheduledTask>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -17638,7 +17767,11 @@ class $$AuditLogsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$AuditLogsTable, AuditLog>(table),
+                    BaseReferences<_$AppDatabase, $AuditLogsTable, AuditLog>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -17834,7 +17967,11 @@ class $$PluginsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$PluginsTable, Plugin>(table),
+                    BaseReferences<_$AppDatabase, $PluginsTable, Plugin>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -18150,7 +18287,11 @@ class $$SkillPacksTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$SkillPacksTable, SkillPack>(table),
+                    BaseReferences<_$AppDatabase, $SkillPacksTable, SkillPack>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -18345,7 +18486,11 @@ class $$McpServersTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$McpServersTable, McpServer>(table),
+                    BaseReferences<_$AppDatabase, $McpServersTable, McpServer>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -18531,7 +18676,11 @@ class $$AccountMetaTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$AccountMetaTable, AccountMetaData>(table),
+                    BaseReferences<_$AppDatabase, $AccountMetaTable,
+                        AccountMetaData>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -18940,7 +19089,11 @@ class $$RunRecordsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$RunRecordsTable, RunRecord>(table),
+                    BaseReferences<_$AppDatabase, $RunRecordsTable, RunRecord>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -19213,7 +19366,11 @@ class $$RunEventsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$RunEventsTable, RunEvent>(table),
+                    BaseReferences<_$AppDatabase, $RunEventsTable, RunEvent>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -19468,7 +19625,11 @@ class $$LogRecordsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$LogRecordsTable, LogRecord>(table),
+                    BaseReferences<_$AppDatabase, $LogRecordsTable, LogRecord>(
+                        db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -19779,7 +19940,12 @@ class $$CollaborationRunsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$CollaborationRunsTable, CollaborationRun>(
+                        table),
+                    BaseReferences<_$AppDatabase, $CollaborationRunsTable,
+                        CollaborationRun>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -20133,7 +20299,12 @@ class $$CollaborationAgentRunsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$CollaborationAgentRunsTable,
+                        CollaborationAgentRun>(table),
+                    BaseReferences<_$AppDatabase, $CollaborationAgentRunsTable,
+                        CollaborationAgentRun>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -20363,7 +20534,12 @@ class $$CollaborationArtifactsTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$CollaborationArtifactsTable,
+                        CollaborationArtifact>(table),
+                    BaseReferences<_$AppDatabase, $CollaborationArtifactsTable,
+                        CollaborationArtifact>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));
@@ -20610,7 +20786,12 @@ class $$CollaborationMessagesTableTableManager extends RootTableManager<
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map((e) => (
+                    e.readTable<$CollaborationMessagesTable,
+                        CollaborationMessage>(table),
+                    BaseReferences<_$AppDatabase, $CollaborationMessagesTable,
+                        CollaborationMessage>(db, table, e)
+                  ))
               .toList(),
           prefetchHooksCallback: null,
         ));

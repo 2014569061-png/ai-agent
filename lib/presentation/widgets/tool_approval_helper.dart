@@ -7,6 +7,7 @@ import '../../application/approval_bridge.dart';
 import '../../application/approval_notification_text.dart';
 import '../../application/audit_service.dart';
 import '../../application/chat_controller.dart';
+import '../../application/nexus_guard.dart';
 import '../../application/providers.dart';
 import '../../domain/models.dart';
 import '../chat/widgets/tool_approval_sheet.dart';
@@ -48,34 +49,58 @@ Future<ToolApproval> promptToolApproval(
   final trust = await ref.read(toolTrustStoreProvider.future);
   if (!context.mounted) return ToolApproval.reject;
 
-  final allowPersistentTrust = !sensitive &&
-      risk != ToolRisk.dangerous &&
-      risk != ToolRisk.requiresConfirmation;
+  // 会话级授权：非敏感、非危险级工具可在本次 App 会话内免于重复审批。授权只写
+  // 内存（ToolTrustStore._session），退出应用即失效，仍会写入审计。
+  final allowSessionTrust = !sensitive && risk != ToolRisk.dangerous;
+
+  // 持久级授权：会写入全局信任清单，此后所有会话静默放行，因此比会话级严格得多。
+  // 当前策略下 requiresConfirmation（终端、写文件等）不开放持久信任——那会绕过
+  // README 里「终端默认逐次确认」的承诺；需要长期免打扰的用户应显式切换到
+  // 「完全访问」模式，那是一个可随时撤回的全局开关。
+  // 注意：此前这里的条件把 requiresConfirmation 一并排除，导致 UI 上「本会话允许
+  // / 始终允许」两个按钮永远不显示（safe 才会通过，而 safe 从不弹窗），是一处
+  // 不可达的假 UI。现在会话级与持久级分开判断。
+  final allowPersistentTrust =
+      allowSessionTrust && risk != ToolRisk.requiresConfirmation;
   var expired = false;
+  var backgrounded = false;
   final decision = await showNexusSheet<ToolApproval>(
     context: context,
     builder: (context) => ToolApprovalSheet(
       call: call,
       risk: risk,
+      allowSessionTrust: allowSessionTrust,
       allowPersistentTrust: allowPersistentTrust,
       timeout: const Duration(minutes: 5),
       onExpired: () => expired = true,
+      // 弹窗显示期间被切到后台：弹窗已经看不见，后台又冻结倒计时，若继续等下去
+      // 整个运行会卡在后台。这里改走通知通道等待裁决，语义与开头那次判断一致
+      // （仍是「超时即拒绝」），只是把裁决面从不可见的弹窗换到锁屏/通知栏。
+      onBackgrounded: () => backgrounded = true,
     ),
   );
 
-  final resolvedDecision = decision ?? ToolApproval.reject;
+  var resolvedDecision = decision ?? ToolApproval.reject;
+  if (backgrounded) {
+    final approved = await const ApprovalBridge().requestDecision(
+      toolName: call.name,
+      summary: approvalNotificationSummary(call, risk),
+      risk: risk.name,
+      database: await ref.read(databaseProvider.future),
+    );
+    resolvedDecision =
+        approved == true ? ToolApproval.allowOnce : ToolApproval.reject;
+  }
+
   if (expired && context.mounted) {
-    FloatingToast.show(context, '瀹℃壒宸茶秴鏃讹紝宸茶嚜鍔ㄦ嫆缁?', tone: ToastTone.warning);
+    FloatingToast.show(context, '审批已超时，已自动拒绝', tone: ToastTone.warning);
   }
   _recordToolDecision(ref, call, risk, resolvedDecision);
-  if (allowPersistentTrust &&
-      (resolvedDecision == ToolApproval.allowAlways ||
-          resolvedDecision == ToolApproval.allowSession)) {
-    if (resolvedDecision == ToolApproval.allowAlways) {
-      await trust.allowAlways(call.name);
-    } else {
-      trust.allowSession(call.name);
-    }
+  if (allowSessionTrust && resolvedDecision == ToolApproval.allowSession) {
+    trust.allowSession(call.name);
+  } else if (allowPersistentTrust &&
+      resolvedDecision == ToolApproval.allowAlways) {
+    await trust.allowAlways(call.name);
   }
   return resolvedDecision;
 }
@@ -88,17 +113,22 @@ void _recordToolDecision(
 ) {
   final audit = ref.read(auditServiceProvider);
   final db = ref.read(databaseProvider.future);
+  // 「谁能批什么」的审计留痕失败绝不能无声：串里的 finally 写成
+  // catchError((_) {}) 时，数据库打不开或写入失败都不会留下任何痕迹，
+  // 审计页于是少报已授予的权限。保持 fire-and-forget，但让失败可观测。
   unawaited(
-    db
-        .then((database) => audit.logSecurityEvent(
-              database,
-              type: 'tool_grant',
-              detail: call.name,
-              decision: decision.name,
-              risk: risk.name,
-              conversationId: ref.read(chatControllerProvider).conversationId,
-            ))
-        .catchError((_) {}),
+    NexusGuard.silentlyAsync<bool>('approval.audit', () async {
+      final database = await db;
+      await audit.logSecurityEvent(
+        database,
+        type: 'tool_grant',
+        detail: call.name,
+        decision: decision.name,
+        risk: risk.name,
+        conversationId: ref.read(chatControllerProvider).conversationId,
+      );
+      return true;
+    }),
   );
 }
 

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 
 import '../../../domain/models.dart';
+import '../../motion/motion_preferences.dart';
+import '../../motion/nexus_haptics.dart';
 import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_execution_status.dart';
+import '../../widgets/nexus_pressable.dart';
 import '../../widgets/glass_surface.dart';
-import 'chat_execution_stage.dart';
 
 /// 首页输入区（对标 DeepSeek App）。
 ///
@@ -27,8 +28,6 @@ class FloatingCapsuleInput extends StatefulWidget {
     super.key,
     required this.controller,
     required this.isRunning,
-    this.runningStage,
-    this.runningStageKind,
     required this.onSend,
     required this.onStop,
     this.onPause,
@@ -45,12 +44,11 @@ class FloatingCapsuleInput extends StatefulWidget {
     this.attachmentExpandedListenable,
     this.isPaused = false,
     this.glassIntensity = GlassIntensity.liquid,
+    this.bottomPadding,
   });
 
   final TextEditingController controller;
   final bool isRunning;
-  final String? runningStage;
-  final ChatExecutionStage? runningStageKind;
   final VoidCallback onSend;
   final VoidCallback onStop;
   final VoidCallback? onPause;
@@ -71,6 +69,10 @@ class FloatingCapsuleInput extends StatefulWidget {
   final ValueListenable<bool>? attachmentExpandedListenable;
   final bool isPaused;
   final GlassIntensity glassIntensity;
+
+  /// 输入区底部留白。显式传入时直接使用（聊天页由 KeyboardSpacer 统一处理
+  /// 键盘与底部安全区）；为 null 时按旧逻辑自适应。
+  final double? bottomPadding;
 
   @override
   State<FloatingCapsuleInput> createState() => _FloatingCapsuleInputState();
@@ -124,19 +126,16 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final textFaint =
         isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
 
-    final bottomPadding = MediaQuery.viewInsetsOf(context).bottom > 0
-        ? 8.0
-        : MediaQuery.paddingOf(context).bottom + 8.0;
+    final bottomPadding = widget.bottomPadding ??
+        (MediaQuery.viewInsetsOf(context).bottom > 0
+            ? 8.0
+            : MediaQuery.paddingOf(context).bottom + 8.0);
 
-    return AnimatedPadding(
-      duration: AppTokens.durationBase,
-      curve: AppTokens.curveStandard,
+    return Padding(
       padding: EdgeInsets.only(bottom: bottomPadding),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -145,7 +144,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // 运行状态提示（仅生成 / 计划模式时出现，首页态不显示）
-            _buildStatusLine(textMuted),
+            _buildStatusLine(),
 
             // 外层容器：20px 圆角，聚焦时描边转 brand
             Builder(
@@ -189,7 +188,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                       ),
                     ),
 
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 0),
 
                     // 操作行：高 48px，左右两端对齐（左2靠左，右3靠右）
                     SizedBox(
@@ -206,7 +205,12 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                                 icon: Icons.tune_rounded,
                                 semanticLabel: '${widget.modeLabel}模式',
                                 selected: true,
-                                onTap: widget.onModeTap,
+                                onTap: widget.onModeTap != null
+                                    ? () {
+                                        NexusHaptics.light(context);
+                                        widget.onModeTap!();
+                                      }
+                                    : null,
                               ),
                               if (widget.onApprovalModeTap != null)
                                 _ModeTile(
@@ -218,7 +222,10 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                                       _approvalModeLabel(widget.approvalMode),
                                   selected: widget.approvalMode ==
                                       ApprovalMode.fullAccess,
-                                  onTap: widget.onApprovalModeTap,
+                                  onTap: () {
+                                    NexusHaptics.light(context);
+                                    widget.onApprovalModeTap!();
+                                  },
                                 ),
                             ],
                           ),
@@ -226,30 +233,21 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _CircleIconButton(
-                                icon: Icons.code_rounded,
-                                iconSize: 15,
-                                tooltip: '插入代码块',
-                                semanticLabel: '插入代码块',
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  final text = widget.controller.text;
-                                  final sel = widget.controller.selection;
-                                  const snippet = '```\n\n```';
-                                  if (sel.isValid && sel.start >= 0) {
-                                    final newText = text.replaceRange(
-                                        sel.start, sel.end, snippet);
-                                    widget.controller.value = TextEditingValue(
-                                      text: newText,
-                                      selection: TextSelection.collapsed(
-                                          offset: sel.start + 4),
-                                    );
-                                  } else {
-                                    widget.controller.text = '$text\n$snippet';
-                                  }
-                                },
+                              PopupMenuButton<String>(
+                                tooltip: '更多输入工具',
+                                icon: const Icon(Icons.more_horiz_rounded,
+                                    size: 20),
+                                constraints:
+                                    const BoxConstraints(minWidth: 160),
+                                onSelected: (_) => _insertCodeBlock(),
+                                itemBuilder: (_) => const [
+                                  PopupMenuItem(
+                                      value: 'code', child: Text('插入代码块')),
+                                ],
                               ),
                               _buildAttachmentButton(),
+                              if (widget.isRunning && widget.isPaused)
+                                _buildPausedStopButton(isDark),
                               _buildTrailingActionListenable(textFaint, isDark),
                             ],
                           ),
@@ -263,16 +261,16 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                   return _withFocusRing(
                     radius: BorderRadius.circular(AppTokens.radiusComposer),
                     child: Container(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+                      padding: const EdgeInsets.fromLTRB(12, 6, 10, 4),
                       decoration: BoxDecoration(
                         color: surface,
                         borderRadius:
                             BorderRadius.circular(AppTokens.radiusComposer),
                         border: Border.all(
                           color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : const Color(0xFFE2E8F0),
-                          width: 0.8,
+                              ? AppPalette.darkHairline
+                              : AppPalette.lightHairline,
+                          width: 1.0,
                         ),
                         boxShadow: [
                           BoxShadow(
@@ -308,7 +306,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                     tint: isDark
                         ? AppPalette.darkSurface.withValues(alpha: 0.36)
                         : AppPalette.lightCanvas.withValues(alpha: 0.32),
-                    padding: const EdgeInsets.fromLTRB(14, 12, 12, 10),
+                    padding: const EdgeInsets.fromLTRB(12, 6, 10, 4),
                     boxShadow: [
                       BoxShadow(
                         color: isDark
@@ -329,6 +327,20 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
     );
   }
 
+  void _insertCodeBlock() {
+    NexusHaptics.light(context);
+    final text = widget.controller.text;
+    final sel = widget.controller.selection;
+    const snippet = '```\n\n```';
+    final start = sel.isValid ? sel.start : text.length;
+    final end = sel.isValid ? sel.end : text.length;
+    widget.controller.value = TextEditingValue(
+      text: text.replaceRange(start, end, snippet),
+      selection: TextSelection.collapsed(offset: start + 4),
+    );
+    _focusNode.requestFocus();
+  }
+
   Widget _withFocusRing({
     required BorderRadius radius,
     required Widget child,
@@ -341,12 +353,23 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
           child: IgnorePointer(
             child: ValueListenableBuilder<bool>(
               valueListenable: _focused,
-              builder: (context, focused, _) => DecoratedBox(
+              builder: (context, focused, _) => AnimatedContainer(
+                duration: NexusMotion.fast,
+                curve: Curves.easeOutCubic,
                 decoration: BoxDecoration(
                   borderRadius: radius,
                   border: focused
                       ? Border.all(color: AppPalette.brand, width: 1.4)
-                      : null,
+                      : Border.all(color: Colors.transparent, width: 1.4),
+                  boxShadow: focused
+                      ? [
+                          BoxShadow(
+                            color: AppPalette.brand.withValues(alpha: 0.16),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : const [],
                 ),
               ),
             ),
@@ -380,6 +403,24 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         textFaint, isDark, widget.hasAttachments);
   }
 
+  /// 已暂停时在主按钮左侧额外给出「停止」：暂停态下用户最常见的下一步
+  /// 就是继续或结束，不应再要求长按才能停止。
+  Widget _buildPausedStopButton(bool isDark) {
+    return _FilledCircleButton(
+      key: const ValueKey('trailing_action_stop_when_paused'),
+      color:
+          isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover,
+      icon: Icons.stop_rounded,
+      iconColor: Theme.of(context).colorScheme.error,
+      tooltip: '停止',
+      semanticLabel: '停止任务',
+      onTap: () {
+        NexusHaptics.medium(context);
+        widget.onStop();
+      },
+    );
+  }
+
   Widget _buildTrailingActionListenable(Color textFaint, bool isDark) {
     final listenable = widget.hasAttachmentsListenable;
     if (listenable == null) {
@@ -411,7 +452,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         tooltip: '补充要求',
         semanticLabel: '补充要求',
         onTap: () {
-          HapticFeedback.mediumImpact();
+          NexusHaptics.medium(context);
           widget.onSend();
         },
       );
@@ -423,7 +464,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         tooltip: '继续',
         semanticLabel: '继续',
         onTap: () {
-          HapticFeedback.mediumImpact();
+          NexusHaptics.medium(context);
           (widget.onResume ?? widget.onStop)();
         },
       );
@@ -435,11 +476,11 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         tooltip: '暂停（长按停止）',
         semanticLabel: '暂停（长按停止）',
         onTap: () {
-          HapticFeedback.mediumImpact();
+          NexusHaptics.medium(context);
           (widget.onPause ?? widget.onStop)();
         },
         onLongPress: () {
-          HapticFeedback.heavyImpact();
+          NexusHaptics.warning(context);
           widget.onStop();
         },
       );
@@ -451,7 +492,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         tooltip: '发送',
         semanticLabel: '发送',
         onTap: () {
-          HapticFeedback.mediumImpact();
+          NexusHaptics.light(context);
           widget.onSend();
         },
       );
@@ -468,47 +509,34 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
       );
     }
 
-    return AnimatedSwitcher(
-      duration: NexusMotion.fast,
-      transitionBuilder: (child, animation) {
-        return FadeTransition(
-          opacity: animation,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.85, end: 1.0).animate(
-              CurvedAnimation(
-                  parent: animation, curve: NexusMotion.curveStandard),
-            ),
-            child: child,
-          ),
-        );
-      },
-      child: button,
-    );
+    return SizedBox(
+        key: const ValueKey('composer-primary-action-slot'),
+        width: 48,
+        height: 48,
+        child: AnimatedSwitcher(
+          duration: NexusMotion.durationFast(context),
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween<double>(
+                        begin: MotionPreferences.shouldReduceMotion(context)
+                            ? 1.0
+                            : 0.94,
+                        end: 1.0)
+                    .animate(
+                  CurvedAnimation(
+                      parent: animation, curve: NexusMotion.curveStandard),
+                ),
+                child: child,
+              ),
+            );
+          },
+          child: button,
+        ));
   }
 
-  static NexusExecutionState _mapRunningStage(ChatExecutionStage? stage) {
-    return switch (stage) {
-      null => NexusExecutionState.idle,
-      ChatExecutionStage.waitingForUser => NexusExecutionState.waitingForUser,
-      ChatExecutionStage.preparing => NexusExecutionState.preparing,
-      ChatExecutionStage.running => NexusExecutionState.running,
-      ChatExecutionStage.succeeded => NexusExecutionState.succeeded,
-      ChatExecutionStage.failed => NexusExecutionState.failed,
-      ChatExecutionStage.cancelled => NexusExecutionState.cancelled,
-    };
-  }
-
-  Widget _buildStatusLine(Color textMuted) {
-    if (widget.isRunning && widget.runningStage != null) {
-      return Padding(
-        padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: NexusExecutionStatus(
-          compact: true,
-          state: _mapRunningStage(widget.runningStageKind),
-          label: widget.runningStage!,
-        ),
-      );
-    }
+  Widget _buildStatusLine() {
     if (widget.planModeEnabled && !widget.isRunning) {
       return const Padding(
         padding: EdgeInsets.only(left: 4, bottom: 8),
@@ -573,13 +601,13 @@ class _ModeTile extends StatelessWidget {
           height: AppTokens.kMinTouchTarget,
           child: Material(
             color: Colors.transparent,
-            child: InkResponse(
+            child: NexusPressable(
               onTap: onTap,
-              radius: 24,
+              borderRadius: BorderRadius.circular(24),
               child: Center(
                 child: AnimatedContainer(
                   duration: NexusMotion.durationFast(context),
-                  curve: AppTokens.curveStandard,
+                  curve: NexusMotion.curveStandard,
                   width: AppTokens.composerCircleButton,
                   height: AppTokens.composerCircleButton,
                   decoration: BoxDecoration(
@@ -628,9 +656,9 @@ class _CircleIconButton extends StatelessWidget {
       height: 48,
       child: Material(
         color: Colors.transparent,
-        child: InkResponse(
+        child: NexusPressable(
           onTap: onTap,
-          radius: 24,
+          borderRadius: BorderRadius.circular(24),
           child: Center(
             child: Container(
               width: AppTokens.composerCircleButton,
@@ -648,7 +676,27 @@ class _CircleIconButton extends StatelessWidget {
                 ),
               ),
               alignment: Alignment.center,
-              child: Icon(icon, size: iconSize, color: resolved),
+              child: AnimatedSwitcher(
+                duration: MotionPreferences.shouldReduceMotion(context)
+                    ? Duration.zero
+                    : NexusMotion.fast,
+                switchInCurve: NexusMotion.curveEnter,
+                switchOutCurve: NexusMotion.curveExit,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale:
+                        Tween<double>(begin: 0.86, end: 1.0).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: Icon(
+                  icon,
+                  key: ValueKey(icon),
+                  size: iconSize,
+                  color: resolved,
+                ),
+              ),
             ),
           ),
         ),
@@ -699,14 +747,14 @@ class _FilledCircleButton extends StatelessWidget {
       height: 48,
       child: Material(
         color: Colors.transparent,
-        child: InkResponse(
+        child: NexusPressable(
           onTap: onTap,
           onLongPress: onLongPress,
-          radius: 24,
+          borderRadius: BorderRadius.circular(24),
           child: Center(
             child: AnimatedContainer(
               duration: NexusMotion.durationFast(context),
-              curve: AppTokens.curveStandard,
+              curve: NexusMotion.curveStandard,
               width: AppTokens.composerCircleButton,
               height: AppTokens.composerCircleButton,
               decoration: BoxDecoration(shape: BoxShape.circle, color: color),

@@ -420,14 +420,22 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
     final cacheWrite = field('cache_creation_input_tokens');
     final reasoning = nested('completion_tokens_details', 'reasoning_tokens') ??
         field('reasoning_tokens');
+    // DeepSeek may only report hit/miss; some compatible APIs use input/output.
+    final prompt = field('prompt_tokens') ??
+        field('input_tokens') ??
+        ((hit != null && miss != null) ? hit + miss : null);
+    final completion = field('completion_tokens') ?? field('output_tokens');
     return UsageEvent(
-      // DeepSeek 部分模型只回 hit/miss 对，不回 prompt_tokens 总数。
-      promptTokens: field('prompt_tokens') ??
-          ((hit != null && miss != null) ? hit + miss : 0),
-      completionTokens: field('completion_tokens') ?? 0,
+      promptTokens: prompt ?? 0,
+      completionTokens: completion ?? 0,
       cachedTokens: cached ?? 0,
       cacheWriteTokens: cacheWrite ?? 0,
       reasoningTokens: reasoning ?? 0,
+      usageReported: prompt != null ||
+          completion != null ||
+          cached != null ||
+          cacheWrite != null ||
+          reasoning != null,
       cacheStatsReported: cached != null || cacheWrite != null,
     );
   }
@@ -442,18 +450,9 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
           ? const <String, dynamic>{}
           : choices.first as Map<String, dynamic>;
       final finishReason = first['finish_reason'] as String?;
-      final usage = json['usage'];
-      if (usage is Map<String, dynamic>) {
-        return _SseChunk(
-          finishReason: finishReason,
-          usage: parseUsage(usage),
-        );
-      }
-      if (choices.isEmpty) {
-        return finishReason == null
-            ? null
-            : _SseChunk(finishReason: finishReason);
-      }
+      final rawUsage = json['usage'];
+      final usage =
+          rawUsage is Map<String, dynamic> ? parseUsage(rawUsage) : null;
       final delta = first['delta'] as Map<String, dynamic>? ?? const {};
       final content = delta['content'] as String?;
       // 推理模型的思考增量：DeepSeek-R1 用 reasoning_content，OpenAI o 系列部分用 reasoning。
@@ -465,6 +464,7 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
           text: content,
           reasoning: reasoning,
           finishReason: finishReason,
+          usage: usage,
           tools: toolCalls.map((item) {
             final tool = item as Map<String, dynamic>;
             final function =
@@ -480,10 +480,15 @@ class OpenAiCompatibleProvider extends StreamingProviderBase {
       if ((content != null && content.isNotEmpty) ||
           (reasoning != null && reasoning.isNotEmpty)) {
         return _SseChunk(
-            text: content, reasoning: reasoning, finishReason: finishReason);
+            text: content,
+            reasoning: reasoning,
+            finishReason: finishReason,
+            usage: usage);
       }
-      // 只剩结束原因的收尾帧。
-      if (finishReason != null) return _SseChunk(finishReason: finishReason);
+      // Usage-only, finish-only and combined final frames are all valid.
+      if (finishReason != null || usage != null) {
+        return _SseChunk(finishReason: finishReason, usage: usage);
+      }
     } catch (_) {
       return null;
     }

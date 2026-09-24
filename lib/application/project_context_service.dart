@@ -123,7 +123,11 @@ class ProjectContextService {
           relativePath: name,
           contents: await file.readAsString(),
         ));
-      } catch (_) {}
+      } catch (_) {
+        // 单个规则文件读不了（权限、编码）就跳过：项目内可能有多个候选规则
+        // 文件，一个失败不该让整批注入失败。
+        // 代价：模型看不到这条规则，而调用方无法区分「文件不存在」与「读取失败」。
+      }
     }
     return files;
   }
@@ -258,7 +262,10 @@ class ProjectContextService {
             matches.add('$relative:${i + 1}: ${lines[i].trim()}');
             if (matches.length >= limit) return;
           }
-        } catch (_) {}
+        } catch (_) {
+          // 单个文件读不了就跳过（二进制、编码异常、权限不足），不能让整个
+          // 项目内搜索失败 —— 同 workspace_tools 的搜索，属尽力而为的检索。
+        }
       }
     }
 

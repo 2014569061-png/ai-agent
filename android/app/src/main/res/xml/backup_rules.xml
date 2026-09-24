@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  API <= 30 的备份规则，配合 application 上的 android:allowBackup="false" 使用。
+
+  本应用在本地保存 Provider API Key（加密库）、会话记录与审计日志，
+  「备份到云盘」等于把这些内容带出设备。这里显式排除全部域，
+  使 allowBackup 的意图在任何 Android 版本上都成立。
+-->
+<full-backup-content>
+    <exclude domain="root" path="." />
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

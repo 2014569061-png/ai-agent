@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../motion/motion_preferences.dart';
+import '../motion/nexus_haptics.dart';
 import '../motion/nexus_motion.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -17,7 +17,12 @@ class NexusDisclosure extends StatefulWidget {
   final String? semanticLabel;
   final EdgeInsetsGeometry? headerPadding;
   final EdgeInsetsGeometry? contentPadding;
+
+  /// 展开时长。未指定时使用局部容器变化标准时长。
   final Duration? duration;
+
+  /// 收起时长。收起不应与展开一样拖沓，默认使用快速反馈时长。
+  final Duration? reverseDuration;
   final BoxDecoration? decoration;
 
   const NexusDisclosure({
@@ -30,9 +35,11 @@ class NexusDisclosure extends StatefulWidget {
     this.trailing,
     this.trailingActions,
     this.semanticLabel,
-    this.headerPadding = const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    this.headerPadding =
+        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
     this.contentPadding = const EdgeInsets.fromLTRB(12, 0, 12, 10),
     this.duration,
+    this.reverseDuration,
     this.decoration,
   });
 
@@ -53,6 +60,7 @@ class _NexusDisclosureState extends State<NexusDisclosure>
     _isExpanded = widget.initiallyExpanded;
     _controller = AnimationController(
       duration: widget.duration ?? NexusMotion.base,
+      reverseDuration: widget.reverseDuration ?? NexusMotion.fast,
       vsync: this,
     );
     _iconTurns = _controller.drive(
@@ -72,8 +80,11 @@ class _NexusDisclosureState extends State<NexusDisclosure>
   @override
   void didUpdateWidget(covariant NexusDisclosure oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.duration != oldWidget.duration) {
-      _controller.duration = widget.duration ?? NexusMotion.base;
+    if (widget.duration != oldWidget.duration ||
+        widget.reverseDuration != oldWidget.reverseDuration) {
+      _controller
+        ..duration = widget.duration ?? NexusMotion.base
+        ..reverseDuration = widget.reverseDuration ?? NexusMotion.fast;
     }
   }
 
@@ -84,16 +95,17 @@ class _NexusDisclosureState extends State<NexusDisclosure>
   }
 
   void _toggleExpansion() {
-    HapticFeedback.selectionClick();
-    setState(() {
-      _isExpanded = !_isExpanded;
-      if (_isExpanded) {
-        _controller.forward();
-      } else {
-        _controller.reverse();
-      }
-      widget.onExpansionChanged?.call(_isExpanded);
-    });
+    NexusHaptics.selection(context);
+    final expanding = !_isExpanded;
+    setState(() => _isExpanded = expanding);
+    if (MotionPreferences.shouldReduceMotion(context)) {
+      _controller.value = expanding ? 1.0 : 0.0;
+    } else if (expanding) {
+      _controller.forward();
+    } else {
+      _controller.reverse();
+    }
+    widget.onExpansionChanged?.call(expanding);
   }
 
   @override
@@ -104,12 +116,9 @@ class _NexusDisclosureState extends State<NexusDisclosure>
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     final shouldReduce = MotionPreferences.shouldReduceMotion(context);
-    if (shouldReduce) {
-      _controller.duration = Duration.zero;
-    }
 
-    final effectiveSemanticLabel = widget.semanticLabel ??
-        (_isExpanded ? '已展开内容，点击收起' : '已收起内容，点击展开');
+    final effectiveSemanticLabel =
+        widget.semanticLabel ?? (_isExpanded ? '已展开内容，点击收起' : '已收起内容，点击展开');
 
     return Container(
       decoration: widget.decoration,
@@ -167,20 +176,66 @@ class _NexusDisclosureState extends State<NexusDisclosure>
                 if (heightFactor == 0.0 && !_isExpanded) {
                   return const SizedBox.shrink();
                 }
+                final content = Padding(
+                  padding: widget.contentPadding ??
+                      const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                  child: widget.child,
+                );
+
                 return Align(
                   alignment: Alignment.topLeft,
                   heightFactor: heightFactor,
-                  child: Padding(
-                    padding: widget.contentPadding ??
-                        const EdgeInsets.fromLTRB(12, 0, 12, 10),
-                    child: widget.child,
-                  ),
+                  child: shouldReduce
+                      ? content
+                      : FractionalTranslation(
+                          translation: Offset(
+                            0.0,
+                            (1.0 - heightFactor) * -0.05,
+                          ),
+                          child: Opacity(
+                            opacity: 0.2 + heightFactor * 0.8,
+                            child: content,
+                          ),
+                        ),
                 );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Shared top-anchored size transition for sections whose header and content
+/// are owned by different widgets. Callers provide an empty child when closed
+/// to keep costly technical content out of the collapsed build.
+class NexusExpandSection extends StatelessWidget {
+  const NexusExpandSection({
+    super.key,
+    required this.expanded,
+    required this.child,
+    this.duration,
+    this.reverseDuration,
+    this.alignment = Alignment.topLeft,
+  });
+
+  final bool expanded;
+  final Widget child;
+  final Duration? duration;
+  final Duration? reverseDuration;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = MotionPreferences.shouldReduceMotion(context);
+    return AnimatedSize(
+      duration: reduceMotion ? Duration.zero : (duration ?? NexusMotion.base),
+      reverseDuration:
+          reduceMotion ? Duration.zero : (reverseDuration ?? NexusMotion.fast),
+      curve: NexusMotion.curveStandard,
+      alignment: alignment,
+      child: expanded ? child : const SizedBox.shrink(),
     );
   }
 }

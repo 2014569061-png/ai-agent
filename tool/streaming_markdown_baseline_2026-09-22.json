@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "utc": "2026-09-22T03:43:52.186585Z",
+  "os": "windows",
+  "dart": "3.13.2 (stable) (Tue Aug 25 01:01:12 2026 -0700) on \"windows_x64\"",
+  "processors": 32,
+  "peakRssBytes": 255475712,
+  "note": "Host JIT microbenchmark only. Prefix checks and substring allocations remain. Fresh scanner reference is not a pre-change release. No device FPS or memory-reduction claim.",
+  "checksum": 469836000,
+  "cases": [
+    {
+      "characters": 2000,
+      "fixture": "single-paragraph",
+      "frames": 20,
+      "appendCharacters": 100,
+      "samples": 7,
+      "freshScannerMedianUs": 17,
+      "incrementalScannerMedianUs": 15,
+      "freshScannedCharacters": 21000,
+      "incrementalScannedCharacters": 2000
+    },
+    {
+      "characters": 2000,
+      "fixture": "paragraphs",
+      "frames": 20,
+      "appendCharacters": 100,
+      "samples": 7,
+      "freshScannerMedianUs": 888,
+      "incrementalScannerMedianUs": 100,
+      "freshScannedCharacters": 21000,
+      "incrementalScannedCharacters": 2000
+    },
+    {
+      "characters": 10000,
+      "fixture": "single-paragraph",
+      "frames": 100,
+      "appendCharacters": 100,
+      "samples": 7,
+      "freshScannerMedianUs": 351,
+      "incrementalScannerMedianUs": 238,
+      "freshScannedCharacters": 505000,
+      "incrementalScannedCharacters": 10000
+    },
+    {
+      "characters": 10000,
+      "fixture": "paragraphs",
+      "frames": 100,
+      "appendCharacters": 100,
+      "samples": 7,
+      "freshScannerMedianUs": 9788,
+      "incrementalScannerMedianUs": 422,
+      "freshScannedCharacters": 505000,
+      "incrementalScannedCharacters": 10000
+    },
+    {
+      "characters": 50000,
+      "fixture": "single-paragraph",
+      "frames": 500,
+      "appendCharacters": 100,
+      "samples": 7,
+      "freshScannerMedianUs": 6223,
+      "incrementalScannerMedianUs": 6309,
+      "freshScannedCharacters": 12525000,
+      "incrementalScannedCharacters": 50000
+    },
+    {
+      "characters": 50000,
+      "fixture": "paragraphs",
+      "frames": 500,
+      "appendCharacters": 100,
+      "samples": 7,
+      "freshScannerMedianUs": 236725,
+      "incrementalScannerMedianUs": 6742,
+      "freshScannedCharacters": 12525000,
+      "incrementalScannedCharacters": 50000
+    }
+  ]
+}

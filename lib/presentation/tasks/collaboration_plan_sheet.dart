@@ -151,7 +151,7 @@ class _CollaborationPlanSheetState
                                   Text(
                                     '只读安全协同',
                                     style: TextStyle(
-                                      fontSize: 12,
+                                      fontSize: AppTokens.fontSizeFootnote,
                                       fontWeight: FontWeight.w500,
                                       color: AppPalette.brand,
                                     ),
@@ -163,13 +163,13 @@ class _CollaborationPlanSheetState
                                 '任务目标：${widget.task.prompt.isEmpty ? "分析当前工程上下文并制定方案" : widget.task.prompt}',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13),
+                                style: const TextStyle(fontSize: AppTokens.fontSizeCaption),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 '协作分析仅使用只读工具（读文件/搜符号），不会修改任何工作区代码。',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: AppTokens.fontSizeBadge,
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),
                               ),
@@ -210,14 +210,14 @@ class _CollaborationPlanSheetState
                                           Text(
                                             agent.role.label,
                                             style: const TextStyle(
-                                                fontSize: 13,
+                                                fontSize: AppTokens.fontSizeCaption,
                                                 fontWeight: FontWeight.w500),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
                                             agent.role.responsibility,
                                             style: TextStyle(
-                                                fontSize: 12,
+                                                fontSize: AppTokens.fontSizeFootnote,
                                                 color: theme.colorScheme
                                                     .onSurfaceVariant),
                                           ),
@@ -225,7 +225,7 @@ class _CollaborationPlanSheetState
                                           Text(
                                             '允许工具：${agent.allowedTools.join("、")}',
                                             style: TextStyle(
-                                                fontSize: 11,
+                                                fontSize: AppTokens.fontSizeBadge,
                                                 color: theme.colorScheme
                                                     .onSurfaceVariant
                                                     .withValues(alpha: 0.8)),
@@ -259,7 +259,7 @@ class _CollaborationPlanSheetState
                             child: Text(
                               _modeDescription(_mode),
                               style: TextStyle(
-                                fontSize: 11.5,
+                                fontSize: AppTokens.fontSizeSubcaption,
                                 color: theme.colorScheme.onSurfaceVariant,
                               ),
                             ),
@@ -356,15 +356,19 @@ class _CollaborationPlanSheetState
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(title,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            style: const TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton.outlined(
-              icon: const Icon(Icons.remove, size: 14),
+              tooltip: '减少',
+              icon: const Icon(Icons.remove, size: 16),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              constraints: const BoxConstraints(
+                minWidth: AppTokens.kMinTouchTarget,
+                minHeight: AppTokens.kMinTouchTarget,
+              ),
               onPressed: canDecrease ? onDecrease : null,
             ),
             SizedBox(
@@ -373,17 +377,21 @@ class _CollaborationPlanSheetState
                 valueText,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  fontSize: 12.5,
+                  fontSize: AppTokens.fontSizeMeta,
                   fontWeight: FontWeight.w500,
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ),
             IconButton.outlined(
-              icon: const Icon(Icons.add, size: 14),
+              tooltip: '增加',
+              icon: const Icon(Icons.add, size: 16),
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              constraints: const BoxConstraints(
+                minWidth: AppTokens.kMinTouchTarget,
+                minHeight: AppTokens.kMinTouchTarget,
+              ),
               onPressed: canIncrease ? onIncrease : null,
             ),
           ],
@@ -406,6 +414,6 @@ class _CollaborationPlanSheetState
   Widget _sectionTitle(String title) => Padding(
         padding: const EdgeInsets.only(top: 8, bottom: 6),
         child: Text(title,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            style: const TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
       );
 }

@@ -71,7 +71,8 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
           '你是一个智能、严谨且富有创造力的 AI 助手。',
     )..addListener(_markDirty);
 
-    _steps = (a?.maxSteps ?? draft?.maxSteps ?? 8).clamp(1, 32);
+    _steps = (a?.maxSteps ?? draft?.maxSteps ?? AgentDraft.defaultMaxSteps)
+        .clamp(1, 100);
     _temperature = (a?.temperature ?? draft?.temperature ?? 0.7).clamp(0.0, 2.0);
     _maxTokens = (a?.maxTokens ?? draft?.maxTokens ?? 2048).clamp(256, 8192);
     _topP = (a?.topP ?? draft?.topP ?? 1.0).clamp(0.0, 1.0);
@@ -285,12 +286,12 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                   children: [
                     TextField(
                       controller: _nameController,
-                      style: TextStyle(fontSize: 15, color: textColor),
+                      style: TextStyle(fontSize: AppTokens.fontSizeBody, color: textColor),
                       decoration: InputDecoration(
                         labelText: '智能体名称 *',
-                        labelStyle: TextStyle(fontSize: 13, color: textMuted),
+                        labelStyle: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
                         hintText: '如：代码审计专家、架构顾问、翻译助手',
-                        hintStyle: TextStyle(fontSize: 14, color: textMuted),
+                        hintStyle: TextStyle(fontSize: AppTokens.fontSizeSubhead, color: textMuted),
                         prefixIcon: const Icon(Icons.smart_toy_outlined, size: 20),
                         border: OutlineInputBorder(
                           borderRadius:
@@ -305,12 +306,12 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                       controller: _promptController,
                       maxLines: 5,
                       minLines: 3,
-                      style: TextStyle(fontSize: 14, height: 1.4, color: textColor),
+                      style: TextStyle(fontSize: AppTokens.fontSizeSubhead, height: 1.4, color: textColor),
                       decoration: InputDecoration(
                         labelText: '系统提示词 (System Prompt) *',
-                        labelStyle: TextStyle(fontSize: 13, color: textMuted),
+                        labelStyle: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
                         hintText: '明确描述该 Agent 的角色人设、专业领域、工作流规范与输出限制…',
-                        hintStyle: TextStyle(fontSize: 13, color: textMuted),
+                        hintStyle: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
                         alignLabelWithHint: true,
                         border: OutlineInputBorder(
                           borderRadius:
@@ -339,8 +340,8 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                       description: 'Agent 自主循环规划与调用工具的最大上限',
                       value: _steps.toDouble(),
                       min: 1,
-                      max: 32,
-                      divisions: 31,
+                      max: 100,
+                      divisions: 99,
                       onChanged: (val) {
                         _markDirty();
                         setState(() => _steps = val.round());
@@ -416,7 +417,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                       };
                     });
                   },
-                  child: const Text('推荐预设', style: TextStyle(fontSize: 12)),
+                  child: const Text('推荐预设', style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
                 ),
               ],
             ),
@@ -432,7 +433,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                           child: Center(
                             child: Text(
                               '未检测到已注册工具',
-                              style: TextStyle(fontSize: 13, color: textMuted),
+                              style: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
                             ),
                           ),
                         )
@@ -462,7 +463,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                                     child: Text(
                                       tool.manifest.name,
                                       style: TextStyle(
-                                        fontSize: 14,
+                                        fontSize: AppTokens.fontSizeSubhead,
                                         fontWeight: FontWeight.w500,
                                         color: textColor,
                                       ),
@@ -486,7 +487,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                                               ? '需确认'
                                               : '安全',
                                       style: TextStyle(
-                                        fontSize: 10.5,
+                                        fontSize: AppTokens.fontSizeMetricSmall,
                                         fontWeight: FontWeight.w500,
                                         color: isDanger
                                           ? AppPalette.danger
@@ -510,7 +511,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                                       child: const Text(
                                         'AI 建议',
                                         style: TextStyle(
-                                          fontSize: 10.5,
+                                          fontSize: AppTokens.fontSizeMetricSmall,
                                           fontWeight: FontWeight.w500,
                                           color: AppPalette.brand,
                                         ),
@@ -526,7 +527,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                      fontSize: 12, color: textMuted),
+                                      fontSize: AppTokens.fontSizeFootnote, color: textMuted),
                                 ),
                               ),
                               onChanged: (val) {
@@ -597,7 +598,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                           )
                         : const Text('保存智能体',
                             style: TextStyle(
-                                fontSize: 14, fontWeight: FontWeight.w500)),
+                                fontSize: AppTokens.fontSizeSubhead, fontWeight: FontWeight.w500)),
                   ),
                 ),
               ],
@@ -625,12 +626,12 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: AppPalette.brand),
+          Icon(icon, size: 16, color: AppPalette.brandTextFor(isDark)),
           const SizedBox(width: 6),
           Text(
             title,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: AppTokens.fontSizeCaption,
               fontWeight: FontWeight.w600,
               color: textMuted,
               letterSpacing: 0.2,
@@ -678,7 +679,7 @@ class _ParamSlider extends StatelessWidget {
           children: [
             Text(label,
                 style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: AppTokens.fontSizeBodySmall,
                     fontWeight: FontWeight.w500,
                     color: textColor)),
             Container(
@@ -695,7 +696,7 @@ class _ParamSlider extends StatelessWidget {
               child: Text(
                 valueText,
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTokens.fontSizeFootnote,
                   fontWeight: FontWeight.w600,
                   color: AppPalette.brand,
                 ),
@@ -706,7 +707,7 @@ class _ParamSlider extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           description,
-          style: TextStyle(fontSize: 11.5, color: textMuted),
+          style: TextStyle(fontSize: AppTokens.fontSizeSubcaption, color: textMuted),
         ),
         const SizedBox(height: 4),
         SliderTheme(
@@ -754,16 +755,16 @@ class _DraftNotice extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.auto_awesome_outlined,
-                    size: 16, color: AppPalette.brand),
+                Icon(Icons.auto_awesome_outlined,
+                    size: 16, color: AppPalette.brandText(context)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     draft.fromModel ? 'AI 已按你的描述预填' : '已用本地模板预填',
-                    style: const TextStyle(
-                      fontSize: 13.5,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeBodySmall,
                       fontWeight: FontWeight.w500,
-                      color: AppPalette.brand,
+                      color: AppPalette.brandText(context),
                     ),
                   ),
                 ),
@@ -773,7 +774,7 @@ class _DraftNotice extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '目标：${draft.goal.trim()}',
-                style: TextStyle(fontSize: 12, height: 1.5, color: textMuted),
+                style: TextStyle(fontSize: AppTokens.fontSizeFootnote, height: 1.5, color: textMuted),
               ),
             ],
             if (draft.notes.isNotEmpty) ...[
@@ -784,7 +785,7 @@ class _DraftNotice extends StatelessWidget {
                   child: Text(
                     '· $note',
                     style:
-                        TextStyle(fontSize: 12, height: 1.5, color: textColor),
+                        TextStyle(fontSize: AppTokens.fontSizeFootnote, height: 1.5, color: textColor),
                   ),
                 ),
             ],
@@ -793,13 +794,13 @@ class _DraftNotice extends StatelessWidget {
               Text(
                 '这些工具高于安全级，因此没有默认勾选，需要就去下面的工具箱里手动打开：'
                 '${draft.pendingTools.join('、')}',
-                style: TextStyle(fontSize: 12, height: 1.5, color: textColor),
+                style: TextStyle(fontSize: AppTokens.fontSizeFootnote, height: 1.5, color: textColor),
               ),
             ],
             const SizedBox(height: 8),
             Text(
               '保存前你可以修改任何内容；只有点了保存才会写入。',
-              style: TextStyle(fontSize: 11.5, color: textMuted),
+              style: TextStyle(fontSize: AppTokens.fontSizeSubcaption, color: textMuted),
             ),
           ],
         ),

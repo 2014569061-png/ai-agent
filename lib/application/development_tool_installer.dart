@@ -69,7 +69,10 @@ class DevelopmentToolInstaller {
           selected = candidate;
           break;
         }
-      } catch (_) {}
+      } catch (_) {
+        // 单个候选运行时探测超时或桥接失败时继续尝试下一个候选；全部失败后由
+        // selected == null 的统一结果向调用方报告安装未完成。
+      }
     }
 
     if (selected == null) {

@@ -30,6 +30,7 @@ class ChatEmptyState extends StatefulWidget {
     this.onModelTap,
     this.onConfigureModel,
     this.onAnalyzeWorkspace,
+    this.onCreateAgent,
   });
 
   final List<QuickAction> suggestions;
@@ -43,6 +44,7 @@ class ChatEmptyState extends StatefulWidget {
   final VoidCallback? onModelTap;
   final VoidCallback? onConfigureModel;
   final VoidCallback? onAnalyzeWorkspace;
+  final VoidCallback? onCreateAgent;
 
   @override
   State<ChatEmptyState> createState() => _ChatEmptyStateState();
@@ -127,6 +129,7 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
                       onConfigureModel: widget.onConfigureModel,
                       onPickWorkspace: widget.onWorkspaceTap,
                       onAnalyzeWorkspace: widget.onAnalyzeWorkspace,
+                      onCreateAgent: widget.onCreateAgent,
                       onTap: (prompt) {
                         widget.onSuggestionTap
                             ?.call(QuickAction(label: prompt));
@@ -186,6 +189,7 @@ class _AuthoritativeActionGrid extends StatelessWidget {
     this.onConfigureModel,
     this.onPickWorkspace,
     this.onAnalyzeWorkspace,
+    this.onCreateAgent,
     required this.onTap,
   });
 
@@ -196,6 +200,7 @@ class _AuthoritativeActionGrid extends StatelessWidget {
   final VoidCallback? onPickWorkspace;
   final VoidCallback? onAnalyzeWorkspace;
   final ValueChanged<String> onTap;
+  final VoidCallback? onCreateAgent;
 
   @override
   Widget build(BuildContext context) {
@@ -339,6 +344,17 @@ class _AuthoritativeActionGrid extends StatelessWidget {
               Expanded(child: _EngineeringActionCard(data: cards[3])),
             ],
           ),
+          if (onCreateAgent != null) ...[
+            const SizedBox(height: 10),
+            _EngineeringActionCard(
+              data: _GridCardData(
+                title: '创建专属 Agent',
+                subtitle: '用一句话描述目标，确认后再保存',
+                icon: Icons.auto_awesome_outlined,
+                onTap: onCreateAgent,
+              ),
+            ),
+          ],
         ],
       ),
     );

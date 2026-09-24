@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:dartssh2/dartssh2.dart';
 import 'package:xterm/xterm.dart';
 
+import 'ssh_host_key_store.dart';
 import 'termux_ssh_credentials.dart';
 
 enum SSHTerminalState {
@@ -18,10 +19,15 @@ class SSHTerminalSession {
   SSHTerminalSession({
     required this.terminal,
     this.config = const SSHTerminalConfig(),
-  });
+    SshHostKeyVerifier? hostKeyVerifier,
+    this.confirmUnknownHostKey,
+  }) : _hostKeyVerifier =
+            hostKeyVerifier ?? SshHostKeyVerifier(SecureSshKnownHostStore());
 
   final Terminal terminal;
   final SSHTerminalConfig config;
+  final SshHostKeyVerifier _hostKeyVerifier;
+  final Future<bool> Function(String fingerprint)? confirmUnknownHostKey;
 
   SSHClient? _client;
   SSHSession? _shellSession;
@@ -78,6 +84,10 @@ class SSHTerminalSession {
         onPasswordRequest:
             config.password != null ? () => config.password! : null,
         identities: identities,
+        onVerifyHostKey: (type, fingerprint) {
+          final presented = utf8.decode(fingerprint, allowMalformed: true);
+          return _acceptHostKey('$type:$presented');
+        },
       );
 
       // 申请 PTY 伪终端并启动交互 Shell
@@ -186,12 +196,45 @@ class SSHTerminalSession {
     _stderrSub = null;
     try {
       _shellSession?.close();
-    } catch (_) {}
+    } catch (_) {
+      // 拆解阶段：连接可能已经断了，此时 close 抛错没有可补救的动作，也不能
+      // 阻断后续的 client 关闭与状态上报。
+    }
     _shellSession = null;
     try {
       await _client?.close();
-    } catch (_) {}
+    } catch (_) {
+      // 同上：关闭已失效的 SSH 客户端属于尽力而为，失败只影响资源释放时机，
+      // 连接对象本身随即被置空。
+    }
     _client = null;
+  }
+
+  /// 供测试直接核对 TOFU / 变更拒绝，不需要建立真实 SSH 连接。
+  Future<bool> acceptPresentedHostKey(String fingerprint) {
+    return _acceptHostKey(fingerprint);
+  }
+
+  Future<bool> _acceptHostKey(String fingerprint) async {
+    final decision = await _hostKeyVerifier.decide(
+      host: config.host,
+      port: config.port,
+      fingerprint: fingerprint,
+      confirmUnknown: confirmUnknownHostKey,
+    );
+    switch (decision) {
+      case SshHostKeyDecision.trusted:
+        return true;
+      case SshHostKeyDecision.trustedNew:
+        terminal.write('\r\n已记录主机密钥（首次连接）。\r\n');
+        return true;
+      case SshHostKeyDecision.mismatch:
+        terminal.write('\r\n主机密钥与已保存的记录不一致，已拒绝连接。\r\n');
+        return false;
+      case SshHostKeyDecision.rejected:
+        terminal.write('\r\n未信任该主机密钥，已拒绝连接。\r\n');
+        return false;
+    }
   }
 
   void dispose() {

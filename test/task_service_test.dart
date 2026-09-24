@@ -20,6 +20,13 @@ void main() {
     await db.close();
   });
 
+  test('task type labels normalize development-prefixed and legacy types', () {
+    expect(TaskService.taskTypeLabel('bug_fix'), '问题修复');
+    expect(TaskService.taskTypeLabel('DEVELOPMENT:bug_fix'), '问题修复');
+    expect(TaskService.taskTypeLabel('agent'), '开发任务');
+    expect(TaskService.taskTypeLabel('unknown'), '开发任务');
+  });
+
   test('creates a running task and lists it', () async {
     final task = await taskService.create(
       db: db,
@@ -34,7 +41,8 @@ void main() {
     expect(running.map((t) => t.id), contains(task.id));
   });
 
-  test('rapid creates never collide on id (Windows clock granularity)', () async {
+  test('rapid creates never collide on id (Windows clock granularity)',
+      () async {
     final ids = <String>{};
     for (var i = 0; i < 200; i++) {
       final task = await taskService.create(

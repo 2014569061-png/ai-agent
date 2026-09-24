@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 
 /// 数学公式渲染（H2）：把 `$$...$$`（块级）与 `$...$`（行内）渲染为 LaTeX 公式，

@@ -44,11 +44,29 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-pub
 
+      - name: Silent catch ratchet
+        # 静默吞掉的异常在 Analyze 这一步是**看不见**的：`catch (error) {}` 会被
+        # empty_catches 报出，但只要参数名写成下划线（`catch (_) {}`）就被豁免，
+        # 而仓库里绝大多数站点恰好都用下划线。于是它们既没有日志也没有遥测，
+        # 失败与成功在数据上不可区分，analyze 却是全绿。
+        #
+        # 这道门槛把「未记录意图的空 catch」数量卡在 0：任何新增都必须要么在
+        # catch 体里写下为什么可以吞（即视为已记录意图），要么用
+        # NexusGuard.degradeAsync / degradeCaught 接入诊断日志。门槛挡的是顺手
+        # 吞掉，不是敷衍地吞掉 —— 97 处既有站点已逐条记录意图并通过本步骤。
+        #
+        # 扫描器自身在 test/count_silent_catches_test.dart 里有测试守护：如果它
+        # 漏计，门槛会假装通过，所以判定器本身也需要被验证。
+        run: dart run tool/count_silent_catches.dart lib 0
+
       - name: Test with coverage
         run: flutter test --coverage
 
       - name: Coverage gate
-        run: dart run tool/check_coverage.dart coverage/lcov.info 48.5
+        # 分母已排除生成代码（见 tool/check_coverage.dart）。作者代码实际覆盖率为
+        # 56% 左右，门槛设 55% 留约 1 个点余量，让它成为真正的回归信号，
+        # 而不是一个测试删掉一半代码都还能过的摆设。
+        run: dart run tool/check_coverage.dart coverage/lcov.info 55.0
 
   android_build:
     name: Android debug build

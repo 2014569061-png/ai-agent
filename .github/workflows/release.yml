@@ -34,9 +34,13 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
       - name: Analyze
-        run: flutter analyze
-      - name: Test
-        run: flutter test
+        run: flutter analyze --no-pub
+      - name: Silent catch ratchet
+        run: dart run tool/count_silent_catches.dart lib 0
+      - name: Test with coverage
+        run: flutter test --coverage
+      - name: Coverage gate
+        run: dart run tool/check_coverage.dart coverage/lcov.info 55.0
   build:
     runs-on: ubuntu-latest
     needs: quality
@@ -106,7 +110,10 @@ jobs:
           apksigner verify --verbose --print-certs "$apk" | tee /tmp/apksigner.txt
           ! grep -Eiq 'CN=Android Debug|androiddebugkey' /tmp/apksigner.txt
       - name: Create SHA-256 sidecar
-        run: sha256sum build/app/outputs/flutter-apk/app-release.apk > build/app/outputs/flutter-apk/app-release.apk.sha256
+        run: |
+          cd build/app/outputs/flutter-apk
+          sha256sum app-release.apk > app-release.apk.sha256
+          sha256sum --check app-release.apk.sha256
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:

@@ -159,7 +159,7 @@ void main() {
       tools: _tools,
     );
 
-    expect(draft.maxSteps, 32);
+    expect(draft.maxSteps, 100);
     expect(draft.temperature, 2.0);
     expect(draft.maxTokens, 256);
     expect(draft.topP, 0.0);

@@ -41,6 +41,10 @@ class SensitiveToolPolicy {
     'edit_file', // 同上（替换/追加的内容）
     'memory_write', // 记忆正文可能含隐私
     'remember', // 记忆正文可能含隐私
+    'android_app_private_data', // 包名与私有数据路径可能指向账号或第三方信息
+    'android_app_private_data_preview',
+    'android_device', // Root 写入内容、私有路径、文件名和深链参数不应持久化
+    'android_automation', // 规则里的 Wi-Fi 名称、应用名与授权目录 URI 属于位置/隐私信息
   };
 
   /// 结果需要在持久化出口脱敏的工具（结果可能回带机密或他人数据）。
@@ -55,6 +59,9 @@ class SensitiveToolPolicy {
     'remember', // 回显出的记忆正文
     'sub_agent', // 子 Agent 摘要可能含委派提示词与中间机密
     'generate_image', // 提示词与返回的远端图片 URL
+    'android_app_private_data', // Root 读取结果可能包含应用凭证与个人信息
+    'android_app_private_data_preview',
+    'android_device', // Logcat、文件搜索与 Root 读取可能含凭证和个人信息
   };
 
   /// MCP 远端工具的命名形态，参数与结果都按敏感处理：

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
 
 import '../l10n/app_strings.dart';
 import '../motion/motion_preferences.dart';
@@ -20,14 +21,21 @@ Future<T?> showNexusSheet<T>({
   bool isBottomDocked = true,
   double? maxHeightRatio,
   Color? barrierColor,
+  bool barrierDismissible = true,
+  String? barrierLabel,
 }) {
+  final effectiveBarrierColor = barrierColor ??
+      Colors.black.withValues(
+        alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.06,
+      );
   return showGeneralDialog<T>(
     context: context,
-    barrierDismissible: true,
-    barrierLabel: AppStrings.closeApprovalSheet,
-    barrierColor: barrierColor ??
-        Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.06),
-    transitionDuration: NexusMotion.base,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: barrierLabel ?? AppStrings.closeDialog,
+    barrierColor: effectiveBarrierColor,
+    transitionDuration: MotionPreferences.adjustDuration(
+        context, NexusMotion.sheet,
+        listen: false),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       final media = MediaQuery.sizeOf(dialogContext);
       final insetsBottom = MediaQuery.viewInsetsOf(dialogContext).bottom;
@@ -55,15 +63,17 @@ Future<T?> showNexusSheet<T>({
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (showDragHandle && isBottomDocked)
-                Center(
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 8, bottom: 4),
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: (isDark ? Colors.white : Colors.black)
-                          .withValues(alpha: 0.18),
-                      borderRadius: BorderRadius.circular(2),
+                _SheetDragHandle(
+                  child: Center(
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 8, bottom: 4),
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: (isDark ? Colors.white : Colors.black)
+                            .withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                 ),
@@ -89,7 +99,7 @@ Future<T?> showNexusSheet<T>({
               intensity: intensity,
               borderRadius: sheetRadius,
               tint: isDark
-                  ? const Color(0xFF141A29).withValues(alpha: 0.65)
+                  ? AppPalette.darkSurface.withValues(alpha: 0.65)
                   : Colors.white.withValues(alpha: 0.78),
               blurSigma: 26,
               refraction: 18,
@@ -135,24 +145,189 @@ Future<T?> showNexusSheet<T>({
       if (MotionPreferences.shouldReduceMotion(context)) {
         return child;
       }
-      final curve = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-      if (isBottomDocked) {
-        // 不把包含 BackdropFilter 的玻璃面板放进 Opacity 临时缓冲区，
-        // 否则弹层首次绘制可能闪烁并丢失背景采样。
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.18),
-            end: Offset.zero,
-          ).animate(curve),
-          child: child,
-        );
-      }
-      return ScaleTransition(
-        scale: Tween<double>(begin: 0.92, end: 1.0).animate(curve),
+      return _NexusSheetMotion(
+        animation: anim,
+        isBottomDocked: isBottomDocked,
+        barrierColor: effectiveBarrierColor,
+        barrierLabel: AppStrings.closeApprovalSheet,
         child: child,
       );
     },
   );
+}
+
+class _SheetDragNotification extends Notification {
+  const _SheetDragNotification.update(this.delta) : velocity = null;
+  const _SheetDragNotification.end(this.velocity) : delta = 0;
+
+  final double delta;
+  final double? velocity;
+
+  bool get isEnd => velocity != null;
+}
+
+/// Keep dismissal gestures on the handle so scrolling content retains its own
+/// gesture arena. The parent owns the actual translation and threshold logic.
+class _SheetDragHandle extends StatelessWidget {
+  const _SheetDragHandle({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragUpdate: (details) =>
+          _SheetDragNotification.update(details.primaryDelta ?? 0)
+              .dispatch(context),
+      onVerticalDragEnd: (details) =>
+          _SheetDragNotification.end(details.velocity.pixelsPerSecond.dy)
+              .dispatch(context),
+      child: child,
+    );
+  }
+}
+
+class _NexusSheetMotion extends StatefulWidget {
+  const _NexusSheetMotion({
+    required this.animation,
+    required this.isBottomDocked,
+    required this.barrierColor,
+    required this.barrierLabel,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final bool isBottomDocked;
+  final Color barrierColor;
+  final String barrierLabel;
+  final Widget child;
+
+  @override
+  State<_NexusSheetMotion> createState() => _NexusSheetMotionState();
+}
+
+class _NexusSheetMotionState extends State<_NexusSheetMotion>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _settleController;
+  var _dragFraction = 0.0;
+  var _settleFrom = 0.0;
+  var _settleTo = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _settleController = AnimationController(
+      vsync: this,
+      duration: NexusMotion.base,
+    )..addListener(() {
+        final t = NexusMotion.curveSpring.transform(_settleController.value);
+        setState(
+            () => _dragFraction = ui.lerpDouble(_settleFrom, _settleTo, t)!);
+      });
+  }
+
+  @override
+  void dispose() {
+    _settleController.dispose();
+    super.dispose();
+  }
+
+  bool _onDrag(_SheetDragNotification notification) {
+    if (!widget.isBottomDocked) return false;
+    if (!notification.isEnd) {
+      if (notification.delta <= 0 && _dragFraction <= 0) return true;
+      _settleController.stop();
+      final height = MediaQuery.sizeOf(context).height;
+      setState(() {
+        _dragFraction = (_dragFraction + notification.delta / height)
+            .clamp(0.0, 0.42)
+            .toDouble();
+      });
+      return true;
+    }
+
+    final velocity = notification.velocity!;
+    final shouldDismiss = _dragFraction > 0.18 || velocity > 900;
+    if (shouldDismiss) {
+      Navigator.of(context).maybePop();
+    } else if (MotionPreferences.shouldReduceMotion(context)) {
+      _settleController.stop();
+      setState(() => _dragFraction = 0.0);
+    } else {
+      _settleFrom = _dragFraction;
+      _settleTo = 0.0;
+      _settleController.forward(from: 0);
+    }
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entering = CurvedAnimation(
+      parent: widget.animation,
+      curve: NexusMotion.curveSheetEnter,
+      reverseCurve: NexusMotion.curveExit,
+    );
+    return NotificationListener<_SheetDragNotification>(
+      onNotification: _onDrag,
+      child: AnimatedBuilder(
+        animation: entering,
+        child: widget.child,
+        builder: (context, child) {
+          final dismissalProgress = widget.isBottomDocked
+              ? (_dragFraction / 0.42).clamp(0.0, 1.0)
+              : 0.0;
+          final barrierOpacity = entering.value * (1.0 - dismissalProgress);
+          final sheetScale = 1.0 - dismissalProgress * 0.015;
+          final barrier = Semantics(
+            button: true,
+            label: widget.barrierLabel,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.of(context).maybePop(),
+              child: ColoredBox(
+                color: widget.barrierColor.withValues(alpha: 0),
+                child: Opacity(
+                  opacity: barrierOpacity,
+                  child: ColoredBox(color: widget.barrierColor),
+                ),
+              ),
+            ),
+          );
+          if (!widget.isBottomDocked) {
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                barrier,
+                ScaleTransition(
+                  scale: Tween<double>(begin: 0.95, end: 1.0).animate(entering),
+                  child: child,
+                ),
+              ],
+            );
+          }
+          // Keep the glass surface outside Opacity so BackdropFilter samples
+          // the scene directly. Only the separate barrier fades with drag.
+          final offset = (1 - entering.value) * 0.18 + _dragFraction;
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              barrier,
+              FractionalTranslation(
+                translation: Offset(0, offset),
+                child: Transform.scale(
+                  alignment: Alignment.bottomCenter,
+                  scale: sheetScale,
+                  child: child,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 }
 
 /// 统一的沉浸式毛玻璃对话框入口，替代不透明的 showDialog / AlertDialog 表面。
@@ -183,8 +358,12 @@ Future<T?> showNexusDialog<T>({
     barrierDismissible: barrierDismissible,
     barrierLabel: AppStrings.closeDialog,
     barrierColor: barrierColor ??
-        Colors.black.withValues(alpha: Theme.of(context).brightness == Brightness.dark ? 0.40 : 0.08),
-    transitionDuration: NexusMotion.base,
+        Colors.black.withValues(
+            alpha:
+                Theme.of(context).brightness == Brightness.dark ? 0.40 : 0.08),
+    transitionDuration: MotionPreferences.adjustDuration(
+        context, NexusMotion.sheet,
+        listen: false),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       final baseTheme = Theme.of(dialogContext);
       final isDark = baseTheme.brightness == Brightness.dark;
@@ -196,7 +375,8 @@ Future<T?> showNexusDialog<T>({
 
       // 膜层：玻璃档留出透明度让背后极光透出来，平面档用实心画布色。
       final tint = useGlass
-          ? (isDark ? const Color(0xFF141A29) : AppPalette.lightCanvas).withValues(
+          ? (isDark ? AppPalette.darkSurface : AppPalette.lightCanvas)
+              .withValues(
               alpha: highContrast ? 0.96 : (isDark ? 0.88 : 0.92),
             )
           : canvas;

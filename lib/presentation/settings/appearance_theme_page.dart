@@ -8,6 +8,7 @@ import '../chat/chat_layout_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme_controller.dart';
 import '../theme/app_appearance_controller.dart';
+import '../widgets/liquid_glass.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/image_cache_policy.dart';
@@ -130,32 +131,10 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                 ),
               ],
             ),
-            const SettingsSectionTitle('视觉与动效表现'),
+            const SettingsSectionTitle('动效偏好'),
             SettingsGroupCard(
               padding: const EdgeInsets.all(16),
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('毛玻璃模糊强度',
-                        style: TextStyle(fontWeight: FontWeight.w500)),
-                    Text(
-                      '${(_glassIntensity * 100).round()}%',
-                      style: const TextStyle(
-                        color: AppPalette.brand,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                Slider(
-                  value: _glassIntensity,
-                  min: 0.2,
-                  max: 1.0,
-                  divisions: 8,
-                  onChanged: _updateGlass,
-                ),
-                const Divider(height: 16),
                 const Text('动效等级',
                     style: TextStyle(fontWeight: FontWeight.w500)),
                 const SizedBox(height: 8),
@@ -166,11 +145,11 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                     if (textScale > 1.15 || constraints.maxWidth < 310) {
                       return Column(
                         children: [
-                          _buildEffectOption('full', '完整动效', '沉浸式流体动画与转场'),
+                          _buildEffectOption('full', '完整动效', '保留轻量转场与交互反馈'),
                           const SizedBox(height: 6),
-                          _buildEffectOption('reduced', '节能平滑', '减少大面积缩放与模糊'),
+                          _buildEffectOption('reduced', '节能平滑', '短过渡、轻量磨砂，停止循环装饰'),
                           const SizedBox(height: 6),
-                          _buildEffectOption('off', '关闭动效', '即时切换，性能最优'),
+                          _buildEffectOption('off', '关闭动效', '即时切换与静态平面，保留操作反馈'),
                         ],
                       );
                     }
@@ -259,7 +238,12 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                 ),
               ],
             ),
-            const SettingsSectionTitle('界面质感与液态玻璃'),
+            const SettingsSectionTitle('界面材质'),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Text('节能模式临时使用轻量磨砂，关闭动效时使用静态平面。系统减少动态效果优先；完整模式恢复所选材质。',
+                  style: TextStyle(fontSize: 12, height: 1.5)),
+            ),
             SettingsGroupCard(
               children: [
                 SettingsTile(
@@ -267,7 +251,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                   iconColor: settingsMutedColor(context),
                   title: '液态玻璃 (Liquid Glass)',
                   subtitle: 'SDF 边缘折射 + 镜面高光 + 磨砂（遇不支持设备自动降级）',
-                  selected: _glassIntensity >= 0.6,
+                  selected: AppAppearanceController.materialForValue(_glassIntensity) == GlassIntensity.liquid,
                   onTap: () => _updateGlass(0.85),
                 ),
                 const SettingsDivider(),
@@ -276,16 +260,16 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                   iconColor: settingsMutedColor(context),
                   title: '经典磨砂 (Frosted Glass)',
                   subtitle: '纯高斯背景模糊，平滑省电，全平台兼容',
-                  selected: _glassIntensity > 0.1 && _glassIntensity < 0.6,
+                  selected: AppAppearanceController.materialForValue(_glassIntensity) == GlassIntensity.frosted,
                   onTap: () => _updateGlass(0.45),
                 ),
                 const SettingsDivider(),
                 SettingsTile(
                   icon: Icons.crop_square_rounded,
                   iconColor: settingsMutedColor(context),
-                  title: '纯扁平 (Flat v2)',
-                  subtitle: '零阴影、零模糊、零折射，遵循 v2 极简省电规范',
-                  selected: _glassIntensity <= 0.1,
+                  title: '纯净平面 (Flat)',
+                  subtitle: '清晰静态表面，不使用模糊与折射',
+                  selected: AppAppearanceController.materialForValue(_glassIntensity) == GlassIntensity.flat,
                   onTap: () => _updateGlass(0.0),
                 ),
               ],

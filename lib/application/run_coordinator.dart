@@ -60,8 +60,7 @@ class RunCoordinator {
   /// 切会话只改变 UI 订阅，不取消开发任务；因此这里不再要求当前可见会话
   /// 与任务会话一致。可见会话写回由 [isVisible] 单独判断。
   bool ownsRun(int generation, String? conversationId) =>
-      generation == _generation &&
-      !_cancelledGenerations.contains(generation);
+      generation == _generation && !_cancelledGenerations.contains(generation);
 
   bool isVisible(String? conversationId) =>
       conversationId != null && currentConversationId() == conversationId;

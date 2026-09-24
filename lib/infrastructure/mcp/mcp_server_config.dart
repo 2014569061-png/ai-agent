@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../observability/sentry_service.dart';
 
 /// MCP 服务器连接方式。
 enum McpServerKind {
@@ -53,10 +56,16 @@ class McpStdioAvailability {
 
   /// 写入真机开关。
   static Future<void> writeEnabled(bool value) async {
+    // 与 chat 的开关写入同类：界面已经把状态切过去了，这里失败只表现为
+    // 「重启后开关自己变回去」。本类位于 infrastructure 层，不能反向依赖
+    // application 的 NexusGuard，因此直接走同层遥测通道留痕（语义等价：
+    // 保留吞掉的控制流，只补可观测性）。
     try {
       final preferences = await SharedPreferences.getInstance();
       await preferences.setBool(preferenceKey, value);
-    } catch (_) {}
+    } catch (error, stackTrace) {
+      unawaited(SentryService.reportException(error, stackTrace));
+    }
   }
 }
 

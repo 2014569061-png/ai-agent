@@ -166,8 +166,10 @@ class TaskTemplateService {
     if (project != null && project.isKnown) {
       buffer
         ..writeln('当前识别到的项目类型：${project.kind.label}。')
-        ..writeln(
-            '建议验证步骤：${[project.testCommand, project.buildCommand].whereType<String>().join('；')}');
+        ..writeln('建议验证步骤：${[
+          project.testCommand,
+          project.buildCommand
+        ].whereType<String>().join('；')}');
     }
     return buffer.toString().trim();
   }

@@ -1,11 +1,13 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 
 import '../../domain/models.dart';
 import '../../domain/network_access_policy.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
+import 'pinned_host_connector.dart';
 import 'tool_registry.dart';
 
 class GetTimeTool implements AgentTool {
@@ -73,19 +75,37 @@ class JsonQueryTool implements AgentTool {
 }
 
 class HttpRequestTool implements AgentTool {
-  HttpRequestTool({Dio? dio, NetworkAccessPolicy? policy})
-      : _dio = dio ??
-            Dio(BaseOptions(
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 30),
-              // SSRF：默认跟随重定向会让「校验原始 URL」形同虚设——
-              // 攻击者控制的公网地址返回 302 Location: http://192.168.1.1/ 即可绕过。
-              // 这里禁用自动跟随，改为下方手工逐跳校验后再请求。
-              followRedirects: false,
-            )),
-        _policy = policy ?? const NetworkAccessPolicy();
+  HttpRequestTool({
+    Dio? dio,
+    NetworkAccessPolicy? policy,
+    PinnedHostConnector? connector,
+  }) : this._(
+          dio,
+          policy ?? const NetworkAccessPolicy(),
+          connector ?? PinnedHostConnector(),
+        );
+
+  HttpRequestTool._(Dio? dio, this._policy, this._connector)
+      : _dio = dio ?? _ownedClient(_connector);
+
+  static Dio _ownedClient(PinnedHostConnector connector) {
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+      // SSRF：默认跟随重定向会让「校验原始 URL」形同虚设——
+      // 攻击者控制的公网地址返回 302 Location: http://192.168.1.1/ 即可绕过。
+      // 这里禁用自动跟随，改为下方手工逐跳校验后再请求。
+      followRedirects: false,
+    ));
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: connector.createClient,
+    );
+    return dio;
+  }
+
   final Dio _dio;
   final NetworkAccessPolicy _policy;
+  final PinnedHostConnector _connector;
   @override
   final manifest = const UnifiedTool(
       name: 'http_request',
@@ -124,23 +144,32 @@ class HttpRequestTool implements AgentTool {
     // 否则「校验原始 URL」会被 302 绕开。
     var currentUrl = url;
     for (var hop = 0; hop <= 5; hop++) {
-      final decision = _policy.inspect(currentUrl);
-      if (!decision.allowed) {
+      final endpoint = await _policy.resolveForConnect(currentUrl);
+      if (!endpoint.decision.allowed) {
         return ToolResult.failure(
           code: ToolCodes.permissionRequired,
-          message: 'URL 被安全策略拒绝：${decision.reason}',
+          message: 'URL 被安全策略拒绝：${endpoint.decision.reason}',
         );
+      }
+      final pinned = endpoint.address;
+      if (pinned != null) {
+        _connector.pin(Uri.parse(currentUrl).host, pinned);
       }
       final Response<dynamic> response;
       try {
-        response = await _dio.request<dynamic>(currentUrl,
-            data: arguments['body'],
-            options: Options(
-              method: method,
-              responseType: ResponseType.json,
-              followRedirects: false,
-              validateStatus: (_) => true,
-            ));
+        response = await _dio.request<dynamic>(
+          currentUrl,
+          data: arguments['body'],
+          options: Options(
+            method: method,
+            responseType: ResponseType.plain,
+            followRedirects: false,
+            validateStatus: (_) => true,
+            extra: {
+              if (pinned != null) 'pinnedAddress': pinned.address,
+            },
+          ),
+        );
       } on DioException catch (error) {
         return ToolResult.failure(
           code: ToolCodes.networkUnavailable,
@@ -155,7 +184,10 @@ class HttpRequestTool implements AgentTool {
           response.statusCode! < 400;
       if (!isRedirect || location == null || location.isEmpty) {
         return ToolResult.text(
-          jsonEncode({'status': response.statusCode, 'data': response.data}),
+          jsonEncode({
+            'status': response.statusCode,
+            'data': _responsePayload(response.data),
+          }),
           effect: readOnly ? ToolEffect.none : ToolEffect.applied,
         );
       }
@@ -173,6 +205,26 @@ class HttpRequestTool implements AgentTool {
       code: ToolCodes.networkUnavailable,
       message: '重定向次数过多，已中止（可能存在重定向循环）',
     );
+  }
+
+  /// JSON 正文仍按结构返回；普通网页和纯文本不再因解析失败变成网络错误。
+  static Object? _responsePayload(Object? data) {
+    if (data == null ||
+        data is Map ||
+        data is List ||
+        data is num ||
+        data is bool) {
+      return data;
+    }
+    final text = data is String ? data : data.toString();
+    if (text.isEmpty) return text;
+    try {
+      return jsonDecode(text);
+    } catch (_) {
+      const limit = 8000;
+      if (text.length <= limit) return text;
+      return '${text.substring(0, limit)}\n[响应已截断]';
+    }
   }
 }
 

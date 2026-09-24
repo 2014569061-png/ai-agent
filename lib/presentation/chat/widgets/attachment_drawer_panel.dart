@@ -1,6 +1,7 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../../domain/attachment_file.dart';
 import '../../theme/app_palette.dart';
+import '../../widgets/nexus_pressable.dart';
 
 /// DeepSeek 风格底部附件展开面板 (对标图 2)
 /// 包含：
@@ -19,7 +20,7 @@ class AttachmentDrawerPanel extends StatefulWidget {
   final VoidCallback onCamera;
   final VoidCallback onGallery;
   final VoidCallback onFile;
-  final List<PlatformFile> attachments;
+  final List<AttachmentFile> attachments;
   final ValueChanged<int>? onSelectThumbnail;
 
   @override
@@ -33,10 +34,12 @@ class _AttachmentDrawerPanelState extends State<AttachmentDrawerPanel> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final cardBg = isDark ? AppPalette.darkSurfaceHover : AppPalette.lightCanvas;
+    final cardBg =
+        isDark ? AppPalette.darkSurfaceHover : AppPalette.lightCanvas;
     final border = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textMuted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
     return Container(
       width: double.infinity,
@@ -144,7 +147,7 @@ class _AttachmentThumbnail extends StatelessWidget {
     required this.textMuted,
   });
 
-  final PlatformFile file;
+  final AttachmentFile file;
   final bool selected;
   final Color cardBg;
   final Color border;
@@ -249,10 +252,12 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
+    return Semantics(
+      button: true,
+      label: label,
+      child: NexusPressable(
         onTap: onTap,
+        pressedScale: 0.96,
         borderRadius: BorderRadius.circular(16),
         child: Container(
           height: 76,

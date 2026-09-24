@@ -1,40 +1,44 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../application/error_humanizer.dart';
 import '../../../domain/models.dart';
 import '../../l10n/app_strings.dart';
 import '../chat_layout_controller.dart';
 import '../../markdown/code_block.dart';
-import '../../markdown/math_block.dart';
-import '../../markdown/markdown_render_policy.dart';
-import '../../markdown/markdown_render_metrics.dart';
+import '../../motion/nexus_haptics.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
-import '../../motion/nexus_motion.dart';
+import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/floating_toast.dart';
-import 'mascot_avatar.dart';
 import 'attachment_strip.dart';
 import 'reasoning_block.dart';
+import 'streaming_markdown.dart';
 
 /// 单个消息气泡：负责气泡布局、正文/思考/附件渲染与轻量操作（复制、重生成）。
-/// 用户消息：底 brandSoft、文字 text 15/400、内边距 10×14、圆角 16 16 8 16、最大宽 78%
-/// AI 消息：不使用气泡，直接排版，左右各 16px 边距；正文 15/1.6、段间距 12px、回答内小标题 17/500（上 20 下 8）
+/// 用户消息：底 brandSoft、无描边、文字 15/400、内边距 10×14、圆角 20 20 6 20、最大宽 78%
+/// AI 消息（DeepSeek 式）：无头像、无卡片、无标题，正文铺满并与列表 16px 边距对齐；
+/// 操作行左侧复制 / 朗读 / 分享，右侧弱化显示模型名 · 耗时与「重新生成」
 class MessageBubble extends StatelessWidget {
   const MessageBubble({
     super.key,
     required this.message,
     required this.isLast,
     required this.running,
+    this.runProgress,
     required this.onLongPress,
     required this.onRegenerate,
+    this.onStop,
     this.onEditPrompt,
     this.onSwitchModel,
+    this.onResumeRun,
     this.onSpeak,
     this.speakingListenable,
     this.selecting = false,
@@ -44,10 +48,15 @@ class MessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool isLast;
   final bool running;
+  final ChatRunProgress? runProgress;
   final VoidCallback? onLongPress;
   final VoidCallback onRegenerate;
+  final VoidCallback? onStop;
   final VoidCallback? onEditPrompt;
   final VoidCallback? onSwitchModel;
+
+  /// 暂停提示卡上的「继续执行」：从断点续跑（null 时不显示该按钮）。
+  final VoidCallback? onResumeRun;
 
   /// 朗读回调（仅助手消息且平台支持时非空）；null 表示不暴露该读屏动作。
   final VoidCallback? onSpeak;
@@ -81,8 +90,16 @@ class MessageBubble extends StatelessWidget {
         message.parts.where((part) => part.type == 'video').toList();
     final hasText = message.parts
         .any((part) => part.type == 'text' && part.value.trim().isNotEmpty);
+    // 可续跑暂停（预算用尽 / 连续失败熔断）：拆出暂停提示渲染成暂停卡，不再
+    // 显示成「错误：遇到未预期的错误」；旧版本写入的正文同样兼容识别。
+    final pauseSplit = splitRunPauseNotice(message.text);
+    final pauseNotice =
+        message.role == MessageRole.assistant ? pauseSplit.notice : null;
+    // 复制 / 选择文本时去掉暂停标记里的元数据，只保留人话。
+    final plainText = stripRunPauseMarker(message.text);
     // 错误消息拆分：人话正文正常渲染，原文技术细节折叠展示。
-    final errorSplit = splitErrorDetail(message.text);
+    final errorSplit =
+        splitErrorDetail(pauseNotice == null ? message.text : pauseSplit.main);
     final errorDetail = errorSplit.detail;
     final canRetryFailure = errorDetail != null &&
         isLast &&
@@ -91,13 +108,20 @@ class MessageBubble extends StatelessWidget {
 
     // 流式生成中的最后一条助手消息使用纯文本，避免每个增量都重新解析 Markdown。
     final lightweight = !isUser && !isTool && isLast && running;
+    final quietReply = !isUser &&
+        !isTool &&
+        !(running && isLast) &&
+        errorDetail == null &&
+        message.text.length <= 160 &&
+        !message.text.contains('```') &&
+        !message.parts.any((part) => part.type != 'text');
 
     // 无障碍：把原本只能长按触发的「复制 / 重新生成」暴露成读屏可操作的自定义
     // 语义动作（不新增可见按钮，避免改变视觉）。
     final customActions = <CustomSemanticsAction, VoidCallback>{
       const CustomSemanticsAction(label: '复制'): () {
-        Clipboard.setData(ClipboardData(text: message.text));
-        HapticFeedback.lightImpact();
+        Clipboard.setData(ClipboardData(text: plainText));
+        NexusHaptics.light(context);
         FloatingToast.show(
           context,
           '已复制全文',
@@ -118,62 +142,127 @@ class MessageBubble extends StatelessWidget {
     final plainStyle = TextStyle(
       color: textColor,
       height: 1.6,
-      fontSize: 15,
+      fontSize: AppTokens.fontSizeBody,
       fontWeight: FontWeight.w400,
     );
 
-    final userTextStyle = const TextStyle(
-      color: Colors.white,
+    final userTextStyle = TextStyle(
+      color: isDark ? AppPalette.darkText : AppPalette.brandOnSoft,
       height: 1.5,
-      fontSize: 14.5,
+      fontSize: AppTokens.fontSizeBody,
       fontWeight: FontWeight.w400,
     );
 
     final body = isUser
         ? Container(
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: isDark
-                    ? [
-                        const Color(0xD01E40AF),
-                        const Color(0xB81D4ED8),
-                      ]
-                    : [
-                        const Color(0xCC2563EB),
-                        const Color(0xDD1D4ED8),
-                      ],
-              ),
+              color:
+                  isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
+              // DeepSeek 式用户气泡：浅色品牌底、无描边，右下角收成小圆角。
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(18),
-                topRight: Radius.circular(18),
-                bottomLeft: Radius.circular(18),
-                bottomRight: Radius.circular(5),
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(6),
               ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: isDark ? 0.35 : 0.50),
-                width: 0.9,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF1D4ED8)
-                      .withValues(alpha: isDark ? 0.35 : 0.16),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
             ),
             child: selecting
                 ? SelectableText(message.text, style: userTextStyle)
                 : Text(message.text, style: userTextStyle),
           )
         : selecting
-            ? SelectableText(message.text, style: plainStyle)
+            ? SelectableText(plainText, style: plainStyle)
             : lightweight
-                ? Text(errorSplit.main, style: plainStyle)
-                : _DeferredMarkdown(
+                ? StreamingMarkdown(
+                    data: errorSplit.main,
+                    textColor: textColor,
+                    tailStyle: plainStyle,
+                    styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                      p: plainStyle,
+                      blockSpacing: 12,
+                      listIndent: 20,
+                      h1: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeTitle,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h1Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h2: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeTitle,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h3: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeBody,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h3Padding: const EdgeInsets.only(top: 16, bottom: 6),
+                      h4: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeBody,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h5: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeBody,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      h6: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeBody,
+                        height: 1.4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      listBullet: TextStyle(
+                        color: textColor,
+                        height: 1.6,
+                        fontSize: AppTokens.fontSizeBody,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      code: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeCaption,
+                        fontFamily: AppTokens.fontFamilyMono,
+                      ),
+                      blockquote: TextStyle(
+                        color: textColor,
+                        height: 1.6,
+                        fontSize: AppTokens.fontSizeBody,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      tableHead: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeCaption,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      tableBody: TextStyle(
+                        color: textColor,
+                        fontSize: AppTokens.fontSizeCaption,
+                        height: 1.55,
+                        fontWeight: FontWeight.w400,
+                      ),
+                      blockquoteDecoration: BoxDecoration(
+                        color: surface,
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusControl),
+                        border: const Border(
+                          left: BorderSide(
+                            color: AppPalette.brand,
+                            width: 3,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : DeferredMarkdown(
                     data: errorSplit.main,
                     selectable: false,
                     builders: {'pre': CodeBlockBuilder()},
@@ -184,68 +273,68 @@ class MessageBubble extends StatelessWidget {
                       listIndent: 20,
                       h1: TextStyle(
                         color: textColor,
-                        fontSize: 17,
+                        fontSize: AppTokens.fontSizeTitle,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
                       h1Padding: const EdgeInsets.only(top: 20, bottom: 8),
                       h2: TextStyle(
                         color: textColor,
-                        fontSize: 17,
+                        fontSize: AppTokens.fontSizeTitle,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
                       h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
                       h3: TextStyle(
                         color: textColor,
-                        fontSize: 15,
+                        fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
                       h3Padding: const EdgeInsets.only(top: 16, bottom: 6),
                       h4: TextStyle(
                         color: textColor,
-                        fontSize: 15,
+                        fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
                       h5: TextStyle(
                         color: textColor,
-                        fontSize: 15,
+                        fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
                       h6: TextStyle(
                         color: textColor,
-                        fontSize: 15,
+                        fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
                       listBullet: TextStyle(
                         color: textColor,
                         height: 1.6,
-                        fontSize: 15,
+                        fontSize: AppTokens.fontSizeBody,
                         fontWeight: FontWeight.w400,
                       ),
                       code: TextStyle(
                         color: textColor,
-                        fontSize: 13,
-                        fontFamily: 'JetBrains Mono',
+                        fontSize: AppTokens.fontSizeCaption,
+                        fontFamily: AppTokens.fontFamilyMono,
                       ),
                       blockquote: TextStyle(
                         color: textColor,
                         height: 1.6,
-                        fontSize: 15,
+                        fontSize: AppTokens.fontSizeBody,
                         fontWeight: FontWeight.w400,
                       ),
                       tableHead: TextStyle(
                         color: textColor,
-                        fontSize: 13,
+                        fontSize: AppTokens.fontSizeCaption,
                         fontWeight: FontWeight.w500,
                       ),
                       tableBody: TextStyle(
                         color: textColor,
-                        fontSize: 13,
+                        fontSize: AppTokens.fontSizeCaption,
                         height: 1.55,
                         fontWeight: FontWeight.w400,
                       ),
@@ -288,224 +377,147 @@ class MessageBubble extends StatelessWidget {
           const SizedBox(height: 6),
           _ErrorDetailBlock(detail: errorDetail),
         ],
+        if (pauseNotice != null) ...[
+          const SizedBox(height: 8),
+          _RunPauseNoticeCard(
+            notice: pauseNotice,
+            actionable: isLast && !running,
+            onContinue: onResumeRun,
+            onRestart: onRegenerate,
+            onSwitchModel: onSwitchModel,
+          ),
+        ],
       ],
     );
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final factor = ChatLayoutController.widthFactor.value;
+    final showActions = !isUser && !isTool && !(running && isLast);
+    final canRegenerate = isLast &&
+        message.role == MessageRole.assistant &&
+        !running &&
+        !canRetryFailure &&
+        pauseNotice == null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: LayoutBuilder(builder: (context, constraints) {
-        final avatarSpace = isUser ? 0.0 : 36.0;
-        final availableWidth = (constraints.maxWidth - avatarSpace)
-            .clamp(0.0, double.infinity)
-            .toDouble();
+        final availableWidth =
+            constraints.maxWidth.clamp(0.0, double.infinity).toDouble();
         final desiredWidth = factor == ChatLayoutController.adaptive
             ? (isUser ? screenWidth * 0.78 : availableWidth)
             : screenWidth * factor;
         final maxWidth = math.min(desiredWidth, availableWidth).toDouble();
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment:
-              isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-          children: [
-            if (!isUser) ...[
-              if (isTool)
-                Semantics(
-                  label: '工具调用',
-                  child: CircleAvatar(
-                    radius: 14,
-                    backgroundColor: surface,
+        // DeepSeek 式排版：AI 回复不再有头像、卡片和标题，正文与列表左右边距
+        // 对齐、铺满宽度；模型名与耗时移到操作行右侧，做成小号弱化文字。
+        final Widget bubble;
+        if (isUser) {
+          bubble = IntrinsicWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Align(alignment: Alignment.centerRight, child: content),
+              ],
+            ),
+          );
+        } else if (isTool) {
+          // 工具消息做成行内提示：小图标 + 浅底，不再占一个头像位。
+          bubble = Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+            decoration: BoxDecoration(
+              color: surface.withValues(alpha: isDark ? 0.35 : 0.55),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: Semantics(
+                    label: '工具调用',
                     child: Icon(Icons.handyman_outlined,
                         size: 14, color: textMuted),
                   ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Semantics(
-                    label: '${message.modelName ?? "AI 助手"}模型',
-                    child: MascotAvatar(modelName: message.modelName ?? ''),
-                  ),
                 ),
-              const SizedBox(width: 8),
-            ],
-            GestureDetector(
-              onLongPress: isTool ? null : onLongPress,
-              child: Tooltip(
-                message: isUser ? '长按可编辑 / 复制' : '长按可朗读 / 复制',
-                // 触发方式必须是 tap：`longPress` 会把长按从外层 GestureDetector
-                // 手里抢走（实测对照：Tooltip(longPress)+Text 时父层收不到长按，
-                // 改成 tap 就能收到），那样消息菜单就永远弹不出来。
-                triggerMode: TooltipTriggerMode.tap,
-                showDuration: const Duration(milliseconds: 1800),
-                child: _SpeakSemantics(
-                  speakingListenable: speakingListenable,
+                const SizedBox(width: 8),
+                Expanded(child: content),
+              ],
+            ),
+          );
+        } else {
+          bubble = Column(
+            key: ValueKey(
+                quietReply ? 'quiet-assistant-reply' : 'assistant-reply'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if ((reasoningText?.trim().isNotEmpty ?? false) ||
+                  (running && isLast && (runProgress != null || !hasText)))
+                ReasoningCompactBlock(
+                  reasoning: reasoningText ?? '',
+                  streaming: running && isLast,
+                  hasStartedAnswer: hasText,
+                  duration: message.reasoningDuration,
+                  progress: isLast ? runProgress : null,
+                  onStop: isLast ? onStop : null,
+                ),
+              content,
+              if (canRetryFailure)
+                Wrap(
+                  spacing: 4,
+                  children: [
+                    _failureAction(
+                      label: '重试',
+                      icon: Icons.refresh_rounded,
+                      onPressed: onRegenerate,
+                    ),
+                    if (onEditPrompt != null)
+                      _failureAction(
+                        label: '编辑问题',
+                        icon: Icons.edit_outlined,
+                        onPressed: onEditPrompt!,
+                      ),
+                    if (onSwitchModel != null)
+                      _failureAction(
+                        label: '切换模型',
+                        icon: Icons.tune_rounded,
+                        onPressed: onSwitchModel!,
+                      ),
+                  ],
+                ),
+              if (showActions)
+                _ReplyActionRow(
+                  copyText: plainText,
+                  textMuted: textMuted,
+                  metaLabel: _replyMetaLabel(message),
+                  onRegenerate: canRegenerate ? onRegenerate : null,
                   onSpeak: onSpeak,
-                  onLongPressHint: isUser ? '编辑或复制' : '朗读或复制',
-                  baseActions: customActions,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: maxWidth),
-                    child: isUser
-                        ? IntrinsicWidth(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: content,
-                                ),
-                              ],
-                            ),
-                          )
-                        : Container(
-                            margin: const EdgeInsets.symmetric(vertical: 2),
-                            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white.withValues(alpha: 0.045)
-                                  : Colors.white.withValues(alpha: 0.60),
-                              borderRadius: BorderRadius.circular(18),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.10)
-                                    : Colors.white.withValues(alpha: 0.75),
-                                width: 0.9,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(
-                                      alpha: isDark ? 0.22 : 0.04),
-                                  blurRadius: 14,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (!isTool && hasText)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 6),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          message.modelName?.isNotEmpty == true
-                                              ? message.modelName!
-                                              : 'NEXUS AI',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: textColor,
-                                          ),
-                                        ),
-                                        if (message.elapsed != null) ...[
-                                          const SizedBox(width: 6),
-                                          Text('•',
-                                              style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: textMuted)),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            '${(message.elapsed!.inMilliseconds / 1000).toStringAsFixed(1)}s',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: textMuted,
-                                              fontFamily: 'monospace',
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                if (!isTool &&
-                                    ((reasoningText?.trim().isNotEmpty ??
-                                            false) ||
-                                        (running && !isUser && !hasText)))
-                                  ReasoningCompactBlock(
-                                    reasoning: reasoningText ?? '',
-                                    streaming: running,
-                                    duration: message.reasoningDuration,
-                                  ),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: content,
-                                ),
-                                Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        visualDensity: VisualDensity.compact,
-                                        iconSize: 18,
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(
-                                            minWidth: 48, minHeight: 48),
-                                        onPressed: () {
-                                          Clipboard.setData(ClipboardData(
-                                              text: message.text));
-                                          HapticFeedback.lightImpact();
-                                          FloatingToast.show(
-                                            context,
-                                            '已复制全文',
-                                            tone: ToastTone.success,
-                                          );
-                                        },
-                                        icon: Icon(Icons.copy_outlined,
-                                            color: textMuted),
-                                        tooltip: '复制',
-                                      ),
-                                      if (canRetryFailure)
-                                        Wrap(
-                                          spacing: 4,
-                                          children: [
-                                            _failureAction(
-                                              label: '重试',
-                                              icon: Icons.refresh_rounded,
-                                              onPressed: onRegenerate,
-                                            ),
-                                            if (onEditPrompt != null)
-                                              _failureAction(
-                                                label: '编辑问题',
-                                                icon: Icons.edit_outlined,
-                                                onPressed: onEditPrompt!,
-                                              ),
-                                            if (onSwitchModel != null)
-                                              _failureAction(
-                                                label: '切换模型',
-                                                icon: Icons.tune_rounded,
-                                                onPressed: onSwitchModel!,
-                                              ),
-                                          ],
-                                        )
-                                      else if (isLast &&
-                                          message.role ==
-                                              MessageRole.assistant &&
-                                          !running)
-                                        IconButton(
-                                          visualDensity: VisualDensity.compact,
-                                          iconSize: 18,
-                                          padding: EdgeInsets.zero,
-                                          constraints: const BoxConstraints(
-                                              minWidth: 48, minHeight: 48),
-                                          onPressed: onRegenerate,
-                                          icon: Icon(Icons.refresh_rounded,
-                                              color: textMuted),
-                                          tooltip: '重新生成',
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                  ),
+                  speakingListenable: speakingListenable,
+                ),
+            ],
+          );
+        }
+        return Align(
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+          child: GestureDetector(
+            onLongPress: isTool ? null : onLongPress,
+            child: Tooltip(
+              message: isUser ? '长按可编辑 / 复制' : '长按可朗读 / 复制',
+              // 触发方式必须是 tap：`longPress` 会把长按从外层 GestureDetector
+              // 手里抢走（实测对照：Tooltip(longPress)+Text 时父层收不到长按，
+              // 改成 tap 就能收到），那样消息菜单就永远弹不出来。
+              triggerMode: TooltipTriggerMode.tap,
+              showDuration: const Duration(milliseconds: 1800),
+              child: _SpeakSemantics(
+                speakingListenable: speakingListenable,
+                onSpeak: onSpeak,
+                onLongPressHint: isUser ? '编辑或复制' : '朗读或复制',
+                baseActions: customActions,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: maxWidth),
+                  child: bubble,
                 ),
               ),
             ),
-          ],
+          ),
         );
       }),
     );
@@ -525,6 +537,227 @@ class MessageBubble extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10),
         ),
       );
+}
+
+/// 可续跑暂停提示卡：预算用尽或连续失败熔断时显示在回复末尾。
+///
+/// 只有最后一条、且当前没有在运行时才显示操作按钮；历史里的旧提示只保留
+/// 文字说明，避免在已经续跑过的旧消息上重复触发。
+class _RunPauseNoticeCard extends StatelessWidget {
+  const _RunPauseNoticeCard({
+    required this.notice,
+    required this.actionable,
+    required this.onRestart,
+    this.onContinue,
+    this.onSwitchModel,
+  });
+
+  final RunPauseNotice notice;
+  final bool actionable;
+  final VoidCallback onRestart;
+  final VoidCallback? onContinue;
+  final VoidCallback? onSwitchModel;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    const accent = AppPalette.warning;
+    final buttonStyle = TextButton.styleFrom(
+      minimumSize: const Size(0, 44),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+    );
+    return Semantics(
+      container: true,
+      label: '任务已暂停：${notice.title}',
+      child: Container(
+        key: const ValueKey('run-pause-notice'),
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: isDark ? 0.14 : 0.08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.pause_circle_outline_rounded,
+                    size: 18, color: accent),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    notice.title,
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: AppTokens.fontSizeSubhead,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              notice.description,
+              style: TextStyle(
+                color: textMuted,
+                fontSize: AppTokens.fontSizeCaption,
+                height: 1.5,
+              ),
+            ),
+            if (actionable)
+              Wrap(
+                spacing: 4,
+                children: [
+                  if (onContinue != null)
+                    TextButton.icon(
+                      key: const ValueKey('run-pause-continue'),
+                      onPressed: onContinue,
+                      icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: const Text('继续执行'),
+                      style: buttonStyle,
+                    ),
+                  TextButton.icon(
+                    key: const ValueKey('run-pause-restart'),
+                    onPressed: onRestart,
+                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                    label: const Text('从头重试'),
+                    style: buttonStyle,
+                  ),
+                  if (onSwitchModel != null)
+                    TextButton.icon(
+                      key: const ValueKey('run-pause-switch-model'),
+                      onPressed: onSwitchModel,
+                      icon: const Icon(Icons.tune_rounded, size: 16),
+                      label: const Text('切换模型'),
+                      style: buttonStyle,
+                    ),
+                ],
+              )
+            else
+              const SizedBox(height: 6),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 操作行右侧的弱化元信息：模型名 · 耗时（任一缺失时只显示另一项）。
+String? _replyMetaLabel(ChatMessage message) {
+  final model = message.modelName?.trim();
+  final elapsed = message.elapsed;
+  final parts = <String>[
+    if (model != null && model.isNotEmpty) model,
+    if (elapsed != null)
+      '${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s',
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
+}
+
+/// AI 回复底部操作行（DeepSeek 式）：左侧复制 / 朗读 / 分享，右侧是弱化的
+/// 模型名与耗时，以及最后一条回复的「重新生成」。
+class _ReplyActionRow extends StatelessWidget {
+  const _ReplyActionRow({
+    required this.copyText,
+    required this.textMuted,
+    this.metaLabel,
+    this.onRegenerate,
+    this.onSpeak,
+    this.speakingListenable,
+  });
+
+  final String copyText;
+  final Color textMuted;
+  final String? metaLabel;
+  final VoidCallback? onRegenerate;
+  final VoidCallback? onSpeak;
+  final ValueListenable<bool>? speakingListenable;
+
+  Widget _action({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) =>
+      IconButton(
+        visualDensity: VisualDensity.compact,
+        iconSize: 18,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+        onPressed: onPressed,
+        icon: Icon(icon, color: textMuted),
+        tooltip: tooltip,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final speak = onSpeak;
+    final speaking = speakingListenable;
+    final regenerate = onRegenerate;
+    final meta = metaLabel;
+    return Row(
+      children: [
+        _action(
+          icon: Icons.copy_outlined,
+          tooltip: '复制',
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: copyText));
+            NexusHaptics.light(context);
+            FloatingToast.show(context, '已复制全文', tone: ToastTone.success);
+          },
+        ),
+        if (speak != null)
+          speaking == null
+              ? _action(
+                  icon: Icons.volume_up_outlined,
+                  tooltip: '朗读',
+                  onPressed: speak,
+                )
+              : ValueListenableBuilder<bool>(
+                  valueListenable: speaking,
+                  builder: (context, active, _) => _action(
+                    icon: active
+                        ? Icons.stop_circle_outlined
+                        : Icons.volume_up_outlined,
+                    tooltip: active ? '停止朗读' : '朗读',
+                    onPressed: speak,
+                  ),
+                ),
+        _action(
+          icon: Icons.ios_share_rounded,
+          tooltip: '分享',
+          onPressed: () => unawaited(
+            SharePlus.instance.share(ShareParams(text: copyText)),
+          ),
+        ),
+        Expanded(
+          child: meta == null
+              ? const SizedBox.shrink()
+              : Text(
+                  meta,
+                  key: const ValueKey('reply-meta'),
+                  textAlign: TextAlign.end,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeFootnote - 1,
+                    color: textMuted,
+                  ),
+                ),
+        ),
+        if (regenerate != null)
+          _action(
+            icon: Icons.refresh_rounded,
+            tooltip: '重新生成',
+            onPressed: regenerate,
+          ),
+      ],
+    );
+  }
 }
 
 /// 消息气泡的读屏语义外壳。
@@ -575,96 +808,8 @@ class _SpeakSemantics extends StatelessWidget {
   }
 }
 
-/// Delays expensive Markdown and math parsing for long completed replies.
-class _DeferredMarkdown extends StatefulWidget {
-  const _DeferredMarkdown({
-    required this.data,
-    required this.selectable,
-    required this.builders,
-    required this.textColor,
-    required this.styleSheet,
-  });
-
-  final String data;
-  final bool selectable;
-  final Map<String, MarkdownElementBuilder> builders;
-  final Color textColor;
-  final MarkdownStyleSheet styleSheet;
-
-  @override
-  State<_DeferredMarkdown> createState() => _DeferredMarkdownState();
-}
-
-class _DeferredMarkdownState extends State<_DeferredMarkdown> {
-  bool _ready = false;
-  bool _markdownMetricRecorded = false;
-
-  bool _shouldDefer(BuildContext context) => MarkdownRenderPolicy.shouldDefer(
-        widget.data,
-        MediaQuery.sizeOf(context).width,
-      );
-
-  @override
-  void initState() {
-    super.initState();
-    _scheduleMarkdown();
-  }
-
-  @override
-  void didUpdateWidget(covariant _DeferredMarkdown oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.data != widget.data) {
-      _ready = false;
-      _markdownMetricRecorded = false;
-      _scheduleMarkdown();
-    }
-  }
-
-  void _scheduleMarkdown() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        setState(() => _ready = true);
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final shouldDefer = _shouldDefer(context);
-    if (shouldDefer && !_ready) {
-      // 占位渲染也必须跟随 selectable：占位阶段若用 SelectableText，长按依旧会被
-      // 文本选择器截走 —— 那会让"长消息"这一整类气泡的菜单时灵时不灵。
-      final placeholderStyle = TextStyle(
-        color: widget.textColor,
-        height: 1.6,
-        fontSize: 15,
-        fontWeight: FontWeight.w400,
-      );
-      return widget.selectable
-          ? SelectableText(widget.data, style: placeholderStyle)
-          : Text(widget.data, style: placeholderStyle);
-    }
-    if (!_markdownMetricRecorded) {
-      _markdownMetricRecorded = true;
-      final stopwatch = Stopwatch()..start();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        stopwatch.stop();
-        MarkdownRenderMetrics.instance.recordMarkdown(
-          durationMs: stopwatch.elapsedMilliseconds,
-        );
-      });
-    }
-    return MathMarkdown(
-      data: widget.data,
-      selectable: widget.selectable,
-      builders: widget.builders,
-      textColor: widget.textColor,
-      styleSheet: widget.styleSheet,
-    );
-  }
-}
-
-/// 错误原文折叠块：遵循统一折叠行规范（13/400 textMuted + 12px 箭头，展开 220ms easeOutCubic）。
+/// 错误原文折叠块：使用统一的顶部锚定尺寸过渡，避免长文本在交叉淡入期间
+/// 同时保留两棵子树造成跳动或额外布局。
 class _ErrorDetailBlock extends StatefulWidget {
   const _ErrorDetailBlock({required this.detail});
 
@@ -689,44 +834,23 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() => _expanded = !_expanded);
-          },
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '技术细节',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w400,
-                    height: 1.55,
-                    color: textMuted,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                AnimatedRotation(
-                  turns: _expanded ? 0.25 : 0.0,
-                  duration: NexusMotion.durationExpand(context),
-                  curve: AppTokens.curveStandard,
-                  child: Icon(
-                    Icons.keyboard_arrow_right_rounded,
-                    size: 12,
-                    color: textMuted,
-                  ),
-                ),
-              ],
+        NexusDisclosure(
+          semanticLabel: _expanded ? '技术细节已展开，点击收起' : '技术细节已收起，点击展开',
+          initiallyExpanded: false,
+          onExpansionChanged: (expanded) =>
+              setState(() => _expanded = expanded),
+          headerPadding: const EdgeInsets.symmetric(vertical: 4),
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            '技术细节',
+            style: TextStyle(
+              fontSize: AppTokens.fontSizeCaption,
+              fontWeight: FontWeight.w400,
+              height: 1.55,
+              color: textMuted,
             ),
           ),
-        ),
-        AnimatedCrossFade(
-          firstChild: const SizedBox(width: double.infinity),
-          secondChild: Container(
+          child: Container(
             width: double.infinity,
             margin: const EdgeInsets.only(top: 6),
             padding: const EdgeInsets.all(12),
@@ -738,20 +862,14 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
             child: SelectableText(
               widget.detail,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppTokens.fontSizeCaption,
                 fontWeight: FontWeight.w400,
                 height: 1.55,
                 color: textMuted,
-                fontFamily: 'JetBrains Mono',
+                fontFamily: AppTokens.fontFamilyMono,
               ),
             ),
           ),
-          crossFadeState:
-              _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          duration: NexusMotion.durationExpand(context),
-          firstCurve: AppTokens.curveStandard,
-          secondCurve: AppTokens.curveStandard,
-          sizeCurve: AppTokens.curveStandard,
         ),
       ],
     );

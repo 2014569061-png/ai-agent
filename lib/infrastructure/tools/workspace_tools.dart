@@ -7,6 +7,7 @@ import '../../domain/models.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import '../observability/unified_diff.dart';
+import '../files/bounded_text_reader.dart';
 import 'tool_registry.dart';
 
 /// 工作区沙盒辅助类：防止路径穿越超出工作区根目录
@@ -18,12 +19,15 @@ class WorkspaceSandbox {
   String? _realRoot;
 
   /// 解析并验证绝对路径，确保在根目录内
-  String resolvePath(String relativePath) {
+  String resolvePath(String relativePath, {bool allowRoot = true}) {
     // 规范化路径
     final normalizedRelative = relativePath.replaceAll('\\', '/').trim();
     final fullPath = p.normalize(p.join(rootPath, normalizedRelative));
     final normalizedRoot = p.normalize(rootPath);
     final relative = p.relative(fullPath, from: normalizedRoot);
+    if (!allowRoot && relative == '.') {
+      throw ArgumentError('禁止删除、移动或替换工作区根目录');
+    }
 
     if (relative == '..' || relative.startsWith('..${p.separator}')) {
       throw ArgumentError('非法路径访问：禁止超出当前工作区根目录');
@@ -176,7 +180,7 @@ class ReadFileTool with _FileMetadata implements AgentTool {
         );
       }
 
-      final content = await file.readAsString();
+      final content = await BoundedTextReader.read(file);
       recordFile(operation: 'read', path: path, after: content);
       final lines = const LineSplitter().convert(content);
 
@@ -209,6 +213,10 @@ class ReadFileTool with _FileMetadata implements AgentTool {
 
       return ToolResult.text(content,
           extra: {'path': path, 'totalLines': lines.length});
+    } on TextFileTooLarge catch (e) {
+      return ToolResult.failure(code: ToolCodes.tooLarge, message: '$e');
+    } on FormatException catch (e) {
+      return ToolResult.failure(code: ToolCodes.invalidFormat, message: '$e');
     } catch (e) {
       return ToolResult.failure(
         code: ToolCodes.toolError,
@@ -270,7 +278,8 @@ class WriteFileTool with _FileMetadata implements AgentTool {
     // 之后抛错必须按“可能已经写进去了”上报，让模型先读再决定是否重试。
     var committed = false;
     try {
-      final before = await file.exists() ? await file.readAsString() : '';
+      final before =
+          await file.exists() ? await BoundedTextReader.read(file) : '';
 
       // 自动创建父目录
       final parentDir = file.parent;
@@ -294,6 +303,10 @@ class WriteFileTool with _FileMetadata implements AgentTool {
         },
         effect: ToolEffect.applied,
       );
+    } on TextFileTooLarge catch (e) {
+      return ToolResult.failure(code: ToolCodes.tooLarge, message: '$e');
+    } on FormatException catch (e) {
+      return ToolResult.failure(code: ToolCodes.invalidFormat, message: '$e');
     } catch (e) {
       return ToolResult.failure(
         code: ToolCodes.toolError,
@@ -340,10 +353,10 @@ class EditFileTool with _FileMetadata implements AgentTool {
         message: 'path 必须是非空字符串',
       );
     }
-    if (target is! String || replacement is! String) {
+    if (target is! String || target.isEmpty || replacement is! String) {
       return ToolResult.failure(
         code: ToolCodes.invalidArguments,
-        message: 'targetContent 与 replacementContent 必须是字符串',
+        message: 'targetContent 必须是非空字符串，replacementContent 必须是字符串',
       );
     }
     final String fullPath;
@@ -366,8 +379,9 @@ class EditFileTool with _FileMetadata implements AgentTool {
         );
       }
 
-      final content = await file.readAsString();
-      if (!content.contains(target)) {
+      final content = await BoundedTextReader.read(file);
+      final firstMatch = content.indexOf(target);
+      if (firstMatch < 0) {
         return ToolResult.failure(
           code: ToolCodes.notFound,
           message: '编辑失败：未在文件中找到指定的 targetContent 匹配块，'
@@ -375,7 +389,13 @@ class EditFileTool with _FileMetadata implements AgentTool {
         );
       }
 
-      // 仅替换一次
+      // Detect overlapping matches too (for example 'aa' in 'aaa').
+      if (content.indexOf(target, firstMatch + 1) >= 0) {
+        return ToolResult.failure(
+          code: ToolCodes.invalidArguments,
+          message: 'targetContent 匹配不唯一，请提供更多上下文后重试',
+        );
+      }
       final newContent = content.replaceFirst(target, replacement);
       await file.writeAsString(newContent);
       committed = true;
@@ -386,6 +406,10 @@ class EditFileTool with _FileMetadata implements AgentTool {
         data: {'path': path, 'chars': newContent.length},
         effect: ToolEffect.applied,
       );
+    } on TextFileTooLarge catch (e) {
+      return ToolResult.failure(code: ToolCodes.tooLarge, message: '$e');
+    } on FormatException catch (e) {
+      return ToolResult.failure(code: ToolCodes.invalidFormat, message: '$e');
     } catch (e) {
       return ToolResult.failure(
         code: ToolCodes.toolError,
@@ -510,18 +534,9 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
           'type': 'string',
           'description': '可选的文件后缀过滤，如 ".dart" 或 ".html"'
         },
-        'pathPrefix': {
-          'type': 'string',
-          'description': '可选的相对路径前缀，限制搜索范围'
-        },
-        'offset': {
-          'type': 'integer',
-          'description': '跳过前 N 条命中，用于分页'
-        },
-        'limit': {
-          'type': 'integer',
-          'description': '返回条数上限，默认 50，最大 100'
-        },
+        'pathPrefix': {'type': 'string', 'description': '可选的相对路径前缀，限制搜索范围'},
+        'offset': {'type': 'integer', 'description': '跳过前 N 条命中，用于分页'},
+        'limit': {'type': 'integer', 'description': '返回条数上限，默认 50，最大 100'},
       },
       'required': ['query'],
     },
@@ -573,6 +588,11 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
               'dist',
               '.idea',
               '.vscode',
+              '.nexus',
+              '.gradle',
+              '.venv',
+              '__pycache__',
+              'target',
             }.contains(name)) {
               continue;
             }
@@ -580,6 +600,10 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
             continue;
           }
           if (entity is! File) continue;
+          if (BoundedTextReader.binaryExtensions
+              .contains(p.extension(entity.path).toLowerCase())) {
+            continue;
+          }
           if (ext != null && !entity.path.endsWith(ext)) continue;
           final rel = sandbox.toRelative(entity.path);
           if (pathPrefix != null &&
@@ -588,7 +612,8 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
             continue;
           }
           try {
-            final content = await entity.readAsString();
+            final content = await BoundedTextReader.read(entity,
+                maxBytes: BoundedTextReader.maxSearchBytes);
             if (!content.contains(query)) continue;
             final lines = const LineSplitter().convert(content);
             for (var i = 0; i < lines.length; i++) {
@@ -597,10 +622,19 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
                 skipped++;
                 continue;
               }
-              results.add('$rel:${i + 1}: ${lines[i].trim()}');
+              final line = lines[i].trim();
+              final preview =
+                  line.length > 500 ? '${line.substring(0, 500)}…' : line;
+              results.add('$rel:${i + 1}: $preview');
               if (results.length >= limit) return;
             }
-          } catch (_) {}
+          } catch (_) {
+            // 单个文件读不了（二进制、编码异常、权限不足）时跳过它，不能让整个
+            // 搜索失败 —— 搜索结果本来就是「尽力而为」的检索辅助。
+            // 代价：结果里不会出现这个文件，调用方无法区分「没有匹配」与
+            // 「这个文件没被搜」。若将来出现「搜不到明明存在的字符串」类问题，
+            // 这里是第一嫌疑点。
+          }
         }
       }
 
@@ -679,7 +713,7 @@ class DeleteFileTool with _FileMetadata implements AgentTool {
     }
     final String fullPath;
     try {
-      fullPath = sandbox.resolvePath(path);
+      fullPath = sandbox.resolvePath(path, allowRoot: false);
     } on ArgumentError catch (e) {
       return ToolResult.failure(
         code: ToolCodes.sandboxViolation,
@@ -695,7 +729,7 @@ class DeleteFileTool with _FileMetadata implements AgentTool {
         // 二进制文件读不成字符串也必须能删，否则删除会被前置读取卡死。
         String? before;
         try {
-          before = await file.readAsString();
+          before = await BoundedTextReader.read(file);
         } catch (_) {
           before = null;
         }
@@ -776,8 +810,8 @@ class MoveFileTool with _FileMetadata implements AgentTool {
     final String sourcePath;
     final String targetPath;
     try {
-      sourcePath = sandbox.resolvePath(oldPath);
-      targetPath = sandbox.resolvePath(newPath);
+      sourcePath = sandbox.resolvePath(oldPath, allowRoot: false);
+      targetPath = sandbox.resolvePath(newPath, allowRoot: false);
     } on ArgumentError catch (e) {
       return ToolResult.failure(
         code: ToolCodes.sandboxViolation,

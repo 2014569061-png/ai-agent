@@ -106,6 +106,18 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
     }
   }
 
+  Future<void> _openHistory() async {
+    Navigator.pop(context);
+    if (widget.onOpenHistory != null) {
+      widget.onOpenHistory!();
+      return;
+    }
+    final selected = await Navigator.of(context).push<Conversation>(
+      NexusPageRoute.detail(builder: (_) => const HistoryPage()),
+    );
+    if (selected != null) widget.onSelectConversation(selected);
+  }
+
   /// 按时间分组：今天 / 7 天内 / 30 天内 / 更早（对标 DeepSeek 抽屉）。
   List<({String label, List<Conversation> items})> _groupConversations(
       List<Conversation> list) {
@@ -172,7 +184,13 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
       if (!mounted) return;
       unawaited(HapticFeedback.selectionClick());
       await _loadData();
-    } catch (_) {}
+    } catch (_) {
+      // 置顶没写成功时列表不会重排，用户很容易读成「点了没反应」，与删除失败
+      // 的处理保持一致，给一条明确反馈。
+      if (mounted) {
+        FloatingToast.show(context, '置顶操作失败，请重试', tone: ToastTone.warning);
+      }
+    }
   }
 
   Future<void> _deleteConversation(Conversation conversation) async {
@@ -229,6 +247,16 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
               onChanged: (val) => setState(() => _filterQuery = val.trim()),
             ),
           ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: TextButton(
+                onPressed: _openHistory,
+                child: const Text('查看全部会话'),
+              ),
+            ),
+          ),
 
           // 2. 中间滚动区域
           Expanded(
@@ -269,37 +297,6 @@ class _ChatCatalogDrawerState extends State<ChatCatalogDrawer> {
                     ),
                   ],
 
-                // 分组之外保留一个低调入口，避免收藏 / 批量管理能力失联
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                    ),
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      if (widget.onOpenHistory != null) {
-                        widget.onOpenHistory!();
-                      } else {
-                        final selected =
-                            await Navigator.of(context).push<Conversation>(
-                          NexusPageRoute.detail(
-                              builder: (_) => const HistoryPage()),
-                        );
-                        if (selected != null) {
-                          widget.onSelectConversation(selected);
-                        }
-                      }
-                    },
-                    child: const Text('查看全部会话',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w400,
-                          color: AppPalette.brand,
-                        )),
-                  ),
-                ),
                 const SizedBox(height: 12),
                 Divider(height: 1, thickness: 0.5, color: hairline),
                 const _SectionHeader(title: '工作区与能力'),
@@ -641,7 +638,7 @@ class _DrawerSearchBarState extends State<_DrawerSearchBar> {
                 color: textColor,
               ),
               decoration: InputDecoration(
-                hintText: '搜索对话内容...',
+                hintText: '搜索最近会话标题...',
                 hintStyle: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
@@ -747,8 +744,6 @@ class _HistoryTileState extends State<_HistoryTile> {
                 : Colors.black.withValues(alpha: 0.04))
             : Colors.transparent);
 
-    final showMore = _isHovered || widget.isSelected;
-
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
@@ -798,25 +793,12 @@ class _HistoryTileState extends State<_HistoryTile> {
                       ),
                     ),
                   ),
-                  if (showMore)
-                    GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () {
-                        if (widget.onMoreTap != null) {
-                          widget.onMoreTap!();
-                        } else {
-                          widget.onLongPress?.call();
-                        }
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(4),
-                        child: Icon(
-                          Icons.more_horiz_rounded,
-                          size: 18,
-                          color: textMuted,
-                        ),
-                      ),
-                    ),
+                  IconButton(
+                    tooltip: '更多会话操作',
+                    onPressed: widget.onMoreTap ?? widget.onLongPress,
+                    icon: Icon(Icons.more_horiz_rounded,
+                        size: 18, color: textMuted),
+                  ),
                 ],
               ),
             ),

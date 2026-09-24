@@ -84,4 +84,44 @@ void main() {
     expect(offsets, [0, 50]);
     expect(find.text('加载更多'), findsNothing);
   });
+
+  testWidgets('history search debounces rapid text changes', (tester) async {
+    final now = DateTime(2026, 9, 17, 12);
+    var loadCount = 0;
+    final conversations = [
+      Conversation(
+        id: 'search-result',
+        title: 'Alpha Beta',
+        agentId: null,
+        mode: 'chat',
+        isPinned: false,
+        isFavorite: false,
+        tagsJson: '[]',
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ];
+
+    await tester.pumpWidget(MaterialApp(
+      home: HistoryPage(
+        loadConversations: () async {
+          loadCount++;
+          return conversations;
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(loadCount, 1);
+
+    final searchField = find.byType(TextField).first;
+    await tester.enterText(searchField, 'a');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(searchField, 'alpha');
+    await tester.pump(const Duration(milliseconds: 219));
+    expect(loadCount, 1);
+
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pumpAndSettle();
+    expect(loadCount, 2);
+  });
 }

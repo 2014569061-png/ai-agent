@@ -186,7 +186,7 @@ class _CollaborationTimelinePageState
                           child: Text(
                             '协作分析完成，已形成汇总决策，等待执行授权',
                             style: TextStyle(
-                              fontSize: 12.5,
+                              fontSize: AppTokens.fontSizeMeta,
                               fontWeight: FontWeight.w500,
                               color: AppPalette.warning,
                             ),
@@ -315,14 +315,14 @@ class _CollaborationTimelinePageState
               Text(
                 '${run.mode.label} · 第 ${run.currentRound}/${run.maxRounds} 轮',
                 style: const TextStyle(
-                  fontSize: 14,
+                  fontSize: AppTokens.fontSizeSubhead,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               Text(
                 '$percent% 预算占用',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTokens.fontSizeFootnote,
                   fontWeight: FontWeight.w500,
                   color: ratio > 0.8
                       ? AppPalette.danger
@@ -409,7 +409,7 @@ class _CollaborationTimelinePageState
                 child: Text(
                   role.label,
                   style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w500),
+                      fontSize: AppTokens.fontSizeBodySmall, fontWeight: FontWeight.w500),
                 ),
               ),
               NexusStatusPill.fromString(agent.status, isCompact: true),
@@ -418,13 +418,13 @@ class _CollaborationTimelinePageState
           const SizedBox(height: 6),
           Text(
             agent.outputSummary ?? agent.failureReason ?? '正在阅读工作区执行分析…',
-            style: const TextStyle(fontSize: 12.5, height: 1.35),
+            style: const TextStyle(fontSize: AppTokens.fontSizeMeta, height: 1.35),
           ),
           const SizedBox(height: 6),
           Text(
             '输入 ${agent.inputTokens} Token · 输出 ${agent.outputTokens} Token',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: AppTokens.fontSizeBadge,
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),
@@ -443,16 +443,16 @@ class _CollaborationTimelinePageState
         leading: const Icon(Icons.inventory_2_outlined, size: 20),
         title: Text(artifact.type,
             style:
-                const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500)),
+                const TextStyle(fontSize: AppTokens.fontSizeBodySmall, fontWeight: FontWeight.w500)),
         subtitle: Text('置信度：$confidence%',
             style:
-                const TextStyle(fontSize: 11.5, color: AppTheme.textSecondary)),
+                const TextStyle(fontSize: AppTokens.fontSizeSubcaption, color: AppTheme.textSecondary)),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
             child: SelectableText(
               const JsonEncoder.withIndent('  ').convert(payload),
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+              style: const TextStyle(fontSize: AppTokens.fontSizeFootnote, fontFamily: 'monospace'),
             ),
           ),
         ],
@@ -485,7 +485,7 @@ class _CollaborationTimelinePageState
                     ? '主 Agent 汇总发言'
                     : (message.senderAgentRunId ?? '智能体消息'),
                 style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: AppTokens.fontSizeFootnote,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -494,7 +494,7 @@ class _CollaborationTimelinePageState
           const SizedBox(height: 6),
           SelectableText(
             message.content,
-            style: const TextStyle(fontSize: 13, height: 1.35),
+            style: const TextStyle(fontSize: AppTokens.fontSizeCaption, height: 1.35),
           ),
         ],
       ),
@@ -509,12 +509,12 @@ class _CollaborationTimelinePageState
         children: [
           SelectableText(
             result.summary,
-            style: const TextStyle(fontSize: 13.5, height: 1.4),
+            style: const TextStyle(fontSize: AppTokens.fontSizeBodySmall, height: 1.4),
           ),
           if (result.findings.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text('关键发现',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                style: TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
             ...result.findings.map((f) => Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 4),
@@ -528,7 +528,7 @@ class _CollaborationTimelinePageState
                               f.detail.isEmpty
                                   ? f.title
                                   : '${f.title}：${f.detail}',
-                              style: const TextStyle(fontSize: 12.5))),
+                              style: const TextStyle(fontSize: AppTokens.fontSizeMeta))),
                     ],
                   ),
                 )),
@@ -537,7 +537,7 @@ class _CollaborationTimelinePageState
             const SizedBox(height: 12),
             const Text('分歧与权衡取舍',
                 style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTokens.fontSizeCaption,
                     fontWeight: FontWeight.w500,
                     color: AppPalette.warning)),
             const SizedBox(height: 4),
@@ -550,7 +550,7 @@ class _CollaborationTimelinePageState
                           style: TextStyle(fontWeight: FontWeight.w500)),
                       Expanded(
                           child: SelectableText(d,
-                              style: const TextStyle(fontSize: 12.5))),
+                              style: const TextStyle(fontSize: AppTokens.fontSizeMeta))),
                     ],
                   ),
                 )),
@@ -559,7 +559,7 @@ class _CollaborationTimelinePageState
             const SizedBox(height: 12),
             const Text('风险与证据缺口',
                 style: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTokens.fontSizeCaption,
                     fontWeight: FontWeight.w500,
                     color: AppPalette.warning)),
             const SizedBox(height: 4),
@@ -572,7 +572,7 @@ class _CollaborationTimelinePageState
                           style: TextStyle(fontWeight: FontWeight.w500)),
                       Expanded(
                           child: SelectableText(risk,
-                              style: const TextStyle(fontSize: 12.5))),
+                              style: const TextStyle(fontSize: AppTokens.fontSizeMeta))),
                     ],
                   ),
                 )),

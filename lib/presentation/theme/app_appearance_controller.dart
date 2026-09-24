@@ -21,8 +21,10 @@ abstract final class AppAppearanceController {
       ? .8
       : .45;
 
-  static GlassIntensity get resolvedGlassIntensity {
-    final v = glassIntensity.value;
+  static GlassIntensity get resolvedGlassIntensity =>
+      materialForValue(glassIntensity.value);
+
+  static GlassIntensity materialForValue(double v) {
     if (v <= 0.1) return GlassIntensity.flat;
     if (v <= 0.5) return GlassIntensity.frosted;
     return GlassIntensity.liquid;
@@ -32,7 +34,7 @@ abstract final class AppAppearanceController {
     final prefs = shared ?? await SharedPreferences.getInstance();
     glassIntensity.value =
         (prefs.getDouble(glassKey) ?? defaultGlassIntensity).clamp(0.0, 1.0);
-    effects.value = prefs.getString(effectsKey) ?? 'full';
+    effects.value = _validEffect(prefs.getString(effectsKey) ?? 'full');
     fontScale.value = (prefs.getDouble(fontScaleKey) ?? 1.0).clamp(0.88, 1.28);
   }
 
@@ -51,9 +53,13 @@ abstract final class AppAppearanceController {
     await setGlass(val);
   }
 
+  static String _validEffect(String value) =>
+      const {'full', 'reduced', 'off'}.contains(value) ? value : 'full';
+
   static Future<void> setEffects(String value) async {
-    effects.value = value;
-    await (await SharedPreferences.getInstance()).setString(effectsKey, value);
+    effects.value = _validEffect(value);
+    await (await SharedPreferences.getInstance())
+        .setString(effectsKey, effects.value);
   }
 
   static Future<void> setFontScale(double value) async {

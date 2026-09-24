@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../domain/models.dart';
 import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
@@ -57,7 +59,13 @@ class SkillsReadTool implements AgentTool {
     final body = store.readBody(pack, maxChars: maxChars);
     if (body == null) {
       return ToolResult.failure(
-          code: ToolCodes.notFound, message: 'Skill 正文不存在或无法读取：$key');
+        code: store.isFrozen(pack)
+            ? ToolCodes.nextTurnRequired
+            : ToolCodes.notFound,
+        message: store.isFrozen(pack)
+            ? 'Skill 完整性校验失败，本轮冻结读取；请重新安装或更新后再试'
+            : 'Skill 正文不存在或无法读取：$key',
+      );
     }
     return ToolResult.text(body,
         extra: {'skill': pack.id, 'name': pack.name, 'maxChars': maxChars});
@@ -93,10 +101,19 @@ class SkillsReadResourceTool implements AgentTool {
           code: ToolCodes.invalidArguments,
           message: '缺少 skill 或 resource path');
     }
+    final rawPath = path.replaceAll('\\', '/');
+    final rawParts = rawPath.split('/');
+    if (rawPath.startsWith('/') ||
+        (rawPath.length >= 2 && rawPath.codeUnitAt(1) == 0x3a) ||
+        rawParts.contains('..') ||
+        rawPath.contains('\u0000')) {
+      return ToolResult.failure(
+        code: ToolCodes.sandboxViolation,
+        message: 'Skill 资源路径越出安装目录，本次未读取',
+      );
+    }
     final normalizedPath = p.normalize(path.replaceAll('\\', p.separator));
-    if (p.isAbsolute(normalizedPath) ||
-        normalizedPath == '.' ||
-        normalizedPath.split(p.separator).contains('..')) {
+    if (p.isAbsolute(normalizedPath) || normalizedPath == '.') {
       return ToolResult.failure(
         code: ToolCodes.sandboxViolation,
         message: 'Skill 资源路径越出安装目录，本次未读取',
@@ -122,6 +139,29 @@ class SkillsReadResourceTool implements AgentTool {
       return ToolResult.failure(
         code: ToolCodes.nextTurnRequired,
         message: 'Skill 安装状态无法确认，本轮冻结读取；请在下一轮重新安装或更新后再试',
+      );
+    }
+    final extension = p.extension(normalizedPath).toLowerCase();
+    if (const {'.png', '.jpg', '.jpeg', '.webp'}.contains(extension)) {
+      final bytes = store.readResourceBytes(pack, normalizedPath);
+      if (bytes == null) {
+        return ToolResult.failure(
+            code: ToolCodes.notFound, message: 'Skill 图片资源不存在或路径非法：$path');
+      }
+      final mimeType = switch (extension) {
+        '.png' => 'image/png',
+        '.jpg' || '.jpeg' => 'image/jpeg',
+        _ => 'image/webp',
+      };
+      return ToolResult.success(
+        message: '已读取图片资源：$normalizedPath',
+        data: {
+          'skill': pack.id,
+          'path': normalizedPath,
+          'mimeType': mimeType,
+          'bytes': bytes.length,
+          'base64': base64Encode(bytes),
+        },
       );
     }
     final body = store.readResource(pack, normalizedPath, maxChars: maxChars);

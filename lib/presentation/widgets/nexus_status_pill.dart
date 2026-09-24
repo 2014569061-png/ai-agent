@@ -73,12 +73,12 @@ class NexusStatusPill extends StatelessWidget {
       NexusStatusType.draft => (
           '待确认',
           Icons.pending_outlined,
-          AppPalette.brand,
+          AppPalette.brandTextFor(isDark),
         ),
       NexusStatusType.running => (
           '执行中',
           Icons.play_circle_outline_rounded,
-          AppPalette.brand,
+          AppPalette.brandTextFor(isDark),
         ),
       NexusStatusType.paused => (
           '已暂停',

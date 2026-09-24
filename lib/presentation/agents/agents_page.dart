@@ -117,7 +117,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
         ),
         child: FloatingActionButton.extended(
           onPressed: () => _openAgentEditor(),
-          tooltip: AppStrings.newAgent,
+          tooltip: '手动创建 Agent',
           backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           elevation: 0,
@@ -128,8 +128,8 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
             borderRadius: BorderRadius.circular(AppTokens.radiusPill),
           ),
           icon: const Icon(Icons.add_rounded, size: 20),
-          label: const Text(AppStrings.newAgent,
-              style: TextStyle(fontWeight: FontWeight.w600)),
+          label:
+              const Text('手动创建', style: TextStyle(fontWeight: FontWeight.w600)),
         ),
       ),
       body: FutureBuilder<List<Agent>>(
@@ -149,10 +149,11 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
               );
             }
             return ListView.separated(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                 // 首项是「描述生成」入口，其余是已有 Agent。
                 itemCount: agents.length + 1,
-                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: AppTokens.sp3),
                 itemBuilder: (context, index) {
                   if (index == 0) {
                     return _DescribeEntryCard(onTap: _createFromDescription);
@@ -184,7 +185,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
                             agent.name,
                             style: const TextStyle(
                               fontWeight: FontWeight.w600,
-                              fontSize: 15,
+                              fontSize: AppTokens.fontSizeBody,
                             ),
                           ),
                           subtitle: Text(
@@ -192,7 +193,7 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: AppTokens.fontSizeCaption,
                               color: isDark
                                   ? AppPalette.darkTextMuted
                                   : AppPalette.lightTextMuted,
@@ -252,11 +253,13 @@ class _DescribeEntryCard extends StatelessWidget {
         ),
         title: const Text(
           '用一句话描述，让 AI 生成',
-          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+          style: TextStyle(
+              fontWeight: FontWeight.w600, fontSize: AppTokens.fontSizeBody),
         ),
         subtitle: Text(
           '生成角色、系统指令与工具范围，你确认后再保存',
-          style: TextStyle(fontSize: 13, color: textMuted),
+          style:
+              TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
         ),
       ),
     );
@@ -334,12 +337,15 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
           Text(
             '用一句话描述这个智能体',
             style: TextStyle(
-                fontSize: 15, fontWeight: FontWeight.w500, color: textColor),
+                fontSize: AppTokens.fontSizeBody,
+                fontWeight: FontWeight.w500,
+                color: textColor),
           ),
           const SizedBox(height: 6),
           Text(
             '例如：帮我审代码，重点看空指针和边界条件',
-            style: TextStyle(fontSize: 12, color: textMuted),
+            style: TextStyle(
+                fontSize: AppTokens.fontSizeFootnote, color: textMuted),
           ),
           const SizedBox(height: 14),
           TextField(
@@ -348,10 +354,14 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
             autofocus: true,
             maxLines: 3,
             minLines: 3,
-            style: TextStyle(fontSize: 14, height: 1.4, color: textColor),
+            style: TextStyle(
+                fontSize: AppTokens.fontSizeSubhead,
+                height: 1.4,
+                color: textColor),
             decoration: InputDecoration(
               hintText: '你希望它替你做的那件事…',
-              hintStyle: TextStyle(fontSize: 13, color: textMuted),
+              hintStyle: TextStyle(
+                  fontSize: AppTokens.fontSizeCaption, color: textMuted),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(AppTokens.radiusControl),
               ),
@@ -361,7 +371,9 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
           if (_error != null) ...[
             const SizedBox(height: 10),
             Text(_error!,
-                style: const TextStyle(fontSize: 12, color: AppPalette.danger)),
+                style: const TextStyle(
+                    fontSize: AppTokens.fontSizeFootnote,
+                    color: AppPalette.danger)),
           ],
           const SizedBox(height: 16),
           Row(
@@ -405,7 +417,8 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
                         )
                       : const Text('生成草稿',
                           style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w500)),
+                              fontSize: AppTokens.fontSizeSubhead,
+                              fontWeight: FontWeight.w500)),
                 ),
               ),
             ],
@@ -413,7 +426,8 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
           const SizedBox(height: 10),
           Text(
             '生成结果只作为编辑器的预填内容，不会自动保存，也不会授予任何权限。',
-            style: TextStyle(fontSize: 11.5, color: textMuted),
+            style: TextStyle(
+                fontSize: AppTokens.fontSizeSubcaption, color: textMuted),
           ),
         ],
       ),

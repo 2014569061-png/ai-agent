@@ -182,8 +182,8 @@ void main() {
     });
   });
 
-  group('会话指标条：键盘弹起时收缩为 2 组（省出键盘上方空间）', () {
-    testWidgets('键盘收起 → maxGroups 不收缩', (tester) async {
+  group('会话指标条：键盘开合均保持单行摘要', () {
+    testWidgets('键盘收起 → 保持摘要', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -192,10 +192,11 @@ void main() {
 
       final bar =
           tester.widget<SessionMetricsBar>(find.byType(SessionMetricsBar));
-      expect(bar.maxGroups, isNull);
+      expect(bar.maxGroups, 1);
+      expect(bar.summaryLabel, isNotNull);
     });
 
-    testWidgets('键盘弹出 → maxGroups 收缩为 2', (tester) async {
+    testWidgets('键盘弹出 → 仍保持摘要', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -205,7 +206,7 @@ void main() {
         tester
             .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
             .maxGroups,
-        isNull,
+        1,
       );
 
       tester.view.viewInsets = const FakeViewPadding(bottom: 336);
@@ -216,8 +217,8 @@ void main() {
         tester
             .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
             .maxGroups,
-        2,
-        reason: '键盘弹起时指标条应收窄，避免挤占键盘上方空间',
+        1,
+        reason: '键盘开合不恢复详细指标，避免挤占键盘上方空间',
       );
     });
   });

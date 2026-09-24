@@ -6,6 +6,8 @@ import 'package:mobile_agent/presentation/chat/widgets/plan_panel.dart';
 import 'package:mobile_agent/presentation/chat/widgets/tool_approval_sheet.dart';
 import 'package:mobile_agent/presentation/settings/settings_components.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_page_header.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_sheet.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -84,6 +86,7 @@ void main() {
             body: ToolApprovalSheet(
               call: call,
               risk: ToolRisk.safe,
+              allowSessionTrust: false,
               allowPersistentTrust: false,
             ),
           ),
@@ -94,7 +97,38 @@ void main() {
 
       expect(find.text('拒绝'), findsOneWidget);
       expect(find.text('确认执行'), findsOneWidget);
-      expect(find.text('仅本次允许'), findsNothing);
+      expect(find.text('本会话允许'), findsNothing);
+      expect(find.text('始终允许'), findsNothing);
+    });
+
+    testWidgets('approval sheet offers session trust for confirmation tools',
+        (tester) async {
+      const call = ToolCall(
+        id: 'call-terminal',
+        name: 'terminal',
+        arguments: {'command': 'ls -la'},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: const Scaffold(
+            body: ToolApprovalSheet(
+              call: call,
+              risk: ToolRisk.requiresConfirmation,
+              // 与会话级授权分开传入，模拟 promptToolApproval 的实际取值。
+              allowSessionTrust: true,
+              allowPersistentTrust: false,
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      // 会话级授权必须可达，否则用户只能对同一条命令反复确认。
+      expect(find.text('本会话允许'), findsOneWidget);
+      // 终端这类高影响工具不提供持久放行。
       expect(find.text('始终允许'), findsNothing);
     });
 
@@ -188,6 +222,73 @@ void main() {
       expect(find.byIcon(Icons.timer_off_outlined), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('showNexusSheet is barrierDismissible by default',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () => showNexusSheet<void>(
+                  context: context,
+                  builder: (ctx) => const SizedBox(height: 100, child: Text('Sheet Content')),
+                ),
+                child: const Text('Open'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sheet Content'), findsOneWidget);
+
+      // Tap outside the bottom sheet (top-left of screen)
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sheet Content'), findsNothing);
+    });
+
+    testWidgets('NexusPageHeader back button satisfies >= 48dp touch constraints',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) => const Scaffold(
+                        appBar: NexusPageHeader(title: 'SubPage'),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('Go'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Go'));
+      await tester.pumpAndSettle();
+
+      final backBtnFinder = find.byTooltip('返回');
+      expect(backBtnFinder, findsOneWidget);
+
+      final size = tester.getSize(backBtnFinder);
+      expect(size.width, greaterThanOrEqualTo(48.0));
+      expect(size.height, greaterThanOrEqualTo(48.0));
     });
   });
 }

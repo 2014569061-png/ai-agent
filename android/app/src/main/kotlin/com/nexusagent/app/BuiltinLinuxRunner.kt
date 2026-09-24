@@ -3,9 +3,11 @@ package com.nexusagent.app
 import android.content.Context
 import android.net.ConnectivityManager
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.Process as AndroidProcess
+import android.os.storage.StorageManager
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -335,6 +337,8 @@ class BuiltinLinuxRunner(context: Context) {
             "/sys",
             "-b",
             bind,
+            // 共享存储：仅在用户授予「所有文件访问权限」后挂载（见 sharedStorageBinds）。
+            *sharedStorageBinds(),
             "-w",
             "/workspace",
             "/bin/sh",
@@ -361,6 +365,23 @@ class BuiltinLinuxRunner(context: Context) {
                 if (ownerToken != null) put("NEXUS_DAEMON_OWNER", ownerToken)
             }
         }
+    }
+
+    /**
+     * 共享存储绑定：仅在 Android 11+ 且用户已授予「所有文件访问权限」时挂载，
+     * 让 Alpine 内可以直接用 /sdcard 或 /storage/emulated/0 访问手机文件。
+     * 未授权时不挂载（挂了也读不到），由 Dart 侧的环境说明提示用户去授权，
+     * 避免模型换着路径反复重试、空耗执行预算。
+     */
+    private fun sharedStorageBinds(): Array<String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyArray()
+        if (!Environment.isExternalStorageManager()) return emptyArray()
+        val storageManager = appContext.getSystemService(StorageManager::class.java)
+            ?: return emptyArray()
+        val storage = storageManager.primaryStorageVolume.directory ?: return emptyArray()
+        if (!storage.isDirectory) return emptyArray()
+        val path = storage.absolutePath
+        return arrayOf("-b", path, "-b", "$path:/sdcard")
     }
 
     /** 把当前网络的 DNS 写入 rootfs 的 resolv.conf；Android 没有宿主 resolv.conf 可绑。 */

@@ -1,7 +1,5 @@
 import '../theme/app_palette.dart';
 import 'dart:convert';
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,6 +41,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _autoBackup = prefs.getBool(_autoBackupKey) ?? false;
       _lastBackupTime = prefs.getString(_lastBackupKey) ?? '暂无备份记录';
@@ -86,22 +85,31 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
 
   Future<void> _restoreAutomaticBackup() async {
     if (!mounted) return;
-    final result = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['nexusauto'],
-      withData: true,
     );
-    if (result == null || result.files.isEmpty) return;
+    if (picked.isEmpty) return;
     try {
-      final picked = result.files.first;
-      final content = picked.bytes != null
-          ? utf8.decode(picked.bytes!)
-          : await File(picked.path!).readAsString();
+      final file = picked.first;
+      if (await file.xFile.length() > VaultLimits.maxCipherBytes) {
+        throw const FormatException('备份文件过大');
+      }
+      if (!mounted) return;
+      final confirmed = await showConfirmAction(context,
+          title: '覆盖恢复本地数据？',
+          message: '当前数据将被备份替换，请先保存现有数据。',
+          confirmLabel: '恢复',
+          isDanger: true,
+          requiredKeyword: '覆盖导入');
+      if (!confirmed || !mounted) return;
+      // file_picker 13 已移除 withData，字节按需读取。
+      final content = utf8.decode(await file.readAsBytes());
       final plaintext = await LocalCryptoService().decryptString(content);
       final json = jsonDecode(plaintext) as Map<String, dynamic>;
       final db = await ref.read(databaseProvider.future);
-      await restoreVault(db, json);
-      if (mounted) FloatingToast.show(context, '自动备份已恢复');
+      final report = await restoreVault(db, json);
+      if (mounted) FloatingToast.show(context, report.summary);
     } catch (e) {
       if (mounted) FloatingToast.show(context, '自动备份恢复失败: $e');
     }
@@ -111,7 +119,8 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
     final confirmed = await showConfirmAction(
       context,
       title: '危险操作：清除本地核心数据？',
-      message: '此操作将永久抹掉本机数据库、Provider 配置、MCP 配置与本地密钥，操作不可撤销，请确保已事先导出备份。请输入确认词继续：',
+      message:
+          '此操作将永久抹掉本机数据库、Provider 配置、MCP 配置与本地密钥，操作不可撤销，请确保已事先导出备份。请输入确认词继续：',
       confirmLabel: '确认清空',
       cancelLabel: '取消',
       isDanger: true,
@@ -161,100 +170,100 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
         loading: _loading,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+          children: [
+            const SettingsSectionTitle('备份与迁移'),
+            SettingsGroupCard(
               children: [
-                const SettingsSectionTitle('备份与迁移'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      icon: Icons.shield_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '隐私保险箱 (加密导出/导入)',
-                      subtitle: '端到端高强度主密码加密备份',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          NexusPageRoute.settingsPage(
-                            builder: (_) => const VaultPage(),
-                          ),
-                        );
-                      },
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.backup_rounded,
-                      iconColor: AppPalette.success,
-                      title: '自动备份',
-                      subtitle: '应用空闲时自动创建加密全量快照',
-                      trailingWidget: SettingsSwitch(
-                        value: _autoBackup,
-                        onChanged: _toggleAutoBackup,
+                SettingsTile(
+                  icon: Icons.shield_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '隐私保险箱 (加密导出/导入)',
+                  subtitle: '端到端高强度主密码加密备份',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      NexusPageRoute.settingsPage(
+                        builder: (_) => const VaultPage(),
                       ),
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.history_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '最近备份时间',
-                      subtitle: _lastBackupTime,
-                      trailingWidget: IconButton(
-                        icon: const Icon(Icons.refresh_rounded, size: 20),
-                        tooltip: '立即备份',
-                        onPressed: _createManualBackup,
-                      ),
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.restore_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '恢复自动备份',
-                      subtitle: '选择 .nexusauto 文件并恢复本机数据',
-                      onTap: _restoreAutomaticBackup,
-                    ),
-                  ],
+                    );
+                  },
                 ),
-                const SettingsSectionTitle('备份内容说明'),
-                SettingsGroupCard(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text(
-                      '备份包将完整包含以下内容：',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 13,
-                        color: theme.colorScheme.onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '• 对话记录：全部历史会话与关联消息\n'
-                      '• 长期记忆：跨会话的事实与个性化记忆条目\n'
-                      '• Agent 与预设：自定义助手模型设定与参数配置\n'
-                      '• 提示词模板：自定义 Prompt 库内容\n'
-                      '• MCP 配置：服务器连接端点与调用偏好\n'
-                      '• Provider 密钥：保险箱模式下支持主密码全量加密封存',
-                      style: TextStyle(
-                        height: 1.6,
-                        fontSize: 12,
-                        color: settingsMutedColor(context),
-                      ),
-                    ),
-                  ],
+                const SettingsDivider(),
+                SettingsTile(
+                  icon: Icons.backup_rounded,
+                  iconColor: AppPalette.success,
+                  title: '自动备份',
+                  subtitle: '应用空闲时自动创建加密全量快照',
+                  trailingWidget: SettingsSwitch(
+                    value: _autoBackup,
+                    onChanged: _toggleAutoBackup,
+                  ),
                 ),
-                const SettingsSectionTitle('危险区域'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      icon: Icons.delete_forever_rounded,
-                      iconColor: AppPalette.danger,
-                      title: '清除本地全部数据',
-                      titleColor: AppPalette.danger,
-                      subtitle: '永久抹除本机数据库中的所有数据（不可撤销）',
-                      onTap: _clearLocalData,
-                    ),
-                  ],
+                const SettingsDivider(),
+                SettingsTile(
+                  icon: Icons.history_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '最近备份时间',
+                  subtitle: _lastBackupTime,
+                  trailingWidget: IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    tooltip: '立即备份',
+                    onPressed: _createManualBackup,
+                  ),
+                ),
+                const SettingsDivider(),
+                SettingsTile(
+                  icon: Icons.restore_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '恢复自动备份',
+                  subtitle: '选择 .nexusauto 文件并恢复本机数据',
+                  onTap: _restoreAutomaticBackup,
                 ),
               ],
             ),
+            const SettingsSectionTitle('备份内容说明'),
+            SettingsGroupCard(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Text(
+                  '备份包将完整包含以下内容：',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '• 对话记录：全部历史会话与关联消息\n'
+                  '• 长期记忆：跨会话的事实与个性化记忆条目\n'
+                  '• Agent 与预设：自定义助手模型设定与参数配置\n'
+                  '• 提示词模板：自定义 Prompt 库内容\n'
+                  '• MCP 配置：服务器连接端点与调用偏好\n'
+                  '• Provider 密钥：保险箱模式下支持主密码全量加密封存',
+                  style: TextStyle(
+                    height: 1.6,
+                    fontSize: 12,
+                    color: settingsMutedColor(context),
+                  ),
+                ),
+              ],
+            ),
+            const SettingsSectionTitle('危险区域'),
+            SettingsGroupCard(
+              children: [
+                SettingsTile(
+                  icon: Icons.delete_forever_rounded,
+                  iconColor: AppPalette.danger,
+                  title: '清除本地全部数据',
+                  titleColor: AppPalette.danger,
+                  subtitle: '永久抹除本机数据库中的所有数据（不可撤销）',
+                  onTap: _clearLocalData,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

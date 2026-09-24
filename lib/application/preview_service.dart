@@ -62,8 +62,10 @@ class PreviewService {
     );
     final ready = await (_waitForPortOverride ?? _waitForPort)(port);
     if (!ready) {
-      await _terminal.cancelJob(job.jobId);
-      throw StateError('预览端口 $port 未就绪');
+      final stopped = await _terminal.cancelJob(job.jobId);
+      throw StateError(stopped
+          ? '预览端口 $port 未就绪，启动作业已停止'
+          : '预览端口 $port 未就绪，作业停止状态未知（作业 ${job.jobId}）');
     }
     _active = PreviewSession(
       projectId: projectId,
@@ -80,7 +82,9 @@ class PreviewService {
   Future<void> stop() async {
     final current = _active;
     if (current == null) return;
-    await _terminal.cancelJob(current.jobId);
+    if (!await _terminal.cancelJob(current.jobId)) {
+      throw StateError('无法确认预览作业已停止：${current.jobId}');
+    }
     _active = null;
   }
 
@@ -122,7 +126,10 @@ class PreviewService {
           if (!addr.isLoopback) return addr.address;
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      // 网络接口枚举在 Web、模拟器或权限受限环境中可能失败；回退到 loopback，
+      // 让预览仍能在本机工作，而不是把网络探测错误扩散给页面。
+    }
     return '127.0.0.1';
   }
 }

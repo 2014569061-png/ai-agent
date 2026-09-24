@@ -38,7 +38,7 @@ class _LanguagePageState extends State<LanguagePage> {
     if (mounted) {
       FloatingToast.show(
         context,
-        code == 'en' ? 'Language switched to English (Partial)' : '语言设置已更新',
+        code == 'en' ? '语言已切换（English 未完整翻译）' : '语言设置已更新',
       );
     }
   }
@@ -81,25 +81,10 @@ class _LanguagePageState extends State<LanguagePage> {
                       icon: Icons.language_rounded,
                       iconColor: AppPalette.success,
                       title: 'English',
-                      subtitle: 'Partial translation in progress',
-                      trailingBadge: Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).brightness == Brightness.dark
-                              ? AppPalette.darkHairline
-                              : AppPalette.lightHairline,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '部分翻译',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: settingsMutedColor(context),
-                          ),
-                        ),
-                      ),
+                      // 此前写的是「Partial translation in progress」，暗示翻译仍在
+                      // 推进。已确认不打算完善英文，因此改成陈述事实，避免承诺一件
+                      // 不会发生的事。
+                      subtitle: '未完整翻译 · 暂不计划完善',
                       selected: _current == 'en',
                       onTap: () => _select('en'),
                     ),

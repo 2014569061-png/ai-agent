@@ -44,6 +44,16 @@ ContextWindow _windowWithBudget(int available, {int? maxToolResultChars}) =>
     );
 
 void main() {
+  test('counts fixed tool-definition tokens against the message budget', () {
+    final window = ContextWindow(maxTokens: 180, fixedTokens: 90);
+    final messages = [_user(_repeat('较早问题')), _user(_repeat('当前问题'))];
+    final applied = window.apply(messages);
+    expect(
+      applied.any((message) => message.text == ContextWindow.compactionNotice),
+      isTrue,
+    );
+  });
+
   test('keeps messages unchanged within budget', () {
     final window = ContextWindow(maxTokens: 1000);
     final messages = [_user('第一条'), _assistant('回复'), _user('第二条')];

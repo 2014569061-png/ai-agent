@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../theme/app_palette.dart';
+import '../motion/motion_preferences.dart';
 import '../theme/app_tokens.dart';
 
 /// 液态玻璃强度档位。
@@ -103,10 +104,28 @@ class LiquidGlass extends StatefulWidget {
 class _LiquidGlassState extends State<LiquidGlass> {
   /// 每个实例独占一个 FragmentShader，避免多面板共用导致 uniform 串扰。
   ui.FragmentShader? _shader;
+  bool _shaderLoading = false;
+  MotionLevel _motionLevel = MotionLevel.full;
+
+  GlassIntensity get _effectiveIntensity => switch (_motionLevel) {
+        MotionLevel.off => GlassIntensity.flat,
+        MotionLevel.reduced when widget.intensity == GlassIntensity.liquid =>
+          GlassIntensity.frosted,
+        _ => widget.intensity,
+      };
+
+  double get _effectiveBlur => _motionLevel == MotionLevel.reduced
+      ? widget.blurSigma.clamp(0.0, 8.0)
+      : widget.blurSigma;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _motionLevel = MotionPreferences.levelOf(context);
+    if (_effectiveIntensity != GlassIntensity.liquid) {
+      _shader?.dispose();
+      _shader = null;
+    }
     _ensureShader();
   }
 
@@ -126,15 +145,25 @@ class _LiquidGlassState extends State<LiquidGlass> {
   }
 
   void _ensureShader() {
-    if (widget.intensity != GlassIntensity.liquid || _shader != null) return;
+    if (_effectiveIntensity != GlassIntensity.liquid ||
+        _shader != null ||
+        _shaderLoading) {
+      return;
+    }
     // 先查后端能力，避免白跑一次资源加载。
     if (!ui.ImageFilter.isShaderFilterSupported) return;
+    _shaderLoading = true;
     unawaited(_loadShader());
   }
 
   Future<void> _loadShader() async {
     final program = await _GlassShaderProgram.resolve();
-    if (!mounted || program == null) return;
+    _shaderLoading = false;
+    if (!mounted ||
+        program == null ||
+        _effectiveIntensity != GlassIntensity.liquid) {
+      return;
+    }
     setState(() => _shader = program.fragmentShader());
   }
 
@@ -143,7 +172,7 @@ class _LiquidGlassState extends State<LiquidGlass> {
     final radius =
         widget.borderRadius ?? BorderRadius.circular(AppTokens.radiusModal);
 
-    if (widget.intensity == GlassIntensity.flat) {
+    if (_effectiveIntensity == GlassIntensity.flat) {
       return _buildShell(context, radius, null);
     }
 
@@ -162,7 +191,7 @@ class _LiquidGlassState extends State<LiquidGlass> {
   /// 优先返回折射滤镜；任何一环不满足即退回高斯模糊。
   ui.ImageFilter _resolveFilter(Size? size) {
     final shader = _shader;
-    if (widget.intensity == GlassIntensity.liquid &&
+    if (_effectiveIntensity == GlassIntensity.liquid &&
         shader != null &&
         size != null &&
         size.width > 0 &&
@@ -184,8 +213,8 @@ class _LiquidGlassState extends State<LiquidGlass> {
         return ui.ImageFilter.compose(
           outer: ui.ImageFilter.shader(shader),
           inner: ui.ImageFilter.blur(
-            sigmaX: widget.blurSigma,
-            sigmaY: widget.blurSigma,
+            sigmaX: _effectiveBlur,
+            sigmaY: _effectiveBlur,
             tileMode: ui.TileMode.clamp,
           ),
         );
@@ -194,8 +223,8 @@ class _LiquidGlassState extends State<LiquidGlass> {
       }
     }
     return ui.ImageFilter.blur(
-      sigmaX: widget.blurSigma,
-      sigmaY: widget.blurSigma,
+      sigmaX: _effectiveBlur,
+      sigmaY: _effectiveBlur,
       tileMode: ui.TileMode.clamp,
     );
   }
@@ -219,19 +248,21 @@ class _LiquidGlassState extends State<LiquidGlass> {
     final hasExplicitBorder = widget.borderColor != null;
     final border = widget.outlined
         ? Border.all(
-            color: hasExplicitBorder
-                ? widget.borderColor!
-                : _borderColor(isDark),
+            color:
+                hasExplicitBorder ? widget.borderColor! : _borderColor(isDark),
             width: widget.borderWidth,
           )
         : null;
 
     Widget panel = DecoratedBox(
       decoration: BoxDecoration(
-        color: widget.tint ?? _defaultTint(isDark),
+        color: _motionLevel == MotionLevel.off
+            ? (isDark ? AppPalette.darkSurface : AppPalette.lightCanvas)
+            : widget.tint ?? _defaultTint(isDark),
         borderRadius: radius,
         border: border,
-        boxShadow: widget.boxShadow,
+        boxShadow:
+            _motionLevel == MotionLevel.off ? const [] : widget.boxShadow,
       ),
       child: widget.padding == null
           ? widget.child
@@ -250,16 +281,18 @@ class _LiquidGlassState extends State<LiquidGlass> {
         fit: StackFit.passthrough,
         children: [
           panel,
-          if (widget.intensity != GlassIntensity.flat)
+          if (_effectiveIntensity != GlassIntensity.flat)
             Positioned.fill(
               child: IgnorePointer(
                 child: CustomPaint(
                   painter: _GlassOpticalPainter(
                     borderRadius: radius,
                     isDark: isDark,
-                    gloss: widget.gloss,
+                    gloss: _motionLevel == MotionLevel.reduced
+                        ? widget.gloss.clamp(0.0, 0.15)
+                        : widget.gloss,
                     outlined: widget.outlined,
-                    liquid: widget.intensity == GlassIntensity.liquid,
+                    liquid: _effectiveIntensity == GlassIntensity.liquid,
                   ),
                 ),
               ),
@@ -282,7 +315,7 @@ class _LiquidGlassState extends State<LiquidGlass> {
   }
 
   Color _borderColor(bool isDark) {
-    if (widget.intensity == GlassIntensity.flat) {
+    if (_effectiveIntensity == GlassIntensity.flat) {
       return isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
     }
     // 玻璃档默认使用半透明白色高光

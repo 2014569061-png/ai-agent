@@ -127,7 +127,10 @@ class HostProcessRuntimeAdapter
       String output = '';
       try {
         output = await log.readAsString();
-      } catch (_) {}
+      } catch (_) {
+        // 进程已经完成，exitCode/timedOut 仍然有效；日志读取失败只让 output 为空，
+        // 不能让结果对象整体丢失。
+      }
       return CommandResult(
         output: output,
         exitCode: exitCode,

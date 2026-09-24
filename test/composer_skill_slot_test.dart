@@ -169,34 +169,36 @@ void main() {
       expect(_skillBarCount(tester), 0);
     });
 
-    testWidgets('运行中指标条收窄为 2 组，让出输入区上方空间', (tester) async {
+    testWidgets('运行中只显示运行详情摘要，让出输入区上方空间', (tester) async {
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpChatPage(tester, _RunningWithLoadedSkill.new);
 
+      expect(tester.widget<SessionMetricsBar>(find.byType(SessionMetricsBar)).summaryLabel, isNotNull);
       expect(
         tester
             .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
             .maxGroups,
-        2,
+        1,
         reason: '运行中输入区自带状态行，指标条应收窄避免叠加占高',
       );
     });
 
-    testWidgets('空闲时指标条不收缩（保留完整信息）', (tester) async {
+    testWidgets('空闲时只显示会话详情摘要，完整信息按需展开', (tester) async {
       tester.view.physicalSize = const Size(360, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpChatPage(tester, _IdleWithLoadedSkill.new);
 
+      expect(tester.widget<SessionMetricsBar>(find.byType(SessionMetricsBar)).summaryLabel, isNotNull);
       expect(
         tester
             .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
             .maxGroups,
-        isNull,
+        1,
       );
     });
   });

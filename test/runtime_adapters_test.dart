@@ -76,6 +76,52 @@ void main() {
       expect(calls.single.arguments, ['-c', 'echo hello']);
       expect(calls.single.workingDirectory, '/workspace');
       expect(calls.single.runInShell, isFalse);
+      expect(calls.single.includeParentEnvironment, isFalse);
+      expect(
+        calls.single.environment?['PATH'],
+        '/system/bin:/system/xbin:/vendor/bin',
+      );
+      expect(
+        calls.single.environment?['HOME'],
+        AndroidShellRuntimeAdapter.sanitizedEnvironment['HOME'],
+      );
+      expect(
+        calls.single.environment?['TMPDIR'],
+        AndroidShellRuntimeAdapter.sanitizedEnvironment['TMPDIR'],
+      );
+    });
+
+    test('foreground run collects stderr so compiler errors stay visible',
+        () async {
+      final process = _FakeProcess(
+        pid: 14,
+        stdoutText: 'out\n',
+        stderrText: 'boom\n',
+        exitCode: 2,
+      );
+      final adapter = AndroidShellRuntimeAdapter(
+        isAndroid: true,
+        processStarter: (
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool includeParentEnvironment = true,
+          bool runInShell = false,
+          ProcessStartMode mode = ProcessStartMode.normal,
+        }) async =>
+            process,
+      );
+
+      final result = await adapter.run(
+        _request('false'),
+        workingDirectory: '/workspace',
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(result.exitCode, 2);
+      expect(result.output, contains('out\n'));
+      expect(result.output, contains('stderr: boom\n'));
     });
 
     test('terminates a command that exceeds its timeout', () async {
@@ -156,8 +202,387 @@ void main() {
 
       expect(result.exitCode, 0);
       expect(result.output, 'stdout\nstderr: stderr\n');
-      expect(calls.single.environment, {'NEXUS_DAEMON_OWNER': 'owner-1'});
+      expect(calls.single.environment, {
+        ...AndroidShellRuntimeAdapter.sanitizedEnvironment,
+        'NEXUS_DAEMON_OWNER': 'owner-1',
+      });
       expect(calls.single.includeParentEnvironment, isFalse);
+    });
+
+    test('parses process group id after a comm that contains parentheses', () {
+      expect(
+        AndroidShellRuntimeAdapter.pidIsGroupLeaderStat(
+          '44 (sh) S 1 44',
+          44,
+        ),
+        isTrue,
+      );
+      expect(
+        AndroidShellRuntimeAdapter.pidIsGroupLeaderStat(
+          '44 (foo) bar) S 1 44',
+          44,
+        ),
+        isTrue,
+      );
+      expect(
+        AndroidShellRuntimeAdapter.pidIsGroupLeaderStat(
+          '44 (sh) S 1 7',
+          44,
+        ),
+        isFalse,
+      );
+      expect(
+        AndroidShellRuntimeAdapter.pidIsGroupLeaderStat('broken', 44),
+        isFalse,
+      );
+    });
+
+    test('timeout kills the process group when the shell is the group leader',
+        () async {
+      final process = _FakeProcess(pid: 44);
+      final signals = <String>[];
+      final adapter = AndroidShellRuntimeAdapter(
+        isAndroid: true,
+        killGrace: Duration.zero,
+        isGroupLeader: (pid) => pid == 44,
+        isProcessAlive: (_) => true,
+        isGroupAlive: (_) => true,
+        signalSender: (pid, signal) {
+          signals.add('$pid:${signal.toString()}');
+          return true;
+        },
+        processStarter: (
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool includeParentEnvironment = true,
+          bool runInShell = false,
+          ProcessStartMode mode = ProcessStartMode.normal,
+        }) async =>
+            process,
+      );
+
+      final result = await adapter.run(
+        _request('sleep 10'),
+        workingDirectory: '.',
+        timeout: const Duration(milliseconds: 20),
+      );
+
+      expect(result.exitCode, 124);
+      expect(result.timedOut, isTrue);
+      expect(signals, contains('-44:${ProcessSignal.sigterm}'));
+      expect(signals, contains('-44:${ProcessSignal.sigkill}'));
+      expect(process.wasKilled, isTrue);
+      expect(signals.any((signal) => signal.startsWith('44:')), isFalse);
+    });
+
+    test('timeout signals descendant processes when the shell is not a leader',
+        () async {
+      final process = _FakeProcess(pid: 44);
+      final signals = <String>[];
+      final adapter = AndroidShellRuntimeAdapter(
+        isAndroid: true,
+        killGrace: Duration.zero,
+        isGroupLeader: (_) => false,
+        isProcessAlive: (_) => true,
+        isGroupAlive: (_) => true,
+        readChildren: (pid) => switch (pid) {
+          44 => const [45],
+          45 => const [46],
+          _ => const <int>[],
+        },
+        signalSender: (pid, signal) {
+          signals.add('$pid:${signal.toString()}');
+          return true;
+        },
+        processStarter: (
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool includeParentEnvironment = true,
+          bool runInShell = false,
+          ProcessStartMode mode = ProcessStartMode.normal,
+        }) async =>
+            process,
+      );
+
+      await adapter.run(
+        _request('sleep 10'),
+        workingDirectory: '.',
+        timeout: const Duration(milliseconds: 20),
+      );
+
+      expect(
+        signals.where((signal) => signal.endsWith('${ProcessSignal.sigterm}')),
+        ['46:${ProcessSignal.sigterm}', '45:${ProcessSignal.sigterm}'],
+      );
+      expect(
+        signals.where((signal) => signal.endsWith('${ProcessSignal.sigkill}')),
+        ['46:${ProcessSignal.sigkill}', '45:${ProcessSignal.sigkill}'],
+      );
+      expect(process.wasKilled, isTrue);
+    });
+
+    test('launches through setsid when a group launcher is available',
+        () async {
+      final calls = <_ProcessStartCall>[];
+      final process = _FakeProcess(pid: 7, stdoutText: 'ok\n', exitCode: 0);
+      final adapter = AndroidShellRuntimeAdapter(
+        isAndroid: true,
+        groupLauncher: '/system/bin/setsid',
+        processStarter: (
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool includeParentEnvironment = true,
+          bool runInShell = false,
+          ProcessStartMode mode = ProcessStartMode.normal,
+        }) async {
+          calls.add(_ProcessStartCall(
+            executable: executable,
+            arguments: arguments,
+            workingDirectory: workingDirectory,
+            environment: environment,
+            includeParentEnvironment: includeParentEnvironment,
+            runInShell: runInShell,
+            mode: mode,
+          ));
+          return process;
+        },
+      );
+
+      final result = await adapter.run(
+        _request('echo ok'),
+        workingDirectory: '.',
+        timeout: const Duration(seconds: 1),
+      );
+
+      expect(result.exitCode, 0);
+      expect(calls.single.executable, '/system/bin/setsid');
+      expect(calls.single.arguments, ['/system/bin/sh', '-c', 'echo ok']);
+    });
+
+    test('group escalation survives an exited group leader', () async {
+      final process = _FakeProcess(pid: 44);
+      final signals = <String>[];
+      final adapter = _cleanupAdapter(
+        process,
+        isGroupLeader: (_) => true,
+        isProcessAlive: (_) => false,
+        isGroupAlive: (_) => true,
+        signalSender: (pid, signal) {
+          signals.add('$pid:$signal');
+          return true;
+        },
+      );
+      final result = await adapter.run(_request('pipeline'),
+          workingDirectory: '.', timeout: const Duration(milliseconds: 10));
+      expect(result.exitCode, 124);
+      expect(signals, contains('-44:${ProcessSignal.sigkill}'));
+    });
+
+    test('tree escalation keeps children reparented after TERM', () async {
+      var rootAlive = true;
+      final signals = <String>[];
+      final process = _FakeProcess(
+        pid: 44,
+        onKill: (_) => rootAlive = false,
+      );
+      final adapter = _cleanupAdapter(
+        process,
+        isProcessAlive: (pid) => pid != 44 || rootAlive,
+        readChildren: (pid) => rootAlive && pid == 44 ? [45] : [],
+        signalSender: (pid, signal) {
+          signals.add('$pid:$signal');
+          return true;
+        },
+      );
+      await adapter.run(_request('pipeline'),
+          workingDirectory: '.', timeout: const Duration(milliseconds: 10));
+      expect(rootAlive, isFalse);
+      expect(signals,
+          ['45:${ProcessSignal.sigterm}', '45:${ProcessSignal.sigkill}']);
+    });
+
+    test('a lone shell ignoring TERM still receives KILL', () async {
+      final process = _FakeProcess(pid: 44, ignoreTerm: true);
+      final adapter = _cleanupAdapter(process, isProcessAlive: (_) => true);
+      final result = await adapter.run(_request('sleep'),
+          workingDirectory: '.', timeout: const Duration(milliseconds: 10));
+      expect(result.exitCode, 124);
+      expect(
+          process.killSignals, [ProcessSignal.sigterm, ProcessSignal.sigkill]);
+    });
+
+    test('stop during launch is remembered before the PID is registered',
+        () async {
+      final process = _FakeProcess(pid: 44);
+      final launch = Completer<Process>();
+      final adapter = _cleanupAdapter(process, launch: launch.future);
+      final pending = adapter.run(_request('sleep'),
+          workingDirectory: '.', timeout: const Duration(seconds: 1));
+      expect(adapter.isRunning, isTrue);
+      adapter.stop();
+      launch.complete(process);
+      final result = await pending;
+      expect(result.exitCode, 143);
+      expect(result.timedOut, isFalse);
+      expect(adapter.isRunning, isFalse);
+      expect(process.killSignals, [ProcessSignal.sigterm]);
+    });
+
+    test('repeated stop shares one termination sequence', () async {
+      final process = _FakeProcess(pid: 44, ignoreTerm: true);
+      final adapter = _cleanupAdapter(process,
+          isProcessAlive: (_) => true,
+          killGrace: const Duration(milliseconds: 10));
+      final pending = adapter.run(_request('sleep'),
+          workingDirectory: '.', timeout: const Duration(seconds: 1));
+      await Future<void>.delayed(Duration.zero);
+      adapter.stop();
+      adapter.stop();
+      final result = await pending;
+      expect(result.timedOut, isFalse);
+      expect(
+          process.killSignals, [ProcessSignal.sigterm, ProcessSignal.sigkill]);
+    });
+
+    test('detached timeout waits for group escalation before completing',
+        () async {
+      final directory = await Directory.systemTemp.createTemp('shell-kill-');
+      addTearDown(() => directory.delete(recursive: true));
+      final process = _FakeProcess(pid: 44);
+      final signals = <String>[];
+      final adapter = _cleanupAdapter(
+        process,
+        killGrace: const Duration(milliseconds: 10),
+        isGroupLeader: (_) => true,
+        isProcessAlive: (_) => false,
+        isGroupAlive: (_) => true,
+        signalSender: (pid, signal) {
+          signals.add('$pid:$signal');
+          return true;
+        },
+      );
+      final handle = await adapter.startDetached(_request('pipeline'),
+          workingDirectory: directory.path,
+          timeout: const Duration(milliseconds: 10),
+          ownerToken: 'test-owner',
+          logPath: '${directory.path}/shell.log');
+      final result = await handle!.completion;
+      expect(result.exitCode, 124);
+      expect(result.timedOut, isTrue);
+      expect(signals, contains('-44:${ProcessSignal.sigkill}'));
+    });
+
+    test('timeout includes pipes retained after the shell has exited',
+        () async {
+      final process = _FakeProcess(pid: 44, exitCode: 0, keepOutputOpen: true);
+      addTearDown(process.closeOutput);
+      final signals = <String>[];
+      final adapter = _cleanupAdapter(
+        process,
+        groupLauncher: '/system/bin/setsid',
+        isGroupAlive: (_) => true,
+        signalSender: (pid, signal) {
+          signals.add('$pid:$signal');
+          return true;
+        },
+      );
+      final result = await adapter.run(_request('sleep 100 &'),
+          workingDirectory: '.', timeout: const Duration(milliseconds: 10));
+      expect(result.exitCode, 124);
+      expect(result.timedOut, isTrue);
+      expect(signals, contains('-44:${ProcessSignal.sigterm}'));
+      expect(signals, contains('-44:${ProcessSignal.sigkill}'));
+      expect(process.stdoutCancelled, isTrue);
+      expect(process.stderrCancelled, isTrue);
+    });
+
+    test('detached timeout cancels inherited pipes after shell exit', () async {
+      final directory = await Directory.systemTemp.createTemp('shell-pipes-');
+      addTearDown(() => directory.delete(recursive: true));
+      final process = _FakeProcess(pid: 44, exitCode: 0, keepOutputOpen: true);
+      addTearDown(process.closeOutput);
+      final adapter = _cleanupAdapter(process);
+      final handle = await adapter.startDetached(_request('sleep 100 &'),
+          workingDirectory: directory.path,
+          timeout: const Duration(milliseconds: 10),
+          ownerToken: 'test-owner',
+          logPath: '${directory.path}/shell.log');
+      final result = await handle!.completion;
+      expect(result.exitCode, 124);
+      expect(result.timedOut, isTrue);
+      expect(process.stdoutCancelled, isTrue);
+      expect(process.stderrCancelled, isTrue);
+    });
+
+    test('stop cancels retained pipes without waiting for request timeout',
+        () async {
+      final process = _FakeProcess(pid: 44, exitCode: 0, keepOutputOpen: true);
+      addTearDown(process.closeOutput);
+      final adapter = _cleanupAdapter(process);
+      final pending = adapter.run(_request('sleep 100 &'),
+          workingDirectory: '.', timeout: const Duration(seconds: 5));
+      await Future<void>.delayed(Duration.zero);
+      adapter.stop();
+      final result = await pending.timeout(const Duration(seconds: 1));
+      expect(result.timedOut, isFalse);
+      expect(process.stdoutCancelled, isTrue);
+      expect(process.stderrCancelled, isTrue);
+    });
+
+    test('non Android detached verification does not inspect a real PID',
+        () async {
+      final adapter = AndroidShellRuntimeAdapter(isAndroid: false);
+      expect(await adapter.verifyDetached(pid, 'owner'), isFalse);
+      expect(await adapter.stopDetached(pid, 'owner'), isFalse);
+    });
+
+    test('stop kills the running process group', () async {
+      final process = _FakeProcess(pid: 44);
+      final signals = <String>[];
+      final started = Completer<void>();
+      final adapter = AndroidShellRuntimeAdapter(
+        isAndroid: true,
+        killGrace: Duration.zero,
+        isGroupLeader: (pid) => pid == 44,
+        isProcessAlive: (_) => true,
+        isGroupAlive: (_) => true,
+        signalSender: (pid, signal) {
+          signals.add('$pid:${signal.toString()}');
+          return true;
+        },
+        processStarter: (
+          String executable,
+          List<String> arguments, {
+          String? workingDirectory,
+          Map<String, String>? environment,
+          bool includeParentEnvironment = true,
+          bool runInShell = false,
+          ProcessStartMode mode = ProcessStartMode.normal,
+        }) async {
+          started.complete();
+          return process;
+        },
+      );
+
+      final pending = adapter.run(
+        _request('sleep 10'),
+        workingDirectory: '.',
+        timeout: const Duration(seconds: 5),
+      );
+      await started.future;
+      await Future<void>.delayed(Duration.zero);
+      adapter.stop();
+      final result = await pending;
+
+      expect(result.exitCode, 143);
+      expect(signals, contains('-44:${ProcessSignal.sigterm}'));
+      expect(signals, contains('-44:${ProcessSignal.sigkill}'));
     });
   });
 
@@ -422,13 +847,20 @@ class _FakeProcess implements Process {
     String stdoutText = '',
     String stderrText = '',
     int? exitCode,
+    this.ignoreTerm = false,
+    this.onKill,
+    bool keepOutputOpen = false,
   }) {
     _exitCode =
         exitCode == null ? _exitCodeCompleter.future : Future.value(exitCode);
     _stdoutController.add(utf8.encode(stdoutText));
     _stderrController.add(utf8.encode(stderrText));
-    unawaited(_stdoutController.close());
-    unawaited(_stderrController.close());
+    _stdoutController.onCancel = () => stdoutCancelled = true;
+    _stderrController.onCancel = () => stderrCancelled = true;
+    if (!keepOutputOpen) {
+      unawaited(_stdoutController.close());
+      unawaited(_stderrController.close());
+    }
   }
 
   @override
@@ -440,6 +872,15 @@ class _FakeProcess implements Process {
   final _stderrController = StreamController<List<int>>();
   final _stdin = IOSink(StreamController<List<int>>());
   bool wasKilled = false;
+  bool stdoutCancelled = false;
+  bool stderrCancelled = false;
+  Future<void> closeOutput() async {
+    await Future.wait([_stdoutController.close(), _stderrController.close()]);
+  }
+
+  final bool ignoreTerm;
+  final void Function(ProcessSignal)? onKill;
+  final List<ProcessSignal> killSignals = [];
 
   @override
   Future<int> get exitCode => _exitCode;
@@ -456,6 +897,9 @@ class _FakeProcess implements Process {
   @override
   bool kill([ProcessSignal signal = ProcessSignal.sigterm]) {
     wasKilled = true;
+    killSignals.add(signal);
+    onKill?.call(signal);
+    if (ignoreTerm && signal == ProcessSignal.sigterm) return true;
     if (!_exitCodeCompleter.isCompleted) _exitCodeCompleter.complete(143);
     return true;
   }
@@ -470,3 +914,35 @@ class _InvalidRootfsAssetBundle extends AssetBundle {
     return rootBundle.load(key);
   }
 }
+
+AndroidShellRuntimeAdapter _cleanupAdapter(
+  Process process, {
+  Future<Process>? launch,
+  String? groupLauncher,
+  ProcessGroupLeaderCheck? isGroupLeader,
+  ProcessAliveCheck? isProcessAlive,
+  ProcessAliveCheck? isGroupAlive,
+  ProcessChildrenReader? readChildren,
+  ProcessSignalSender? signalSender,
+  Duration killGrace = Duration.zero,
+}) =>
+    AndroidShellRuntimeAdapter(
+      isAndroid: true,
+      killGrace: killGrace,
+      groupLauncher: groupLauncher,
+      isGroupLeader: isGroupLeader ?? (_) => false,
+      isProcessAlive: isProcessAlive ?? (_) => false,
+      isGroupAlive: isGroupAlive ?? (_) => false,
+      readChildren: readChildren ?? (_) => [],
+      signalSender: signalSender ?? (_, __) => false,
+      processStarter: (
+        String executable,
+        List<String> arguments, {
+        String? workingDirectory,
+        Map<String, String>? environment,
+        bool includeParentEnvironment = true,
+        bool runInShell = false,
+        ProcessStartMode mode = ProcessStartMode.normal,
+      }) async =>
+          launch == null ? process : await launch,
+    );

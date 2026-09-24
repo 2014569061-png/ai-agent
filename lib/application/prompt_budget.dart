@@ -1,5 +1,7 @@
+import '../domain/context_insights.dart';
 import '../domain/models.dart';
 import 'context_window.dart';
+import 'context_snapshot_builder.dart';
 import 'file_citation.dart';
 import 'project_context_service.dart';
 
@@ -44,16 +46,14 @@ class PromptBudgetAllocator {
       role: MessageRole.system,
       parts: [MessagePart.text(systemPrompt)],
     ));
-    final toolTokens = tools.fold<int>(0, (sum, tool) {
-      final encoded =
-          '${tool.name} ${tool.description} ${tool.parametersSchema}';
-      return sum + ContextWindow.estimateTokens(ChatMessage(
-        role: MessageRole.system,
-        parts: [MessagePart.text(encoded)],
-      ));
-    });
-    final remaining = (contextTokens - systemTokens - toolTokens - reservedOutputTokens)
-        .clamp(0, contextTokens);
+    final toolTokens = ContextSnapshotBuilder.estimateToolTokens(tools);
+    final outputReservation = ContextBudget.outputReservationFor(
+      contextWindow: contextTokens,
+      requestedOutputTokens: reservedOutputTokens,
+    );
+    final remaining =
+        (contextTokens - systemTokens - toolTokens - outputReservation)
+            .clamp(0, contextTokens);
     final historyBudget = (remaining * 0.7).floor();
     final fileBudget = remaining - historyBudget;
     final compacted = ContextWindow(maxTokens: historyBudget).apply(history);
@@ -103,7 +103,7 @@ class PromptBudgetAllocator {
       totalTokens: contextTokens,
       systemTokens: systemTokens,
       toolTokens: toolTokens,
-      reservedOutputTokens: reservedOutputTokens,
+      reservedOutputTokens: outputReservation,
       historyTokens: compacted.fold<int>(
           0, (sum, message) => sum + ContextWindow.estimateTokens(message)),
       fileTokens: fileTokens,

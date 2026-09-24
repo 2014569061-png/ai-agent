@@ -139,7 +139,10 @@ class _DevelopmentWorkbenchPageState
             ),
           );
         }
-      } catch (_) {}
+      } catch (_) {
+        // 制品登记失败：构建本身已经成功（上面的 _result 已展示），这里只是没能
+        // 写进「项目制品库」。用户会在制品页看不到这次产物，属于可见的信息缺失。
+      }
     }
   }
 
@@ -194,12 +197,12 @@ class _DevelopmentWorkbenchPageState
                       ? '正在识别项目类型…'
                       : '当前项目：${_project?.kind.label ?? _selected.name}',
                   style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w600),
+                      fontSize: AppTokens.fontSizeSubhead, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   widget.workspacePath,
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                  style: const TextStyle(fontSize: AppTokens.fontSizeFootnote, fontFamily: 'monospace'),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<DevelopmentWorkflow>(
@@ -233,7 +236,7 @@ class _DevelopmentWorkbenchPageState
                     Text(
                       '验证步骤',
                       style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                          TextStyle(fontSize: AppTokens.fontSizeSubhead, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -271,7 +274,7 @@ class _DevelopmentWorkbenchPageState
                                       child: Text(
                                         step.title,
                                         style: const TextStyle(
-                                            fontSize: 13,
+                                            fontSize: AppTokens.fontSizeCaption,
                                             fontWeight: FontWeight.w500),
                                       ),
                                     ),
@@ -297,7 +300,7 @@ class _DevelopmentWorkbenchPageState
                                       '\$ ${step.command}',
                                       style: const TextStyle(
                                         fontFamily: 'monospace',
-                                        fontSize: 12,
+                                        fontSize: AppTokens.fontSizeFootnote,
                                       ),
                                     ),
                                   ),
@@ -345,7 +348,7 @@ class _DevelopmentWorkbenchPageState
                       Text(
                         _result!.success ? '验证完成' : '验证遇到错误',
                         style: TextStyle(
-                          fontSize: 15,
+                          fontSize: AppTokens.fontSizeBody,
                           fontWeight: FontWeight.w500,
                           color: _result!.success
                               ? AppPalette.success
@@ -369,14 +372,14 @@ class _DevelopmentWorkbenchPageState
                   ],
                   const Text('步骤日志',
                       style:
-                          TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                          TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 6),
                   ..._result!.steps.map((step) => Padding(
                         padding: const EdgeInsets.only(bottom: 4),
                         child: SelectableText(
                           step.message,
                           style: const TextStyle(
-                              fontFamily: 'monospace', fontSize: 11.5),
+                              fontFamily: 'monospace', fontSize: AppTokens.fontSizeSubcaption),
                         ),
                       )),
                 ],
@@ -444,13 +447,13 @@ class _DevelopmentWorkbenchPageState
                 const SizedBox(width: 6),
                 Text(exists ? '真实产物' : '产物不存在',
                     style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w500)),
+                        fontSize: AppTokens.fontSizeFootnote, fontWeight: FontWeight.w500)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     path,
                     style:
-                        const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                        const TextStyle(fontSize: AppTokens.fontSizeFootnote, fontFamily: 'monospace'),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -468,15 +471,15 @@ class _DevelopmentWorkbenchPageState
             if (_result!.sha256 != null)
               Text('SHA-256：${_result!.sha256}',
                   style:
-                      const TextStyle(fontSize: 11, fontFamily: 'monospace')),
+                      const TextStyle(fontSize: AppTokens.fontSizeBadge, fontFamily: 'monospace')),
             if (_result!.packageName != null)
               Text('包名：${_result!.packageName}',
-                  style: const TextStyle(fontSize: 12)),
+                  style: const TextStyle(fontSize: AppTokens.fontSizeFootnote)),
             if (_result!.artifactBytes != null)
               Text('大小：${_result!.artifactBytes} 字节',
-                  style: const TextStyle(fontSize: 12)),
+                  style: const TextStyle(fontSize: AppTokens.fontSizeFootnote)),
             for (final note in _result!.notes)
-              Text(note, style: const TextStyle(fontSize: 12)),
+              Text(note, style: const TextStyle(fontSize: AppTokens.fontSizeFootnote)),
             if (exists) ...[
               const SizedBox(height: 8),
               Wrap(

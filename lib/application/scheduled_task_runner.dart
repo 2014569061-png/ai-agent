@@ -18,6 +18,7 @@ import '../infrastructure/notifications/notification_service.dart';
 import '../infrastructure/providers/provider_config_store.dart';
 import '../infrastructure/files/vault_exporter_io.dart';
 import '../infrastructure/files/local_crypto_service.dart';
+import '../domain/unique_id.dart';
 
 /// C5 定时任务的后台入口（WorkManager 回调）。
 /// 在独立 isolate 中打开数据库、取到点任务、无 UI 运行 Agent、写入结果并弹通知。
@@ -39,10 +40,13 @@ void scheduledTaskCallbackDispatcher() {
       await NotificationService.instance.init();
       final usedNotificationIds = <int>{};
       for (final task in due) {
+        final startedAt = DateTime.now();
+        var runStatus = 'success';
+        var runResult = '';
+        var runRecorded = false;
         try {
-          final agent = task.agentId == null
-              ? null
-              : await db.findAgent(task.agentId!);
+          final agent =
+              task.agentId == null ? null : await db.findAgent(task.agentId!);
           final systemPrompt = agent?.systemPrompt;
           Set<String>? allowedToolNames;
           if (agent != null) {
@@ -59,19 +63,21 @@ void scheduledTaskCallbackDispatcher() {
           }
           final cancellationToken = AgentCancellationToken();
           final cancelToken = CancelToken();
-          final execution = BackgroundExecutionGateway().run(
-            db: db,
-            config: config,
-            prompt: task.prompt,
-            systemPrompt: systemPrompt,
-            allowedToolNames: allowedToolNames,
-            maxSteps: agent?.maxSteps ?? 4,
-            temperature: agent?.temperature ?? 0.7,
-            maxTokens: agent?.maxTokens ?? 1024,
-            topP: agent?.topP ?? 1.0,
-            cancellationToken: cancellationToken,
-            cancelToken: cancelToken,
-          ).then((result) => result.text);
+          final execution = BackgroundExecutionGateway()
+              .run(
+                db: db,
+                config: config,
+                prompt: task.prompt,
+                systemPrompt: systemPrompt,
+                allowedToolNames: allowedToolNames,
+                maxSteps: agent?.maxSteps ?? 4,
+                temperature: agent?.temperature ?? 0.7,
+                maxTokens: agent?.maxTokens ?? 1024,
+                topP: agent?.topP ?? 1.0,
+                cancellationToken: cancellationToken,
+                cancelToken: cancelToken,
+              )
+              .then((result) => result.text);
           String result;
           try {
             result = await execution.timeout(const Duration(minutes: 2));
@@ -80,18 +86,33 @@ void scheduledTaskCallbackDispatcher() {
             cancelToken.cancel('scheduled task timeout');
             try {
               await execution;
-            } catch (_) {}
+            } catch (_) {
+              // 超时后已经取消、并且结果已经定下，这里再 await 一次只是等它退出；
+              // 退出时抛错不影响上面的结论，也没有补救动作。
+            }
             result = '任务执行超时（超过 2 分钟），已中止';
+            runStatus = 'timeout';
           } catch (error, stack) {
             debugPrint('定时任务 ${task.id} 执行失败: $error\n$stack');
             result = '任务执行失败：$error';
+            runStatus = 'failed';
           }
           final completedAt = DateTime.now();
+          runResult = result;
           await db.saveScheduledTask(task.copyWith(
             lastResult: Value<String?>(result),
             lastRunAt: Value<DateTime?>(completedAt),
             updatedAt: completedAt,
           ));
+          await _recordScheduledTaskRun(
+            db,
+            task: task,
+            status: runStatus,
+            result: runResult,
+            startedAt: startedAt,
+            completedAt: completedAt,
+          );
+          runRecorded = true;
           final preview =
               result.length > 60 ? '${result.substring(0, 60)}…' : result;
           var notifId = task.id.hashCode & 0x7fffffff;
@@ -106,6 +127,31 @@ void scheduledTaskCallbackDispatcher() {
           );
         } catch (error, stack) {
           debugPrint('定时任务 ${task.id} 收尾失败: $error\n$stack');
+          if (!runRecorded) {
+            runStatus = 'failed';
+            runResult = '任务执行失败：$error';
+            final completedAt = DateTime.now();
+            try {
+              await db.saveScheduledTask(task.copyWith(
+                lastResult: Value<String?>(runResult),
+                lastRunAt: Value<DateTime?>(completedAt),
+                updatedAt: completedAt,
+              ));
+              await _recordScheduledTaskRun(
+                db,
+                task: task,
+                status: runStatus,
+                result: runResult,
+                startedAt: startedAt,
+                completedAt: completedAt,
+              );
+            } catch (recordError, recordStack) {
+              debugPrint(
+                '定时任务 ${task.id} 失败记录写入失败: '
+                '$recordError\n$recordStack',
+              );
+            }
+          }
         }
       }
     } catch (error, stack) {
@@ -114,10 +160,42 @@ void scheduledTaskCallbackDispatcher() {
     } finally {
       try {
         await db?.close();
-      } catch (_) {}
+      } catch (_) {
+        // 收尾时关闭临时数据库：失败最多留下一个已打开的连接，随即被进程回收，
+        // 没有可采取的动作，也不该影响本次执行已经写入的结果。
+      }
     }
     return true;
   });
+}
+
+Future<void> _recordScheduledTaskRun(
+  AppDatabase db, {
+  required ScheduledTask task,
+  required String status,
+  required String result,
+  required DateTime startedAt,
+  required DateTime completedAt,
+}) async {
+  await db.insertAuditLog(AuditLogsCompanion.insert(
+    id: UniqueId.generate('scheduled_run', now: completedAt),
+    type: 'scheduled_task_run',
+    detail: jsonEncode({
+      'taskId': task.id,
+      'taskName': task.name,
+      'status': status,
+      'startedAt': startedAt.toIso8601String(),
+      'completedAt': completedAt.toIso8601String(),
+      'durationMs': completedAt.difference(startedAt).inMilliseconds,
+      // Execution results remain local and bounded so history is useful
+      // without letting an agent response grow the audit database without limit.
+      'result': result.length > 4000 ? result.substring(0, 4000) : result,
+      'truncated': result.length > 4000,
+    }),
+    decision: Value(status),
+    risk: const Value('background'),
+    createdAt: completedAt,
+  ));
 }
 
 Future<void> _runAutomaticBackup(AppDatabase db) async {
@@ -128,16 +206,12 @@ Future<void> _runAutomaticBackup(AppDatabase db) async {
   );
   if (last != null && DateTime.now().difference(last).inHours < 24) return;
 
-  final snapshot = jsonEncode(await buildVaultJson(db));
+  final snapshot = await encodeVaultJson(await buildVaultJson(db));
   final encrypted = await LocalCryptoService().encryptString(snapshot);
   final dir = await getApplicationDocumentsDirectory();
   final backupDir = Directory(p.join(dir.path, 'backups'));
   await backupDir.create(recursive: true);
-  final path = p.join(
-    backupDir.path,
-    'nexus-auto-${DateTime.now().millisecondsSinceEpoch}.nexusauto',
-  );
-  await File(path).writeAsString(encrypted, flush: true);
+  await publishAutomaticBackup(backupDir, encrypted);
   await pruneAutomaticBackups(backupDir);
   await prefs.setString(
     'settings.backup.last_time',
@@ -159,21 +233,20 @@ Future<void> pruneAutomaticBackups(Directory backupDir,
   for (final file in files.skip(keep)) {
     try {
       await file.delete();
-    } catch (_) {}
+    } catch (_) {
+      // 备份保留策略是尽力而为：删不掉旧备份只会多占磁盘，下次触发时会再试
+      // 一次，不该因此让整个备份流程失败。
+    }
   }
 }
 
 Future<String?> createAutomaticBackupNow(AppDatabase db) async {
-  final snapshot = jsonEncode(await buildVaultJson(db));
+  final snapshot = await encodeVaultJson(await buildVaultJson(db));
   final encrypted = await LocalCryptoService().encryptString(snapshot);
   final dir = await getApplicationDocumentsDirectory();
   final backupDir = Directory(p.join(dir.path, 'backups'));
   await backupDir.create(recursive: true);
-  final path = p.join(
-    backupDir.path,
-    'nexus-auto-${DateTime.now().millisecondsSinceEpoch}.nexusauto',
-  );
-  await File(path).writeAsString(encrypted, flush: true);
+  final path = await publishAutomaticBackup(backupDir, encrypted);
   await pruneAutomaticBackups(backupDir);
   final prefs = await SharedPreferences.getInstance();
   await prefs.setString(
@@ -181,4 +254,25 @@ Future<String?> createAutomaticBackupNow(AppDatabase db) async {
     DateTime.now().toIso8601String(),
   );
   return path;
+}
+
+/// A backup is discoverable only after its complete encrypted payload is flushed.
+/// Unique staging names also prevent same-millisecond backup collisions.
+Future<String> publishAutomaticBackup(
+    Directory directory, String encrypted) async {
+  if (utf8.encode(encrypted).length > VaultLimits.maxCipherBytes) {
+    throw const FormatException('加密备份超过容量上限');
+  }
+  await directory.create(recursive: true);
+  final staging = await directory.createTemp('.nexus-pending-');
+  try {
+    final file = File(p.join(staging.path, 'payload'));
+    await file.writeAsString(encrypted, flush: true);
+    final target = p.join(directory.path,
+        'nexus-auto-${DateTime.now().microsecondsSinceEpoch}-${p.basename(staging.path)}.nexusauto');
+    await file.rename(target);
+    return target;
+  } finally {
+    await staging.delete(recursive: true);
+  }
 }

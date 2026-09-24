@@ -121,7 +121,8 @@ class ChangeSetService {
         if (await current.exists()) {
           final bytes = await current.readAsBytes();
           afterHash = sha256.convert(bytes).toString();
-          afterRef = p.join(objectDir.path, '${change.path.replaceAll('/', '_')}.after');
+          afterRef = p.join(
+              objectDir.path, '${change.path.replaceAll('/', '_')}.after');
           await File(afterRef).writeAsBytes(bytes, flush: true);
         }
       } catch (_) {
@@ -158,7 +159,8 @@ class ChangeSetService {
     final journal = <String>[];
     for (final file in changeSet.files) {
       if (!file.reversible) {
-        conflicts.add(RollbackConflict(path: file.relativePath, reason: '不可自动回退'));
+        conflicts
+            .add(RollbackConflict(path: file.relativePath, reason: '不可自动回退'));
         continue;
       }
       final currentHash = currentHashes[file.relativePath];

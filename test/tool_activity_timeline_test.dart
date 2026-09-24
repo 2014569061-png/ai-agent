@@ -101,6 +101,35 @@ void main() {
     expect(find.textContaining('工具: write_file'), findsOneWidget);
   });
 
+  testWidgets('marks compressed results and reveals the original on expand',
+      (tester) async {
+    await tester.pumpWidget(const _Harness(
+      activities: [
+        ToolActivity(
+          call: ToolCall(
+            id: 'read-1',
+            name: 'read_file',
+            arguments: {'path': 'large.txt'},
+          ),
+          risk: ToolRisk.safe,
+          status: '已完成',
+          ok: true,
+          compressed: true,
+          originalResult: '完整的原始工具结果',
+        ),
+      ],
+    ));
+
+    expect(find.text('已压缩'), findsOneWidget);
+    expect(find.text('完整的原始工具结果'), findsNothing);
+
+    await tester.tap(find.text('已完成：读取文件 large.txt'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('原始结果'), findsOneWidget);
+    expect(find.text('完整的原始工具结果'), findsOneWidget);
+  });
+
   testWidgets('collapses a long finished trajectory behind a toggle',
       (tester) async {
     await tester.pumpWidget(_Harness(

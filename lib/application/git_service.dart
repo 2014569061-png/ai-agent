@@ -15,13 +15,14 @@ class GitStatusEntry {
   final String workTreeStatus;
 
   bool get staged => indexStatus.trim().isNotEmpty && indexStatus != ' ';
-  bool get unstaged => workTreeStatus.trim().isNotEmpty && workTreeStatus != ' ';
+  bool get unstaged =>
+      workTreeStatus.trim().isNotEmpty && workTreeStatus != ' ';
 }
 
 class GitService {
   GitService({TerminalCommandService? terminal, String workspacePath = '.'})
-      : _terminal = terminal ??
-            TerminalCommandService(workspacePath: workspacePath);
+      : _terminal =
+            terminal ?? TerminalCommandService(workspacePath: workspacePath);
 
   final TerminalCommandService _terminal;
 
@@ -37,15 +38,16 @@ class GitService {
   }
 
   Future<List<GitStatusEntry>> status(String workspacePath) async {
-    final result = await _run(['status', '--porcelain=v1', '-z'],
-        cwd: workspacePath);
+    final result =
+        await _run(['status', '--porcelain=v1', '-z'], cwd: workspacePath);
     if (result.exitCode != 0) {
       throw StateError(result.output);
     }
     return parsePorcelain(result.output);
   }
 
-  Future<String> diff(String workspacePath, {List<String> paths = const []}) async {
+  Future<String> diff(String workspacePath,
+      {List<String> paths = const []}) async {
     final result = await _run(['diff', '--', ...paths], cwd: workspacePath);
     return result.output;
   }
@@ -89,7 +91,8 @@ class GitService {
   Future<CommandResult> fetch(String workspacePath) =>
       _run(['fetch', '--prune'], cwd: workspacePath);
 
-  Future<CommandResult> push(String workspacePath, {String? remote, String? branch}) {
+  Future<CommandResult> push(String workspacePath,
+      {String? remote, String? branch}) {
     return _run([
       'push',
       if (remote != null) remote,
@@ -99,7 +102,9 @@ class GitService {
 
   Future<CommandResult> _run(List<String> args, {required String cwd}) {
     final escaped = args
-        .map((arg) => arg.contains(RegExp(r'[\s"]')) ? '"${arg.replaceAll('"', '\\"')}"' : arg)
+        .map((arg) => arg.contains(RegExp(r'[\s"]'))
+            ? '"${arg.replaceAll('"', '\\"')}"'
+            : arg)
         .join(' ');
     return _terminal.run('git $escaped', workingDirectory: cwd);
   }
