@@ -115,6 +115,8 @@ abstract final class AppTokens {
   static const _durationBubbleRiseMs = 320;
   static const _durationPressReleaseMs = 320;
   static const _durationAnswerRevealMs = 180;
+  static const _ambientGlowPeriodMs = 12000;
+  static const _ambientGlowTickMs = 50;
   static const Duration durationInstant =
       Duration(milliseconds: _durationInstantMs);
   static const Duration durationFast = Duration(milliseconds: 150);
@@ -162,6 +164,13 @@ abstract final class AppTokens {
   /// 流式回复首个 token 到达时正文的淡入时长（只播放一次）。
   static const Duration durationAnswerReveal =
       Duration(milliseconds: _durationAnswerRevealMs);
+
+  /// 空状态环境光晕：漂移 / 呼吸周期、重绘间隔（约 20fps）、漂移上限（dp）。
+  static const Duration ambientGlowPeriod =
+      Duration(milliseconds: _ambientGlowPeriodMs);
+  static const Duration ambientGlowTick =
+      Duration(milliseconds: _ambientGlowTickMs);
+  static const double ambientGlowDrift = 24;
   @Deprecated('请改用 durationExpand (300ms)')
   static const Duration durationModal = durationExpand;
   @Deprecated('请改用 durationExpand (300ms)')

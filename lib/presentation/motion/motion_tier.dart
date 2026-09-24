@@ -134,6 +134,16 @@ class MotionTierScope extends InheritedNotifier<MotionTierController> {
   /// 未挂载 Scope（例如独立 widget 测试）时的默认档位。
   static const MotionTier fallback = MotionTier.mid;
 
+  /// 与 [of] 相同，但未挂载 Scope 时返回 null。
+  ///
+  /// 持续循环的装饰层（如环境光晕）用它判断是否处于真实 App 中：
+  /// 独立 widget 测试没有 Scope，循环会让 `pumpAndSettle` 无法结束。
+  static MotionTier? maybeOf(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<MotionTierScope>();
+    if (scope == null) return null;
+    return of(context);
+  }
+
   static MotionTier of(BuildContext context, {bool listen = true}) {
     final scope = listen
         ? context.dependOnInheritedWidgetOfExactType<MotionTierScope>()

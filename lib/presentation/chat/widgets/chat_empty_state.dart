@@ -5,6 +5,7 @@ import '../../motion/nexus_entrance.dart';
 import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../widgets/ambient_glow.dart';
 import '../../widgets/brand_mark.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/liquid_segmented_control.dart';
@@ -83,87 +84,94 @@ class _ChatEmptyStateState extends State<ChatEmptyState> {
     final animateGrid = !_gridEntered;
     if (!widget.keyboardVisible) _gridEntered = true;
 
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // M2：主视觉（无玻璃）淡入 + 0.96→1 缩放，槽位 1。
-            NexusEntrance(
-              slot: 1,
-              scaleFrom: 0.96,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const BrandMark(size: 44, withGlow: true),
-                  const SizedBox(height: 16),
-                  Semantics(
-                    header: true,
-                    child: Text(
-                      '今天想构建什么？',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.displayMedium?.copyWith(
-                        color: textColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '审查代码变更 · 执行指令 · 自动化重构',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (!widget.keyboardVisible) ...[
-              const SizedBox(height: 24),
-              // M2：卡片区含玻璃，只做 12dp 上移，槽位 2。
-              _maybeEntrance(
-                animate: animateGrid,
-                child: ValueListenableBuilder<int>(
-                  valueListenable: _selectedCategoryIndex,
-                  builder: (context, selectedIndex, _) => Column(
+    // M7：环境光晕垫在内容之下，只随空状态挂载；Stack 大小由内容决定，
+    // 与原来的 Center 布局一致。
+    return Stack(
+      children: [
+        const Positioned.fill(child: AmbientGlow()),
+        Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // M2：主视觉（无玻璃）淡入 + 0.96→1 缩放，槽位 1。
+                NexusEntrance(
+                  slot: 1,
+                  scaleFrom: 0.96,
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 横向紧凑场景分段芯片（Segmented Chips，释放纵向空间）
+                      const BrandMark(size: 44, withGlow: true),
+                      const SizedBox(height: 16),
                       Semantics(
-                        container: true,
-                        label: '场景类别',
-                        child: _ScenarioSegmentedBar(
-                          categories: _categories,
-                          selectedIndex: selectedIndex,
-                          onSelect: (index) =>
-                              _selectedCategoryIndex.value = index,
+                        header: true,
+                        child: Text(
+                          '今天想构建什么？',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.displayMedium?.copyWith(
+                            color: textColor,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      // 2x2 规整极简工程卡片网格
-                      _AuthoritativeActionGrid(
-                        categoryIndex: selectedIndex,
-                        providerConfigured: widget.providerConfigured,
-                        hasWorkspace: widget.hasWorkspace,
-                        onConfigureModel: widget.onConfigureModel,
-                        onPickWorkspace: widget.onWorkspaceTap,
-                        onAnalyzeWorkspace: widget.onAnalyzeWorkspace,
-                        onCreateAgent: widget.onCreateAgent,
-                        onTap: (prompt) {
-                          widget.onSuggestionTap
-                              ?.call(QuickAction(label: prompt));
-                        },
+                      const SizedBox(height: 8),
+                      Text(
+                        '审查代码变更 · 执行指令 · 自动化重构',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: textMuted,
+                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
-          ],
+                if (!widget.keyboardVisible) ...[
+                  const SizedBox(height: 24),
+                  // M2：卡片区含玻璃，只做 12dp 上移，槽位 2。
+                  _maybeEntrance(
+                    animate: animateGrid,
+                    child: ValueListenableBuilder<int>(
+                      valueListenable: _selectedCategoryIndex,
+                      builder: (context, selectedIndex, _) => Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 横向紧凑场景分段芯片（Segmented Chips，释放纵向空间）
+                          Semantics(
+                            container: true,
+                            label: '场景类别',
+                            child: _ScenarioSegmentedBar(
+                              categories: _categories,
+                              selectedIndex: selectedIndex,
+                              onSelect: (index) =>
+                                  _selectedCategoryIndex.value = index,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          // 2x2 规整极简工程卡片网格
+                          _AuthoritativeActionGrid(
+                            categoryIndex: selectedIndex,
+                            providerConfigured: widget.providerConfigured,
+                            hasWorkspace: widget.hasWorkspace,
+                            onConfigureModel: widget.onConfigureModel,
+                            onPickWorkspace: widget.onWorkspaceTap,
+                            onAnalyzeWorkspace: widget.onAnalyzeWorkspace,
+                            onCreateAgent: widget.onCreateAgent,
+                            onTap: (prompt) {
+                              widget.onSuggestionTap
+                                  ?.call(QuickAction(label: prompt));
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 

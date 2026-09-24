@@ -42,6 +42,11 @@ abstract final class NexusMotion {
   /// 流式回复（M6）：首个 token 到达时正文淡入 180ms。
   static const Duration answerReveal = AppTokens.durationAnswerReveal;
 
+  /// 空状态环境光晕（M7）：12s 周期、50ms 重绘间隔、漂移 ≤ 24dp。
+  static const Duration ambientGlowPeriod = AppTokens.ambientGlowPeriod;
+  static const Duration ambientGlowTick = AppTokens.ambientGlowTick;
+  static const double ambientGlowDrift = AppTokens.ambientGlowDrift;
+
   /// 发送按钮按下后的缩放。
   static const double sendPressedScale = 0.9;
 
