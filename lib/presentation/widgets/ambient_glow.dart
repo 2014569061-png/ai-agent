@@ -2,13 +2,14 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import '../motion/motion_lifecycle.dart';
 import '../motion/motion_preferences.dart';
 import '../motion/motion_tier.dart';
 import '../motion/nexus_motion.dart';
 import '../theme/app_palette.dart';
+import 'light_dust_field.dart';
 
 /// M7 环境光晕：空状态页背后两团缓慢变化的柔光（品牌色 + 冷蓝）。
 ///
@@ -19,6 +20,7 @@ import '../theme/app_palette.dart';
 /// * 只有挂了 [MotionTierScope]（真实 App）时才循环；独立 widget 测试里
 ///   一律静态，避免 `pumpAndSettle` 因持续调度帧而超时。
 /// * 接入 [MotionLifecycle]：后台、页面被遮挡（TickerMode 关闭）时停止 Timer。
+/// * M8 光尘粒子（[LightDustSystem]）叠在光晕之上，由同一个 Timer 推进。
 /// * 纯 `RadialGradient` 绘制，不用 blur 滤镜；α 上限 [AmbientGlowPainter.maxAlpha]。
 class AmbientGlow extends StatefulWidget {
   const AmbientGlow({super.key});
@@ -35,6 +37,9 @@ class _AmbientGlowState extends State<AmbientGlow>
   MotionBudget? _budget;
   bool _hasTierScope = false;
 
+  /// M8 光尘：只在光晕循环时存在，与光晕共用同一个时钟。
+  LightDustSystem? _dust;
+
   bool get _wantsLoop {
     final budget = _budget;
     if (budget == null || !budget.ambientGlow) return false;
@@ -45,6 +50,9 @@ class _AmbientGlowState extends State<AmbientGlow>
 
   @visibleForTesting
   bool get isLooping => _timer?.isActive ?? false;
+
+  @visibleForTesting
+  LightDustSystem? get debugDust => _dust;
 
   @override
   void didChangeDependencies() {
@@ -64,6 +72,13 @@ class _AmbientGlowState extends State<AmbientGlow>
       _timer?.cancel();
       _timer = null;
     }
+    _syncDust();
+  }
+
+  void _syncDust() {
+    final count = _wantsLoop ? (_budget?.particleCount ?? 0) : 0;
+    if (count == (_dust?.count ?? 0)) return;
+    _dust = count > 0 ? LightDustSystem(count: count) : null;
   }
 
   void _onTick(Timer _) {
@@ -71,6 +86,7 @@ class _AmbientGlowState extends State<AmbientGlow>
         Duration.microsecondsPerSecond;
     final step = NexusMotion.ambientGlowTick.inMicroseconds /
         Duration.microsecondsPerSecond;
+    _dust?.step(step);
     // 按周期取模，长时间运行也不会累积浮点误差。
     _time.value = (_time.value + step) % period;
   }
@@ -87,17 +103,30 @@ class _AmbientGlowState extends State<AmbientGlow>
     final budget = _budget ?? MotionBudget.of(context);
     if (!budget.ambientGlow) return const SizedBox.shrink();
     final animated = _wantsLoop;
+    final dust = _dust;
     return IgnorePointer(
       child: ExcludeSemantics(
         child: RepaintBoundary(
-          child: CustomPaint(
-            painter: AmbientGlowPainter(
-              time: _time,
-              drift: animated && budget.ambientDrift,
-              breathing: animated && budget.ambientBreathing,
-              singleLayer: budget.level == MotionLevel.reduced,
-            ),
-            child: const SizedBox.expand(),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CustomPaint(
+                painter: AmbientGlowPainter(
+                  time: _time,
+                  drift: animated && budget.ambientDrift,
+                  breathing: animated && budget.ambientBreathing,
+                  singleLayer: budget.level == MotionLevel.reduced,
+                ),
+              ),
+              if (dust != null)
+                CustomPaint(
+                  painter: LightDustPainter(
+                    system: dust,
+                    isDark: Theme.of(context).brightness == Brightness.dark,
+                    repaint: _time,
+                  ),
+                ),
+            ],
           ),
         ),
       ),
