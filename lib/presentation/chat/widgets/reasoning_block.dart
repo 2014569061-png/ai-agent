@@ -344,8 +344,12 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
               ),
             ),
           ),
-          if (thinking && widget.progress != null && !condensedProgress)
-            _buildProgressTimeline(context, cardBorder, textMuted),
+          _buildTimelineSlot(
+            context,
+            thinking && widget.progress != null && !condensedProgress
+                ? _buildProgressTimeline(context, cardBorder, textMuted)
+                : const SizedBox(width: double.infinity),
+          ),
           NexusExpandSection(
             expanded: _expanded,
             duration: NexusMotion.durationBase(context),
@@ -364,6 +368,19 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 答案开始后时间线收起：用 AnimatedSize 平滑过渡，避免下方正文跳动。
+  /// reduced / off 下不包 AnimatedSize（零时长的 AnimatedSize 会在布局中
+  /// 重新标脏自身），直接切换。
+  Widget _buildTimelineSlot(BuildContext context, Widget child) {
+    if (MotionPreferences.shouldReduceMotion(context)) return child;
+    return AnimatedSize(
+      duration: NexusMotion.base,
+      curve: NexusMotion.curveStandard,
+      alignment: Alignment.topCenter,
+      child: child,
     );
   }
 

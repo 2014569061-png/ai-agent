@@ -39,6 +39,9 @@ abstract final class NexusMotion {
   static const Duration bubbleRise = AppTokens.durationBubbleRise;
   static const Duration pressRelease = AppTokens.durationPressRelease;
 
+  /// 流式回复（M6）：首个 token 到达时正文淡入 180ms。
+  static const Duration answerReveal = AppTokens.durationAnswerReveal;
+
   /// 发送按钮按下后的缩放。
   static const double sendPressedScale = 0.9;
 

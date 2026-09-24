@@ -13,7 +13,9 @@ import '../../../domain/models.dart';
 import '../../l10n/app_strings.dart';
 import '../chat_layout_controller.dart';
 import '../../markdown/code_block.dart';
+import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_haptics.dart';
+import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_disclosure.dart';
@@ -358,7 +360,7 @@ class MessageBubble extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AttachmentStrip(parts: [...imageParts, ...audioParts, ...videoParts]),
-        if (hasText) body,
+        if (hasText) _AnswerReveal(animate: lightweight, child: body),
         // 选择模式的退出入口：必须留在气泡内、且始终可达 —— 进入选择模式后
         // 长按会被文本选择器占用，菜单打不开，所以不能依赖菜单来退出。
         if (selecting && onExitSelection != null)
@@ -872,6 +874,69 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 流式回复首个 token 到达时正文淡入一次（M6）。
+///
+/// 只在流式中首次挂载时播放；历史消息和已完成消息不创建 controller。
+/// 包装结构始终存在，流式结束切换为完整 Markdown 时子树不会被重新挂载。
+/// 不对逐个 token 做动画。
+class _AnswerReveal extends StatefulWidget {
+  const _AnswerReveal({required this.animate, required this.child});
+
+  final bool animate;
+  final Widget child;
+
+  @override
+  State<_AnswerReveal> createState() => _AnswerRevealState();
+}
+
+class _AnswerRevealState extends State<_AnswerReveal>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _controller;
+  bool _decided = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_decided) {
+      // 淡入途中切换到 reduced / off：立即完成，不留运行中的 ticker。
+      final controller = _controller;
+      if (controller != null &&
+          controller.isAnimating &&
+          MotionPreferences.shouldReduceMotion(context)) {
+        controller
+          ..stop()
+          ..value = 1.0;
+      }
+      return;
+    }
+    _decided = true;
+    if (!widget.animate || MotionPreferences.shouldReduceMotion(context)) {
+      return;
+    }
+    _controller = AnimationController(
+      vsync: this,
+      duration: NexusMotion.answerReveal,
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return FadeTransition(
+      opacity: controller == null
+          ? kAlwaysCompleteAnimation
+          : CurvedAnimation(parent: controller, curve: NexusMotion.curveEnter),
+      child: widget.child,
     );
   }
 }

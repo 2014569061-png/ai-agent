@@ -114,6 +114,7 @@ abstract final class AppTokens {
   static const _durationSendRippleMs = 280;
   static const _durationBubbleRiseMs = 320;
   static const _durationPressReleaseMs = 320;
+  static const _durationAnswerRevealMs = 180;
   static const Duration durationInstant =
       Duration(milliseconds: _durationInstantMs);
   static const Duration durationFast = Duration(milliseconds: 150);
@@ -157,6 +158,10 @@ abstract final class AppTokens {
       Duration(milliseconds: _durationBubbleRiseMs);
   static const Duration durationPressRelease =
       Duration(milliseconds: _durationPressReleaseMs);
+
+  /// 流式回复首个 token 到达时正文的淡入时长（只播放一次）。
+  static const Duration durationAnswerReveal =
+      Duration(milliseconds: _durationAnswerRevealMs);
   @Deprecated('请改用 durationExpand (300ms)')
   static const Duration durationModal = durationExpand;
   @Deprecated('请改用 durationExpand (300ms)')
