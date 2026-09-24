@@ -515,7 +515,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
+                NexusPageRoute.detail(
                   builder: (_) => const TerminalPage(),
                 ),
               );

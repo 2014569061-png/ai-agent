@@ -123,8 +123,7 @@ void main() {
       });
     }
 
-    testWidgets('裸内容（selfContained: false）仍拿到卡片背景，且外壳贴合内容',
-        (tester) async {
+    testWidgets('裸内容（selfContained: false）仍拿到卡片背景，且外壳贴合内容', (tester) async {
       tester.view.physicalSize = const Size(1080, 2340);
       tester.view.devicePixelRatio = 2.75;
       addTearDown(tester.view.resetPhysicalSize);
@@ -171,8 +170,7 @@ void main() {
       expect(shellRect.width, lessThan(screen.width * 0.9));
     });
 
-    testWidgets('含 Expanded 的确认框仍然正常渲染（外壳移除不能破坏它）',
-        (tester) async {
+    testWidgets('含 Expanded 的确认框仍然正常渲染（外壳移除不能破坏它）', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           theme: AppTheme.light(),
@@ -317,7 +315,20 @@ void main() {
   // ---------------------------------------------------------------- Bug 3
 
   group('Bug3 页面转场不应出现两层画面重叠', () {
-    testWidgets('进入方向：下层路由停止绘制，本页仍然绘制', (tester) async {
+    // M1 起整屏转场改为「上层整屏位移 + 下层视差暗化」，下层在转场期间可见。
+    // 防重叠由两点保证：上层自带不透明画布底（见第三个用例），下层只以
+    // 快照参与绘制（不逐帧重录，玻璃面板也不会采样到变化中的内容）。
+    bool lowerSnapshotting(WidgetTester tester) {
+      final snapshots = tester.widgetList<SnapshotWidget>(
+        find.ancestor(
+          of: find.text('home', skipOffstage: false),
+          matching: find.byType(SnapshotWidget),
+        ),
+      );
+      return snapshots.any((s) => s.controller.allowSnapshotting);
+    }
+
+    testWidgets('进入方向：下层以快照参与转场，本页仍然实时绘制', (tester) async {
       final navigatorKey = GlobalKey<NavigatorState>();
       await tester.pumpWidget(
         MaterialApp(
@@ -332,15 +343,14 @@ void main() {
       );
       navigatorKey.currentState!.push(route);
 
-      // 转场进行中取样：这是「两个画面重叠」出现的时间窗口。
+      // 转场进行中取样：这是「两个画面重叠」可能出现的时间窗口。
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 40));
 
       expect(
-        route.overlayEntries.first.opaque,
+        lowerSnapshotting(tester),
         isTrue,
-        reason: '进入方向必须让下层路由立刻停止绘制；'
-            '否则两层页面会画在同一个 backdrop 上，玻璃面板还会采样到下层文字',
+        reason: '进入期间下层必须冻结为快照，只改 transform，不逐帧重录',
       );
       expect(
         route.overlayEntries.last.opaque,
@@ -350,10 +360,10 @@ void main() {
 
       await tester.pumpAndSettle();
       expect(find.text('detail'), findsOneWidget);
+      expect(find.text('home'), findsNothing, reason: '稳态下层由 opaque 路由停绘');
     });
 
-    testWidgets('反转方向：同样压制下层，避免返回首帧重光栅化整棵下层页面',
-        (tester) async {
+    testWidgets('反转方向：下层同样以快照参与，结束后恢复真实绘制', (tester) async {
       final navigatorKey = GlobalKey<NavigatorState>();
       await tester.pumpWidget(
         MaterialApp(
@@ -375,16 +385,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 40));
 
       expect(
-        route.overlayEntries.first.opaque,
+        lowerSnapshotting(tester),
         isTrue,
-        reason: '返回期间也必须压住下层。下层在整个 push 期间没被绘制过，'
-            '第一帧恢复就要重新光栅化整棵页面（聊天页 = 全屏背景图 + 消息列表 + '
-            '两处玻璃面板），而这一帧还压着上层退出动画的绘制，必然掉帧。'
-            '视觉上下层本来就不可见：上层自带不透明画布底，位移只有 8~16dp。',
+        reason: '返回期间下层只拍一次快照，避免逐帧重光栅化整棵下层页面'
+            '（聊天页 = 全屏背景图 + 消息列表 + 两处玻璃面板）',
       );
 
       await tester.pumpAndSettle();
-      // 反向保护：压制只属于「转场期间」，不能把下层永久冻住。
+      // 反向保护：快照只属于「转场期间」，不能把下层永久冻住。
+      expect(lowerSnapshotting(tester), isFalse);
       expect(find.text('home'), findsOneWidget);
       expect(find.text('detail'), findsNothing);
     });

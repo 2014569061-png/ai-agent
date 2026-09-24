@@ -1,28 +1,52 @@
 import 'package:flutter/material.dart';
-
 import '../widgets/nexus_background.dart';
 import 'motion_preferences.dart';
+import 'motion_tier.dart';
 import 'nexus_motion.dart';
 
 /// 页面层级转场表现形式
 enum RoutePresentation {
-  /// 详情页（从列表进入）：16dp 水平平移。
+  /// 详情页（从列表进入）：整屏左右位移 + 下层视差暗化。
   detail,
 
-  /// 设置/配置类页面：<=12dp 水平位移。
+  /// 设置/配置类页面：同 detail（上下层级关系一致）。
   settings,
 
-  /// 工作台/全屏工作区（沉浸式工作流）：轻量水平位移。
+  /// 工作台/全屏工作区：同 detail。
   workspace,
 
-  /// 纯淡入
+  /// 纯淡入（下层保持不动、透出）。
   fade,
 }
 
-/// NEXUS 统一页面转场路由
+/// NEXUS 统一页面转场路由（整屏「左右位移遮罩」）。
+///
+/// 设计思路借鉴 HarmonyOS 的层级转场：上下层级页面左右位移、不单帧切换、
+/// 曲线优先弹簧。参数为本项目独立制定：
+///
+/// | 角色 | 进入（push） | 返回（pop） |
+/// | --- | --- | --- |
+/// | 上层 | translateX 100% → 0，[NexusMotion.springRelease] 归一化曲线，350ms | 0 → 100%，250ms 标准曲线 |
+/// | 下层 | translateX 0 → −30%（视差）+ 暗化 α 0 → 0.12 | 反向 |
+///
+/// 下层动画通过 [delegatedTransition] 交给下层路由执行，因此即使下层是
+/// `MaterialApp.home` 生成的 MaterialPageRoute 也能同步让位；下层同为
+/// [NexusPageRoute] 时（Flutter 不会把相同的 delegatedTransition 交给它），
+/// 由它自己在 [buildTransitions] 里根据 secondaryAnimation 执行同一套动画。
+///
+/// 性能契约（见 `test/route_transition_paint_test.dart`）：
+/// * 转场期间下层以**快照**参与绘制，只改 transform，不逐帧重录；
+/// * 返回期间上层同样替换为快照；
+/// * 转场结束后恢复真实绘制；稳态下下层由 Flutter 默认的 opaque 机制停绘。
 class NexusPageRoute<T> extends PageRouteBuilder<T> {
   final RoutePresentation presentation;
-  bool _firstFramePainted = false;
+
+  /// 栈中上一层（next route）是否是会让本页让位的整屏位移路由。
+  ///
+  /// 只在得知新的上层时更新；上层被移除（null）时保持原值——此时
+  /// secondaryAnimation 已是 dismissed，保持原值不会产生任何效果，
+  /// 反而能避免返回动画进行中被提前关掉导致的跳变。
+  bool _yieldsToNext = false;
 
   NexusPageRoute({
     required WidgetBuilder builder,
@@ -34,26 +58,51 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
               builder(context),
           transitionDuration:
               _getTransitionDuration(presentation, entering: true),
-          // Entering establishes the new spatial relationship; leaving should
-          // release the old page quickly instead of holding the user.
           reverseTransitionDuration:
               _getTransitionDuration(presentation, entering: false),
-          // BackdropFilter 在 Opacity 临时缓冲区中可能产生闪烁；玻璃页面
-          // 必须在转场期间保持实时绘制，不能使用路由快照。
+          // BackdropFilter 在 Opacity 临时缓冲区中可能产生闪烁；这里关闭
+          // Flutter 内置的路由快照，快照统一由本文件的 [_SnapshotWhile] 控制。
           allowSnapshotting: false,
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return _buildTransition(
-              context,
-              animation,
-              secondaryAnimation,
-              child,
-              presentation,
-            );
-          },
         );
 
+  /// 进入方向的弹簧曲线（离手弹簧归一化 + 钳制不越界）。
+  static final Curve enterCurve = NexusSpringCurve(NexusMotion.springRelease);
+
+  /// 下层视差位移比例（相对屏宽）。
+  static const double parallaxFraction = 0.3;
+
+  /// 下层暗化遮罩最大不透明度。
+  static const double dimOpacity = 0.12;
+
+  bool get _slides => presentation != RoutePresentation.fade;
+
   @override
-  Duration get transitionDuration => _effectiveDuration(super.transitionDuration);
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      _slides ? _delegatedSecondaryTransition : null;
+
+  static Widget? _delegatedSecondaryTransition(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    bool allowSnapshotting,
+    Widget? child,
+  ) =>
+      buildSecondaryTransition(
+        context,
+        secondaryAnimation,
+        child ?? const SizedBox.shrink(),
+      );
+
+  @override
+  void didChangeNext(Route<dynamic>? nextRoute) {
+    super.didChangeNext(nextRoute);
+    if (nextRoute == null) return;
+    _yieldsToNext = nextRoute is NexusPageRoute && nextRoute._slides;
+  }
+
+  @override
+  Duration get transitionDuration =>
+      _effectiveDuration(super.transitionDuration);
 
   @override
   Duration get reverseTransitionDuration =>
@@ -61,8 +110,9 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
 
   Duration _effectiveDuration(Duration base) {
     final routeContext = navigator?.context;
-    return routeContext == null ? base :
-        MotionPreferences.adjustDuration(routeContext, base, listen: false);
+    return routeContext == null
+        ? base
+        : MotionPreferences.adjustDuration(routeContext, base, listen: false);
   }
 
   void _syncDurations() {
@@ -71,82 +121,27 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
   }
 
   @override
+  TickerFuture didPush() {
+    _syncDurations();
+    return super.didPush();
+  }
+
+  @override
   bool didPop(T? result) {
     _syncDurations();
     return super.didPop(result);
   }
 
-  /// 本路由是否在整段生命周期内遮挡下层。
-  ///
-  /// `fade` 档靠上层淡出让下层透出来，压住下层会变成「淡出到空白再跳出内容」，
-  /// 所以这一类必须放行。其余档位都是「上层自带不透明画布底 + 位移只有
-  /// 8~16dp」，转场期间下层在视觉上完全不可见。
-  bool get _occludesUnderlyingRoute => presentation != RoutePresentation.fade;
-
-  /// 让下层路由停止绘制（**进入和返回都算**）。
-  ///
-  /// 玻璃档下 `scaffoldBackgroundColor` 是 `Colors.transparent`，画布由
-  /// `MaterialApp.builder` 里的 `NexusBackground` 提供。转场期间 Flutter 默认会把
-  /// 两层路由画在同一个 backdrop 上，于是：
-  /// 1. 两层页面的内容直接叠在一起（用户看到的「两个画面重叠」）；
-  /// 2. 玻璃面板采样到这个 backdrop，「卡片里能看到下层页面的文字」；
-  /// 3. 整棵下层页面白画一遍，转场掉帧。
-  ///
-  /// `Overlay` 只在 `entry.opaque == true` 时跳过其下方所有 entry 的绘制，
-  /// 而 `TransitionRoute` 只在动画 `completed` 时才置位、并在 forward/reverse
-  /// 期间显式置回 false（见 Flutter `widgets/routes.dart` 的
-  /// `_handleStatusChanged`）。这里补一个监听把这个置位维持住。
-  ///
-  /// **为什么返回方向也要压住**（这是返回掉帧的根因）：
-  /// 下层在整个被遮挡期间从未被绘制，它的 `_needsPaint` 一直是脏的。一旦恢复，
-  /// 第一帧就要把整棵下层页面重新光栅化——聊天页里包含全屏背景图、消息列表
-  /// 和两处玻璃面板（`BackdropFilter` + 折射着色器），这一帧恰好还压着上层
-  /// 退出动画的绘制，必然超预算。而这段时间下层画不画，视觉上完全一样：
-  /// 上层自带不透明画布底，位移只有 8~16dp，露出的边缘与根背景同一张底。
-  ///
-  /// **为什么用 `animation.addListener` 就够**（不需要帧回调）：
-  /// `_handleStatusChanged` 是在 `reverse()` 的同步栈里把标记置回 false 的，
-  /// 而动画的第一次 tick 发生在下一帧的 transient 阶段——早于
-  /// build/layout/paint。监听器在同一个 tick 里把标记纠正回来，这一帧的
-  /// `_Theatre.skipCount` 就已经是正确的，不会有「白画一帧」。
-  ///
-  /// **为什么返回方向是「零绘制」而进入方向会多一次**：
-  /// 下层刚被跳过的第一帧，它的 `RepaintBoundary` 还是上一帧的 attached 状态，
-  /// 于是那次 `markNeedsPaint` 会走 `repaintCompositedChild` 真的重录一遍
-  /// （结果不进入合成，因为此时它已不在 onstage 集合里）。从第二帧起它的
-  /// layer 处于 detach 状态，后续一切 `markNeedsPaint` 都走
-  /// `_skippedPaintingOnLayer`，不再产生任何绘制——返回方向正好整段都落在
-  /// 这个状态里，所以整个返回动画一次绘制都不发生。
-  /// 回归保护：`test/route_transition_paint_test.dart`。
-  void _keepUnderlyingRouteHidden() {
-    if (!_occludesUnderlyingRoute) return;
-    if (overlayEntries.isEmpty) return;
-    // Let the first push frame keep the previous route as a visual fallback.
-    // The new page may not have recorded its first composited layer yet;
-    // hiding the old route before that frame exposes a white flash.
-    if (!_firstFramePainted) return;
-    final entry = overlayEntries.first;
-    if (entry.opaque) return;
-    entry.opaque = true;
-  }
-
   @override
-  TickerFuture didPush() {
-    _syncDurations();
-    final future = super.didPush();
-    animation?.addListener(_keepUnderlyingRouteHidden);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (overlayEntries.isEmpty) return;
-      _firstFramePainted = true;
-      _keepUnderlyingRouteHidden();
-    });
-    return future;
-  }
-
-  @override
-  void dispose() {
-    animation?.removeListener(_keepUnderlyingRouteHidden);
-    super.dispose();
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final primary = _buildPrimaryTransition(context, animation, child);
+    if (!_yieldsToNext) return primary;
+    return buildSecondaryTransition(context, secondaryAnimation, primary);
   }
 
   /// 详情页快捷构造函数
@@ -209,157 +204,210 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
     RoutePresentation presentation, {
     required bool entering,
   }) {
-    if (!entering) return NexusMotion.pageExit;
-    return switch (presentation) {
-      RoutePresentation.detail => NexusMotion.page,
-      RoutePresentation.settings => NexusMotion.page,
-      RoutePresentation.workspace => NexusMotion.page,
-      RoutePresentation.fade => NexusMotion.base,
-    };
+    if (presentation == RoutePresentation.fade) {
+      return entering ? NexusMotion.base : NexusMotion.pageExit;
+    }
+    return entering ? NexusMotion.pageSpring : NexusMotion.page;
   }
 
-  static Widget _buildTransition(
+  Widget _buildPrimaryTransition(
     BuildContext context,
     Animation<double> animation,
-    Animation<double> secondaryAnimation,
     Widget child,
-    RoutePresentation presentation,
   ) {
-    // 页面自带画布底，视觉与 MaterialApp.builder 里的根 NexusBackground 完全一致。
-    //
-    // 玻璃档下 Scaffold 背景是透明的（app_theme.dart 的 scaffoldBackgroundColor），
-    // 页面本身没有任何不透明区域。转场期间只要还看得见下层，就会出现
-    // 「两个画面重叠」——而且玻璃面板会把下层的文字折射进卡片里。
-    //
-    // 之前只靠「push 时让下层停止绘制」规避，但 pop 时下层必须继续绘制
-    // （否则下层会直到转场结束才突然出现，反而是跳变），于是 pop 期间必然同框。
-    // 给页面自己一个不透明底才是根本解：无论上下的绘制策略如何，视觉上都被遮住。
-    // 因为底色与根背景同一套视觉，滑入滑出时露出的边缘也是同一张底，接缝不可见。
-    // Keep the page as one composited layer.  During a reverse transition the
-    // page is only translated; without this boundary Flutter repaints every
-    // BackdropFilter and optical painter on every animation tick.
+    // 页面自带不透明画布底（与根 NexusBackground 同一套视觉）：
+    // 玻璃档下 Scaffold 背景是透明的，没有这层底，位移过程中上下两层内容会
+    // 叠在一起，玻璃面板还会把下层文字折射进卡片。
+    // RepaintBoundary 让位移只改 layer transform，不触发子树重绘。
     final canvasChild = RepaintBoundary(
       child: NexusBackground(child: child),
     );
 
-    // 检查是否开启无障碍「减少动态效果」
-    if (MotionPreferences.shouldReduceMotion(context)) {
-      return canvasChild;
+    final level = MotionPreferences.levelOf(context);
+    if (level == MotionLevel.off) return canvasChild;
+    if (level == MotionLevel.reduced || !_slides) {
+      // 减少动态效果 / fade 档：只做透明度（fade 档靠上层淡出让下层透出，
+      // 快照会让玻璃失去实时采样，所以不包快照）。
+      return FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: NexusMotion.curveStandard,
+        ),
+        child: canvasChild,
+      );
     }
 
-    // 返回方向：把整页替换成一张已光栅化的快照。
-    //
-    // 实测（见 `test/route_transition_paint_test.dart` 的「返回期上层快照」用例）
-    // 返回期间本页如果内部还有活跃内容（流式增量、光标闪烁、指标条），
-    // 每一帧都会被重绘一次：`[1,1,1,1,1,1,1,1,1,1]` ≈ 9~10 次全页重录；
-    // 一个静态页面则是 `[0,0,...]`。差异全部来自页面自身内容变脏，而不是位移
-    // ——`SlideTransition` 只改 layer 的 transform，本身不触发重绘。
-    //
-    // 也就是说这 10 次重录**在视觉上是完全不可见的**：页面在这段时间里只是
-    // 被平移 8~16dp，它上一次录下来的 picture 依然有效。包快照后降到 1 次
-    // （就是拍摄快照那一帧本身）。
-    //
-    // 为什么 `RepaintBoundary` 挡不住：边界只对**它上方**的调用者做缓存，子树内部
-    // 变脏照样要重录。要真正跳过，必须在「子树 vs 图层」之间插一层图片。
-    //
-    // 为什么只在 reverse 期间开：
-    // * push 时页面是新的，第一帧必须真实绘制才能拍出快照，开了也没有收益；
-    // * 快照会冻结这段时间的页面内容（进度条不动、光标不闪），150ms 的退出期间
-    //   用户看不出来，但绝不能在稳态下开着。
-    // `SnapshotMode.permissive`：本项目 `lib/` 下没有任何平台视图（已核实无
-    // `AndroidView` / `UiKitView` / `WebView`），但 permissive 会在遇到平台视图时
-    // 自动退回普通绘制而不是抛异常，作为兜底更稳妥。
-    return _SnapshotOnExit(
+    return _SnapshotWhile(
       animation: animation,
-      child: switch (presentation) {
-        RoutePresentation.detail => SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(16.0 / 360.0, 0.0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: NexusMotion.curveEnter,
-              reverseCurve: NexusMotion.curveExit,
-            )),
-            child: canvasChild,
+      // 只在返回期间快照：push 时页面是新的，第一帧必须真实绘制。
+      when: (status) => status == AnimationStatus.reverse,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: animation,
+          curve: enterCurve,
+          reverseCurve: NexusMotion.curveStandard,
+        )),
+        child: _LeadingEdgeShadow(child: canvasChild),
+      ),
+    );
+  }
+
+  /// 下层让位动画：视差位移 + 暗化遮罩，整段以快照参与绘制。
+  ///
+  /// 公开给 [delegatedTransition] 与测试使用。
+  static Widget buildSecondaryTransition(
+    BuildContext context,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (secondaryAnimation.isDismissed ||
+        MotionPreferences.shouldReduceMotion(context)) {
+      return child;
+    }
+    final budget = MotionBudget.of(context);
+    final curved = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: enterCurve,
+      reverseCurve: NexusMotion.curveStandard,
+    );
+    Widget result = _SnapshotWhile(
+      animation: secondaryAnimation,
+      when: (status) =>
+          status == AnimationStatus.forward ||
+          status == AnimationStatus.reverse,
+      child: child,
+    );
+    if (budget.routeParallax) {
+      result = SlideTransition(
+        position: Tween<Offset>(
+          begin: Offset.zero,
+          end: const Offset(-parallaxFraction, 0),
+        ).animate(curved),
+        child: result,
+      );
+    }
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        result,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: FadeTransition(
+              opacity: curved,
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: dimOpacity),
+              ),
+            ),
           ),
-        RoutePresentation.settings => SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(10.0 / 360.0, 0.0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: NexusMotion.curveEnter,
-              reverseCurve: NexusMotion.curveExit,
-            )),
-            child: canvasChild,
-          ),
-        RoutePresentation.workspace => SlideTransition(
-            position: Tween<Offset>(
-              begin: const Offset(8.0 / 360.0, 0.0),
-              end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: animation,
-              curve: NexusMotion.curveEnter,
-              reverseCurve: NexusMotion.curveExit,
-            )),
-            child: canvasChild,
-          ),
-        // fade 档靠上层淡出让下层透出，快照会把「淡出」变成「一张图淡出」，
-        // 视觉上等价，但玻璃面板在快照里会失去实时采样，所以放行。
-        RoutePresentation.fade => canvasChild,
-      },
+        ),
+      ],
     );
   }
 }
 
-/// 在动画反向（返回）期间，用一张快照替代整棵子树参与绘制。
+/// 上层页面左缘的柔和投影，让位移中的上下层级更清晰。
+/// 投影位于页面左边界之外，页面就位后自然移出屏幕，无需额外动画。
+class _LeadingEdgeShadow extends StatelessWidget {
+  const _LeadingEdgeShadow({required this.child});
+
+  final Widget child;
+
+  static const double _width = 16;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final alpha = isDark ? 0.20 : 0.08;
+    return Stack(
+      clipBehavior: Clip.none,
+      fit: StackFit.passthrough,
+      children: [
+        child,
+        Positioned(
+          left: -_width,
+          top: 0,
+          bottom: 0,
+          width: _width,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerRight,
+                  end: Alignment.centerLeft,
+                  colors: [
+                    Colors.black.withValues(alpha: alpha),
+                    Colors.black.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 在 [when] 成立期间，用一张快照替代整棵子树参与绘制。
 ///
-/// 页面在返回期间只被平移，内容变化在视觉上不可见，逐帧重录是纯浪费。
-/// 这里把「子树」换成「一张已经拍好的图」，让每帧只剩 layer 的 transform 变化。
+/// 转场期间页面只被平移，内容变化在视觉上不可见，逐帧重录是纯浪费。
+/// 这里把「子树」换成「一张已经拍好的图」，让每帧只剩 layer 的 transform
+/// 变化。条件不成立时（稳态）必须关掉，否则页面内容会被永久冻结。
 ///
-/// 只在 `reverse` 期间启用：进入方向第一帧必须真实绘制，快照也无意义；
-/// 稳态下必须关掉，否则页面内容会被永久冻结。
-class _SnapshotOnExit extends StatefulWidget {
-  const _SnapshotOnExit({required this.animation, required this.child});
+/// `SnapshotMode.permissive`：遇到平台视图时自动退回普通绘制而不是抛异常。
+class _SnapshotWhile extends StatefulWidget {
+  const _SnapshotWhile({
+    required this.animation,
+    required this.when,
+    required this.child,
+  });
 
   final Animation<double> animation;
+  final bool Function(AnimationStatus status) when;
   final Widget child;
 
   @override
-  State<_SnapshotOnExit> createState() => _SnapshotOnExitState();
+  State<_SnapshotWhile> createState() => _SnapshotWhileState();
 }
 
-class _SnapshotOnExitState extends State<_SnapshotOnExit> {
+class _SnapshotWhileState extends State<_SnapshotWhile> {
   final SnapshotController _controller = SnapshotController();
 
   @override
   void initState() {
     super.initState();
-    widget.animation.addListener(_sync);
+    widget.animation.addStatusListener(_onStatus);
     _sync();
   }
 
   @override
-  void didUpdateWidget(covariant _SnapshotOnExit oldWidget) {
+  void didUpdateWidget(covariant _SnapshotWhile oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.animation != widget.animation) {
-      oldWidget.animation.removeListener(_sync);
-      widget.animation.addListener(_sync);
+      oldWidget.animation.removeStatusListener(_onStatus);
+      widget.animation.addStatusListener(_onStatus);
     }
     _sync();
   }
 
   @override
   void dispose() {
-    widget.animation.removeListener(_sync);
+    widget.animation.removeStatusListener(_onStatus);
     _controller.dispose();
     super.dispose();
   }
 
+  void _onStatus(AnimationStatus _) => _sync();
+
   void _sync() {
-    _controller.allowSnapshotting =
-        widget.animation.status == AnimationStatus.reverse;
+    final allow = widget.when(widget.animation.status);
+    if (_controller.allowSnapshotting == allow) return;
+    // 每次重新开启都丢弃旧快照，保证拍到的是当前内容。
+    if (allow) _controller.clear();
+    _controller.allowSnapshotting = allow;
   }
 
   @override

@@ -101,6 +101,7 @@ abstract final class AppTokens {
   // 200~250ms、全屏/复杂转场不超过 350ms。
   static const _durationInstantMs = 100;
   static const _durationPageMs = 250;
+  static const _durationPageSpringMs = 350;
   static const _durationPageExitMs = 180;
   static const _durationSheetMs = 300;
   static const _durationToastMs = 220;
@@ -111,6 +112,10 @@ abstract final class AppTokens {
   static const Duration durationBase = Duration(milliseconds: 220);
   static const Duration durationExpand = Duration(milliseconds: 300);
   static const Duration durationPage = Duration(milliseconds: _durationPageMs);
+
+  /// 整屏层级转场（上层进入）：HarmonyOS 全屏动效上限 350ms。
+  static const Duration durationPageSpring =
+      Duration(milliseconds: _durationPageSpringMs);
   static const Duration durationPageExit =
       Duration(milliseconds: _durationPageExitMs);
   static const Duration durationSheet =

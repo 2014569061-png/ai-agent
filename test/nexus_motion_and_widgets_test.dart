@@ -78,10 +78,10 @@ void main() {
       final detailRoute = NexusPageRoute.detail(
         builder: (_) => const SizedBox(),
       );
-      expect(detailRoute.transitionDuration, const Duration(milliseconds: 250));
+      expect(detailRoute.transitionDuration, const Duration(milliseconds: 350));
       expect(
         detailRoute.reverseTransitionDuration,
-        const Duration(milliseconds: 180),
+        const Duration(milliseconds: 250),
       );
 
       final fadeRoute = NexusPageRoute.fade(
@@ -110,7 +110,7 @@ void main() {
                         const LiquidGlass(child: Text('Glass page')),
                     presentation: presentation,
                   );
-                  return route.transitionsBuilder(
+                  return route.buildTransitions(
                     context,
                     const AlwaysStoppedAnimation<double>(0.5),
                     const AlwaysStoppedAnimation<double>(0.0),

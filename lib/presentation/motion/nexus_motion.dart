@@ -21,6 +21,9 @@ abstract final class NexusMotion {
   /// 页面进入：新元素需要更长的末尾减速来建立空间关系。
   static const Duration page = AppTokens.durationPage;
 
+  /// 整屏层级转场进入时长（配合 [NexusSpringCurve] 使用）
+  static const Duration pageSpring = AppTokens.durationPageSpring;
+
   /// 页面退出：已在视线中的元素应更快离场，减少等待感。
   static const Duration pageExit = AppTokens.durationPageExit;
 
@@ -163,5 +166,40 @@ abstract final class NexusMotion {
       axis: axis,
       child: child,
     );
+  }
+}
+
+/// 把弹簧模拟归一化成定长 [Curve]，供必须给定时长的场景使用（例如路由转场）。
+///
+/// 取弹簧最后一次离开终值 ±0.5% 范围的时刻 T 作为总时长，
+/// `f(t) = x(t·T) / x(T)`，并钳制在 [0, 1]：整屏转场不允许越界，
+/// 越界会在屏幕边缘露出下层页面。
+class NexusSpringCurve extends Curve {
+  NexusSpringCurve(this.description)
+      : _simulation = SpringSimulation(description, 0, 1, 0) {
+    _settle = _settleTime(_simulation);
+    _end = _simulation.x(_settle);
+  }
+
+  final SpringDescription description;
+  final SpringSimulation _simulation;
+  late final double _settle;
+  late final double _end;
+
+  /// 弹簧从静止走到稳定所需的物理时长（秒），便于测试与调参。
+  double get settleSeconds => _settle;
+
+  @override
+  double transformInternal(double t) =>
+      (_simulation.x(t * _settle) / _end).clamp(0.0, 1.0);
+
+  static double _settleTime(SpringSimulation simulation) {
+    const tolerance = 0.005;
+    var last = 0.0;
+    for (var ms = 1; ms <= 5000; ms++) {
+      final t = ms / 1000;
+      if ((simulation.x(t) - 1).abs() >= tolerance) last = t;
+    }
+    return last + 0.001;
   }
 }

@@ -5,6 +5,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 
 import '../../infrastructure/tools/command_tool.dart';
+import '../motion/nexus_page_route_factory.dart';
 import '../terminal/terminal_page.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/floating_toast.dart';
@@ -195,7 +196,7 @@ class _TerminalSheetState extends State<TerminalSheet> {
                   onPressed: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(
+                      NexusPageRoute.workspace(
                         builder: (_) => const TerminalPage(),
                       ),
                     );
