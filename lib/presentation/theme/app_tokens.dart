@@ -107,6 +107,8 @@ abstract final class AppTokens {
   static const _durationToastMs = 220;
   static const _durationImeSettleMs = 400;
   static const _durationEntranceMs = 260;
+  static const _durationListItemMs = 220;
+  static const _listStaggerMs = 30;
   static const _entranceStaggerMs = 40;
   static const _durationReducedEntranceMs = 120;
   static const Duration durationInstant =
@@ -138,6 +140,12 @@ abstract final class AppTokens {
       Duration(milliseconds: _entranceStaggerMs);
   static const Duration durationReducedEntrance =
       Duration(milliseconds: _durationReducedEntranceMs);
+
+  /// 列表错开入场：单项时长 / 相邻两项错开 / 参与入场的最大项数。
+  static const Duration durationListItem =
+      Duration(milliseconds: _durationListItemMs);
+  static const Duration listStagger = Duration(milliseconds: _listStaggerMs);
+  static const int listStaggerMaxItems = 8;
   @Deprecated('请改用 durationExpand (300ms)')
   static const Duration durationModal = durationExpand;
   @Deprecated('请改用 durationExpand (300ms)')

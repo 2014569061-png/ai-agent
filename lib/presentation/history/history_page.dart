@@ -10,6 +10,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../motion/nexus_motion.dart';
+import '../motion/nexus_staggered_entrance.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
@@ -476,41 +477,44 @@ class _HistoryPageState extends State<HistoryPage> {
                     )
                   : null,
               onRetry: _reload,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
-                itemCount: rows.length +
-                    (_pagedMode && (_hasMore || _loadingMore) ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index >= rows.length) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Center(
-                        child: _loadingMore
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+              child: NexusStaggeredEntrance(
+                child: ListView.builder(
+                  physics: NexusMotion.listPhysics,
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
+                  itemCount: rows.length +
+                      (_pagedMode && (_hasMore || _loadingMore) ? 1 : 0),
+                  itemBuilder: NexusStaggeredItem.wrap((context, index) {
+                    if (index >= rows.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Center(
+                          child: _loadingMore
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : TextButton(
+                                  onPressed: _loadMore,
+                                  child: const Text('加载更多'),
                                 ),
-                              )
-                            : TextButton(
-                                onPressed: _loadMore,
-                                child: const Text('加载更多'),
-                              ),
-                      ),
+                        ),
+                      );
+                    }
+                    final row = rows[index];
+                    if (row is _HistoryGroupRow) {
+                      return _groupHeader(row, isDark);
+                    }
+                    final conversation =
+                        (row as _HistoryConversationRow).conversation;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: _conversationTile(conversation),
                     );
-                  }
-                  final row = rows[index];
-                  if (row is _HistoryGroupRow) {
-                    return _groupHeader(row, isDark);
-                  }
-                  final conversation =
-                      (row as _HistoryConversationRow).conversation;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: _conversationTile(conversation),
-                  );
-                },
+                  }),
+                ),
               ),
             ),
           ),

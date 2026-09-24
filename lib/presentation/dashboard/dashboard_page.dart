@@ -10,6 +10,8 @@ import '../../application/nexus_guard.dart';
 import '../history/history_page.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
+import '../motion/nexus_motion.dart';
+import '../motion/nexus_staggered_entrance.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
@@ -170,44 +172,68 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
         data: (summary) => GlassScrollEdge(
           child: RefreshIndicator(
             onRefresh: _refresh,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-              children: [
-                // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
-                TodoSection(
-                  todos: summary.todos,
-                  onConversationSelected: widget.onConversationSelected,
-                ),
-                const SizedBox(height: 16),
-                if (_developerMode) ...[
-                  TokenUsageHero(days: summary.weeklyUsage),
-                  const SizedBox(height: 16),
-                  KpiCardGrid(kpis: summary.kpis),
-                  const SizedBox(height: 16),
-                  RunStatusList(
-                    runs: summary.recentRuns,
-                    onConversationSelected: widget.onConversationSelected,
-                  ),
-                  const SizedBox(height: 16),
-                  TokenTrendCard(days: summary.weeklyUsage),
-                  const SizedBox(height: 16),
-                ] else
-                  SectionCard(
-                    child: ListTile(
-                      leading: const Icon(Icons.insights_rounded,
-                          color: AppPalette.brand),
-                      title: const Text('性能详情'),
-                      subtitle: const Text('Token、费用、运行指标与趋势'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: _togglePresentationMode,
+            child: NexusStaggeredEntrance(
+              child: ListView(
+                physics: NexusMotion.listPhysics,
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                children: [
+                  // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
+                  NexusStaggeredItem(
+                    index: 0,
+                    child: TodoSection(
+                      todos: summary.todos,
+                      onConversationSelected: widget.onConversationSelected,
                     ),
                   ),
-                if (!_developerMode) const SizedBox(height: 16),
-                _RecentConversationsSection(
-                  conversations: summary.recentConversations,
-                  onConversationSelected: widget.onConversationSelected,
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  if (_developerMode) ...[
+                    NexusStaggeredItem(
+                      index: 1,
+                      child: TokenUsageHero(days: summary.weeklyUsage),
+                    ),
+                    const SizedBox(height: 16),
+                    NexusStaggeredItem(
+                      index: 2,
+                      child: KpiCardGrid(kpis: summary.kpis),
+                    ),
+                    const SizedBox(height: 16),
+                    NexusStaggeredItem(
+                      index: 3,
+                      child: RunStatusList(
+                        runs: summary.recentRuns,
+                        onConversationSelected: widget.onConversationSelected,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    NexusStaggeredItem(
+                      index: 4,
+                      child: TokenTrendCard(days: summary.weeklyUsage),
+                    ),
+                    const SizedBox(height: 16),
+                  ] else
+                    NexusStaggeredItem(
+                      index: 1,
+                      child: SectionCard(
+                        child: ListTile(
+                          leading: const Icon(Icons.insights_rounded,
+                              color: AppPalette.brand),
+                          title: const Text('性能详情'),
+                          subtitle: const Text('Token、费用、运行指标与趋势'),
+                          trailing: const Icon(Icons.chevron_right_rounded),
+                          onTap: _togglePresentationMode,
+                        ),
+                      ),
+                    ),
+                  if (!_developerMode) const SizedBox(height: 16),
+                  NexusStaggeredItem(
+                    index: _developerMode ? 5 : 2,
+                    child: _RecentConversationsSection(
+                      conversations: summary.recentConversations,
+                      onConversationSelected: widget.onConversationSelected,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -29,6 +29,15 @@ abstract final class NexusMotion {
   static const Duration entranceStagger = AppTokens.entranceStagger;
   static const Duration reducedEntrance = AppTokens.durationReducedEntrance;
 
+  /// 列表错开入场（M3）。
+  static const Duration listItem = AppTokens.durationListItem;
+  static const Duration listStagger = AppTokens.listStagger;
+  static const int listStaggerMaxItems = AppTokens.listStaggerMaxItems;
+
+  /// 非聊天列表的滚动物理：弹性过界（聊天列表保持平台默认）。
+  static const ScrollPhysics listPhysics =
+      BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+
   /// 页面退出：已在视线中的元素应更快离场，减少等待感。
   static const Duration pageExit = AppTokens.durationPageExit;
 

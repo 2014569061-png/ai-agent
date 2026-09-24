@@ -9,6 +9,8 @@ import '../../infrastructure/database/app_database.dart';
 import '../../application/mojibake_repair.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
 import '../motion/nexus_page_route_factory.dart';
+import '../motion/nexus_motion.dart';
+import '../motion/nexus_staggered_entrance.dart';
 import 'agent_editor_page.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
@@ -148,68 +150,72 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
                 onAction: _createFromDescription,
               );
             }
-            return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                // 首项是「描述生成」入口，其余是已有 Agent。
-                itemCount: agents.length + 1,
-                separatorBuilder: (_, __) =>
-                    const SizedBox(height: AppTokens.sp3),
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    return _DescribeEntryCard(onTap: _createFromDescription);
-                  }
-                  final agent = agents[index - 1];
-                  return SectionCard(
-                      glass: true,
-                      child: ListTile(
-                          leading: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppPalette.brandSoftDark
-                                  : AppPalette.brandSoftLight,
-                              borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusControl),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.12)
-                                    : AppPalette.brand.withValues(alpha: 0.15),
-                                width: 0.8,
+            return NexusStaggeredEntrance(
+                child: ListView.separated(
+                    physics: NexusMotion.listPhysics,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    // 首项是「描述生成」入口，其余是已有 Agent。
+                    itemCount: agents.length + 1,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppTokens.sp3),
+                    itemBuilder: NexusStaggeredItem.wrap((context, index) {
+                      if (index == 0) {
+                        return _DescribeEntryCard(
+                            onTap: _createFromDescription);
+                      }
+                      final agent = agents[index - 1];
+                      return SectionCard(
+                          glass: true,
+                          child: ListTile(
+                              leading: Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? AppPalette.brandSoftDark
+                                      : AppPalette.brandSoftLight,
+                                  borderRadius: BorderRadius.circular(
+                                      AppTokens.radiusControl),
+                                  border: Border.all(
+                                    color: isDark
+                                        ? Colors.white.withValues(alpha: 0.12)
+                                        : AppPalette.brand
+                                            .withValues(alpha: 0.15),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: const Icon(Icons.smart_toy_outlined,
+                                    size: 20, color: AppPalette.brand),
                               ),
-                            ),
-                            child: const Icon(Icons.smart_toy_outlined,
-                                size: 20, color: AppPalette.brand),
-                          ),
-                          title: Text(
-                            agent.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: AppTokens.fontSizeBody,
-                            ),
-                          ),
-                          subtitle: Text(
-                            agent.systemPrompt,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: AppTokens.fontSizeCaption,
-                              color: isDark
-                                  ? AppPalette.darkTextMuted
-                                  : AppPalette.lightTextMuted,
-                            ),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            tooltip: AppStrings.editAgent,
-                            constraints: const BoxConstraints(
-                              minWidth: AppTokens.kMinTouchTarget,
-                              minHeight: AppTokens.kMinTouchTarget,
-                            ),
-                            onPressed: () => _openAgentEditor(agent: agent),
-                          ),
-                          onTap: () => _openAgentEditor(agent: agent)));
-                });
+                              title: Text(
+                                agent.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: AppTokens.fontSizeBody,
+                                ),
+                              ),
+                              subtitle: Text(
+                                agent.systemPrompt,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: AppTokens.fontSizeCaption,
+                                  color: isDark
+                                      ? AppPalette.darkTextMuted
+                                      : AppPalette.lightTextMuted,
+                                ),
+                              ),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                tooltip: AppStrings.editAgent,
+                                constraints: const BoxConstraints(
+                                  minWidth: AppTokens.kMinTouchTarget,
+                                  minHeight: AppTokens.kMinTouchTarget,
+                                ),
+                                onPressed: () => _openAgentEditor(agent: agent),
+                              ),
+                              onTap: () => _openAgentEditor(agent: agent)));
+                    })));
           }),
     );
   }

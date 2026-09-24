@@ -9,6 +9,7 @@ import '../../infrastructure/mcp/mcp_tool_provider.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_motion.dart';
 import '../motion/motion_preferences.dart';
+import '../motion/nexus_staggered_entrance.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -545,264 +546,271 @@ class _McpServersPageState extends State<McpServersPage> {
                   actionLabel: AppStrings.addMcpServer,
                   onAction: _add,
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  itemCount: _servers.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: AppTokens.sp3),
-                  itemBuilder: (context, index) {
-                    final server = _servers[index];
-                    final isStdio = server.kind != McpServerKind.http;
-                    final connectionResult = _connectionResults[server.id];
+              : NexusStaggeredEntrance(
+                  child: ListView.separated(
+                    physics: NexusMotion.listPhysics,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    itemCount: _servers.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppTokens.sp3),
+                    itemBuilder: NexusStaggeredItem.wrap((context, index) {
+                      final server = _servers[index];
+                      final isStdio = server.kind != McpServerKind.http;
+                      final connectionResult = _connectionResults[server.id];
 
-                    return SectionCard(
-                      glass: true,
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppTokens.sp4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 38,
-                                  height: 38,
-                                  decoration: BoxDecoration(
-                                    color: server.enabled
-                                        ? (isDark
-                                            ? AppPalette.brandSoftDark
-                                            : AppPalette.brandSoftLight)
-                                        : (isDark
-                                            ? AppPalette.darkSurface
-                                            : AppPalette.lightSurface),
-                                    borderRadius: BorderRadius.circular(
-                                        AppTokens.radiusControl),
-                                    border: Border.all(
+                      return SectionCard(
+                        glass: true,
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppTokens.sp4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: server.enabled
+                                          ? (isDark
+                                              ? AppPalette.brandSoftDark
+                                              : AppPalette.brandSoftLight)
+                                          : (isDark
+                                              ? AppPalette.darkSurface
+                                              : AppPalette.lightSurface),
+                                      borderRadius: BorderRadius.circular(
+                                          AppTokens.radiusControl),
+                                      border: Border.all(
+                                        color: server.enabled
+                                            ? AppPalette.brand
+                                            : (isDark
+                                                ? AppPalette.darkHairline
+                                                : AppPalette.lightHairline),
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      isStdio
+                                          ? Icons.terminal_rounded
+                                          : Icons.dns_outlined,
+                                      size: 20,
                                       color: server.enabled
                                           ? AppPalette.brand
                                           : (isDark
-                                              ? AppPalette.darkHairline
-                                              : AppPalette.lightHairline),
+                                              ? AppPalette.darkTextMuted
+                                              : AppPalette.lightTextMuted),
                                     ),
                                   ),
-                                  child: Icon(
-                                    isStdio
-                                        ? Icons.terminal_rounded
-                                        : Icons.dns_outlined,
-                                    size: 20,
-                                    color: server.enabled
-                                        ? AppPalette.brand
-                                        : (isDark
-                                            ? AppPalette.darkTextMuted
-                                            : AppPalette.lightTextMuted),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          server.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: AppTokens.fontSizeBody,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Wrap(
+                                          spacing: 6,
+                                          runSpacing: 4,
+                                          children: [
+                                            if (_testing[server.id] == true)
+                                              const NexusStatusBadge(
+                                                label: '测试中...',
+                                                tone: NexusBadgeTone.warning,
+                                                showDot: true,
+                                              )
+                                            else
+                                              NexusStatusBadge(
+                                                label: server.enabled
+                                                    ? '已启用'
+                                                    : '已停用',
+                                                tone: server.enabled
+                                                    ? NexusBadgeTone.success
+                                                    : NexusBadgeTone.neutral,
+                                              ),
+                                            NexusStatusBadge(
+                                              label: isStdio
+                                                  ? 'STDIO 进程'
+                                                  : 'HTTP 远程',
+                                              tone: NexusBadgeTone.neutral,
+                                            ),
+                                            NexusStatusBadge(
+                                              label: isStdio
+                                                  ? '高权限本地执行'
+                                                  : '受控网络请求',
+                                              tone: isStdio
+                                                  ? NexusBadgeTone.warning
+                                                  : NexusBadgeTone.brand,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        server.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: AppTokens.fontSizeBody,
-                                          fontWeight: FontWeight.w500,
+                                  Switch(
+                                    value: server.enabled,
+                                    onChanged: (enabled) async {
+                                      unawaited(
+                                          HapticFeedback.selectionClick());
+                                      await _service.toggleServer(
+                                          server.id, enabled);
+                                      await _reload();
+                                    },
+                                  ),
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert_rounded,
+                                        size: 20),
+                                    tooltip: '更多操作',
+                                    onSelected: (action) {
+                                      switch (action) {
+                                        case 'test':
+                                          _testConnection(server);
+                                          break;
+                                        case 'edit':
+                                          _edit(server);
+                                          break;
+                                        case 'delete':
+                                          _deleteServer(server);
+                                          break;
+                                      }
+                                    },
+                                    itemBuilder: (ctx) => [
+                                      PopupMenuItem(
+                                        value: 'test',
+                                        child: Row(
+                                          children: [
+                                            _testing[server.id] == true
+                                                ? const Icon(
+                                                    Icons.sync_rounded,
+                                                    size: 18,
+                                                    color:
+                                                        AppPalette.brandAction,
+                                                  )
+                                                : const Icon(
+                                                    Icons
+                                                        .wifi_tethering_rounded,
+                                                    size: 18),
+                                            const SizedBox(width: 8),
+                                            const Text('测试连接'),
+                                          ],
                                         ),
                                       ),
-                                      const SizedBox(height: 4),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 4,
-                                        children: [
-                                          if (_testing[server.id] == true)
-                                            const NexusStatusBadge(
-                                              label: '测试中...',
-                                              tone: NexusBadgeTone.warning,
-                                              showDot: true,
-                                            )
-                                          else
-                                            NexusStatusBadge(
-                                              label: server.enabled
-                                                  ? '已启用'
-                                                  : '已停用',
-                                              tone: server.enabled
-                                                  ? NexusBadgeTone.success
-                                                  : NexusBadgeTone.neutral,
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.edit_outlined, size: 18),
+                                            SizedBox(width: 8),
+                                            Text('编辑配置'),
+                                          ],
+                                        ),
+                                      ),
+                                      const PopupMenuItem(
+                                        value: 'delete',
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.delete_outline_rounded,
+                                                size: 18,
+                                                color: AppPalette.danger),
+                                            SizedBox(width: 8),
+                                            Text(
+                                              '删除服务器',
+                                              style: TextStyle(
+                                                  color: AppPalette.danger),
                                             ),
-                                          NexusStatusBadge(
-                                            label: isStdio
-                                                ? 'STDIO 进程'
-                                                : 'HTTP 远程',
-                                            tone: NexusBadgeTone.neutral,
-                                          ),
-                                          NexusStatusBadge(
-                                            label:
-                                                isStdio ? '高权限本地执行' : '受控网络请求',
-                                            tone: isStdio
-                                                ? NexusBadgeTone.warning
-                                                : NexusBadgeTone.brand,
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
-                                ),
-                                Switch(
-                                  value: server.enabled,
-                                  onChanged: (enabled) async {
-                                    unawaited(HapticFeedback.selectionClick());
-                                    await _service.toggleServer(
-                                        server.id, enabled);
-                                    await _reload();
-                                  },
-                                ),
-                                PopupMenuButton<String>(
-                                  icon: const Icon(Icons.more_vert_rounded,
-                                      size: 20),
-                                  tooltip: '更多操作',
-                                  onSelected: (action) {
-                                    switch (action) {
-                                      case 'test':
-                                        _testConnection(server);
-                                        break;
-                                      case 'edit':
-                                        _edit(server);
-                                        break;
-                                      case 'delete':
-                                        _deleteServer(server);
-                                        break;
-                                    }
-                                  },
-                                  itemBuilder: (ctx) => [
-                                    PopupMenuItem(
-                                      value: 'test',
-                                      child: Row(
-                                        children: [
-                                          _testing[server.id] == true
-                                              ? const Icon(
-                                                  Icons.sync_rounded,
-                                                  size: 18,
-                                                  color: AppPalette.brandAction,
-                                                )
-                                              : const Icon(
-                                                  Icons.wifi_tethering_rounded,
-                                                  size: 18),
-                                          const SizedBox(width: 8),
-                                          const Text('测试连接'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'edit',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.edit_outlined, size: 18),
-                                          SizedBox(width: 8),
-                                          Text('编辑配置'),
-                                        ],
-                                      ),
-                                    ),
-                                    const PopupMenuItem(
-                                      value: 'delete',
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.delete_outline_rounded,
-                                              size: 18,
-                                              color: AppPalette.danger),
-                                          SizedBox(width: 8),
-                                          Text(
-                                            '删除服务器',
-                                            style: TextStyle(
-                                                color: AppPalette.danger),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppPalette.darkSurface
-                                    : AppPalette.lightSurface,
-                                borderRadius: BorderRadius.circular(
-                                    AppTokens.radiusControl),
+                                ],
                               ),
-                              child: SelectableText(
-                                server.url ?? server.command ?? '未指定地址',
-                                style: TextStyle(
-                                  fontSize: AppTokens.fontSizeFootnote,
-                                  fontFamily: 'monospace',
+                              const SizedBox(height: 10),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
                                   color: isDark
-                                      ? AppPalette.darkTextMuted
-                                      : AppPalette.lightTextMuted,
+                                      ? AppPalette.darkSurface
+                                      : AppPalette.lightSurface,
+                                  borderRadius: BorderRadius.circular(
+                                      AppTokens.radiusControl),
+                                ),
+                                child: SelectableText(
+                                  server.url ?? server.command ?? '未指定地址',
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeFootnote,
+                                    fontFamily: 'monospace',
+                                    color: isDark
+                                        ? AppPalette.darkTextMuted
+                                        : AppPalette.lightTextMuted,
+                                  ),
                                 ),
                               ),
-                            ),
-                            AnimatedSize(
-                              duration: MotionPreferences.adjustDuration(
-                                context,
-                                NexusMotion.fast,
-                              ),
-                              alignment: Alignment.topCenter,
-                              child: connectionResult == null
-                                  ? const SizedBox.shrink()
-                                  : AnimatedSwitcher(
-                                      duration:
-                                          MotionPreferences.adjustDuration(
-                                        context,
-                                        NexusMotion.fast,
-                                      ),
-                                      switchInCurve: NexusMotion.curveEnter,
-                                      switchOutCurve: NexusMotion.curveExit,
-                                      child: Column(
-                                        key: ValueKey(connectionResult),
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            connectionResult.ok
-                                                ? '最近测试：连接成功 · ${connectionResult.toolCount} 个工具'
-                                                : '最近测试：连接失败',
-                                            style: TextStyle(
-                                              fontSize:
-                                                  AppTokens.fontSizeFootnote,
-                                              color: connectionResult.ok
-                                                  ? AppPalette.brandAction
-                                                  : AppPalette.danger,
-                                            ),
-                                          ),
-                                          if (!connectionResult.ok &&
-                                              connectionResult
-                                                      .error?.isNotEmpty ==
-                                                  true)
+                              AnimatedSize(
+                                duration: MotionPreferences.adjustDuration(
+                                  context,
+                                  NexusMotion.fast,
+                                ),
+                                alignment: Alignment.topCenter,
+                                child: connectionResult == null
+                                    ? const SizedBox.shrink()
+                                    : AnimatedSwitcher(
+                                        duration:
+                                            MotionPreferences.adjustDuration(
+                                          context,
+                                          NexusMotion.fast,
+                                        ),
+                                        switchInCurve: NexusMotion.curveEnter,
+                                        switchOutCurve: NexusMotion.curveExit,
+                                        child: Column(
+                                          key: ValueKey(connectionResult),
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const SizedBox(height: 8),
                                             Text(
-                                              connectionResult.error!,
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .bodySmall,
+                                              connectionResult.ok
+                                                  ? '最近测试：连接成功 · ${connectionResult.toolCount} 个工具'
+                                                  : '最近测试：连接失败',
+                                              style: TextStyle(
+                                                fontSize:
+                                                    AppTokens.fontSizeFootnote,
+                                                color: connectionResult.ok
+                                                    ? AppPalette.brandAction
+                                                    : AppPalette.danger,
+                                              ),
                                             ),
-                                        ],
+                                            if (!connectionResult.ok &&
+                                                connectionResult
+                                                        .error?.isNotEmpty ==
+                                                    true)
+                                              Text(
+                                                connectionResult.error!,
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall,
+                                              ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                            ),
-                          ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    }),
+                  ),
                 ),
       floatingActionButton: FloatingActionButton(
         onPressed: _add,

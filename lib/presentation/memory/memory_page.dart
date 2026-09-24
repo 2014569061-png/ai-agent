@@ -5,6 +5,8 @@ import '../../application/memory_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../l10n/app_strings.dart';
+import '../motion/nexus_motion.dart';
+import '../motion/nexus_staggered_entrance.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -402,172 +404,181 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
         loading: _loading,
         error: _error,
         onRetry: _load,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // 搜索栏
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: isFlat
-                  ? SizedBox(
-                      height: 40,
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (v) => setState(
-                            () => _searchQuery = v.trim().toLowerCase()),
-                        decoration: InputDecoration(
-                          hintText: '搜索记忆内容或分类...',
-                          hintStyle: TextStyle(
-                            fontSize: AppTokens.fontSizeCaption,
-                            color: isDark
-                                ? AppPalette.darkTextMuted
-                                : AppPalette.lightTextMuted,
-                          ),
-                          prefixIcon:
-                              const Icon(Icons.search_rounded, size: 18),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear_rounded,
-                                      size: 16),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _searchQuery = '');
-                                  },
-                                )
-                              : null,
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 12),
-                          filled: true,
-                          fillColor: isDark
-                              ? AppPalette.darkSurface
-                              : AppPalette.lightSurface,
-                          border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusPill),
-                            borderSide: BorderSide(
+        child: NexusStaggeredEntrance(
+          child: ListView(
+            physics: NexusMotion.listPhysics,
+            padding: const EdgeInsets.all(16),
+            children: [
+              // 搜索栏
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: isFlat
+                    ? SizedBox(
+                        height: 40,
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (v) => setState(
+                              () => _searchQuery = v.trim().toLowerCase()),
+                          decoration: InputDecoration(
+                            hintText: '搜索记忆内容或分类...',
+                            hintStyle: TextStyle(
+                              fontSize: AppTokens.fontSizeCaption,
                               color: isDark
-                                  ? AppPalette.darkHairline
-                                  : AppPalette.lightHairline,
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
                             ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusPill),
-                            borderSide: BorderSide(
-                              color: isDark
-                                  ? AppPalette.darkHairline
-                                  : AppPalette.lightHairline,
+                            prefixIcon:
+                                const Icon(Icons.search_rounded, size: 18),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded,
+                                        size: 16),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 12),
+                            filled: true,
+                            fillColor: isDark
+                                ? AppPalette.darkSurface
+                                : AppPalette.lightSurface,
+                            border: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppTokens.radiusPill),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.circular(AppTokens.radiusPill),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline,
+                              ),
                             ),
                           ),
                         ),
+                      )
+                    : GlassSurface(
+                        role: GlassRole.control,
+                        variant: GlassVariant.clear,
+                        intensity:
+                            AppAppearanceController.resolvedGlassIntensity,
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusControl),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (v) => setState(
+                              () => _searchQuery = v.trim().toLowerCase()),
+                          decoration: InputDecoration(
+                            hintText: '搜索记忆内容或分类...',
+                            hintStyle: TextStyle(
+                              fontSize: AppTokens.fontSizeCaption,
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            prefixIcon:
+                                const Icon(Icons.search_rounded, size: 18),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear_rounded,
+                                        size: 16),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      setState(() => _searchQuery = '');
+                                    },
+                                  )
+                                : null,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                          ),
+                        ),
                       ),
-                    )
-                  : GlassSurface(
-                      role: GlassRole.control,
-                      variant: GlassVariant.clear,
-                      intensity: AppAppearanceController.resolvedGlassIntensity,
+              ),
+              SectionCard(
+                child: SwitchListTile(
+                  secondary: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppPalette.brandSoftDark
+                          : AppPalette.brandSoftLight,
                       borderRadius:
                           BorderRadius.circular(AppTokens.radiusControl),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (v) => setState(
-                            () => _searchQuery = v.trim().toLowerCase()),
-                        decoration: InputDecoration(
-                          hintText: '搜索记忆内容或分类...',
-                          hintStyle: TextStyle(
-                            fontSize: AppTokens.fontSizeCaption,
-                            color: isDark
-                                ? AppPalette.darkTextMuted
-                                : AppPalette.lightTextMuted,
-                          ),
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          prefixIcon:
-                              const Icon(Icons.search_rounded, size: 18),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear_rounded,
-                                      size: 16),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() => _searchQuery = '');
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                        ),
-                      ),
                     ),
-            ),
-            SectionCard(
-              child: SwitchListTile(
-                secondary: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppPalette.brandSoftDark
-                        : AppPalette.brandSoftLight,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    child: const Icon(Icons.psychology_outlined,
+                        size: 20, color: AppPalette.brand),
                   ),
-                  child: const Icon(Icons.psychology_outlined,
-                      size: 20, color: AppPalette.brand),
-                ),
-                title: const Text(
-                  AppStrings.memoryEnabled,
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: AppTokens.fontSizeBody),
-                ),
-                subtitle: Text(
-                  AppStrings.memoryEnabledHint,
-                  style: TextStyle(
-                    fontSize: AppTokens.fontSizeCaption,
-                    color: isDark
-                        ? AppPalette.darkTextMuted
-                        : AppPalette.lightTextMuted,
+                  title: const Text(
+                    AppStrings.memoryEnabled,
+                    style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: AppTokens.fontSizeBody),
                   ),
+                  subtitle: Text(
+                    AppStrings.memoryEnabledHint,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeCaption,
+                      color: isDark
+                          ? AppPalette.darkTextMuted
+                          : AppPalette.lightTextMuted,
+                    ),
+                  ),
+                  value: _enabled,
+                  onChanged: _toggleEnabled,
                 ),
-                value: _enabled,
-                onChanged: _toggleEnabled,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              AppStrings.memoryHint,
-              style: TextStyle(
-                fontSize: AppTokens.fontSizeCaption,
-                color: isDark
-                    ? AppPalette.darkTextMuted
-                    : AppPalette.lightTextMuted,
+              const SizedBox(height: 8),
+              Text(
+                AppStrings.memoryHint,
+                style: TextStyle(
+                  fontSize: AppTokens.fontSizeCaption,
+                  color: isDark
+                      ? AppPalette.darkTextMuted
+                      : AppPalette.lightTextMuted,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            if (_memories.isEmpty)
-              EmptyStateView(
-                icon: Icons.psychology_outlined,
-                title: '暂无记忆',
-                message: '还没有记忆，Agent 会在聊天中自动为您沉淀长期记忆，或点击下方按钮手动添加',
-                actionLabel: '添加记忆',
-                onAction: () => _addOrEdit(),
-              )
-            else if (filtered.isEmpty)
-              EmptyStateView(
-                icon: Icons.search_off_rounded,
-                title: '未找到相关记忆',
-                message: '没有匹配 "$_searchQuery" 的记忆条目',
-                actionLabel: '清空搜索',
-                onAction: () {
-                  _searchController.clear();
-                  setState(() => _searchQuery = '');
-                },
-              )
-            else
-              ...filtered.map((memory) => _buildMemoryCard(memory, isDark)),
-          ],
+              const SizedBox(height: 12),
+              if (_memories.isEmpty)
+                EmptyStateView(
+                  icon: Icons.psychology_outlined,
+                  title: '暂无记忆',
+                  message: '还没有记忆，Agent 会在聊天中自动为您沉淀长期记忆，或点击下方按钮手动添加',
+                  actionLabel: '添加记忆',
+                  onAction: () => _addOrEdit(),
+                )
+              else if (filtered.isEmpty)
+                EmptyStateView(
+                  icon: Icons.search_off_rounded,
+                  title: '未找到相关记忆',
+                  message: '没有匹配 "$_searchQuery" 的记忆条目',
+                  actionLabel: '清空搜索',
+                  onAction: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              else
+                ...filtered.indexed.map((entry) => NexusStaggeredItem(
+                      index: entry.$1,
+                      child: _buildMemoryCard(entry.$2, isDark),
+                    )),
+            ],
+          ),
         ),
       ),
     );
