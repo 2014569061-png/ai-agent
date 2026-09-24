@@ -111,6 +111,9 @@ abstract final class AppTokens {
   static const _listStaggerMs = 30;
   static const _entranceStaggerMs = 40;
   static const _durationReducedEntranceMs = 120;
+  static const _durationSendRippleMs = 280;
+  static const _durationBubbleRiseMs = 320;
+  static const _durationPressReleaseMs = 320;
   static const Duration durationInstant =
       Duration(milliseconds: _durationInstantMs);
   static const Duration durationFast = Duration(milliseconds: 150);
@@ -146,6 +149,14 @@ abstract final class AppTokens {
       Duration(milliseconds: _durationListItemMs);
   static const Duration listStagger = Duration(milliseconds: _listStaggerMs);
   static const int listStaggerMaxItems = 8;
+
+  /// 发送反馈：光圈扩散 / 用户气泡弹簧升起 / 发送按钮松手弹簧回弹。
+  static const Duration durationSendRipple =
+      Duration(milliseconds: _durationSendRippleMs);
+  static const Duration durationBubbleRise =
+      Duration(milliseconds: _durationBubbleRiseMs);
+  static const Duration durationPressRelease =
+      Duration(milliseconds: _durationPressReleaseMs);
   @Deprecated('请改用 durationExpand (300ms)')
   static const Duration durationModal = durationExpand;
   @Deprecated('请改用 durationExpand (300ms)')

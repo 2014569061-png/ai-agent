@@ -18,6 +18,8 @@ class NexusPressable extends StatefulWidget {
     this.pressedScale = 0.97,
     this.borderRadius,
     this.behavior = HitTestBehavior.deferToChild,
+    this.releaseCurve,
+    this.releaseDuration,
   });
 
   final Widget child;
@@ -26,6 +28,12 @@ class NexusPressable extends StatefulWidget {
   final double pressedScale;
   final BorderRadius? borderRadius;
   final HitTestBehavior behavior;
+
+  /// 松手回弹曲线；为 null 时使用 [NexusMotion.curveSpring]。
+  final Curve? releaseCurve;
+
+  /// 松手回弹时长；为 null 时使用 [NexusMotion.fast]。
+  final Duration? releaseDuration;
 
   @override
   State<NexusPressable> createState() => _NexusPressableState();
@@ -103,8 +111,12 @@ class _NexusPressableState extends State<NexusPressable>
         scale: scale,
         duration: reduceMotion
             ? Duration.zero
-            : (_pressed ? NexusMotion.instant : NexusMotion.fast),
-        curve: _pressed ? Curves.easeOutCubic : NexusMotion.curveSpring,
+            : (_pressed
+                ? NexusMotion.instant
+                : (widget.releaseDuration ?? NexusMotion.fast)),
+        curve: _pressed
+            ? Curves.easeOutCubic
+            : (widget.releaseCurve ?? NexusMotion.curveSpring),
         child: content,
       ),
     );

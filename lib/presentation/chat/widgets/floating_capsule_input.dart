@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../domain/models.dart';
 import '../../motion/motion_preferences.dart';
+import '../../motion/motion_tier.dart';
 import '../../motion/nexus_entrance.dart';
 import '../../motion/nexus_haptics.dart';
 import '../../motion/nexus_motion.dart';
@@ -79,9 +80,16 @@ class FloatingCapsuleInput extends StatefulWidget {
   State<FloatingCapsuleInput> createState() => _FloatingCapsuleInputState();
 }
 
-class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
+class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
+    with SingleTickerProviderStateMixin {
   late final ValueNotifier<bool> _focused;
   final FocusNode _focusNode = FocusNode();
+
+  /// 发送光圈（M5）：只在点击发送时从 0 播放到 1，其余时间静止不绘制。
+  late final AnimationController _sendPulse = AnimationController(
+    vsync: this,
+    duration: NexusMotion.sendRipple,
+  );
 
   String _approvalModeLabel(ApprovalMode mode) => switch (mode) {
         ApprovalMode.ask => '每次询问',
@@ -115,7 +123,13 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
     _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
     _focused.dispose();
+    _sendPulse.dispose();
     super.dispose();
+  }
+
+  void _playSendRipple() {
+    if (!MotionBudget.of(context, listen: false).sendRipple) return;
+    _sendPulse.forward(from: 0);
   }
 
   void _onFocusChange() {
@@ -500,8 +514,12 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         icon: Icons.arrow_upward_rounded,
         tooltip: '发送',
         semanticLabel: '发送',
+        pressedScale: NexusMotion.sendPressedScale,
+        releaseCurve: NexusMotion.curveSendRelease,
+        releaseDuration: NexusMotion.pressRelease,
         onTap: () {
           NexusHaptics.light(context);
+          _playSendRipple();
           widget.onSend();
         },
       );
@@ -518,7 +536,13 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
       );
     }
 
-    return SizedBox(
+    return CustomPaint(
+      // 光圈画在按钮与输入框玻璃之上的前景层，不参与命中测试。
+      foregroundPainter: _SendRipplePainter(
+        progress: _sendPulse,
+        color: AppPalette.brand,
+      ),
+      child: SizedBox(
         key: const ValueKey('composer-primary-action-slot'),
         width: 48,
         height: 48,
@@ -542,7 +566,9 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
             );
           },
           child: button,
-        ));
+        ),
+      ),
+    );
   }
 
   Widget _buildStatusLine() {
@@ -739,6 +765,9 @@ class _FilledCircleButton extends StatelessWidget {
     this.onTap,
     this.onLongPress,
     this.iconColor = Colors.white,
+    this.pressedScale = 0.97,
+    this.releaseCurve,
+    this.releaseDuration,
   });
 
   final Color color;
@@ -748,6 +777,9 @@ class _FilledCircleButton extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final Color iconColor;
+  final double pressedScale;
+  final Curve? releaseCurve;
+  final Duration? releaseDuration;
 
   @override
   Widget build(BuildContext context) {
@@ -759,6 +791,9 @@ class _FilledCircleButton extends StatelessWidget {
         child: NexusPressable(
           onTap: onTap,
           onLongPress: onLongPress,
+          pressedScale: pressedScale,
+          releaseCurve: releaseCurve,
+          releaseDuration: releaseDuration,
           borderRadius: BorderRadius.circular(24),
           child: Center(
             child: AnimatedContainer(
@@ -786,4 +821,34 @@ class _FilledCircleButton extends StatelessWidget {
       child: button,
     );
   }
+}
+
+/// 发送光圈：从按钮中心扩散的描边圆环，半径 0 → [maxRadius]，
+/// 透明度 [startAlpha] → 0。静止（进度为 0 或 1）时不绘制任何东西。
+class _SendRipplePainter extends CustomPainter {
+  _SendRipplePainter({required this.progress, required this.color})
+      : super(repaint: progress);
+
+  static const double maxRadius = 28;
+  static const double startAlpha = 0.35;
+  static const double strokeWidth = 1.5;
+
+  final Animation<double> progress;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = progress.value;
+    if (t <= 0 || t >= 1) return;
+    final eased = NexusMotion.curveEnter.transform(t);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = color.withValues(alpha: startAlpha * (1 - t));
+    canvas.drawCircle(size.center(Offset.zero), maxRadius * eased, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SendRipplePainter oldDelegate) =>
+      oldDelegate.progress != progress || oldDelegate.color != color;
 }

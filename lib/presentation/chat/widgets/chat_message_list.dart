@@ -358,6 +358,7 @@ class ChatMessageListState extends State<ChatMessageList> {
               ? ValueKey<int>(index)
               : _messageKeys.putIfAbsent(message.id!, GlobalKey.new),
           animate: shouldAnimate,
+          isUser: message.role == MessageRole.user,
           onCompleted: shouldAnimate
               ? () {
                   if (mounted) {
@@ -419,11 +420,19 @@ class _MessageEntrance extends StatefulWidget {
     required this.animate,
     required this.child,
     this.onCompleted,
+    this.isUser = false,
   });
 
   final bool animate;
   final Widget child;
   final VoidCallback? onCompleted;
+
+  /// 用户气泡（M5）：从右下角弹簧升起。为 false 时保持原有淡入 + 上移。
+  final bool isUser;
+
+  /// 用户气泡升起的起始位移与起始缩放。
+  static const double userRiseOffset = 16;
+  static const double userRiseScale = 0.96;
 
   @override
   State<_MessageEntrance> createState() => _MessageEntranceState();
@@ -433,12 +442,15 @@ class _MessageEntranceState extends State<_MessageEntrance>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
+  Duration get _baseDuration =>
+      widget.isUser ? NexusMotion.bubbleRise : NexusMotion.base;
+
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: NexusMotion.base,
+      duration: _baseDuration,
     );
     _controller.value = widget.animate ? 0.0 : 1.0;
   }
@@ -448,7 +460,7 @@ class _MessageEntranceState extends State<_MessageEntrance>
     super.didChangeDependencies();
     _controller.duration = MotionPreferences.adjustDuration(
       context,
-      NexusMotion.base,
+      _baseDuration,
     );
     if (!widget.animate || MotionPreferences.shouldReduceMotion(context)) {
       _controller
@@ -480,6 +492,9 @@ class _MessageEntranceState extends State<_MessageEntrance>
     if (!widget.animate) {
       return widget.child;
     }
+    if (widget.isUser) {
+      return _buildUserRise();
+    }
     final curve = CurvedAnimation(
       parent: _controller,
       curve: NexusMotion.curveEnter,
@@ -492,6 +507,34 @@ class _MessageEntranceState extends State<_MessageEntrance>
           end: Offset.zero,
         ).animate(curve),
         child: widget.child,
+      ),
+    );
+  }
+
+  /// 位移与缩放跟随离手弹簧；透明度在前 50% 时长内完成，避免拖尾。
+  Widget _buildUserRise() {
+    final opacity = CurvedAnimation(
+      parent: _controller,
+      curve: const Interval(0, 0.5, curve: NexusMotion.curveEnter),
+    );
+    return FadeTransition(
+      opacity: opacity,
+      child: AnimatedBuilder(
+        animation: _controller,
+        child: widget.child,
+        builder: (context, child) {
+          final v = NexusMotion.curveBubbleRise.transform(_controller.value);
+          final scale = _MessageEntrance.userRiseScale +
+              (1 - _MessageEntrance.userRiseScale) * v;
+          return Transform.translate(
+            offset: Offset(0, _MessageEntrance.userRiseOffset * (1 - v)),
+            child: Transform.scale(
+              scale: scale,
+              alignment: Alignment.bottomRight,
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }

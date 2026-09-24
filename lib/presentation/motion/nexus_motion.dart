@@ -34,6 +34,21 @@ abstract final class NexusMotion {
   static const Duration listStagger = AppTokens.listStagger;
   static const int listStaggerMaxItems = AppTokens.listStaggerMaxItems;
 
+  /// 发送反馈（M5）：光圈 280ms、用户气泡升起 320ms、发送按钮回弹 320ms。
+  static const Duration sendRipple = AppTokens.durationSendRipple;
+  static const Duration bubbleRise = AppTokens.durationBubbleRise;
+  static const Duration pressRelease = AppTokens.durationPressRelease;
+
+  /// 发送按钮按下后的缩放。
+  static const double sendPressedScale = 0.9;
+
+  /// 发送按钮松手：轻弹弹簧，保留过冲。
+  static final Curve curveSendRelease =
+      NexusSpringCurve(springLively, allowOvershoot: true);
+
+  /// 用户气泡升起：离手弹簧（阻尼比 0.825，几乎无过冲）。
+  static final Curve curveBubbleRise = NexusSpringCurve(springRelease);
+
   /// 非聊天列表的滚动物理：弹性过界（聊天列表保持平台默认）。
   static const ScrollPhysics listPhysics =
       BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
@@ -189,13 +204,16 @@ abstract final class NexusMotion {
 /// `f(t) = x(t·T) / x(T)`，并钳制在 [0, 1]：整屏转场不允许越界，
 /// 越界会在屏幕边缘露出下层页面。
 class NexusSpringCurve extends Curve {
-  NexusSpringCurve(this.description)
+  /// [allowOvershoot] 为 false（默认）时输出限制在 0..1，适合透明度、路由等
+  /// 不允许越界的属性；为 true 时保留弹簧过冲，只用于缩放等可越界的属性。
+  NexusSpringCurve(this.description, {this.allowOvershoot = false})
       : _simulation = SpringSimulation(description, 0, 1, 0) {
     _settle = _settleTime(_simulation);
     _end = _simulation.x(_settle);
   }
 
   final SpringDescription description;
+  final bool allowOvershoot;
   final SpringSimulation _simulation;
   late final double _settle;
   late final double _end;
@@ -204,8 +222,10 @@ class NexusSpringCurve extends Curve {
   double get settleSeconds => _settle;
 
   @override
-  double transformInternal(double t) =>
-      (_simulation.x(t * _settle) / _end).clamp(0.0, 1.0);
+  double transformInternal(double t) {
+    final value = _simulation.x(t * _settle) / _end;
+    return allowOvershoot ? value : value.clamp(0.0, 1.0);
+  }
 
   static double _settleTime(SpringSimulation simulation) {
     const tolerance = 0.005;
