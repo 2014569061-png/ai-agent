@@ -1,3 +1,4 @@
+import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 import '../theme/app_tokens.dart';
 import 'motion_preferences.dart';
@@ -59,6 +60,38 @@ abstract final class NexusMotion {
 
   /// 连续循环呼吸曲线：平滑双向正弦过渡 (用于状态胶囊、执行中呼吸灯)
   static const Curve curveBreathing = Curves.easeInOutSine;
+
+  // --- 弹簧 Token（物理曲线，时长由参数与初速度自动决定，可随时打断衔接）---
+  // 换算：stiffness = (2π / response)²，damping = 2 · ratio · √(mass · stiffness)。
+  // 思路参考 HarmonyOS 弹性曲线（responsiveSpringMotion / springMotion /
+  // interpolatingSpring），数值为本项目独立换算，不引用其代码。
+
+  /// 跟手：response 0.15s、阻尼比 0.86。用于按压、拖拽、侧滑返回的跟手阶段。
+  static const SpringDescription springFollow =
+      SpringDescription(mass: 1, stiffness: 1754.6, damping: 72.05);
+
+  /// 离手：response 0.55s、阻尼比 0.825。用于松手回弹、气泡升起、整屏转场。
+  static const SpringDescription springRelease =
+      SpringDescription(mass: 1, stiffness: 130.5, damping: 18.85);
+
+  /// 轻弹：stiffness 128、damping 12（阻尼比约 0.53，约 4% 过冲）。用于发送按钮回弹。
+  static const SpringDescription springLively =
+      SpringDescription(mass: 1, stiffness: 128, damping: 12);
+
+  /// 构建一个从 [from] 到 [to] 的弹簧模拟，供 `AnimationController.animateWith` 使用。
+  static SpringSimulation spring(
+    SpringDescription description, {
+    double from = 0,
+    double to = 1,
+    double velocity = 0,
+  }) =>
+      SpringSimulation(
+        description,
+        from,
+        to,
+        velocity,
+        tolerance: const Tolerance(distance: 0.001, velocity: 0.01),
+      );
 
   // --- 考虑无障碍「减少动态效果」后的自适应时间 ---
   static Duration durationInstant(BuildContext context) =>

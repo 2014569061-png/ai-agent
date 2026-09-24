@@ -22,6 +22,7 @@ import 'infrastructure/observability/sentry_service.dart';
 import 'infrastructure/share/deep_link_service.dart';
 import 'infrastructure/share/sharing_service.dart';
 import 'presentation/chat/chat_layout_controller.dart';
+import 'presentation/motion/motion_tier.dart';
 import 'presentation/navigation/app_shell.dart';
 import 'presentation/l10n/app_locale_controller.dart';
 import 'presentation/onboarding/onboarding_page.dart';
@@ -31,6 +32,7 @@ import 'presentation/theme/app_theme_controller.dart';
 import 'presentation/theme/app_appearance_controller.dart';
 import 'presentation/theme/app_presentation_preferences.dart';
 import 'presentation/widgets/brand_mark.dart';
+import 'presentation/widgets/liquid_glass.dart';
 import 'presentation/widgets/nexus_background.dart';
 
 void main() {
@@ -46,6 +48,8 @@ void main() {
 
       // The first Flutter frame must not wait for platform services or storage.
       runApp(const ProviderScope(child: MobileAgentApp()));
+      // 动效档位：按帧耗时在会话内自动降级装饰层（粒子 / 光晕 / 流光）。
+      MotionTierController.app.startMonitoring();
       unawaited(_initializeServices());
     },
     (error, stack) {
@@ -204,7 +208,14 @@ class MobileAgentApp extends StatelessWidget {
                 : kThemeChangeDuration,
             builder: (context, child) {
               final isDark = Theme.of(context).brightness == Brightness.dark;
-              return AppPresentationPreferences(
+              return MotionTierScope(
+                controller: MotionTierController.app,
+                // 纯扁平玻璃 = 用户选择朴素风格，装饰层按最低档处理。
+                cap: AppAppearanceController.resolvedGlassIntensity ==
+                        GlassIntensity.flat
+                    ? MotionTier.low
+                    : null,
+                child: AppPresentationPreferences(
                 child: AnnotatedRegion<SystemUiOverlayStyle>(
                   value: SystemUiOverlayStyle(
                     statusBarColor: Colors.transparent,
@@ -215,6 +226,7 @@ class MobileAgentApp extends StatelessWidget {
                     systemNavigationBarContrastEnforced: false,
                   ),
                   child: NexusBackground(child: child ?? const SizedBox.shrink()),
+                ),
                 ),
               );
             },
