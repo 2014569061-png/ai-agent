@@ -4,6 +4,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'glass_surface.dart';
+import 'nexus_touch_light.dart';
 import 'nexus_surface.dart';
 
 /// 统一的内容分段卡片 (SectionCard)
@@ -34,6 +35,8 @@ class SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = borderRadius ?? BorderRadius.circular(AppTokens.radiusCard);
+    // M4：卡片内所有 InkWell 的水波纹替换为按压光斑（按档位自动降级）。
+    final litChild = NexusTouchLightScope(child: child);
     final intensity = AppAppearanceController.resolvedGlassIntensity;
     final shouldUseGlass = (glass ?? true) && intensity != GlassIntensity.flat;
 
@@ -49,7 +52,7 @@ class SectionCard extends StatelessWidget {
           type: MaterialType.transparency,
           borderRadius: radius,
           clipBehavior: Clip.antiAlias,
-          child: child,
+          child: litChild,
         ),
       );
     }
@@ -78,7 +81,7 @@ class SectionCard extends StatelessWidget {
           type: MaterialType.transparency,
           borderRadius: radius,
           clipBehavior: Clip.antiAlias,
-          child: child,
+          child: litChild,
         ),
       );
     }
@@ -88,7 +91,7 @@ class SectionCard extends StatelessWidget {
       padding: padding,
       level: SurfaceLevel.regular,
       borderRadius: radius,
-      child: child,
+      child: litChild,
     );
   }
 }

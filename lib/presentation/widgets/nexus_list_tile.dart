@@ -2,6 +2,7 @@
 
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import 'nexus_touch_light.dart';
 
 /// 二级页面统一的列表行，提供图标、标题、副标题、可选开关/尾巴、内嵌式分隔。
 /// 避免各页面各自用原始 ListTile + 硬编码字体颜色。
@@ -88,10 +89,12 @@ class NexusListTile extends StatelessWidget {
     );
 
     if (onTap != null) {
-      content = InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
-        child: content,
+      content = NexusTouchLightScope(
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+          child: content,
+        ),
       );
     }
 
