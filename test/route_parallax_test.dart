@@ -2,6 +2,8 @@
 //
 // 这里只验证几何与分档策略（位置、遮罩、各档位降级），绘制次数的性能契约
 // 见 `route_transition_paint_test.dart`。
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/presentation/motion/motion_preferences.dart';
@@ -148,6 +150,37 @@ void main() {
       navKey.currentState!.pop();
       await tester.pumpAndSettle();
       expect(_x(tester, 'middle'), closeTo(middleX, 0.01));
+    });
+
+    testWidgets('先收起 Sheet 再推入：让位的是 Sheet 下方的页面', (tester) async {
+      final navKey = await _pumpApp(tester);
+      final homeX = _x(tester, 'home');
+      unawaited(showModalBottomSheet<void>(
+        context: navKey.currentContext!,
+        builder: (context) => TextButton(
+          onPressed: () {
+            final navigator = Navigator.of(context);
+            navigator.pop();
+            navigator.push(
+              NexusPageRoute<void>.workspace(
+                builder: (_) => const _Page('detail'),
+              ),
+            );
+          },
+          child: const Text('open'),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(_x(tester, 'home'), lessThan(homeX - 1));
+      await tester.pumpAndSettle();
+      expect(find.text('open'), findsNothing);
+      expect(find.text('detail'), findsOneWidget);
+      navKey.currentState!.pop();
+      await tester.pumpAndSettle();
+      expect(_x(tester, 'home'), closeTo(homeX, 0.01));
     });
 
     testWidgets('低档设备：只暗化、不视差', (tester) async {

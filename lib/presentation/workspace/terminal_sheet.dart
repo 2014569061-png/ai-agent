@@ -194,8 +194,11 @@ class _TerminalSheetState extends State<TerminalSheet> {
                   tooltip: '打开全屏交互终端 (PTY)',
                   icon: const Icon(Icons.open_in_new_rounded),
                   onPressed: () {
-                    Navigator.push(
-                      context,
+                    // 先收起 Sheet 再推入全屏页：让整屏转场作用在 Sheet 下方的
+                    // 页面上（视差 + 暗化），而不是让 Sheet 自己横移。
+                    final navigator = Navigator.of(context);
+                    navigator.pop();
+                    navigator.push(
                       NexusPageRoute.workspace(
                         builder: (_) => const TerminalPage(),
                       ),
