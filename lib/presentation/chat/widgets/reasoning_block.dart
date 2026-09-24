@@ -9,6 +9,7 @@ import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_haptics.dart';
 import '../../motion/nexus_motion.dart';
 import '../../widgets/nexus_disclosure.dart';
+import '../../widgets/shimmer_text.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 
@@ -240,14 +241,18 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                       ),
                       const SizedBox(width: 6),
                       Expanded(
-                        child: Text(
-                          _label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: AppTokens.fontSizeSubcaption,
-                            fontWeight: FontWeight.w500,
-                            color: textMuted,
+                        // M9：思考中标题流光；响应变慢时停止，避免「假装在忙」。
+                        child: ShimmerText(
+                          enabled: thinking && !_isStalled,
+                          child: Text(
+                            _label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeSubcaption,
+                              fontWeight: FontWeight.w500,
+                              color: textMuted,
+                            ),
                           ),
                         ),
                       ),

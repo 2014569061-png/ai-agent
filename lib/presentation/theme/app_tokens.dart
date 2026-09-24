@@ -117,6 +117,9 @@ abstract final class AppTokens {
   static const _durationAnswerRevealMs = 180;
   static const _ambientGlowPeriodMs = 12000;
   static const _ambientGlowTickMs = 50;
+  static const _shimmerSweepMs = 1600;
+  static const _shimmerGapMs = 400;
+  static const _glowRingCollapseMs = 180;
   static const Duration durationInstant =
       Duration(milliseconds: _durationInstantMs);
   static const Duration durationFast = Duration(milliseconds: 150);
@@ -171,6 +174,14 @@ abstract final class AppTokens {
   static const Duration ambientGlowTick =
       Duration(milliseconds: _ambientGlowTickMs);
   static const double ambientGlowDrift = 24;
+
+  /// 思考中 / 执行中（M9）：流光扫过 1600ms + 间隔 400ms；执行光环外扩 6dp，
+  /// 完成时收拢 180ms。
+  static const Duration shimmerSweep = Duration(milliseconds: _shimmerSweepMs);
+  static const Duration shimmerGap = Duration(milliseconds: _shimmerGapMs);
+  static const double glowRingSpread = 6;
+  static const Duration glowRingCollapse =
+      Duration(milliseconds: _glowRingCollapseMs);
   @Deprecated('请改用 durationExpand (300ms)')
   static const Duration durationModal = durationExpand;
   @Deprecated('请改用 durationExpand (300ms)')

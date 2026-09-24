@@ -47,6 +47,12 @@ abstract final class NexusMotion {
   static const Duration ambientGlowTick = AppTokens.ambientGlowTick;
   static const double ambientGlowDrift = AppTokens.ambientGlowDrift;
 
+  /// 思考中 / 执行中（M9）。
+  static const Duration shimmerSweep = AppTokens.shimmerSweep;
+  static const Duration shimmerGap = AppTokens.shimmerGap;
+  static const double glowRingSpread = AppTokens.glowRingSpread;
+  static const Duration glowRingCollapse = AppTokens.glowRingCollapse;
+
   /// 发送按钮按下后的缩放。
   static const double sendPressedScale = 0.9;
 

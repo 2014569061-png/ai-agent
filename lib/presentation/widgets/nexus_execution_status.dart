@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../motion/motion_preferences.dart';
 import '../motion/motion_lifecycle.dart';
+import '../motion/motion_tier.dart';
 import '../motion/nexus_motion.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -46,9 +47,12 @@ class NexusExecutionStatus extends StatefulWidget {
 }
 
 class _NexusExecutionStatusState extends State<NexusExecutionStatus>
-    with SingleTickerProviderStateMixin, MotionLifecycle<NexusExecutionStatus> {
+    with TickerProviderStateMixin, MotionLifecycle<NexusExecutionStatus> {
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
+
+  /// M9：运行结束（running / preparing → succeeded）时光环收拢 180ms。
+  late final AnimationController _finishController;
 
   @override
   void initState() {
@@ -61,12 +65,28 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
       CurvedAnimation(
           parent: _pulseController, curve: NexusMotion.curveBreathing),
     );
-
+    _finishController = AnimationController(
+      vsync: this,
+      duration: NexusMotion.glowRingCollapse,
+    );
   }
+
+  /// 外发光环是否可用：装饰动效在运行（full 档、前台、可见），且档位允许光感。
+  bool get _glowRingAllowed =>
+      decorativeMotionActive && MotionBudget.of(context, listen: false).shimmer;
 
   @override
   void didUpdateWidget(covariant NexusExecutionStatus oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_shouldPulse(oldWidget.state) &&
+        widget.state == NexusExecutionState.succeeded &&
+        _glowRingAllowed) {
+      _finishController.forward(from: 0);
+    } else if (widget.state != NexusExecutionState.succeeded &&
+        _finishController.isAnimating) {
+      _finishController.stop();
+      _finishController.value = 0;
+    }
     onMotionActivityChanged();
   }
 
@@ -82,11 +102,16 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
         _pulseController.value = 1.0;
       }
     }
+    if (!decorativeMotionActive && _finishController.isAnimating) {
+      _finishController.stop();
+      _finishController.value = 0;
+    }
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
+    _finishController.dispose();
     super.dispose();
   }
 
@@ -168,6 +193,30 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
         child: iconWidget,
       );
     }
+    // M9 外发光环：运行中与呼吸同相（α 0→0.25、外扩 0→6dp），完成时收拢。
+    // 始终包一层 CustomPaint（painter 可为空），保持结构稳定；画在图标
+    // 背后且允许溢出图标边界，不影响布局。
+    final ringAllowed =
+        decorativeMotionActive && MotionBudget.of(context).shimmer;
+    final ringMode = !ringAllowed
+        ? null
+        : _shouldPulse(widget.state)
+            ? ExecutionGlowRingMode.breathing
+            : (widget.state == NexusExecutionState.succeeded &&
+                    _finishController.isAnimating)
+                ? ExecutionGlowRingMode.collapsing
+                : null;
+    iconWidget = CustomPaint(
+      painter: ringMode == null
+          ? null
+          : ExecutionGlowRingPainter(
+              pulse: _pulseController,
+              finish: _finishController,
+              color: fg,
+              mode: ringMode,
+            ),
+      child: iconWidget,
+    );
 
     if (widget.compact) {
       return Semantics(
@@ -299,6 +348,58 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
       ),
     );
   }
+}
+
+enum ExecutionGlowRingMode { breathing, collapsing }
+
+/// 执行状态图标的外发光环（径向渐变，无 blur 滤镜）。
+class ExecutionGlowRingPainter extends CustomPainter {
+  ExecutionGlowRingPainter({
+    required this.pulse,
+    required this.finish,
+    required this.color,
+    required this.mode,
+  }) : super(repaint: Listenable.merge([pulse, finish]));
+
+  final Animation<double> pulse;
+  final Animation<double> finish;
+  final Color color;
+  final ExecutionGlowRingMode mode;
+
+  static const double maxAlpha = 0.25;
+
+  /// 当前强度 0→1：呼吸时跟随脉冲（同相），收拢时从 1 线性降到 0。
+  double get intensity => switch (mode) {
+        ExecutionGlowRingMode.breathing =>
+          NexusMotion.curveBreathing.transform(pulse.value.clamp(0.0, 1.0)),
+        ExecutionGlowRingMode.collapsing =>
+          1 - NexusMotion.curveExit.transform(finish.value.clamp(0.0, 1.0)),
+      };
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = intensity;
+    if (k <= 0.001 || size.isEmpty) return;
+    final inner = size.shortestSide / 2;
+    final radius = inner + NexusMotion.glowRingSpread * k;
+    final center = size.center(Offset.zero);
+    final paint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          color.withValues(alpha: maxAlpha * k),
+          color.withValues(alpha: 0),
+        ],
+        stops: [inner / radius * 0.8, 1],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+    canvas.drawCircle(center, radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(ExecutionGlowRingPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.mode != mode ||
+      oldDelegate.pulse != pulse ||
+      oldDelegate.finish != finish;
 }
 
 class _ActionTextButton extends StatelessWidget {
