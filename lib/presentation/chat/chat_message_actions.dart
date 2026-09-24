@@ -11,7 +11,10 @@ extension _ChatMessageActions on _ChatPageState {
     final tts = TtsService.instance;
     // 朗读只对助手正文开放（不含工具气泡）；平台不支持时不展示入口。
     final canSpeak = message.role == MessageRole.assistant && tts.isAvailable;
-    final speaking = canSpeak && tts.isSpeaking;
+    // M10：只有正在朗读的这条消息才显示「停止朗读」。
+    final speaking = canSpeak &&
+        tts.isSpeaking &&
+        _speakingMessageIndex.value == messageIndex;
     // 打开菜单即退出上一条消息的选择模式，避免两个状态并存。
     if (_selectingMessageIndex.value != null) {
       _selectingMessageIndex.value = null;
@@ -74,7 +77,8 @@ extension _ChatMessageActions on _ChatPageState {
         }
       }
     } else if (action == 'speak') {
-      await _toggleSpeak(stripRunPauseMarker(message.text));
+      await _toggleSpeak(stripRunPauseMarker(message.text),
+          index: messageIndex);
     } else if (action == 'select') {
       final currentIndex = ref.read(chatControllerProvider).messages.indexWhere(
           (current) => message.id != null
@@ -101,13 +105,18 @@ extension _ChatMessageActions on _ChatPageState {
   void _speakMessageAt(int index) {
     final messages = ref.read(chatControllerProvider).messages;
     if (index < 0 || index >= messages.length) return;
-    unawaited(_toggleSpeak(stripRunPauseMarker(messages[index].text)));
+    unawaited(
+        _toggleSpeak(stripRunPauseMarker(messages[index].text), index: index));
   }
 
   /// G1：朗读 / 停止朗读助手消息正文。内容为空或设备不可用时给出提示。
-  Future<void> _toggleSpeak(String markdown) async {
+  ///
+  /// M10：[index] 为被操作的消息。再次点同一条 → 停止；朗读中点另一条 →
+  /// 切换朗读那一条（其按钮此时显示的是「朗读」，行为与之保持一致）。
+  Future<void> _toggleSpeak(String markdown, {int? index}) async {
     final tts = TtsService.instance;
-    if (tts.isSpeaking) {
+    if (tts.isSpeaking &&
+        (index == null || _speakingMessageIndex.value == index)) {
       await tts.stop();
       return;
     }
@@ -119,6 +128,8 @@ extension _ChatMessageActions on _ChatPageState {
       return;
     }
     final started = await tts.speak(content);
+    // speak() 会先停掉上一段（触发一次 false → 清空索引），因此在其返回后再标记。
+    if (started && mounted) _speakingMessageIndex.value = index;
     if (!started && mounted) {
       FloatingToast.show(context, AppStrings.ttsUnsupported);
     }

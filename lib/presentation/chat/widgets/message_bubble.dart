@@ -20,6 +20,7 @@ import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/floating_toast.dart';
+import '../../widgets/speaking_wave.dart';
 import 'attachment_strip.dart';
 import 'reasoning_block.dart';
 import 'streaming_markdown.dart';
@@ -721,13 +722,25 @@ class _ReplyActionRow extends StatelessWidget {
                 )
               : ValueListenableBuilder<bool>(
                   valueListenable: speaking,
-                  builder: (context, active, _) => _action(
-                    icon: active
-                        ? Icons.stop_circle_outlined
-                        : Icons.volume_up_outlined,
-                    tooltip: active ? '停止朗读' : '朗读',
-                    onPressed: speak,
-                  ),
+                  builder: (context, active, _) => active
+                      // M10：朗读中用声波条代替停止图标（伪波形，只表示正在发声）。
+                      ? IconButton(
+                          key: const ValueKey('speaking-wave-action'),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints:
+                              const BoxConstraints(minWidth: 48, minHeight: 48),
+                          onPressed: speak,
+                          tooltip: '停止朗读',
+                          icon: SpeakingWave(
+                            color: AppPalette.brandText(context),
+                          ),
+                        )
+                      : _action(
+                          icon: Icons.volume_up_outlined,
+                          tooltip: '朗读',
+                          onPressed: speak,
+                        ),
                 ),
         _action(
           icon: Icons.ios_share_rounded,

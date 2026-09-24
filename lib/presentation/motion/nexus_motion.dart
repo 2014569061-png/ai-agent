@@ -50,6 +50,9 @@ abstract final class NexusMotion {
   /// 思考中 / 执行中（M9）。
   static const Duration shimmerSweep = AppTokens.shimmerSweep;
   static const Duration shimmerGap = AppTokens.shimmerGap;
+
+  /// 朗读声波条（M10）。
+  static const Duration speakingWaveLoop = AppTokens.speakingWaveLoop;
   static const double glowRingSpread = AppTokens.glowRingSpread;
   static const Duration glowRingCollapse = AppTokens.glowRingCollapse;
 

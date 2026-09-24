@@ -272,6 +272,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 正文默认不可选，否则长按会被文本选择器截走、消息菜单永远打不开。
   final ValueNotifier<int?> _selectingMessageIndex = ValueNotifier(null);
 
+  /// M10：正在朗读的消息索引（null = 未朗读）。只驱动气泡上的
+  /// 「停止朗读」与声波条，TTS 播放本身仍由 [TtsService] 负责。
+  final ValueNotifier<int?> _speakingMessageIndex = ValueNotifier(null);
+
+  void _onTtsSpeakingChanged() {
+    if (!TtsService.instance.isSpeaking) _speakingMessageIndex.value = null;
+  }
+
   ChatController get _chat => ref.read(chatControllerProvider.notifier);
 
   void _notifyAttachmentsChanged() {
@@ -474,6 +482,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
   @override
   void initState() {
     super.initState();
+    TtsService.instance.speakingListenable.addListener(_onTtsSpeakingChanged);
     SharedPreferences.getInstance().then((prefs) {
       if (mounted) {
         setState(() {
@@ -1151,6 +1160,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     _scrollIndicator.dispose();
     _scrollController.dispose();
     _selectingMessageIndex.dispose();
+    TtsService.instance.speakingListenable
+        .removeListener(_onTtsSpeakingChanged);
+    _speakingMessageIndex.dispose();
     DeepLinkService.instance.removeListener(_scheduleDeepLinkConsumption);
     _attachmentsRevision.dispose();
     _hasAttachments.dispose();
@@ -2695,6 +2707,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
                                                                 TtsService
                                                                     .instance
                                                                     .speakingListenable,
+                                                            speakingIndexListenable:
+                                                                _speakingMessageIndex,
                                                             selectionIndex:
                                                                 selectionIndex,
                                                             onExitSelection: () =>
@@ -3151,7 +3165,9 @@ class _RecoverableTaskDialog extends StatelessWidget {
           Expanded(
             child: Text(
               isPaused ? '任务已暂停' : '发现未完成的任务',
-              style: const TextStyle(fontSize: AppTokens.fontSizeTitle, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                  fontSize: AppTokens.fontSizeTitle,
+                  fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -3171,7 +3187,8 @@ class _RecoverableTaskDialog extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: AppTokens.fontSizeSubhead, fontWeight: FontWeight.w600),
+                      fontSize: AppTokens.fontSizeSubhead,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -3230,7 +3247,8 @@ class _RecoverableTaskDialog extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '忽略后可在仪表盘「待我处理」中随时继续。',
-            style: TextStyle(fontSize: AppTokens.fontSizeFootnote, color: muted),
+            style:
+                TextStyle(fontSize: AppTokens.fontSizeFootnote, color: muted),
           ),
         ],
       ),

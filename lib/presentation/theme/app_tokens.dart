@@ -120,6 +120,7 @@ abstract final class AppTokens {
   static const _shimmerSweepMs = 1600;
   static const _shimmerGapMs = 400;
   static const _glowRingCollapseMs = 180;
+  static const _speakingWaveLoopMs = 7200;
   static const Duration durationInstant =
       Duration(milliseconds: _durationInstantMs);
   static const Duration durationFast = Duration(milliseconds: 150);
@@ -179,6 +180,11 @@ abstract final class AppTokens {
   /// 完成时收拢 180ms。
   static const Duration shimmerSweep = Duration(milliseconds: _shimmerSweepMs);
   static const Duration shimmerGap = Duration(milliseconds: _shimmerGapMs);
+
+  /// 朗读声波条（M10）：4 根条周期 600/720/900/800ms 的最小公倍数，
+  /// 循环一整轮后无缝衔接。
+  static const Duration speakingWaveLoop =
+      Duration(milliseconds: _speakingWaveLoopMs);
   static const double glowRingSpread = 6;
   static const Duration glowRingCollapse =
       Duration(milliseconds: _glowRingCollapseMs);

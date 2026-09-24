@@ -6,6 +6,7 @@ import '../../../domain/models.dart';
 import '../../../domain/history_load_result.dart';
 import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_motion.dart';
+import '../../widgets/speaking_wave.dart';
 import 'message_bubble.dart';
 
 /// 长会话消息列表：完整消息仍由上层持有，列表只按窗口构建可见消息。
@@ -24,6 +25,7 @@ class ChatMessageList extends StatefulWidget {
     this.onResumeRun,
     this.onSpeak,
     this.speakingListenable,
+    this.speakingIndexListenable,
     this.selectionIndex,
     this.onExitSelection,
     this.trailingWidgets = const [],
@@ -50,6 +52,10 @@ class ChatMessageList extends StatefulWidget {
   /// 长按朗读（G1）：仅助手消息、且平台支持 TTS 时非空。
   final ValueChanged<int>? onSpeak;
   final ValueListenable<bool>? speakingListenable;
+
+  /// M10：正在朗读的消息索引（null = 未朗读）。提供时每条气泡只在
+  /// 自己被朗读时显示「停止朗读」和声波条；未提供时退回 [speakingListenable]。
+  final ValueListenable<int?>? speakingIndexListenable;
 
   /// 处于「文本选择模式」的消息索引（null = 无）。见 MessageBubble.selecting。
   final int? selectionIndex;
@@ -320,7 +326,9 @@ class ChatMessageListState extends State<ChatMessageList> {
               message.role == MessageRole.assistant && widget.onSpeak != null
                   ? () => widget.onSpeak?.call(index)
                   : null,
-          speakingListenable: widget.speakingListenable,
+          speakingListenable: widget.speakingIndexListenable == null
+              ? widget.speakingListenable
+              : SpeakingAtIndex(widget.speakingIndexListenable!, index),
           selecting: selecting,
           onExitSelection: widget.onExitSelection == null
               ? null
@@ -347,7 +355,7 @@ class ChatMessageListState extends State<ChatMessageList> {
                   widget.onResumeRun != null,
                   widget.onSpeak != null,
                   widget.onExitSelection != null,
-                  widget.speakingListenable,
+                  widget.speakingIndexListenable ?? widget.speakingListenable,
                   Theme.of(context),
                   MediaQuery.textScalerOf(context),
                 ),
