@@ -956,9 +956,7 @@ extension ChatRunExecution on ChatController {
           _currentState = _currentState.copyWith(
             activityLog: [
               ..._currentState.activityLog,
-              currentTool == null
-                  ? '正在执行工具'
-                  : '正在执行：${currentTool.call.name}',
+              currentTool == null ? '正在执行工具' : '正在执行：${currentTool.call.name}',
             ],
             toolActivities: _updateLastToolActivity(
                 _currentState.toolActivities,
@@ -1393,6 +1391,7 @@ extension ChatRunExecution on ChatController {
     if (visible()) {
       _convergePlanToTerminal(runStatus: runStatus, cancelled: runCancelled);
     }
+    final runSucceeded = !runCancelled && runStatus == 'success';
     if (ownsRun()) {
       try {
         await _persistMessage(assistantMessage,
@@ -1415,6 +1414,8 @@ extension ChatRunExecution on ChatController {
             running: false,
             clearLiveReply: true,
             clearRunProgress: true,
+            successfulRunCount:
+                runSucceeded ? _currentState.successfulRunCount + 1 : null,
             liveContextTokens: usage.totalTokens > 0
                 ? usage.totalTokens
                 : _estimateLiveContextTokens(assistantIndex, assistantMessage),
@@ -1424,7 +1425,9 @@ extension ChatRunExecution on ChatController {
               running: false,
               paused: false,
               clearLiveReply: true,
-              clearRunProgress: true);
+              clearRunProgress: true,
+              successfulRunCount:
+                  runSucceeded ? _currentState.successfulRunCount + 1 : null);
         }
       }
     }

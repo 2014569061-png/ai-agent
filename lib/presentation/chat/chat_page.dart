@@ -96,6 +96,7 @@ import '../widgets/nexus_disclosure.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/tool_approval_helper.dart';
 import '../motion/motion_preferences.dart';
+import '../motion/nexus_haptics.dart';
 import '../motion/nexus_motion.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/nexus_loading_skeleton.dart';
@@ -106,6 +107,11 @@ import '../theme/app_appearance_controller.dart';
 import '../widgets/liquid_glass.dart';
 
 part 'chat_message_actions.dart';
+
+/// 两次状态之间是否有一整轮运行成功完成（用于成功触感）。
+@visibleForTesting
+bool runSucceededBetween(ChatState previous, ChatState next) =>
+    next.successfulRunCount > previous.successfulRunCount;
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -2348,6 +2354,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if ((previous.loading && !next.loading) ||
           (previous.restoringConversation && !next.restoringConversation)) {
         _scheduleDeepLinkConsumption();
+      }
+      // 整轮成功完成：一次轻触感（lightImpact，避免每轮都重震）。只在前台触发；动画 off 档由 NexusHaptics 跳过。
+      if (runSucceededBetween(previous, next)) {
+        final lifecycle = WidgetsBinding.instance.lifecycleState;
+        if (lifecycle == null || lifecycle == AppLifecycleState.resumed) {
+          NexusHaptics.light(context);
+        }
       }
     });
 

@@ -165,6 +165,7 @@ class ChatState {
     this.currentRunId,
     this.pendingCitations = const [],
     this.omittedContext = const [],
+    this.successfulRunCount = 0,
   }) : mode = mode ?? (planMode ? ChatMode.plan : ChatMode.chat);
 
   final List<ChatMessage> messages;
@@ -236,6 +237,10 @@ class ChatState {
   final List<FileCitation> pendingCitations;
   final List<String> omittedContext;
 
+  /// 本会话内「整轮成功完成」的次数，只增不减。UI 据此给出一次成功触感，
+  /// 不参与任何业务判断。失败、取消、暂停、异常都不计数。
+  final int successfulRunCount;
+
   ChatState copyWith({
     List<ChatMessage>? messages,
     bool? running,
@@ -279,6 +284,7 @@ class ChatState {
     String? currentRunId,
     List<FileCitation>? pendingCitations,
     List<String>? omittedContext,
+    int? successfulRunCount,
     bool clearWorkspace = false,
     bool clearProject = false,
     bool clearTask = false,
@@ -360,6 +366,7 @@ class ChatState {
       currentRunId: clearTask ? null : (currentRunId ?? this.currentRunId),
       pendingCitations: pendingCitations ?? this.pendingCitations,
       omittedContext: omittedContext ?? this.omittedContext,
+      successfulRunCount: successfulRunCount ?? this.successfulRunCount,
     );
   }
 }

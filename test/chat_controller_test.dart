@@ -44,6 +44,7 @@ void main() {
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
+    expect(state.successfulRunCount, 1);
     expect(state.messages.length, 2);
     expect(state.messages.last.text, contains('演示响应'));
     expect(state.messages.last.elapsed, isNotNull);
@@ -152,6 +153,7 @@ void main() {
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
+    expect(state.successfulRunCount, 0);
     expect(state.messages.last.text, contains('模型未返回可显示内容'));
     expect((await db.recentRuns()).single.status, 'failed');
   });
@@ -294,6 +296,7 @@ void main() {
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
+    expect(state.successfulRunCount, 0);
     expect(state.messages.length, 2);
     final failedRuns = await db.recentRuns();
     expect(failedRuns, hasLength(1));
@@ -338,6 +341,7 @@ void main() {
 
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
+    expect(state.successfulRunCount, 0);
     // 停止后消息仍保留（部分或全部文本），且可再次发送。
     expect(state.messages.length, 2);
   });

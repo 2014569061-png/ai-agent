@@ -1529,6 +1529,8 @@ class ChatController extends Notifier<ChatState> {
           paused: false,
           clearLiveReply: true,
           clearRunProgress: true,
+          successfulRunCount:
+              taskStatus == 'completed' ? state.successfulRunCount + 1 : null,
         );
         final assistantMessage = ChatMessage(
           id: UniqueId.generate('message'),
