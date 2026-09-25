@@ -113,6 +113,15 @@ part 'chat_message_actions.dart';
 bool runSucceededBetween(ChatState previous, ChatState next) =>
     next.successfulRunCount > previous.successfulRunCount;
 
+/// 切换会话时是否应停止本页发起的朗读（离开会话后不再继续读上一段）。
+@visibleForTesting
+bool shouldStopSpeakingOnSwitch(
+  ChatState previous,
+  ChatState next, {
+  required bool speakingHere,
+}) =>
+    speakingHere && previous.conversationId != next.conversationId;
+
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
 
@@ -2354,6 +2363,11 @@ class _ChatPageState extends ConsumerState<ChatPage>
       if ((previous.loading && !next.loading) ||
           (previous.restoringConversation && !next.restoringConversation)) {
         _scheduleDeepLinkConsumption();
+      }
+      if (shouldStopSpeakingOnSwitch(previous, next,
+          speakingHere: _speakingMessageIndex.value != null)) {
+        // 停止后 speakingListenable 变为 false，朗读索引会随之清空。
+        unawaited(TtsService.instance.stop());
       }
       // 整轮成功完成：一次轻触感（lightImpact，避免每轮都重震）。只在前台触发；动画 off 档由 NexusHaptics 跳过。
       if (runSucceededBetween(previous, next)) {

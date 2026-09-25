@@ -20,4 +20,12 @@ void main() {
     // 新会话重建状态、计数归零时不触发。
     expect(runSucceededBetween(b, a), isFalse);
   });
+
+  test('切换会话时只停止本页发起的朗读', () {
+    const a = ChatState(conversationId: 'c1');
+    const b = ChatState(conversationId: 'c2');
+    expect(shouldStopSpeakingOnSwitch(a, b, speakingHere: true), isTrue);
+    expect(shouldStopSpeakingOnSwitch(a, b, speakingHere: false), isFalse);
+    expect(shouldStopSpeakingOnSwitch(a, a, speakingHere: true), isFalse);
+  });
 }
