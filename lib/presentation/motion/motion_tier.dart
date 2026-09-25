@@ -1,6 +1,7 @@
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
+import 'motion_intensity.dart';
 import 'motion_preferences.dart';
 
 /// 设备动效能力档位。
@@ -36,6 +37,17 @@ class MotionTierController extends ValueNotifier<MotionTier> {
 
   /// 调试 / 测试时强制档位；非空时忽略运行时降档。
   static MotionTier? debugOverride;
+
+  MotionIntensity _intensity = MotionIntensity.subtle;
+
+  /// 用户选择的动效强度（S1）。默认 [MotionIntensity.subtle]（即原始参数），
+  /// App 启动时由设置同步；变化时通知依赖方重建。
+  MotionIntensity get intensity => _intensity;
+  set intensity(MotionIntensity value) {
+    if (value == _intensity) return;
+    _intensity = value;
+    notifyListeners();
+  }
 
   final double refreshRate;
   final int sampleSize;
@@ -151,6 +163,14 @@ class MotionTierScope extends InheritedNotifier<MotionTierController> {
     return of(context);
   }
 
+  /// 当前动效强度增益（未挂载 Scope 时为 1，即原始参数）。
+  static double gainOf(BuildContext context, {bool listen = true}) {
+    final scope = listen
+        ? context.dependOnInheritedWidgetOfExactType<MotionTierScope>()
+        : context.getInheritedWidgetOfExactType<MotionTierScope>();
+    return scope?.notifier?.intensity.gain ?? 1;
+  }
+
   static MotionTier of(BuildContext context, {bool listen = true}) {
     final scope = listen
         ? context.dependOnInheritedWidgetOfExactType<MotionTierScope>()
@@ -184,9 +204,13 @@ class MotionBudget {
     required this.touchLight,
     required this.sendRipple,
     required this.routeParallax,
+    this.gain = 1,
   });
 
-  factory MotionBudget.resolve(MotionLevel level, MotionTier tier) {
+  factory MotionBudget.resolve(MotionLevel level, MotionTier tier,
+      {double gain = 1}) {
+    // 粒子数随强度放大：鲜明档（gain 2）high 28 → 48、mid 14 → 24。
+    int particles(int base) => amplify(base.toDouble(), gain, 0.7).round();
     if (level == MotionLevel.off) {
       return MotionBudget._(
         level: level,
@@ -200,6 +224,7 @@ class MotionBudget {
         touchLight: false,
         sendRipple: false,
         routeParallax: false,
+        gain: gain,
       );
     }
     if (level == MotionLevel.reduced) {
@@ -215,13 +240,14 @@ class MotionBudget {
         touchLight: false,
         sendRipple: false,
         routeParallax: false,
+        gain: gain,
       );
     }
     return switch (tier) {
       MotionTier.high => MotionBudget._(
           level: level,
           tier: tier,
-          particleCount: 28,
+          particleCount: particles(28),
           ambientGlow: true,
           ambientDrift: true,
           ambientBreathing: true,
@@ -230,11 +256,12 @@ class MotionBudget {
           touchLight: true,
           sendRipple: true,
           routeParallax: true,
+          gain: gain,
         ),
       MotionTier.mid => MotionBudget._(
           level: level,
           tier: tier,
-          particleCount: 14,
+          particleCount: particles(14),
           ambientGlow: true,
           ambientDrift: false,
           ambientBreathing: true,
@@ -243,6 +270,7 @@ class MotionBudget {
           touchLight: true,
           sendRipple: true,
           routeParallax: true,
+          gain: gain,
         ),
       MotionTier.low => MotionBudget._(
           level: level,
@@ -256,6 +284,7 @@ class MotionBudget {
           touchLight: false,
           sendRipple: false,
           routeParallax: false,
+          gain: gain,
         ),
     };
   }
@@ -264,6 +293,7 @@ class MotionBudget {
       MotionBudget.resolve(
         MotionPreferences.levelOf(context, listen: listen),
         MotionTierScope.of(context, listen: listen),
+        gain: MotionTierScope.gainOf(context, listen: listen),
       );
 
   final MotionLevel level;
@@ -296,14 +326,20 @@ class MotionBudget {
   /// 页面转场下层视差（整屏转场方案）。
   final bool routeParallax;
 
+  /// 动效强度增益（S1）：1 = 原始参数，2 = 鲜明。各效果按自身系数放大。
+  final double gain;
+
   /// 是否存在任何需要持续刷新的装饰层。
   bool get hasContinuousDecoration =>
       particleCount > 0 || ambientDrift || ambientBreathing || shimmer;
 
   @override
   bool operator ==(Object other) =>
-      other is MotionBudget && other.level == level && other.tier == tier;
+      other is MotionBudget &&
+      other.level == level &&
+      other.tier == tier &&
+      other.gain == gain;
 
   @override
-  int get hashCode => Object.hash(level, tier);
+  int get hashCode => Object.hash(level, tier, gain);
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../motion/motion_intensity.dart';
 import '../motion/motion_lifecycle.dart';
 import '../motion/motion_tier.dart';
 import '../motion/nexus_motion.dart';
@@ -100,8 +101,13 @@ class _ShimmerTextState extends State<ShimmerText>
   Widget build(BuildContext context) {
     if (!_wantsShimmer) return widget.child;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gain = _budget?.gain ?? 1;
+    // S1：深色高光随强度提亮（0.9 → 1.0），高光带加宽（鲜明档 0.4 → 0.5）。
     final highlight = widget.highlightColor ??
-        (isDark ? Colors.white.withValues(alpha: 0.9) : AppPalette.brand);
+        (isDark
+            ? Colors.white.withValues(alpha: (0.9 * gain).clamp(0.0, 1.0))
+            : AppPalette.brand);
+    final band = amplify(ShimmerText.bandWidth, gain, 0.25);
     final sweep = NexusMotion.shimmerSweep.inMicroseconds;
     final sweepFraction =
         sweep / (sweep + NexusMotion.shimmerGap.inMicroseconds);
@@ -114,7 +120,7 @@ class _ShimmerTextState extends State<ShimmerText>
         final t = raw >= 1 ? 1.0 : NexusMotion.curveStandard.transform(raw);
         return ShaderMask(
           blendMode: BlendMode.srcATop,
-          shaderCallback: (bounds) => shimmerGradient(highlight, t)
+          shaderCallback: (bounds) => shimmerGradient(highlight, t, band: band)
               .createShader(Offset.zero & bounds.size),
           child: child,
         );
@@ -125,8 +131,8 @@ class _ShimmerTextState extends State<ShimmerText>
 
 /// 进度 [t]（0→1）时的高光渐变：高光中心从 -0.2 移动到 1.2（相对文字宽度），
 /// 保证起止时刻高光都完全在文字之外。
-LinearGradient shimmerGradient(Color highlight, double t) {
-  const band = ShimmerText.bandWidth;
+LinearGradient shimmerGradient(Color highlight, double t,
+    {double band = ShimmerText.bandWidth}) {
   final center = -band / 2 + t * (1 + band);
   return LinearGradient(
     colors: [
@@ -134,7 +140,7 @@ LinearGradient shimmerGradient(Color highlight, double t) {
       highlight,
       highlight.withValues(alpha: 0),
     ],
-    stops: const [0.5 - band / 2, 0.5, 0.5 + band / 2],
+    stops: [0.5 - band / 2, 0.5, 0.5 + band / 2],
     transform: _SlideGradient(center - 0.5),
   );
 }

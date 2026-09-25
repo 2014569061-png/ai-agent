@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 
 import '../../../domain/models.dart';
+import '../../motion/motion_intensity.dart';
 import '../../motion/motion_preferences.dart';
 import '../../motion/motion_tier.dart';
 import '../../motion/nexus_entrance.dart';
@@ -541,6 +542,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
       foregroundPainter: _SendRipplePainter(
         progress: _sendPulse,
         color: AppPalette.brand,
+        gain: MotionTierScope.gainOf(context),
       ),
       child: SizedBox(
         key: const ValueKey('composer-primary-action-slot'),
@@ -825,9 +827,13 @@ class _FilledCircleButton extends StatelessWidget {
 
 /// 发送光圈：从按钮中心扩散的描边圆环，半径 0 → [maxRadius]，
 /// 透明度 [startAlpha] → 0。静止（进度为 0 或 1）时不绘制任何东西。
+/// S1：半径 / 透明度 / 线宽随强度放大（鲜明档 42dp、0.6、2.5dp）。
 class _SendRipplePainter extends CustomPainter {
-  _SendRipplePainter({required this.progress, required this.color})
-      : super(repaint: progress);
+  _SendRipplePainter({
+    required this.progress,
+    required this.color,
+    this.gain = 1,
+  }) : super(repaint: progress);
 
   static const double maxRadius = 28;
   static const double startAlpha = 0.35;
@@ -835,20 +841,26 @@ class _SendRipplePainter extends CustomPainter {
 
   final Animation<double> progress;
   final Color color;
+  final double gain;
 
   @override
   void paint(Canvas canvas, Size size) {
     final t = progress.value;
     if (t <= 0 || t >= 1) return;
+    final radius = amplify(maxRadius, gain, 0.5);
+    final alpha = amplify(startAlpha, gain, 0.72).clamp(0.0, 0.6);
+    final stroke = amplify(strokeWidth, gain, 0.67);
     final eased = NexusMotion.curveEnter.transform(t);
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..color = color.withValues(alpha: startAlpha * (1 - t));
-    canvas.drawCircle(size.center(Offset.zero), maxRadius * eased, paint);
+      ..strokeWidth = stroke
+      ..color = color.withValues(alpha: alpha * (1 - t));
+    canvas.drawCircle(size.center(Offset.zero), radius * eased, paint);
   }
 
   @override
   bool shouldRepaint(covariant _SendRipplePainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.color != color;
+      oldDelegate.progress != progress ||
+      oldDelegate.color != color ||
+      oldDelegate.gain != gain;
 }

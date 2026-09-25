@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../motion/motion_intensity.dart';
 import '../motion/motion_preferences.dart';
 import '../motion/motion_tier.dart';
 import '../motion/nexus_motion.dart';
@@ -27,17 +28,38 @@ abstract final class NexusTouchLight {
       MotionPreferences.levelOf(context) == MotionLevel.full &&
       MotionBudget.of(context).touchLight;
 
-  static Color colorFor({required bool dark}) => dark
-      ? Colors.white.withValues(alpha: darkAlpha)
-      : AppPalette.brand.withValues(alpha: lightAlpha);
+  /// S1：强度增益下的光斑 α 上限（鲜明档深色 0.28 / 浅色 0.16）。
+  static const double maxBoostedAlpha = 0.3;
+
+  static Color colorFor({required bool dark, double gain = 1}) => dark
+      ? Colors.white
+          .withValues(alpha: (darkAlpha * gain).clamp(0.0, maxBoostedAlpha))
+      : AppPalette.brand
+          .withValues(alpha: (lightAlpha * gain).clamp(0.0, maxBoostedAlpha));
+
+  /// S1：光斑半径随强度放大（鲜明档 ×1.3）。
+  static double radiusFor(Size size, {double gain = 1}) =>
+      size.shortestSide * amplify(radiusFactor, gain, 0.3);
+
+  static final Map<(bool, double), InteractiveInkFeatureFactory> _factories =
+      {};
+
+  /// 按（深浅色, 强度）取工厂；同一组合复用同一实例，主题缓存才能命中。
+  static InteractiveInkFeatureFactory factoryFor(
+      {required bool dark, double gain = 1}) {
+    if (gain == 1) return dark ? darkFactory : lightFactory;
+    return _factories[(dark, gain)] ??=
+        _NexusTouchLightFactory(dark: dark, gain: gain);
+  }
 
   static Paint paintFor({
     required bool dark,
     required Offset center,
     required double radius,
     required double strength,
+    double gain = 1,
   }) {
-    final color = colorFor(dark: dark);
+    final color = colorFor(dark: dark, gain: gain);
     final peak = color.withValues(alpha: color.a * strength.clamp(0.0, 1.0));
     return Paint()
       ..blendMode = dark ? BlendMode.plus : BlendMode.srcOver
@@ -64,9 +86,10 @@ class NexusTouchLightScope extends StatelessWidget {
     final theme = Theme.of(context);
     final factory = !NexusTouchLight.enabled(context)
         ? NoSplash.splashFactory
-        : theme.brightness == Brightness.dark
-            ? NexusTouchLight.darkFactory
-            : NexusTouchLight.lightFactory;
+        : NexusTouchLight.factoryFor(
+            dark: theme.brightness == Brightness.dark,
+            gain: MotionTierScope.gainOf(context),
+          );
     if (identical(theme.splashFactory, factory)) return child;
     final perTheme =
         _cache[theme] ??= <InteractiveInkFeatureFactory, ThemeData>{};
@@ -76,9 +99,10 @@ class NexusTouchLightScope extends StatelessWidget {
 }
 
 class _NexusTouchLightFactory extends InteractiveInkFeatureFactory {
-  const _NexusTouchLightFactory({required this.dark});
+  const _NexusTouchLightFactory({required this.dark, this.gain = 1});
 
   final bool dark;
+  final double gain;
 
   @override
   InteractiveInkFeature create({
@@ -99,6 +123,7 @@ class _NexusTouchLightFactory extends InteractiveInkFeatureFactory {
       referenceBox: referenceBox,
       position: position,
       dark: dark,
+      gain: gain,
       textDirection: textDirection,
       rectCallback: rectCallback,
       borderRadius: borderRadius,
@@ -114,6 +139,7 @@ class _NexusTouchLightInk extends InteractiveInkFeature {
     required super.referenceBox,
     required Offset position,
     required bool dark,
+    double gain = 1,
     required TextDirection textDirection,
     RectCallback? rectCallback,
     BorderRadius? borderRadius,
@@ -121,12 +147,13 @@ class _NexusTouchLightInk extends InteractiveInkFeature {
     super.onRemoved,
   })  : _position = position,
         _dark = dark,
+        _gain = gain,
         _textDirection = textDirection,
         _borderRadius = borderRadius ?? BorderRadius.zero,
         _clipCallback = rectCallback ?? (() => Offset.zero & referenceBox.size),
         super(
           controller: controller,
-          color: NexusTouchLight.colorFor(dark: dark),
+          color: NexusTouchLight.colorFor(dark: dark, gain: gain),
         ) {
     _strength = AnimationController(
       vsync: controller.vsync,
@@ -141,6 +168,7 @@ class _NexusTouchLightInk extends InteractiveInkFeature {
 
   final Offset _position;
   final bool _dark;
+  final double _gain;
   final TextDirection _textDirection;
   final BorderRadius _borderRadius;
   final RectCallback _clipCallback;
@@ -173,8 +201,7 @@ class _NexusTouchLightInk extends InteractiveInkFeature {
   void paintFeature(Canvas canvas, Matrix4 transform) {
     final t = NexusMotion.curveStandard.transform(_strength.value);
     if (t <= 0) return;
-    final radius =
-        referenceBox.size.shortestSide * NexusTouchLight.radiusFactor;
+    final radius = NexusTouchLight.radiusFor(referenceBox.size, gain: _gain);
     paintInkCircle(
       canvas: canvas,
       transform: transform,
@@ -183,6 +210,7 @@ class _NexusTouchLightInk extends InteractiveInkFeature {
         center: _position,
         radius: radius,
         strength: t,
+        gain: _gain,
       ),
       center: _position,
       radius: radius,
@@ -201,12 +229,16 @@ class NexusPressLightPainter extends CustomPainter {
     required this.position,
     required this.dark,
     this.borderRadius,
+    this.gain = 1,
   }) : super(repaint: Listenable.merge([strength, position]));
 
   final Animation<double> strength;
   final ValueListenable<Offset?> position;
   final bool dark;
   final BorderRadius? borderRadius;
+
+  /// S1 强度增益（1 = 原始参数）。
+  final double gain;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -220,7 +252,7 @@ class NexusPressLightPainter extends CustomPainter {
     } else {
       canvas.clipRect(rect);
     }
-    final radius = size.shortestSide * NexusTouchLight.radiusFactor;
+    final radius = NexusTouchLight.radiusFor(size, gain: gain);
     canvas.drawCircle(
       center,
       radius,
@@ -229,6 +261,7 @@ class NexusPressLightPainter extends CustomPainter {
         center: center,
         radius: radius,
         strength: t,
+        gain: gain,
       ),
     );
     canvas.restore();
@@ -239,5 +272,6 @@ class NexusPressLightPainter extends CustomPainter {
       oldDelegate.strength != strength ||
       oldDelegate.position != position ||
       oldDelegate.dark != dark ||
-      oldDelegate.borderRadius != borderRadius;
+      oldDelegate.borderRadius != borderRadius ||
+      oldDelegate.gain != gain;
 }

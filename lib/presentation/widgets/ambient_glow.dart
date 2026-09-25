@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../motion/motion_intensity.dart';
 import '../motion/motion_lifecycle.dart';
 import '../motion/motion_preferences.dart';
 import '../motion/motion_tier.dart';
@@ -77,8 +78,20 @@ class _AmbientGlowState extends State<AmbientGlow>
 
   void _syncDust() {
     final count = _wantsLoop ? (_budget?.particleCount ?? 0) : 0;
-    if (count == (_dust?.count ?? 0)) return;
-    _dust = count > 0 ? LightDustSystem(count: count) : null;
+    final gain = _budget?.gain ?? 1;
+    final sizeGain = amplify(1, gain, 0.5);
+    if (count == (_dust?.count ?? 0) &&
+        (count == 0 || _dust?.sizeGain == sizeGain)) {
+      return;
+    }
+    // S1：粒子随强度变大、变亮（鲜明档半径 ×1.5、α ×1.6）。
+    _dust = count > 0
+        ? LightDustSystem(
+            count: count,
+            sizeGain: sizeGain,
+            alphaGain: amplify(1, gain, 0.6),
+          )
+        : null;
   }
 
   void _onTick(Timer _) {
@@ -104,6 +117,8 @@ class _AmbientGlowState extends State<AmbientGlow>
     if (!budget.ambientGlow) return const SizedBox.shrink();
     final animated = _wantsLoop;
     final dust = _dust;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gain = budget.gain;
     return IgnorePointer(
       child: ExcludeSemantics(
         child: RepaintBoundary(
@@ -116,13 +131,18 @@ class _AmbientGlowState extends State<AmbientGlow>
                   drift: animated && budget.ambientDrift,
                   breathing: animated && budget.ambientBreathing,
                   singleLayer: budget.level == MotionLevel.reduced,
+                  // S1：深色背景对比度余量大，α 可放大（鲜明 ×1.8）；浅色模式
+                  // 已贴近 4.5 对比度红线，α 不放大，改为扩大光团与漂移幅度。
+                  alphaGain: isDark ? amplify(1, gain, 0.8) : 1,
+                  radiusGain: amplify(1, gain, 0.25),
+                  driftGain: amplify(1, gain, 0.5),
                 ),
               ),
               if (dust != null)
                 CustomPaint(
                   painter: LightDustPainter(
                     system: dust,
-                    isDark: Theme.of(context).brightness == Brightness.dark,
+                    isDark: isDark,
                     repaint: _time,
                   ),
                 ),
@@ -141,12 +161,20 @@ class AmbientGlowPainter extends CustomPainter {
     required this.drift,
     required this.breathing,
     required this.singleLayer,
+    this.alphaGain = 1,
+    this.radiusGain = 1,
+    this.driftGain = 1,
   }) : super(repaint: time);
 
   final ValueListenable<double> time;
   final bool drift;
   final bool breathing;
   final bool singleLayer;
+
+  /// S1 强度增益：α、半径、漂移幅度的倍率（1 = 原始参数）。
+  final double alphaGain;
+  final double radiusGain;
+  final double driftGain;
 
   /// 对比度护栏：任何一层的 α 都不超过这个值。
   static const double maxAlpha = 0.12;
@@ -179,12 +207,15 @@ class AmbientGlowPainter extends CustomPainter {
   }
 
   /// 时间 [t]（秒）下两层的 α：[主色, 辅色]。均被钳制到 [maxAlpha]。
+  ///
+  /// [gain] 为 S1 强度倍率，α 与上限同比放大（只在深色模式下大于 1）。
   static List<double> layerAlphas(double t,
-      {required bool breathing, bool singleLayer = false}) {
+      {required bool breathing, bool singleLayer = false, double gain = 1}) {
     final k = breathFactor(t, breathing: breathing);
+    final cap = maxAlpha * gain;
     return [
-      (primaryAlpha * k).clamp(0.0, maxAlpha),
-      if (!singleLayer) (secondaryAlpha * k).clamp(0.0, maxAlpha),
+      (primaryAlpha * k * gain).clamp(0.0, cap),
+      if (!singleLayer) (secondaryAlpha * k * gain).clamp(0.0, cap),
     ];
   }
 
@@ -198,10 +229,10 @@ class AmbientGlowPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.isEmpty) return;
     final t = time.value;
-    final alphas =
-        layerAlphas(t, breathing: breathing, singleLayer: singleLayer);
-    final offset = driftOffset(t, drift: drift);
-    final radius = size.width * radiusFactor;
+    final alphas = layerAlphas(t,
+        breathing: breathing, singleLayer: singleLayer, gain: alphaGain);
+    final offset = driftOffset(t, drift: drift) * driftGain;
+    final radius = size.width * radiusFactor * radiusGain;
     final rect = Offset.zero & size;
 
     _paintLayer(
@@ -255,5 +286,8 @@ class AmbientGlowPainter extends CustomPainter {
       oldDelegate.time != time ||
       oldDelegate.drift != drift ||
       oldDelegate.breathing != breathing ||
-      oldDelegate.singleLayer != singleLayer;
+      oldDelegate.singleLayer != singleLayer ||
+      oldDelegate.alphaGain != alphaGain ||
+      oldDelegate.radiusGain != radiusGain ||
+      oldDelegate.driftGain != driftGain;
 }

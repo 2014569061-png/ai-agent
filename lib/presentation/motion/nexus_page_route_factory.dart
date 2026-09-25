@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/nexus_background.dart';
+import 'motion_intensity.dart';
 import 'motion_preferences.dart';
 import 'motion_tier.dart';
 import 'nexus_motion.dart';
@@ -268,6 +269,9 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
       return child;
     }
     final budget = MotionBudget.of(context);
+    // S1：视差与暗化随强度放大（鲜明档 30% → 45%、0.12 → 0.22）。
+    final parallax = amplify(parallaxFraction, budget.gain, 0.5);
+    final dim = amplify(dimOpacity, budget.gain, 0.85);
     final curved = CurvedAnimation(
       parent: secondaryAnimation,
       curve: enterCurve,
@@ -284,7 +288,7 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
       result = SlideTransition(
         position: Tween<Offset>(
           begin: Offset.zero,
-          end: const Offset(-parallaxFraction, 0),
+          end: Offset(-parallax, 0),
         ).animate(curved),
         child: result,
       );
@@ -298,7 +302,7 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
             child: FadeTransition(
               opacity: curved,
               child: ColoredBox(
-                color: Colors.black.withValues(alpha: dimOpacity),
+                color: Colors.black.withValues(alpha: dim),
               ),
             ),
           ),

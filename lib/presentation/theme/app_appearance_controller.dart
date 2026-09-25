@@ -1,15 +1,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../motion/motion_intensity.dart';
 import '../widgets/liquid_glass.dart';
 
 abstract final class AppAppearanceController {
   static const glassKey = 'settings.theme.glass_intensity';
   static const effectsKey = 'settings.theme.immersive_effects';
   static const fontScaleKey = 'settings.font_scale';
+  static const motionIntensityKey = 'settings.theme.motion_intensity';
   static final glassIntensity = ValueNotifier<double>(.8);
   static final effects = ValueNotifier<String>('full');
   static final fontScale = ValueNotifier<double>(1.0);
+
+  /// 动效强度（S1）。默认「鲜明」，只放大装饰效果，不改变动效等级开关。
+  static final motionIntensity =
+      ValueNotifier<MotionIntensity>(MotionIntensity.vivid);
 
   /// Mobile devices have the widest performance range. Keep the initial
   /// composition to one inexpensive blur pass there; people can still select
@@ -36,6 +42,8 @@ abstract final class AppAppearanceController {
         (prefs.getDouble(glassKey) ?? defaultGlassIntensity).clamp(0.0, 1.0);
     effects.value = _validEffect(prefs.getString(effectsKey) ?? 'full');
     fontScale.value = (prefs.getDouble(fontScaleKey) ?? 1.0).clamp(0.88, 1.28);
+    motionIntensity.value =
+        MotionIntensity.parse(prefs.getString(motionIntensityKey));
   }
 
   static Future<void> setGlass(double value) async {
@@ -60,6 +68,12 @@ abstract final class AppAppearanceController {
     effects.value = _validEffect(value);
     await (await SharedPreferences.getInstance())
         .setString(effectsKey, effects.value);
+  }
+
+  static Future<void> setMotionIntensity(MotionIntensity value) async {
+    motionIntensity.value = value;
+    await (await SharedPreferences.getInstance())
+        .setString(motionIntensityKey, value.name);
   }
 
   static Future<void> setFontScale(double value) async {

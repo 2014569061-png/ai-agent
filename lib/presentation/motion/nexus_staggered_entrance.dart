@@ -2,7 +2,9 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/app_appearance_controller.dart';
 import '../widgets/liquid_glass.dart';
+import 'motion_intensity.dart';
 import 'motion_preferences.dart';
+import 'motion_tier.dart';
 import 'nexus_motion.dart';
 
 /// 列表错开入场（M3）：整个列表共用一个 [AnimationController]，
@@ -113,6 +115,9 @@ class _NexusStaggeredItemState extends State<NexusStaggeredItem> {
   bool _fade = false;
   bool _resolved = false;
 
+  /// S1：入场位移随强度放大（鲜明档 12 → 18dp），挂载时确定。
+  double _offsetY = NexusStaggeredItem.offsetY;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -127,6 +132,8 @@ class _NexusStaggeredItemState extends State<NexusStaggeredItem> {
         (NexusMotion.listStagger * widget.index).inMicroseconds / total;
     final end = start + NexusMotion.listItem.inMicroseconds / total;
     _fade = scope.fade;
+    _offsetY = amplify(NexusStaggeredItem.offsetY,
+        MotionTierScope.gainOf(context, listen: false), 0.5);
     _progress = CurvedAnimation(
       parent: scope.animation,
       curve:
@@ -144,7 +151,7 @@ class _NexusStaggeredItemState extends State<NexusStaggeredItem> {
       builder: (context, child) {
         final t = progress.value;
         Widget result = Transform.translate(
-          offset: Offset(0, NexusStaggeredItem.offsetY * (1 - t)),
+          offset: Offset(0, _offsetY * (1 - t)),
           child: child,
         );
         if (_fade) {

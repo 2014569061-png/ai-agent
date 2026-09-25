@@ -13,12 +13,22 @@ import '../theme/app_palette.dart';
 ///
 /// 粒子状态保存在一个 [Float32List] 里，推进与绘制过程零分配。
 class LightDustSystem {
-  LightDustSystem({required this.count, int seed = 7})
-      : assert(count >= 0),
+  LightDustSystem({
+    required this.count,
+    int seed = 7,
+    this.sizeGain = 1,
+    this.alphaGain = 1,
+  })  : assert(count >= 0),
         _random = math.Random(seed),
         _data = Float32List(count * _stride);
 
   final int count;
+
+  /// S1 强度倍率：粒子半径与 α 的放大系数（1 = 原始参数）。
+  /// α 放大后仍钳制在 [maxBoostedAlpha] 以内。
+  final double sizeGain;
+  final double alphaGain;
+  static const double maxBoostedAlpha = 0.72;
   final math.Random _random;
   final Float32List _data;
   Size _size = Size.zero;
@@ -71,8 +81,9 @@ class LightDustSystem {
     _data[o + _phase] = _random.nextDouble() * 2 * math.pi;
     _data[o + _age] = 0;
     _data[o + _life] = _lerp(minLife, maxLife);
-    _data[o + _radius] = _lerp(minRadius, maxRadius);
-    _data[o + _alpha] = _lerp(minAlpha, maxAlpha);
+    _data[o + _radius] = _lerp(minRadius, maxRadius) * sizeGain;
+    _data[o + _alpha] =
+        (_lerp(minAlpha, maxAlpha) * alphaGain).clamp(0.0, maxBoostedAlpha);
   }
 
   double _lerp(double a, double b) => a + (b - a) * _random.nextDouble();

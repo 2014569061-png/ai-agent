@@ -50,6 +50,11 @@ void main() {
       runApp(const ProviderScope(child: MobileAgentApp()));
       // 动效档位：按帧耗时在会话内自动降级装饰层（粒子 / 光晕 / 流光）。
       MotionTierController.app.startMonitoring();
+      // S1：动效强度偏好同步给档位控制器，MotionTierScope 随之通知重建。
+      void syncIntensity() => MotionTierController.app.intensity =
+          AppAppearanceController.motionIntensity.value;
+      syncIntensity();
+      AppAppearanceController.motionIntensity.addListener(syncIntensity);
       unawaited(_initializeServices());
     },
     (error, stack) {

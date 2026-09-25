@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../motion/motion_preferences.dart';
+import '../motion/motion_tier.dart';
 import '../motion/nexus_motion.dart';
 import 'nexus_touch_light.dart';
 
@@ -94,6 +95,7 @@ class _NexusPressableState extends State<NexusPressable>
                 position: _lightPosition,
                 dark: Theme.of(context).brightness == Brightness.dark,
                 borderRadius: widget.borderRadius,
+                gain: MotionTierScope.gainOf(context),
               )
             : null,
         child: widget.child,

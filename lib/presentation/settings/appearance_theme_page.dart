@@ -7,6 +7,7 @@ import '../../infrastructure/background_service.dart';
 import '../chat/chat_layout_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme_controller.dart';
+import '../motion/motion_intensity.dart';
 import '../theme/app_appearance_controller.dart';
 import '../widgets/liquid_glass.dart';
 import '../widgets/async_state_view.dart';
@@ -165,6 +166,23 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                       onSelected: _updateEffects,
                     );
                   },
+                ),
+                const SizedBox(height: 16),
+                const Text('动效强度',
+                    style: TextStyle(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
+                ValueListenableBuilder<MotionIntensity>(
+                  valueListenable: AppAppearanceController.motionIntensity,
+                  builder: (context, intensity, _) =>
+                      LiquidSegmentedControl<MotionIntensity>(
+                    key: const ValueKey('motion-intensity-control'),
+                    segments: [
+                      for (final v in MotionIntensity.values)
+                        LiquidSegment(value: v, label: v.label),
+                    ],
+                    selected: intensity,
+                    onSelected: AppAppearanceController.setMotionIntensity,
+                  ),
                 ),
               ],
             ),
