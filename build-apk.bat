@@ -362,7 +362,16 @@ break > "!BUILD_MARKER!"
 for /f "delims=" %%A in ('powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "(Get-Date).ToFileTimeUtc()"') do set "BUILD_START_TICKS=%%A"
 
 echo.
-set "BUILD_ARGS=build apk --release --target-platform android-arm64 --no-pub --android-skip-build-dependency-validation"
+rem Stamp the build so the app can show which commit/time it came from
+rem (Settings > Appearance > Motion diagnostics). "-dirty" marks uncommitted lib/pubspec changes.
+set "BUILD_SHA=nogit"
+for /f "delims=" %%G in ('git rev-parse --short HEAD 2^>nul') do set "BUILD_SHA=%%G"
+git diff --quiet HEAD -- lib pubspec.yaml >nul 2>&1
+if errorlevel 1 set "BUILD_SHA=!BUILD_SHA!-dirty"
+set "BUILD_TIME=unknown"
+for /f "delims=" %%T in ('powershell.exe -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmm"') do set "BUILD_TIME=%%T"
+echo [info] Build stamp: !BUILD_SHA! !BUILD_TIME!
+set "BUILD_ARGS=build apk --release --target-platform android-arm64 --no-pub --android-skip-build-dependency-validation --dart-define=NEXUS_BUILD_SHA=!BUILD_SHA! --dart-define=NEXUS_BUILD_TIME=!BUILD_TIME!"
 if "!FAST_BUILD!"=="1" set "BUILD_ARGS=!BUILD_ARGS! --android-project-arg=fastBuild=true"
 echo [3/5] Building signed ARM64 release APK ^(!BUILD_MODE! mode^)...
 if "!FAST_BUILD!"=="1" echo [info] --fast enabled: skipping R8/resource shrinking for this local build.

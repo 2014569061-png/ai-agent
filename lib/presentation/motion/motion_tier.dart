@@ -15,7 +15,9 @@ enum MotionTier { low, mid, high }
 /// * 初始档：显示刷新率 ≥ 90Hz 判为 [MotionTier.high]，否则 [MotionTier.mid]。
 /// * 运行时：统计最近 [sampleSize] 帧，UI 或 Raster 任一超过帧预算的占比
 ///   超过 [jankRatioThreshold] 就降一档。会话内**只降不升**，避免档位抖动
-///   导致粒子数忽多忽少。
+///   导致粒子数忽多忽少。运行时最低只降到 [MotionTier.mid]；low 只来自
+///   外部限档（如纯扁平玻璃）。卡顿判定预算不低于 60Hz 的 16.7ms，
+///   避免高刷设备因 8.3ms 预算被误降档。
 /// * 启动后的前 [warmupFrames] 帧（着色器编译、首屏光栅化）不计入统计。
 class MotionTierController extends ValueNotifier<MotionTier> {
   MotionTierController({
@@ -49,6 +51,12 @@ class MotionTierController extends ValueNotifier<MotionTier> {
   int get frameBudgetMicros =>
       (Duration.microsecondsPerSecond / refreshRate).round();
 
+  /// 卡顿判定用的预算：取帧预算与 60Hz 预算中较宽松的一个。
+  static const int _minJankBudgetMicros = 16667;
+  int get jankBudgetMicros => frameBudgetMicros > _minJankBudgetMicros
+      ? frameBudgetMicros
+      : _minJankBudgetMicros;
+
   bool get isMonitoring => _monitoring;
 
   static MotionTier tierForRefreshRate(double refreshRate) =>
@@ -81,7 +89,7 @@ class MotionTierController extends ValueNotifier<MotionTier> {
     if (_seenFrames <= warmupFrames) return;
     _windowFrames++;
     final worst = build > raster ? build : raster;
-    if (worst.inMicroseconds > frameBudgetMicros) _windowJank++;
+    if (worst.inMicroseconds > jankBudgetMicros) _windowJank++;
     if (_windowFrames < sampleSize) return;
     final jankRatio = _windowJank / _windowFrames;
     _windowFrames = 0;
@@ -90,11 +98,10 @@ class MotionTierController extends ValueNotifier<MotionTier> {
   }
 
   void _downgrade() {
-    value = switch (value) {
-      MotionTier.high => MotionTier.mid,
-      MotionTier.mid || MotionTier.low => MotionTier.low,
-    };
-    if (value == MotionTier.low) stopMonitoring();
+    // 运行时最低降到 mid：位移 / 透明度等廉价动效本就不受档位影响，
+    // mid 只减半粒子并关闭光晕漂移，已足够减负。
+    if (value == MotionTier.high) value = MotionTier.mid;
+    stopMonitoring();
   }
 
   @override

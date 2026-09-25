@@ -52,7 +52,8 @@ void main() {
       for (var i = 0; i < 10; i++) {
         c.recordFrame(_fast, _slow);
       }
-      expect(c.value, MotionTier.low);
+      // 运行时最低只降到 mid（low 只来自外部限档）。
+      expect(c.value, MotionTier.mid);
     });
 
     test('掉帧率未超阈值时保持档位', () {

@@ -16,6 +16,7 @@ import '../widgets/liquid_segmented_control.dart';
 import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
+import 'motion_diagnostics.dart';
 
 class AppearanceThemePage extends StatefulWidget {
   const AppearanceThemePage({super.key});
@@ -147,7 +148,8 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                         children: [
                           _buildEffectOption('full', '完整动效', '保留轻量转场与交互反馈'),
                           const SizedBox(height: 6),
-                          _buildEffectOption('reduced', '节能平滑', '短过渡、轻量磨砂，停止循环装饰'),
+                          _buildEffectOption(
+                              'reduced', '节能平滑', '短过渡、轻量磨砂，停止循环装饰'),
                           const SizedBox(height: 6),
                           _buildEffectOption('off', '关闭动效', '即时切换与静态平面，保留操作反馈'),
                         ],
@@ -238,6 +240,8 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                 ),
               ],
             ),
+            const SettingsSectionTitle('动效诊断'),
+            const MotionDiagnosticsCard(),
             const SettingsSectionTitle('界面材质'),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
@@ -251,7 +255,9 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                   iconColor: settingsMutedColor(context),
                   title: '液态玻璃 (Liquid Glass)',
                   subtitle: 'SDF 边缘折射 + 镜面高光 + 磨砂（遇不支持设备自动降级）',
-                  selected: AppAppearanceController.materialForValue(_glassIntensity) == GlassIntensity.liquid,
+                  selected: AppAppearanceController.materialForValue(
+                          _glassIntensity) ==
+                      GlassIntensity.liquid,
                   onTap: () => _updateGlass(0.85),
                 ),
                 const SettingsDivider(),
@@ -260,7 +266,9 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                   iconColor: settingsMutedColor(context),
                   title: '经典磨砂 (Frosted Glass)',
                   subtitle: '纯高斯背景模糊，平滑省电，全平台兼容',
-                  selected: AppAppearanceController.materialForValue(_glassIntensity) == GlassIntensity.frosted,
+                  selected: AppAppearanceController.materialForValue(
+                          _glassIntensity) ==
+                      GlassIntensity.frosted,
                   onTap: () => _updateGlass(0.45),
                 ),
                 const SettingsDivider(),
@@ -269,7 +277,9 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                   iconColor: settingsMutedColor(context),
                   title: '纯净平面 (Flat)',
                   subtitle: '清晰静态表面，不使用模糊与折射',
-                  selected: AppAppearanceController.materialForValue(_glassIntensity) == GlassIntensity.flat,
+                  selected: AppAppearanceController.materialForValue(
+                          _glassIntensity) ==
+                      GlassIntensity.flat,
                   onTap: () => _updateGlass(0.0),
                 ),
               ],
