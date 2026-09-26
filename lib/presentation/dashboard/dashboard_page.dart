@@ -175,7 +175,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
             child: NexusStaggeredEntrance(
               child: ListView(
                 physics: NexusMotion.listPhysics,
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                // U1 节奏：分区之间统一 24、同组（性能卡 + KPI）之间 12。
+                // NexusSection 自带 bottom 16（待办条目另有 8），这里只补差值。
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 children: [
                   // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
                   NexusStaggeredItem(
@@ -185,18 +187,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                       onConversationSelected: widget.onConversationSelected,
                     ),
                   ),
-                  const SizedBox(height: 16),
                   if (_developerMode) ...[
                     NexusStaggeredItem(
                       index: 1,
                       child: TokenUsageHero(days: summary.weeklyUsage),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
                     NexusStaggeredItem(
                       index: 2,
                       child: KpiCardGrid(kpis: summary.kpis),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                     NexusStaggeredItem(
                       index: 3,
                       child: RunStatusList(
@@ -204,12 +205,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                         onConversationSelected: widget.onConversationSelected,
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     NexusStaggeredItem(
                       index: 4,
                       child: TokenTrendCard(days: summary.weeklyUsage),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                   ] else
                     NexusStaggeredItem(
                       index: 1,
@@ -224,7 +225,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                         ),
                       ),
                     ),
-                  if (!_developerMode) const SizedBox(height: 16),
+                  if (!_developerMode) const SizedBox(height: 24),
                   NexusStaggeredItem(
                     index: _developerMode ? 5 : 2,
                     child: _RecentConversationsSection(
