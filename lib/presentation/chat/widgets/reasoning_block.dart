@@ -50,6 +50,9 @@ class ReasoningCompactBlock extends StatefulWidget {
   State<ReasoningCompactBlock> createState() => _ReasoningCompactBlockState();
 }
 
+/// 消息区卡片圆角（S1：卡片 16 / 芯片半高 / 用户气泡 20 + 右下 6）。
+const _cardRadius = 16.0;
+
 class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
   bool _expanded = false;
   Duration _displayElapsed = Duration.zero;
@@ -199,8 +202,8 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
       ),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
-        border: Border.all(color: cardBorder, width: 0.8),
+        // S1：卡片统一 16 圆角，去描边只留浅底（描边色仍用于内部分隔线）。
+        borderRadius: BorderRadius.circular(_cardRadius),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,7 +214,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
             child: InkWell(
               // S6：整行可点展开/收起思考过程，不再单独放「思考过程」按钮。
               onTap: hasReasoning ? _toggleReasoning : null,
-              borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+              borderRadius: BorderRadius.circular(_cardRadius),
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

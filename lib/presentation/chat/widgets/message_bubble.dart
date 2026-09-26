@@ -582,7 +582,7 @@ class _RunPauseNoticeCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
         decoration: BoxDecoration(
           color: accent.withValues(alpha: isDark ? 0.14 : 0.08),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -844,8 +844,6 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final hairline =
-        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -872,8 +870,7 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: surface,
-              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-              border: Border.all(color: hairline, width: 1.0),
+              borderRadius: BorderRadius.circular(AppTokens.radiusCard),
             ),
             child: SelectableText(
               widget.detail,

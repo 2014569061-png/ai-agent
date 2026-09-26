@@ -283,10 +283,12 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    final background = dark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    // S1：去描边后浅色模式的白底会融进页面，改用极浅的文字色罩底。
+    final background = dark
+        ? AppPalette.darkSurface
+        : AppPalette.lightText.withValues(alpha: 0.035);
     final headerBackground =
         dark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
-    final border = dark ? AppPalette.darkHairline : AppPalette.lightHairline;
     final headerText =
         dark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
     final codeColor = dark ? AppPalette.darkText : AppPalette.lightText;
@@ -304,8 +306,8 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-        border: Border.all(color: border, width: 0.8),
+        // S1：代码卡 12 圆角、无描边，靠浅底与标题栏色阶区分层级。
+        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
