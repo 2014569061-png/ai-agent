@@ -167,7 +167,9 @@ class _ProviderListPageState extends State<ProviderListPage> {
                           onActivate: () => _activate(_profiles[i]),
                           onDelete: () => _delete(_profiles[i]),
                         ),
-                        if (i < _profiles.length - 1) const SettingsDivider(),
+                        // R4：首字母方块 28，文字从 56 开始，分隔线对齐文字。
+                        if (i < _profiles.length - 1)
+                          const SettingsDivider(indent: 56),
                       ],
                     ],
                   ),
@@ -188,7 +190,8 @@ class _ProviderListPageState extends State<ProviderListPage> {
                           ),
                           onTap: () => _openPreset(available[i]),
                         ),
-                        if (i < available.length - 1) const SettingsDivider(),
+                        if (i < available.length - 1)
+                          const SettingsDivider(indent: 56),
                       ],
                     ],
                   ),
