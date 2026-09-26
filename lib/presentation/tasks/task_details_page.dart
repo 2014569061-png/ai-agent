@@ -244,6 +244,14 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     if (result.ok) await _loadAudit();
   }
 
+  /// Y1：任务来源显示中文；未知来源原样显示，避免丢信息。
+  static String _sourceLabel(String source) => switch (source) {
+        'manual' => '手动发起',
+        'verification_repair' => '验证修复',
+        'scheduled' => '定时任务',
+        _ => source,
+      };
+
   String _formatDate(DateTime time) {
     final local = time.toLocal();
     return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')} '
@@ -423,10 +431,10 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                   color: theme.colorScheme.primary
                                       .withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusControl),
+                                      AppTokens.radiusPill),
                                 ),
                                 child: Text(
-                                  '类型：${_task.type}',
+                                  '类型：${TaskService.taskTypeLabel(_task.type)}',
                                   style: TextStyle(
                                     fontSize: AppTokens.fontSizeFootnote,
                                     fontWeight: FontWeight.w500,
@@ -443,10 +451,10 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                       .colorScheme.surfaceContainerHighest
                                       .withValues(alpha: 0.6),
                                   borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusControl),
+                                      AppTokens.radiusPill),
                                 ),
                                 child: Text(
-                                  '来源：${_task.sourceType}',
+                                  '来源：${_sourceLabel(_task.sourceType)}',
                                   style: TextStyle(
                                     fontSize: AppTokens.fontSizeFootnote,
                                     color: theme.colorScheme.onSurfaceVariant,
