@@ -192,7 +192,11 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
         thinking && widget.progress != null && widget.hasStartedAnswer;
 
     return Container(
-      margin: EdgeInsets.symmetric(vertical: condensedProgress ? 3 : 6),
+      // S7：流式正文紧跟进度卡时留 10dp；完成态 6 + 段落上距 6 ≈ 12。
+      margin: EdgeInsets.only(
+        top: condensedProgress ? 3 : 6,
+        bottom: condensedProgress ? 10 : 6,
+      ),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(AppTokens.radiusCard),

@@ -302,6 +302,11 @@ class ChatMessageListState extends State<ChatMessageList> {
             : storedMessage;
         final shouldAnimate = _enteringMessageIndices.contains(index);
         final isLast = index == widget.messages.length - 1;
+        // S7 节奏：同一轮内气泡间距 12（气泡自带），新一轮用户消息前再加 12，
+        // 让「一问一答」成组。始终包 Padding、只改数值，避免切换结构重建子树。
+        final beforeNewTurn = !isLast &&
+            widget.messages[index + 1].role == MessageRole.user &&
+            message.role != MessageRole.user;
         final selecting = widget.selectionIndex == index;
         final bubble = MessageBubble(
           message: message,
@@ -374,7 +379,10 @@ class ChatMessageListState extends State<ChatMessageList> {
                   }
                 }
               : null,
-          child: child,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: beforeNewTurn ? 12 : 0),
+            child: child,
+          ),
         );
       },
     );
