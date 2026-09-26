@@ -105,13 +105,17 @@ class _PlanPanelState extends State<PlanPanel> {
         child: _isCompleted && !_expanded
             ? _buildCompletedCompact(muted)
             : (_expanded
-                ? SizedBox(
+                // Z5：高度随内容收缩（上限不变），步骤少时不再留出空白。
+                ? ConstrainedBox(
                     key: const ValueKey('plan_expanded'),
-                    height: math.min(
-                        410.0, MediaQuery.sizeOf(context).height * 0.58),
+                    constraints: BoxConstraints(
+                      maxHeight: math.min(
+                          410.0, MediaQuery.sizeOf(context).height * 0.58),
+                    ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
+                        Flexible(
                           child: SingleChildScrollView(
                             child: _buildExpanded(muted, includeActions: false),
                           ),
