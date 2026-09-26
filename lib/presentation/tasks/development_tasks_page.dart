@@ -174,70 +174,49 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
             if (_showSearch)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
-                child: isFlat
-                    ? TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        decoration: InputDecoration(
-                          hintText: '搜索任务标题、工作区路径或指令…',
-                          prefixIcon:
-                              const Icon(Icons.search_rounded, size: 20),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.clear_rounded,
-                                      size: 18),
-                                  onPressed: () {
-                                    setState(() {
-                                      _searchQuery = '';
-                                      _searchController.clear();
-                                    });
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 10),
-                        ),
-                        onChanged: (val) => setState(() => _searchQuery = val),
-                      )
-                    : GlassSurface(
-                        role: GlassRole.control,
-                        variant: GlassVariant.clear,
-                        intensity:
-                            AppAppearanceController.resolvedGlassIntensity,
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusControl),
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: TextField(
-                          controller: _searchController,
-                          autofocus: true,
-                          decoration: InputDecoration(
-                            hintText: '搜索任务标题、工作区路径或指令…',
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            prefixIcon:
-                                const Icon(Icons.search_rounded, size: 20),
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? IconButton(
-                                    icon: const Icon(Icons.clear_rounded,
-                                        size: 18),
-                                    onPressed: () {
-                                      setState(() {
-                                        _searchQuery = '';
-                                        _searchController.clear();
-                                      });
-                                    },
-                                  )
-                                : null,
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                          ),
-                          onChanged: (val) =>
-                              setState(() => _searchQuery = val),
-                        ),
+                // W6：与设置 / 历史页一致的无描边浅底胶囊搜索；聚焦时品牌色细描边。
+                child: TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    hintText: '搜索任务标题、工作区路径或指令…',
+                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear_rounded, size: 18),
+                            onPressed: () {
+                              setState(() {
+                                _searchQuery = '';
+                                _searchController.clear();
+                              });
+                            },
+                          )
+                        : null,
+                    isDense: true,
+                    filled: true,
+                    fillColor:
+                        (isDark ? AppPalette.darkText : AppPalette.lightText)
+                            .withValues(alpha: isDark ? 0.08 : 0.05),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                      borderSide: BorderSide(
+                        color: AppPalette.brandTextFor(isDark),
+                        width: 1.2,
                       ),
+                    ),
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                ),
               ),
 
             // 统计与筛选胶囊标签行
