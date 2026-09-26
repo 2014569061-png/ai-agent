@@ -1,4 +1,3 @@
-import '../theme/app_palette.dart';
 import 'package:flutter/material.dart';
 import '../l10n/app_locale_controller.dart';
 import '../widgets/async_state_view.dart';
@@ -70,7 +69,7 @@ class _LanguagePageState extends State<LanguagePage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.translate_rounded,
-                      iconColor: AppPalette.warning,
+                      iconColor: settingsMutedColor(context),
                       title: '简体中文',
                       subtitle: '完整支持 · 默认语言',
                       selected: _current == 'zh',
@@ -79,7 +78,7 @@ class _LanguagePageState extends State<LanguagePage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.language_rounded,
-                      iconColor: AppPalette.success,
+                      iconColor: settingsMutedColor(context),
                       title: 'English',
                       // 此前写的是「Partial translation in progress」，暗示翻译仍在
                       // 推进。已确认不打算完善英文，因此改成陈述事实，避免承诺一件

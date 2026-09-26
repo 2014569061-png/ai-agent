@@ -99,7 +99,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                     return Column(
                       children: [
                         SettingsTile(
-                          icon: Icons.brightness_auto_rounded,
+                          icon: Icons.brightness_auto_outlined,
                           iconColor: settingsMutedColor(context),
                           title: '跟随系统',
                           subtitle: '根据系统深浅色外观自动切换',
@@ -109,8 +109,8 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                         ),
                         const SettingsDivider(),
                         SettingsTile(
-                          icon: Icons.light_mode_rounded,
-                          iconColor: AppPalette.warning,
+                          icon: Icons.light_mode_outlined,
+                          iconColor: settingsMutedColor(context),
                           title: '浅色模式',
                           subtitle: '清新明亮的白蓝质感',
                           selected: currentMode == ThemeMode.light,
@@ -119,7 +119,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                         ),
                         const SettingsDivider(),
                         SettingsTile(
-                          icon: Icons.dark_mode_rounded,
+                          icon: Icons.dark_mode_outlined,
                           iconColor: settingsMutedColor(context),
                           title: '深色模式',
                           subtitle: '深邃专注的纯黑沉浸感',
@@ -261,10 +261,17 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
             const SettingsSectionTitle('动效诊断'),
             const MotionDiagnosticsCard(),
             const SettingsSectionTitle('界面材质'),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 10),
-              child: Text('节能模式临时使用轻量磨砂，关闭动效时使用静态平面。系统减少动态效果优先；完整模式恢复所选材质。',
-                  style: TextStyle(fontSize: 12, height: 1.5)),
+            // R2：说明文字与分组标题同缩进 16，用次要色，不抢标题。
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Text(
+                '节能模式临时使用轻量磨砂，关闭动效时使用静态平面。系统减少动态效果优先；完整模式恢复所选材质。',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.5,
+                  color: settingsMutedColor(context),
+                ),
+              ),
             ),
             SettingsGroupCard(
               children: [
@@ -343,8 +350,20 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                         ),
                         const SettingsDivider(),
                         SettingsTile(
-                          icon: Icons.wallpaper_rounded,
-                          iconColor: settingsMutedColor(context),
+                          // R3：三行前导统一为 28 方块，标题都从 56 开始。
+                          leading: ClipRRect(
+                            borderRadius: BorderRadius.circular(7),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              child: Icon(
+                                Icons.wallpaper_rounded,
+                                size: 16,
+                                color: settingsMutedColor(context),
+                              ),
+                            ),
+                          ),
                           title: '默认（跟随主题）',
                           subtitle: '极简纯色纯净底色，与顶栏完全融为一体',
                           selected: current.mode == 'default',
@@ -353,7 +372,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                             if (mounted) setState(() {});
                           },
                         ),
-                        const SettingsDivider(),
+                        const SettingsDivider(indent: 56),
                         SettingsTile(
                           leading: ClipRRect(
                             borderRadius: BorderRadius.circular(7),
@@ -378,7 +397,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                             if (mounted) setState(() {});
                           },
                         ),
-                        const SettingsDivider(),
+                        const SettingsDivider(indent: 56),
                         SettingsTile(
                           leading: ClipRRect(
                             borderRadius: BorderRadius.circular(7),
