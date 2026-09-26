@@ -508,8 +508,10 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                               workspacePath.isNotEmpty) ...[
                             Row(
                               children: [
-                                const Icon(Icons.folder_outlined,
-                                    size: 15, color: AppTheme.textSecondary),
+                                // Y4：次要文字用主题色，深色模式下也清晰。
+                                Icon(Icons.folder_outlined,
+                                    size: 15,
+                                    color: theme.colorScheme.onSurfaceVariant),
                                 const SizedBox(width: 6),
                                 const Text('工作区：',
                                     style: TextStyle(
@@ -518,9 +520,10 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 Expanded(
                                   child: SelectableText(
                                     workspacePath,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: AppTokens.fontSizeFootnote,
-                                        color: AppTheme.textSecondary),
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant),
                                   ),
                                 ),
                               ],
@@ -539,14 +542,15 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                           ],
                           Row(
                             children: [
-                              const Icon(Icons.schedule_rounded,
-                                  size: 15, color: AppTheme.textSecondary),
+                              Icon(Icons.schedule_rounded,
+                                  size: 15,
+                                  color: theme.colorScheme.onSurfaceVariant),
                               const SizedBox(width: 6),
                               Text(
                                 '更新时间：${_formatDate(_task.updatedAt)}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontSize: AppTokens.fontSizeFootnote,
-                                    color: AppTheme.textSecondary),
+                                    color: theme.colorScheme.onSurfaceVariant),
                               ),
                             ],
                           ),
