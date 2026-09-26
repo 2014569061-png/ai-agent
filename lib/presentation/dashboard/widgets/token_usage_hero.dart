@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../../application/dashboard_service.dart';
 import '../../l10n/app_strings.dart';
-import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
-import '../../widgets/glass_surface.dart';
 import '../../widgets/section_card.dart';
 import '../../chat/widgets/context_budget_bar.dart';
 import 'token_numbers.dart';
@@ -329,13 +327,14 @@ class _TelemetryStatCard extends StatelessWidget {
     final text = isDark ? AppPalette.darkText : AppPalette.lightText;
     final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
-    return GlassSurface(
-      role: GlassRole.control,
-      variant: GlassVariant.clear,
-      intensity: AppAppearanceController.resolvedGlassIntensity,
-      borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+    // U3：原先嵌套 clear 玻璃——浅色下完全透明、深色下只有描边，两套样式；
+    // 且玻璃里再套玻璃违背「材质不嵌套」。改为文字色低透明度浅底、无描边。
+    return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      boxShadow: const [],
+      decoration: BoxDecoration(
+        color: text.withValues(alpha: isDark ? 0.06 : 0.045),
+        borderRadius: BorderRadius.circular(AppTokens.smallControlRadius),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
