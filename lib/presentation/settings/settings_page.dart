@@ -851,11 +851,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 if (trailing != null &&
                     trailing.isNotEmpty &&
                     !stackedValue) ...[
-                  Flexible(
+                  // T1：值贴右、箭头统一对齐；原先 Flexible 与标题 Expanded
+                  // 平分剩余宽度，值会停在行中间。最多占屏宽约 42%，超出省略。
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.sizeOf(context).width * 0.42,
+                    ),
                     child: Text(
                       trailing,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
                       style: TextStyle(
                         fontSize: AppTokens.fontSizeSubhead,
                         fontWeight: FontWeight.w400,
