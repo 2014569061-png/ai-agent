@@ -114,4 +114,47 @@ void main() {
     expect(result?.mode, ChatMode.agent);
     expect(result?.planMode, isFalse);
   });
+
+  testWidgets('vendor pills only list vendors that have models',
+      (tester) async {
+    const profiles = [
+      ProviderConfig(
+        id: 'openai',
+        name: '常用模型',
+        baseUrl: 'https://example.com/v1',
+        model: 'gpt-5.6-terra',
+        apiKey: 'key',
+      ),
+      ProviderConfig(
+        id: 'local',
+        name: '本地模型',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'qwen3',
+        apiKey: '',
+      ),
+    ];
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      home: const Scaffold(
+        body: ModelPickerSheet(
+          profiles: profiles,
+          selectedId: 'openai',
+          reasoningEffort: ReasoningEffort.medium,
+          planMode: false,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('全部'), findsOneWidget);
+    expect(find.text('OpenAI'), findsOneWidget);
+    expect(find.text('本地'), findsOneWidget);
+    expect(find.text('DeepSeek'), findsNothing);
+    expect(find.text('Anthropic'), findsNothing);
+
+    await tester.tap(find.text('本地'));
+    await tester.pumpAndSettle();
+    expect(find.text('qwen3'), findsOneWidget);
+    expect(find.text('gpt-5.6-terra'), findsNothing);
+  });
 }

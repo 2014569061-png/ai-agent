@@ -75,26 +75,38 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
     return keywords.any((kw) => text.contains(kw));
   }
 
+  bool _matchesCategory(ProviderConfig profile, String category) =>
+      switch (category) {
+        'DeepSeek' => _matchesKeyword(profile, ['deepseek']),
+        'Anthropic' => _matchesKeyword(profile, ['anthropic', 'claude']),
+        'OpenAI' => _matchesKeyword(profile, ['openai', 'gpt']),
+        '本地' => profile.id == 'local' ||
+            _matchesKeyword(profile, [
+              '本地',
+              'local',
+              'ollama',
+              '127.0.0.1',
+              'localhost',
+              'qwen',
+              'llama'
+            ]),
+        _ => true,
+      };
+
+  /// Z4：只显示有匹配模型的厂商；「全部」与当前选中项始终保留。
+  List<String> get _visibleCategories => [
+        for (final cat in _categories)
+          if (cat == '全部' ||
+              cat == _selectedCategory ||
+              widget.profiles.any((p) => _matchesCategory(p, cat)))
+            cat,
+      ];
+
   List<ProviderConfig> get _filteredProfiles {
     return widget.profiles.where((profile) {
-      if (_selectedCategory != '全部') {
-        final matchesCat = switch (_selectedCategory) {
-          'DeepSeek' => _matchesKeyword(profile, ['deepseek']),
-          'Anthropic' => _matchesKeyword(profile, ['anthropic', 'claude']),
-          'OpenAI' => _matchesKeyword(profile, ['openai', 'gpt']),
-          '本地' => profile.id == 'local' ||
-              _matchesKeyword(profile, [
-                '本地',
-                'local',
-                'ollama',
-                '127.0.0.1',
-                'localhost',
-                'qwen',
-                'llama'
-              ]),
-          _ => true,
-        };
-        if (!matchesCat) return false;
+      if (_selectedCategory != '全部' &&
+          !_matchesCategory(profile, _selectedCategory)) {
+        return false;
       }
       final query = _query.trim().toLowerCase();
       if (query.isEmpty) return true;
@@ -239,7 +251,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: _categories.map((cat) {
+                  children: _visibleCategories.map((cat) {
                     final selected = _selectedCategory == cat;
                     return Padding(
                       padding: const EdgeInsets.only(right: 6),
@@ -250,36 +262,18 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                           duration: NexusMotion.durationFast(context),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 11, vertical: 5),
+                          // Z4：无描边填充胶囊（与 X3/W4 一致），去掉描边与投影。
                           decoration: BoxDecoration(
                             color: selected
                                 ? (isDark
-                                    ? AppPalette.brandAction
-                                        .withValues(alpha: 0.22)
-                                    : AppPalette.brandAction
-                                        .withValues(alpha: 0.12))
+                                    ? AppPalette.brandSoftDark
+                                    : AppPalette.brandSoftLight)
                                 : (isDark
-                                    ? Colors.white.withValues(alpha: 0.04)
-                                    : Colors.black.withValues(alpha: 0.025)),
+                                        ? AppPalette.darkText
+                                        : AppPalette.lightText)
+                                    .withValues(alpha: isDark ? 0.08 : 0.05),
                             borderRadius:
                                 BorderRadius.circular(AppTokens.radiusPill),
-                            border: Border.all(
-                              color: selected
-                                  ? AppPalette.brandAction
-                                      .withValues(alpha: isDark ? 0.55 : 0.40)
-                                  : (isDark
-                                      ? Colors.white.withValues(alpha: 0.07)
-                                      : Colors.black.withValues(alpha: 0.05)),
-                              width: 1.0,
-                            ),
-                            boxShadow: selected
-                                ? [
-                                    BoxShadow(
-                                      color: AppPalette.brandAction.withValues(
-                                          alpha: isDark ? 0.22 : 0.10),
-                                      blurRadius: 6,
-                                    ),
-                                  ]
-                                : null,
                           ),
                           child: Text(
                             cat,
@@ -592,6 +586,7 @@ class _ModelTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // 分组标题即 profile.name，行尾不再重复。
                     if (selected)
                       Icon(
                         Icons.check_circle_rounded,
@@ -599,13 +594,6 @@ class _ModelTile extends StatelessWidget {
                         color: isDark
                             ? AppPalette.darkBrandHover
                             : AppPalette.brandAction,
-                      )
-                    else
-                      Text(
-                        profile.name,
-                        style: TextStyle(
-                            fontSize: AppTokens.fontSizeFootnote,
-                            color: textMuted),
                       ),
                   ],
                 ),
