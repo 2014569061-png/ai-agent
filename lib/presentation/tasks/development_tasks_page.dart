@@ -325,6 +325,10 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
     final typeLabel = TaskService.taskTypeLabel(task.type);
     final showTypeLabel = !task.title.startsWith(typeLabel);
     final metaColor = theme.colorScheme.onSurfaceVariant;
+    // W3：项目类型未识别时不显示「未知项目」，把位置留给工作区名。
+    final projectKind = task.projectKind;
+    final showProjectKind =
+        projectKind != null && projectKind != ProjectKind.unknown;
 
     // W1：任务卡片与其他页面统一 16 圆角（只传参，不改 SectionCard）。
     return SectionCard(
@@ -401,7 +405,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                     child: Text(
                       '${_relativeTime(task.updatedAt)}'
                       '${task.workspacePath != null ? ' · ${task.workspacePath!.split(RegExp(r'[\\\\/]')).last}' : ''}'
-                      '${task.projectKind != null ? ' · ${task.projectKind!.label}' : ''}'
+                      '${showProjectKind ? ' · ${projectKind.label}' : ''}'
                       '${task.resumeCount > 0 ? ' · 恢复 ${task.resumeCount} 次' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
