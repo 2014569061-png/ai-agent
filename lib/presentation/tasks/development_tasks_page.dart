@@ -471,15 +471,11 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
               if (isWaitingApproval) ...[
                 const SizedBox(height: 10),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  // W5：提示条去描边、圆角 12（嵌套在 16 卡片内），按钮降为琥珀浅底胶囊。
+                  padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
                   decoration: BoxDecoration(
-                    color: AppPalette.warning.withValues(alpha: 0.12),
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
-                    border: Border.all(
-                      color: AppPalette.warning.withValues(alpha: 0.3),
-                    ),
+                    color: AppPalette.warning.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
@@ -496,10 +492,15 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                           ),
                         ),
                       ),
-                      FilledButton.tonal(
+                      FilledButton(
                         style: FilledButton.styleFrom(
+                          backgroundColor:
+                              AppPalette.warning.withValues(alpha: 0.16),
+                          foregroundColor: AppPalette.warning,
+                          elevation: 0,
+                          shape: const StadiumBorder(),
                           minimumSize: const Size(0, 28),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           visualDensity: VisualDensity.compact,
                         ),
                         onPressed: () => _openTaskDetails(task),
