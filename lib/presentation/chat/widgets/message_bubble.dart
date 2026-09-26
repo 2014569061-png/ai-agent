@@ -156,6 +156,16 @@ class MessageBubble extends StatelessWidget {
       fontWeight: FontWeight.w400,
     );
 
+    // 行内代码：与卡片同一级的浅填充（不再是刺眼的纯白块），等宽字体，
+    // 字号为正文的 0.9 倍，与正文基线更协调。Markdown 的行内样式只支持
+    // TextStyle，所以没有圆角和内边距（自定义行内组件会打断文字换行）。
+    final inlineCodeStyle = TextStyle(
+      color: textColor,
+      fontSize: AppTokens.fontSizeBody * 0.9,
+      fontFamily: AppTokens.fontFamilyMono,
+      backgroundColor: textColor.withValues(alpha: isDark ? 0.10 : 0.06),
+    );
+
     final body = isUser
         ? Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -234,11 +244,7 @@ class MessageBubble extends StatelessWidget {
                         fontSize: AppTokens.fontSizeBody,
                         fontWeight: FontWeight.w400,
                       ),
-                      code: TextStyle(
-                        color: textColor,
-                        fontSize: AppTokens.fontSizeCaption,
-                        fontFamily: AppTokens.fontFamilyMono,
-                      ),
+                      code: inlineCodeStyle,
                       blockquote: TextStyle(
                         color: textColor,
                         height: 1.6,
@@ -325,11 +331,7 @@ class MessageBubble extends StatelessWidget {
                         fontSize: AppTokens.fontSizeBody,
                         fontWeight: FontWeight.w400,
                       ),
-                      code: TextStyle(
-                        color: textColor,
-                        fontSize: AppTokens.fontSizeCaption,
-                        fontFamily: AppTokens.fontFamilyMono,
-                      ),
+                      code: inlineCodeStyle,
                       blockquote: TextStyle(
                         color: textColor,
                         height: 1.6,
