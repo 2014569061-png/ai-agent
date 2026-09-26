@@ -85,6 +85,7 @@ class _ModelListPageState extends State<ModelListPage> {
   Widget build(BuildContext context) {
     final models = _models;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
 
     return Scaffold(
       backgroundColor: settingsBgColor(context),
@@ -96,7 +97,7 @@ class _ModelListPageState extends State<ModelListPage> {
           SettingsGroupCard(
             children: [
               SettingsTile(
-                icon: Icons.cloud_download_rounded,
+                icon: Icons.cloud_download_outlined,
                 iconColor: settingsMutedColor(context),
                 title: '从远端自动获取',
                 subtitle: _loading
@@ -107,17 +108,17 @@ class _ModelListPageState extends State<ModelListPage> {
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(
+                    : Icon(
                         Icons.chevron_right_rounded,
                         size: 20,
-                        color: AppPalette.lightTextMuted,
+                        color: settingsMutedColor(context),
                       ),
                 onTap: _loading ? null : _loadRemote,
               ),
               const SettingsDivider(),
               SettingsTile(
                 icon: Icons.add_rounded,
-                iconColor: AppPalette.success,
+                iconColor: settingsMutedColor(context),
                 title: '添加自定义模型',
                 subtitle: '手动填写展示名称与 Model ID',
                 onTap: _addCustomModel,
@@ -125,57 +126,51 @@ class _ModelListPageState extends State<ModelListPage> {
             ],
           ),
           const SizedBox(height: 12),
-          // iOS Search Field
+          // Q4：与设置页 T2 一致的无描边浅底胶囊，聚焦时品牌色细描边。
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Container(
-              height: 38,
-              decoration: BoxDecoration(
-                color:
-                    isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-                border: Border.all(
-                  color: isDark
-                      ? AppPalette.darkHairline
-                      : AppPalette.lightHairline,
-                  width: 0.8,
-                ),
+            child: TextField(
+              controller: _searchController,
+              style: TextStyle(
+                fontSize: AppTokens.fontSizeBody,
+                color: textColor,
               ),
-              child: TextField(
-                controller: _searchController,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isDark ? AppPalette.darkText : AppPalette.lightText,
+              decoration: InputDecoration(
+                hintText: '搜索模型名称或 ID…',
+                hintStyle: TextStyle(
+                  fontSize: AppTokens.fontSizeBody,
+                  color: settingsMutedColor(context),
                 ),
-                decoration: InputDecoration(
-                  hintText: '搜索模型名称或 ID…',
-                  hintStyle: TextStyle(
-                    fontSize: 14,
-                    color: settingsMutedColor(context),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  size: 20,
+                  color: settingsMutedColor(context),
+                ),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded, size: 18),
+                        tooltip: '清空搜索',
+                        onPressed: _searchController.clear,
+                      )
+                    : null,
+                filled: true,
+                fillColor: textColor.withValues(alpha: isDark ? 0.08 : 0.05),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderSide: BorderSide(
+                    color: AppPalette.brandTextFor(isDark),
+                    width: 1.2,
                   ),
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    size: 18,
-                    color: settingsMutedColor(context),
-                  ),
-                  prefixIconConstraints: const BoxConstraints(minWidth: 34),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? GestureDetector(
-                          onTap: () {
-                            _searchController.clear();
-                            setState(() {});
-                          },
-                          child: Icon(
-                            Icons.cancel_rounded,
-                            size: 16,
-                            color: settingsMutedColor(context),
-                          ),
-                        )
-                      : null,
-                  suffixIconConstraints: const BoxConstraints(minWidth: 32),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  isDense: true,
                 ),
               ),
             ),
@@ -269,14 +264,12 @@ class _DisplayModel {
     required this.displayName,
     required this.capabilities,
     this.contextTokens,
-    this.isAvailable = true,
   });
 
   factory _DisplayModel.fromPreset(ProviderPresetModel model) => _DisplayModel(
         id: model.id,
         displayName: model.displayName,
         contextTokens: model.contextTokens,
-        isAvailable: true,
         capabilities: ModelCapabilities(
             streaming: true,
             tools: model.tools,
@@ -288,14 +281,22 @@ class _DisplayModel {
         id: model.id,
         displayName: model.id,
         capabilities: model.capabilities,
-        isAvailable: true,
       );
 
   final String id;
   final String displayName;
   final ModelCapabilities capabilities;
   final int? contextTokens;
-  final bool isAvailable;
+}
+
+/// 上下文长度的紧凑写法：128000 → 128K，1000000 → 1M（Q5）。
+String formatContextTokens(int tokens) {
+  if (tokens >= 1000000) {
+    final m = (tokens / 100000).round() / 10;
+    return m == m.truncateToDouble() ? '${m.toInt()}M' : '${m}M';
+  }
+  if (tokens >= 1000) return '${(tokens / 1000).round()}K';
+  return '$tokens';
 }
 
 class _ModelTile extends StatelessWidget {
@@ -309,7 +310,8 @@ class _ModelTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final chips = <String>[
-      if (model.contextTokens != null) '${model.contextTokens} 上下文',
+      if (model.contextTokens case final tokens?)
+        '${formatContextTokens(tokens)} 上下文',
       if (model.capabilities.tools) '工具',
       if (model.capabilities.vision) '视觉',
       if (model.capabilities.jsonMode) 'JSON',
@@ -364,29 +366,6 @@ class _ModelTile extends StatelessWidget {
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w500,
                                 color: AppPalette.brandAction,
-                              ),
-                            ),
-                          )
-                        else
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 1.5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppPalette.darkSurface
-                                  : AppPalette.lightHairline,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              model.isAvailable ? '可用' : '不可用',
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w400,
-                                color: model.isAvailable
-                                    ? AppPalette.success
-                                    : AppPalette.danger,
                               ),
                             ),
                           ),
