@@ -124,6 +124,12 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                   const SizedBox(width: 8),
                   FilledButton.tonal(
                     style: FilledButton.styleFrom(
+                      // U4：按钮降一级——与左侧图标同色系的浅底胶囊，
+                      // 不再是抢眼的实心亮蓝，层级让位给标题。
+                      backgroundColor: badgeColor.withValues(alpha: 0.12),
+                      foregroundColor: badgeColor,
+                      elevation: 0,
+                      shape: const StadiumBorder(),
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       textStyle: const TextStyle(
