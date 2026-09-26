@@ -60,18 +60,17 @@ class TokenUsageHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 标题行：今日 Token + LIVE 遥测徽标 (对标效果图 2)
+          // 标题行：今日 Token + 实时徽标（U2：与全中文界面一致，徽标去描边只留浅底）
           Row(
             children: [
               Icon(Icons.data_usage_rounded, size: 16, color: muted),
               const SizedBox(width: 6),
               Text(
-                'Console & Telemetry',
+                '实时用量',
                 style: TextStyle(
                   fontSize: AppTokens.fontSizeBodySmall,
                   fontWeight: FontWeight.w600,
                   color: muted,
-                  letterSpacing: 0.2,
                 ),
               ),
               const Spacer(),
@@ -80,9 +79,6 @@ class TokenUsageHero extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: liveSoft,
                   borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                  border: Border.all(
-                    color: liveColor.withValues(alpha: 0.3),
-                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -97,12 +93,11 @@ class TokenUsageHero extends StatelessWidget {
                     ),
                     const SizedBox(width: 5),
                     Text(
-                      'LIVE',
+                      '实时',
                       style: TextStyle(
                         fontSize: AppTokens.fontSizeMetricSmall,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
                         color: liveColor,
-                        letterSpacing: 0.5,
                       ),
                     ),
                   ],
