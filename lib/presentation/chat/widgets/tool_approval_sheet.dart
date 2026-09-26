@@ -170,7 +170,9 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
   @override
   Widget build(BuildContext context) {
     final danger = widget.risk == ToolRisk.dangerous;
-    final riskColor = danger ? AppTheme.danger : AppTheme.warning;
+    // Z3：风险色与弱化文字随主题取值（原 outline 描边色作文字几乎不可见）。
+    final semantic = AppTheme.semanticOf(context);
+    final riskColor = danger ? semantic.danger : semantic.warning;
     final riskLabel =
         danger ? AppStrings.dangerOperation : AppStrings.requiresConfirmation;
     final humanizer = const ToolHumanizer();
@@ -185,6 +187,11 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
             widget.call.arguments['command'] ??
             widget.call.arguments['cmd'])
         ?.toString();
+    // 指令已在下方预览块完整展示，摘要里不再重复同一条命令。
+    final visibleParamLines = [
+      for (final line in paramLines)
+        if (command == null || line.$2 != command) line,
+    ];
     final targetContent = widget.call.arguments['TargetContent']?.toString();
     final replacementContent =
         widget.call.arguments['ReplacementContent']?.toString();
@@ -196,11 +203,15 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
             widget.call.arguments['content'])
         ?.toString();
 
-    return SizedBox(
-      height: math.min(MediaQuery.sizeOf(context).height * 0.76, 640.0),
+    // 高度随内容收缩，上限不变：短内容不再在按钮上方留出大片空白。
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: math.min(MediaQuery.sizeOf(context).height * 0.76, 640.0),
+      ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
+          Flexible(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
               child: Column(
@@ -235,8 +246,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                                   ?.copyWith(fontWeight: FontWeight.w500)),
                           Text(AppStrings.requiresAuthorization,
                               style: TextStyle(
-                                  color: Theme.of(context).colorScheme.outline,
-                                  fontSize: 13)),
+                                  color: semantic.textMuted, fontSize: 13)),
                         ])),
                   ]),
                   const SizedBox(height: 16),
@@ -312,9 +322,9 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                     Text(summary,
                         style: const TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w500)),
-                    if (paramLines.isNotEmpty) ...[
+                    if (visibleParamLines.isNotEmpty) ...[
                       const SizedBox(height: 6),
-                      for (final (k, v) in paramLines)
+                      for (final (k, v) in visibleParamLines)
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 1),
                           child: Text('· $k: $v',
@@ -342,7 +352,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                     title: Text('技术细节',
                         style: TextStyle(
                             fontSize: AppTokens.fontSizeFootnote,
-                            color: Theme.of(context).colorScheme.outline)),
+                            color: semantic.textMuted)),
                     child: Container(
                       width: double.infinity,
                       constraints: const BoxConstraints(maxHeight: 160),
