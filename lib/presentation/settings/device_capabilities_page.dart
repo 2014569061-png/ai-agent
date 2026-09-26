@@ -9,7 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/environment_service.dart';
 import '../../infrastructure/terminal/linux_runtime.dart';
 import '../../infrastructure/tools/android_device_tool.dart';
-import '../theme/app_palette.dart';
+import '../theme/app_theme.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
@@ -331,10 +331,10 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
                 ? '检测到 su；管理器：$manager'
                 : '未检测到可用 su；管理器：$manager';
     final color = error != null
-        ? AppPalette.danger
+        ? _sem.danger
         : rootGranted
-            ? AppPalette.success
-            : AppPalette.warning;
+            ? _sem.success
+            : _sem.warning;
     return SettingsGroupCard(
       children: [
         SettingsTile(
@@ -547,10 +547,28 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
     return null;
   }
 
+  /// X4：徽标 / 图标使用当前主题语义色（深色下琥珀文字对比度足够）。
+  AppSemanticColors get _sem => AppTheme.semanticOf(context);
+
   Widget _actionButton(String label, VoidCallback onPressed) => TextButton(
         onPressed: _actionBusy ? null : onPressed,
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          minimumSize: const Size(0, 36),
+        ),
         child: Text(label),
       );
+
+  /// X4：徽标在上、操作在下，避免横排挤压副标题。
+  Widget _badgeWithAction(Widget badge, Widget? action) {
+    if (action == null) return badge;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [badge, const SizedBox(height: 2), action],
+    );
+  }
 
   String _routeName(Object? route) => switch (route) {
         'root' => 'Root',
@@ -611,7 +629,7 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
                 () => _runPrivilegeAction(
                     '授予系统权限', _bridge.grantPermissionsViaPrivilege),
               );
-    final color = granted ? AppPalette.success : AppPalette.warning;
+    final color = granted ? _sem.success : _sem.warning;
     final rootNote = rootProbed ? '' : '（Root 未检查）';
     return SettingsGroupCard(
       children: [
@@ -620,10 +638,8 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
           iconColor: color,
           title: 'Shizuku',
           subtitle: subtitle,
-          trailingWidget: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [_badge(status, color), action],
-          ),
+          subtitleMaxLines: 4,
+          trailingWidget: _badgeWithAction(_badge(status, color), action),
           showChevron: false,
         ),
         const SettingsDivider(),
@@ -632,6 +648,7 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
           title: '当前执行通道',
           status: routes['shell'] != null ? '已就绪' : '仅降级',
           available: routes['shell'] != null,
+          subtitleMaxLines: 3,
           subtitle: '系统命令：${_routeName(routes['shell'])} · '
               '需 uid 0：${_routeName(routes['rootUid'])} · '
               '共享存储：${_routeName(routes['storage'])}$rootNote',
@@ -726,25 +743,23 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
   ) {
     final (key, title, kind, usage, icon) = item;
     final allowed = permissions[key] == true;
-    final color = allowed ? AppPalette.success : AppPalette.warning;
+    final color = allowed ? _sem.success : _sem.warning;
     return SettingsTile(
       icon: icon,
       iconColor: color,
       title: title,
       subtitle: usage,
-      trailingWidget: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _badge(allowed ? '已允许' : '未允许', color),
-          if (!allowed && kind != null)
-            _actionButton(
-              '去授权',
-              () => _runPrivilegeAction(
-                title,
-                () => _bridge.openSpecialPermission(kind),
-              ),
-            ),
-        ],
+      trailingWidget: _badgeWithAction(
+        _badge(allowed ? '已允许' : '未允许', color),
+        !allowed && kind != null
+            ? _actionButton(
+                '去授权',
+                () => _runPrivilegeAction(
+                  title,
+                  () => _bridge.openSpecialPermission(kind),
+                ),
+              )
+            : null,
       ),
       showChevron: false,
     );
@@ -766,10 +781,10 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
             ? '已启用 · 未运行'
             : '未启用';
     final color = running
-        ? AppPalette.success
+        ? _sem.success
         : lastError != null
-            ? AppPalette.danger
-            : AppPalette.warning;
+            ? _sem.danger
+            : _sem.warning;
     final hasRules = domains.isNotEmpty || apps.isNotEmpty;
     final mode = switch (filter['mode']) {
       'dns' => ' · DNS 模式',
@@ -837,17 +852,19 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
     required bool? available,
     required String subtitle,
     Object? error,
+    int subtitleMaxLines = 2,
   }) {
     final color = error != null
-        ? AppPalette.danger
+        ? _sem.danger
         : available == true
-            ? AppPalette.success
-            : AppPalette.warning;
+            ? _sem.success
+            : _sem.warning;
     return SettingsTile(
       icon: icon,
       iconColor: color,
       title: title,
       subtitle: subtitle,
+      subtitleMaxLines: subtitleMaxLines,
       trailingBadge: _badge(status, color),
       showChevron: false,
     );

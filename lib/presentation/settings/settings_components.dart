@@ -217,6 +217,7 @@ class SettingsTile extends StatelessWidget {
     this.selected,
     this.onTap,
     this.contentPadding,
+    this.subtitleMaxLines = 2,
   });
 
   final IconData? icon;
@@ -235,6 +236,9 @@ class SettingsTile extends StatelessWidget {
   final bool? selected;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry? contentPadding;
+
+  /// 副标题最多行数；默认 2，承载多段状态信息的行可放宽。
+  final int subtitleMaxLines;
 
   @override
   Widget build(BuildContext context) {
@@ -300,7 +304,7 @@ class SettingsTile extends StatelessWidget {
                             height: 1.55,
                             color: subtitleColor ?? semantic.textMuted,
                           ),
-                          maxLines: 2,
+                          maxLines: subtitleMaxLines,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
