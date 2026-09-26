@@ -1,4 +1,5 @@
 import '../theme/app_palette.dart';
+import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -421,24 +422,6 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
     };
   }
 
-  Color _toolColor(_ToolEntry tool) {
-    if (tool.isSensitive) return AppPalette.warning;
-    if (tool.risk == ToolRisk.dangerous) return AppPalette.danger;
-    if (tool.risk == ToolRisk.requiresConfirmation) {
-      return AppPalette.brand;
-    }
-    return switch (tool.category) {
-      '网络与知识' => AppPalette.brand,
-      '通用计算' => AppPalette.success,
-      '工作区与文件' => AppPalette.lightTextMuted,
-      '终端与执行' => AppPalette.danger,
-      'Agent 与上下文' => AppPalette.lightTextMuted,
-      '多模态' => AppPalette.danger,
-      '手机与本地文件' => AppPalette.brand,
-      _ => AppPalette.lightTextMuted,
-    };
-  }
-
   void _showToolDetail(_ToolEntry tool) {
     showNexusSheet(
       context: context,
@@ -455,12 +438,19 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
                   Container(
                     width: 36,
                     height: 36,
+                    // X2：中性图标底，风险只由徽标表达。
                     decoration: BoxDecoration(
-                      color: _toolColor(tool),
+                      color: AppTheme.semanticOf(context)
+                          .textPrimary
+                          .withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     alignment: Alignment.center,
-                    child: Icon(_toolIcon(tool), color: Colors.white, size: 20),
+                    child: Icon(
+                      _toolIcon(tool),
+                      color: AppTheme.semanticOf(context).textMuted,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -761,7 +751,6 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
                 for (var i = 0; i < tools.length; i++) ...[
                   SettingsTile(
                     icon: _toolIcon(tools[i]),
-                    iconColor: _toolColor(tools[i]),
                     title: tools[i].displayName,
                     subtitle: tools[i].description,
                     trailingBadge: _buildRiskBadge(tools[i]),
