@@ -185,6 +185,10 @@ class MessageBubble extends StatelessWidget {
                       p: plainStyle,
                       blockSpacing: 12,
                       listIndent: 20,
+                      // 代码块由 CodeBlockWidget 自绘圆角卡片；去掉 Markdown 外层
+                      // 默认的直角底板，避免四角露出、形成两层卡片错位。
+                      codeblockPadding: EdgeInsets.zero,
+                      codeblockDecoration: const BoxDecoration(),
                       h1: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeTitle,
@@ -274,6 +278,8 @@ class MessageBubble extends StatelessWidget {
                       p: plainStyle,
                       blockSpacing: 12,
                       listIndent: 20,
+                      codeblockPadding: EdgeInsets.zero,
+                      codeblockDecoration: const BoxDecoration(),
                       h1: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeTitle,
