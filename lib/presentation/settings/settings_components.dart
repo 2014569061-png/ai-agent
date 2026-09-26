@@ -55,6 +55,17 @@ Color normalizeIconTint(BuildContext context, Color? raw) {
   if (raw == iosGreen) return semantic.success;
   if (raw == iosOrange || raw == iosOrangeBright) return semantic.warning;
   if (raw == iosRed || raw == iosPinkRed) return semantic.danger;
+  // X1：调用点常直接传 AppPalette.success/warning/danger（= 浅色值），深色下
+  // 它们不等于当前主题 token 而被降为灰色；两套语义色都映射到当前主题。
+  if (raw == AppPalette.lightSuccess || raw == AppPalette.darkSuccess) {
+    return semantic.success;
+  }
+  if (raw == AppPalette.lightWarning || raw == AppPalette.darkWarning) {
+    return semantic.warning;
+  }
+  if (raw == AppPalette.lightDanger || raw == AppPalette.darkDanger) {
+    return semantic.danger;
+  }
   if (raw == semantic.success ||
       raw == semantic.warning ||
       raw == semantic.danger ||
