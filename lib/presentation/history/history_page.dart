@@ -402,56 +402,46 @@ class _HistoryPageState extends State<HistoryPage> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: isFlat
-                ? TextField(
-                    controller: _searchController,
-                    onChanged: _onQueryChanged,
-                    decoration: InputDecoration(
-                      hintText: '搜索会话标题',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _query.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 18),
-                              tooltip: '清空',
-                              onPressed: () {
-                                _searchController.clear();
-                                _onQueryChanged('');
-                              },
-                            )
-                          : null,
-                      isDense: true,
-                    ),
-                  )
-                : GlassSurface(
-                    role: GlassRole.control,
-                    variant: GlassVariant.clear,
-                    intensity: AppAppearanceController.resolvedGlassIntensity,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: _onQueryChanged,
-                      decoration: InputDecoration(
-                        hintText: '搜索会话标题',
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _query.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                tooltip: '清空',
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _onQueryChanged('');
-                                },
-                              )
-                            : null,
-                        isDense: true,
-                      ),
-                    ),
+            // V3：与设置页一致的无描边浅底胶囊搜索；聚焦时才出现品牌色细描边。
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onQueryChanged,
+              decoration: InputDecoration(
+                hintText: '搜索会话标题',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                suffixIcon: _query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        tooltip: '清空',
+                        onPressed: () {
+                          _searchController.clear();
+                          _onQueryChanged('');
+                        },
+                      )
+                    : null,
+                isDense: true,
+                filled: true,
+                fillColor: (isDark ? AppPalette.darkText : AppPalette.lightText)
+                    .withValues(alpha: isDark ? 0.08 : 0.05),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderSide: BorderSide.none,
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderSide: BorderSide.none,
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderSide: BorderSide(
+                    color: AppPalette.brandTextFor(isDark),
+                    width: 1.2,
                   ),
+                ),
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
