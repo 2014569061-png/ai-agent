@@ -455,34 +455,24 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                     )
                                   : null,
                               filled: true,
-                              fillColor: isDark
-                                  ? AppPalette.darkSurface
-                                  : AppPalette.lightSurface,
+                              // T2：搜索做成无描边浅底胶囊；聚焦时才出现品牌色细描边。
+                              fillColor: textColor.withValues(
+                                  alpha: isDark ? 0.08 : 0.05),
                               contentPadding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                    AppTokens.radiusControl),
-                                borderSide: BorderSide(
-                                  color: isDark
-                                      ? AppPalette.darkHairline
-                                      : AppPalette.lightHairline,
-                                  width: 1.0,
-                                ),
+                                borderRadius:
+                                    BorderRadius.circular(AppTokens.radiusPill),
+                                borderSide: BorderSide.none,
                               ),
                               enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                    AppTokens.radiusControl),
-                                borderSide: BorderSide(
-                                  color: isDark
-                                      ? AppPalette.darkHairline
-                                      : AppPalette.lightHairline,
-                                  width: 1.0,
-                                ),
+                                borderRadius:
+                                    BorderRadius.circular(AppTokens.radiusPill),
+                                borderSide: BorderSide.none,
                               ),
                               focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(
-                                    AppTokens.radiusControl),
+                                borderRadius:
+                                    BorderRadius.circular(AppTokens.radiusPill),
                                 borderSide: BorderSide(
                                   color: AppPalette.brandTextFor(isDark),
                                   width: 1.2,
