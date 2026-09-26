@@ -480,7 +480,7 @@ class _HistoryPageState extends State<HistoryPage> {
               child: NexusStaggeredEntrance(
                 child: ListView.builder(
                   physics: NexusMotion.listPhysics,
-                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 88),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
                   itemCount: rows.length +
                       (_pagedMode && (_hasMore || _loadingMore) ? 1 : 0),
                   itemBuilder: NexusStaggeredItem.wrap((context, index) {
@@ -526,7 +526,7 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget _conversationTile(Conversation conversation) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return SectionCard(
-      margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      margin: const EdgeInsets.symmetric(vertical: 2),
       child: ListTile(
         leading: Icon(
           conversation.isPinned ? Icons.push_pin : Icons.chat_bubble_outline,
@@ -580,7 +580,7 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Widget _groupHeader(_HistoryGroupRow row, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
       child: Row(
         children: [
           Text(
