@@ -35,6 +35,7 @@ class NexusStatusBadge extends StatelessWidget {
     Color bg;
     Color fg;
 
+    // Z1：语义前景随主题取值；深色下浅色值（如 #9A6700）对比度不足。
     switch (tone) {
       case NexusBadgeTone.brand:
         bg = isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
@@ -42,15 +43,15 @@ class NexusStatusBadge extends StatelessWidget {
         break;
       case NexusBadgeTone.success:
         bg = isDark ? AppPalette.darkSuccessSoft : AppPalette.lightSuccessSoft;
-        fg = AppPalette.success;
+        fg = isDark ? AppPalette.darkSuccess : AppPalette.success;
         break;
       case NexusBadgeTone.warning:
         bg = isDark ? AppPalette.darkWarningSoft : AppPalette.lightWarningSoft;
-        fg = AppPalette.warning;
+        fg = isDark ? AppPalette.darkWarning : AppPalette.warning;
         break;
       case NexusBadgeTone.danger:
         bg = isDark ? AppPalette.darkDangerSoft : AppPalette.lightDangerSoft;
-        fg = AppPalette.danger;
+        fg = isDark ? AppPalette.darkDanger : AppPalette.danger;
         break;
       case NexusBadgeTone.neutral:
         bg = isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
