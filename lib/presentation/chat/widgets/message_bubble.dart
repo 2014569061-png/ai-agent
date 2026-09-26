@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, visibleForTesting;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -437,28 +439,13 @@ class MessageBubble extends StatelessWidget {
             ),
           );
         } else if (isTool) {
-          // 工具消息做成行内提示：小图标 + 浅底，不再占一个头像位。
-          bubble = Container(
-            padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
-            decoration: BoxDecoration(
-              color: surface.withValues(alpha: isDark ? 0.35 : 0.55),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Semantics(
-                    label: '工具调用',
-                    child: Icon(Icons.handyman_outlined,
-                        size: 14, color: textMuted),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(child: content),
-              ],
-            ),
+          // 工具消息降一级：自适应宽度的胶囊芯片，14dp 图标 + 弱化小字，
+          // 只显示结果摘要（完整结果在工具活动面板里查看）。
+          bubble = _ToolResultChip(
+            summary: toolResultSummary(message.text),
+            textColor: textColor,
+            textMuted: textMuted,
+            isDark: isDark,
           );
         } else {
           bubble = Column(
@@ -964,6 +951,74 @@ class _AnswerRevealState extends State<_AnswerReveal>
           ? kAlwaysCompleteAnimation
           : CurvedAnimation(parent: controller, curve: NexusMotion.curveEnter),
       child: widget.child,
+    );
+  }
+}
+
+/// 工具消息的一行摘要：结构化结果（`ToolResult.encode` 的 JSON）取 message，
+/// 失败时加「失败：」前缀；其他文本取第一行。只影响展示，不改消息内容。
+@visibleForTesting
+String toolResultSummary(String raw) {
+  final text = raw.trim();
+  final firstLine = text.split('\n').first.trim();
+  if (!text.startsWith('{')) return firstLine;
+  final Object? decoded;
+  try {
+    decoded = jsonDecode(text);
+  } on FormatException {
+    // 不是合法 JSON：按普通文本显示第一行。
+    return firstLine;
+  }
+  if (decoded is! Map) return firstLine;
+  final message = decoded['message']?.toString().trim() ?? '';
+  if (message.isEmpty) return firstLine;
+  return decoded['ok'] == false ? '失败：$message' : message;
+}
+
+class _ToolResultChip extends StatelessWidget {
+  const _ToolResultChip({
+    required this.summary,
+    required this.textColor,
+    required this.textMuted,
+    required this.isDark,
+  });
+
+  final String summary;
+  final Color textColor;
+  final Color textMuted;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: '工具调用：$summary',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+        decoration: BoxDecoration(
+          color: textColor.withValues(alpha: isDark ? 0.08 : 0.045),
+          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.handyman_outlined, size: 14, color: textMuted),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                summary,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: textMuted,
+                  fontSize: AppTokens.fontSizeCaption,
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
