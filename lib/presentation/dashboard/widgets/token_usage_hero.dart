@@ -39,10 +39,9 @@ class TokenUsageHero extends StatelessWidget {
     final total = prompt + completion;
     final calls = hasData ? today.calls : 0;
     final costYuan = formatCostYuan(hasData ? today.costCents : 0);
-    // Historical daily rows cannot distinguish a cache miss from a provider
-    // that omitted cache statistics. Do not render unknown data as 0%.
-    final cacheRate =
-        hasData && prompt > 0 && cached > 0 ? cached / prompt : null;
+    // U5：缓存命中率已在 KPI 网格展示（同一口径），这里改为每次调用平均
+    // Token，避免同屏重复；无调用时显示占位而不是 0。
+    final avgPerCall = calls > 0 ? (total / calls).round() : null;
     final weeklyPeak = days.fold<int>(0, (peak, day) {
       final value = day.promptTokens + day.completionTokens;
       return value > peak ? value : peak;
@@ -201,9 +200,9 @@ class TokenUsageHero extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: _TelemetryStatCard(
-                  label: '缓存命中率',
-                  value: cacheRate != null ? formatPercent(cacheRate) : '--',
-                  icon: Icons.bolt_rounded,
+                  label: '每次调用平均',
+                  value: avgPerCall != null ? formatExact(avgPerCall) : '--',
+                  icon: Icons.equalizer_rounded,
                   iconColor: isDark
                       ? AppPalette.darkBrandHover
                       : AppPalette.brand,
