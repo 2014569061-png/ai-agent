@@ -235,6 +235,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
             SettingsGroupCard(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               children: [
+                // Q1：玻璃卡片在内边距以内裁切，浮动标签需要内容区自己留出空间。
+                const SizedBox(height: 8),
                 TextField(
                   controller: _name,
                   decoration: InputDecoration(
