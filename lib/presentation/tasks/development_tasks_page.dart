@@ -11,6 +11,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../motion/nexus_page_route_factory.dart';
+import '../motion/nexus_motion.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/glass_surface.dart';
@@ -289,30 +290,78 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
           final isSelected = _filter == entry.key;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              avatar: count > 0 && entry.key == 'waiting_approval'
-                  ? Container(
-                      width: 8,
-                      height: 8,
+            child: _filterPill(entry.key, entry.value, count, isSelected),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  /// W4：筛选改为无描边填充胶囊（与历史页一致）——选中品牌浅底 + 品牌字，
+  /// 数字弱化；待审批有任务时保留琥珀小圆点。
+  Widget _filterPill(String key, String label, int count, bool selected) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final base = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final fg = selected ? AppPalette.brand : base.withValues(alpha: 0.72);
+    final radius = BorderRadius.circular(AppTokens.radiusPill);
+    return Center(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              setState(() => _filter = key);
+            },
+            child: AnimatedContainer(
+              duration: NexusMotion.durationFast(context),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected
+                    ? (isDark
+                        ? AppPalette.brandSoftDark
+                        : AppPalette.brandSoftLight)
+                    : base.withValues(alpha: isDark ? 0.08 : 0.05),
+                borderRadius: radius,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (count > 0 && key == 'waiting_approval') ...[
+                    Container(
+                      width: 6,
+                      height: 6,
                       decoration: const BoxDecoration(
                         color: AppPalette.warning,
                         shape: BoxShape.circle,
                       ),
-                    )
-                  : null,
-              label: Text('${entry.value} $count'),
-              labelStyle: TextStyle(
-                fontSize: 12.5,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                      color: fg,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: fg.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
               ),
-              selected: isSelected,
-              onSelected: (_) {
-                HapticFeedback.selectionClick();
-                setState(() => _filter = entry.key);
-              },
             ),
-          );
-        }).toList(),
+          ),
+        ),
       ),
     );
   }
