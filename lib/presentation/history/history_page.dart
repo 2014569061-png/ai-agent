@@ -315,8 +315,6 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget _filterChip(String label, String value, IconData icon) {
     final selected = _filterType == value;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return InkWell(
       onTap: () {
@@ -329,26 +327,13 @@ class _HistoryPageState extends State<HistoryPage> {
       child: AnimatedContainer(
         duration: NexusMotion.durationFast(context),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        // V4：筛选胶囊去描边，靠填充区分——选中品牌浅底，未选中浅灰底。
         decoration: BoxDecoration(
           color: selected
               ? (isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight)
-              : (isDark
-                  ? (isFlat
-                      ? AppPalette.darkSurface
-                      : AppPalette.darkSurface.withValues(alpha: 0.55))
-                  : (isFlat
-                      ? AppPalette.lightSurface
-                      : AppPalette.lightSurface.withValues(alpha: 0.65))),
+              : (isDark ? AppPalette.darkText : AppPalette.lightText)
+                  .withValues(alpha: isDark ? 0.08 : 0.05),
           borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-          border: Border.all(
-            color: selected
-                ? AppPalette.brand
-                : (isDark
-                    ? AppPalette.darkHairline
-                    : (isFlat
-                        ? AppPalette.lightHairline
-                        : const Color(0x80FFFFFF))),
-          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -648,12 +633,10 @@ class _HistoryPageState extends State<HistoryPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             decoration: BoxDecoration(
-              color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+              // V4：计数徽标去描边，只留浅填充。
+              color: (isDark ? AppPalette.darkText : AppPalette.lightText)
+                  .withValues(alpha: isDark ? 0.08 : 0.05),
               borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-              border: Border.all(
-                color:
-                    isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
-              ),
             ),
             child: Text(
               '${row.count}',
