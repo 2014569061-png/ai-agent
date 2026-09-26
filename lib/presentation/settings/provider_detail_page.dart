@@ -322,18 +322,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
               const SizedBox(height: 12),
               SettingsGroupCard(
                 children: [
-                  SettingsTile(
-                    icon: _status!.startsWith('连接测试成功')
-                        ? Icons.check_circle_rounded
-                        : Icons.info_rounded,
-                    // R5：用当前主题的语义色；AppPalette 常量在深色主题下会被
-                    // normalizeIconTint 降成灰色，成功 / 失败就分不清了。
-                    iconColor: _status!.startsWith('连接测试成功')
-                        ? AppTheme.semanticOf(context).success
-                        : AppTheme.semanticOf(context).danger,
-                    title: _status!,
-                    showChevron: false,
-                  ),
+                  ProviderConnectionStatus(status: _status!, testing: _testing),
                 ],
               ),
             ],
@@ -507,6 +496,78 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 测试连接的结果行：标题只写结论，完整原因放在下方，最多 3 行且可选中复制。
+/// 图标用当前主题的语义色（R5）；测试进行中用中性色，不再显示成红色。
+class ProviderConnectionStatus extends StatelessWidget {
+  const ProviderConnectionStatus({
+    super.key,
+    required this.status,
+    required this.testing,
+  });
+
+  final String status;
+  final bool testing;
+
+  @override
+  Widget build(BuildContext context) {
+    final semantic = AppTheme.semanticOf(context);
+    final ok = !testing && status.startsWith('连接测试成功');
+    final split = status.indexOf('：');
+    final title = split < 0 ? status : status.substring(0, split);
+    final detail = split < 0 ? '' : status.substring(split + 1).trim();
+    final color = testing
+        ? semantic.textMuted
+        : (ok ? semantic.success : semantic.danger);
+    final icon = testing
+        ? Icons.hourglass_top_rounded
+        : (ok ? Icons.check_circle_rounded : Icons.error_rounded);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    height: 1.4,
+                    color: semantic.textPrimary,
+                  ),
+                ),
+                if (detail.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  SelectableText(
+                    detail,
+                    key: const ValueKey('provider-connection-detail'),
+                    maxLines: 3,
+                    minLines: 1,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.55,
+                      color: semantic.textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
