@@ -528,7 +528,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 ),
                               if (_matchesSearch('数据管理'))
                                 _buildRow(
-                                  icon: Icons.storage_outlined,
+                                  // T5：storage/bolt 的描边版仍是实心字形，换成真正线性的图标。
+                                  icon: Icons.dataset_outlined,
                                   title: '数据管理',
                                   textColor: textColor,
                                   textMuted: textMuted,
@@ -601,7 +602,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                 ),
                               if (_matchesSearch('设备自动化', '定时 / Wi-Fi / 电量触发'))
                                 _buildRow(
-                                  icon: Icons.bolt_outlined,
+                                  icon: Icons.auto_mode_rounded,
                                   title: '设备自动化',
                                   trailing: '定时 / Wi-Fi / 电量',
                                   textColor: textColor,
