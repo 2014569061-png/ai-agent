@@ -193,8 +193,11 @@ class MessageBubble extends StatelessWidget {
                     tailStyle: plainStyle,
                     styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                       p: plainStyle,
-                      blockSpacing: 12,
-                      listIndent: 20,
+                      blockSpacing: 6,
+                      listIndent: 24,
+                      // 段落自带 6dp 上边距：段落之间、列表结束后接段落都是 12；
+                      // 引导句与紧随其后的列表之间 6，列表项之间 6。
+                      pPadding: const EdgeInsets.only(top: 6),
                       // 代码块由 CodeBlockWidget 自绘圆角卡片；去掉 Markdown 外层
                       // 默认的直角底板，避免四角露出、形成两层卡片错位。
                       codeblockPadding: EdgeInsets.zero,
@@ -205,21 +208,21 @@ class MessageBubble extends StatelessWidget {
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h1Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h1Padding: const EdgeInsets.only(top: 20, bottom: 2),
                       h2: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeTitle,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h2Padding: const EdgeInsets.only(top: 20, bottom: 2),
                       h3: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h3Padding: const EdgeInsets.only(top: 16, bottom: 6),
+                      h3Padding: const EdgeInsets.only(top: 16, bottom: 2),
                       h4: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
@@ -282,8 +285,11 @@ class MessageBubble extends StatelessWidget {
                     textColor: textColor,
                     styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                       p: plainStyle,
-                      blockSpacing: 12,
-                      listIndent: 20,
+                      blockSpacing: 6,
+                      listIndent: 24,
+                      // 段落自带 6dp 上边距：段落之间、列表结束后接段落都是 12；
+                      // 引导句与紧随其后的列表之间 6，列表项之间 6。
+                      pPadding: const EdgeInsets.only(top: 6),
                       codeblockPadding: EdgeInsets.zero,
                       codeblockDecoration: const BoxDecoration(),
                       h1: TextStyle(
@@ -292,21 +298,21 @@ class MessageBubble extends StatelessWidget {
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h1Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h1Padding: const EdgeInsets.only(top: 20, bottom: 2),
                       h2: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeTitle,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h2Padding: const EdgeInsets.only(top: 20, bottom: 8),
+                      h2Padding: const EdgeInsets.only(top: 20, bottom: 2),
                       h3: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h3Padding: const EdgeInsets.only(top: 16, bottom: 6),
+                      h3Padding: const EdgeInsets.only(top: 16, bottom: 2),
                       h4: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
