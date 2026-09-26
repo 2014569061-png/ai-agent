@@ -665,7 +665,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
         SettingsTile(
           key: Key('rule-${_rules[i].id}'),
           icon: Icons.bolt_outlined,
-          iconColor: _rules[i].requiresRoot ? AppPalette.danger : null,
+          iconColor: _rules[i].requiresRoot ? AppPalette.warning : null,
           title: _rules[i].name,
           subtitle: [
             _rules[i].trigger.describe(),
@@ -699,13 +699,16 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
       for (var i = 0; i < shown.length; i++) ...[
         if (i > 0) const SettingsDivider(),
         SettingsTile(
+          // X5：部分成功属于警告而非错误。
           icon: switch (shown[i].status) {
             'executed' => Icons.check_circle_outline,
+            'partial' => Icons.warning_amber_rounded,
             'dismissed' => Icons.do_not_disturb_on_outlined,
             _ => Icons.error_outline,
           },
           iconColor: switch (shown[i].status) {
             'executed' => AppPalette.success,
+            'partial' => AppPalette.warning,
             'dismissed' => null,
             _ => AppPalette.danger,
           },
