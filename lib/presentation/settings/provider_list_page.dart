@@ -127,14 +127,14 @@ class _ProviderListPageState extends State<ProviderListPage> {
                     SettingsTile(
                       icon: Icons.api_rounded,
                       iconColor: settingsMutedColor(context),
-                      title: '新增 OpenAI-compatible',
-                      subtitle: '支持 GPT、DeepSeek、Kimi、GLM、Qwen 等',
+                      title: '新增 OpenAI 兼容服务',
+                      subtitle: 'GPT、DeepSeek、Kimi、Qwen 等',
                       onTap: () => _openPreset(providerPresets.first),
                     ),
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.auto_awesome_rounded,
-                      iconColor: AppPalette.warning,
+                      iconColor: settingsMutedColor(context),
                       title: '新增官方 API',
                       subtitle: 'Anthropic Claude 或 Google Gemini',
                       onTap: () => _openPreset(
@@ -177,26 +177,10 @@ class _ProviderListPageState extends State<ProviderListPage> {
                     children: [
                       for (var i = 0; i < available.length; i++) ...[
                         SettingsTile(
-                          leading: Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: AppPalette.lightTextMuted,
-                              borderRadius: BorderRadius.circular(7),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              available[i].name.characters.first.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
+                          leading: _ProviderMonogram(name: available[i].name),
                           title: available[i].name,
                           subtitle:
-                              '${available[i].type.name} · ${available[i].models.length} 个预设模型',
+                              '${providerProtocolLabel(available[i].type)} · ${available[i].models.length} 个预设模型',
                           trailingWidget: const Icon(
                             Icons.add_circle_outline_rounded,
                             size: 20,
@@ -245,29 +229,7 @@ class _ProviderTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: active
-                      ? AppPalette.brand
-                      : (isDark
-                          ? AppPalette.darkHairline
-                          : AppPalette.lightHairline),
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  config.name.characters.first.toUpperCase(),
-                  style: TextStyle(
-                    color: active
-                        ? Colors.white
-                        : (isDark ? Colors.white70 : Colors.black87),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
+              _ProviderMonogram(name: config.name, active: active),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -312,7 +274,8 @@ class _ProviderTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${config.model.isEmpty ? "未选择模型" : config.model} · ${isConfigured ? "已配置 Key" : "未配置 Key"}',
+                      // Q2：Key 状态放前面，模型名过长时只截断模型名。
+                      '${isConfigured ? "已配置 Key" : "未配置 Key"} · ${config.model.isEmpty ? "未选择模型" : config.model}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -368,6 +331,49 @@ class _ProviderTile extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 协议类型的中文展示名，与服务商配置页的下拉框一致。
+String providerProtocolLabel(ProviderType type) => switch (type) {
+      ProviderType.openaiCompatible => 'OpenAI 兼容',
+      ProviderType.anthropic => 'Anthropic',
+      ProviderType.gemini => 'Gemini',
+      ProviderType.proxy => '代理',
+    };
+
+/// 服务商首字母方块：已配置与预设同一套浅填充，只有激活项用品牌色（Q3）。
+class _ProviderMonogram extends StatelessWidget {
+  const _ProviderMonogram({required this.name, this.active = false});
+
+  final String name;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final letter = name.isEmpty ? '?' : name.characters.first.toUpperCase();
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: active
+            ? AppPalette.brand
+            : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        letter,
+        style: TextStyle(
+          color: active
+              ? Colors.white
+              : (isDark ? AppPalette.darkText : AppPalette.lightText),
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
