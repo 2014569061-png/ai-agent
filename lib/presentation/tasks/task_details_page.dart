@@ -34,6 +34,9 @@ import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
 import 'collaboration_plan_sheet.dart';
 
+/// Y5：本页卡片与其他已改页面统一 16 圆角（只给 SectionCard 传参）。
+const _kCardRadius = BorderRadius.all(Radius.circular(16));
+
 /// 完整开发任务详情页 (TaskDetailsPage)
 /// 严格依据 NEXUS UI 设计优化规范重构，替代旧版紧凑底部弹层：
 /// 1. 顶部 Header：返回、标题、统一状态徽标、操作菜单。
@@ -430,6 +433,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                   NexusSection(
                     title: '任务总览',
                     child: SectionCard(
+                      borderRadius: _kCardRadius,
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,6 +569,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                   NexusSection(
                     title: '任务输入指令',
                     child: SectionCard(
+                      borderRadius: _kCardRadius,
                       padding: const EdgeInsets.all(16),
                       child: SelectableText(
                         _task.prompt.isEmpty ? '（无文本输入）' : _task.prompt,
@@ -602,6 +607,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     NexusSection(
                       title: '结果摘要',
                       child: SectionCard(
+                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: SelectableText(
                           summary,
@@ -619,6 +625,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     NexusSection(
                       title: '交付产物',
                       child: SectionCard(
+                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: _artifactsLoading
                             ? const Center(
@@ -693,6 +700,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     NexusSection(
                       title: '结构化产物',
                       child: SectionCard(
+                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -811,6 +819,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     NexusSection(
                       title: AppStrings.taskFeedbackTitle,
                       child: SectionCard(
+                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
@@ -1006,6 +1015,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   Widget _buildAuditSection() {
     if (_auditLoading) {
       return const SectionCard(
+        borderRadius: _kCardRadius,
         child: Padding(
           padding: EdgeInsets.all(16),
           child: NexusCardSkeleton(),
@@ -1014,6 +1024,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     }
     if (_auditError != null) {
       return SectionCard(
+        borderRadius: _kCardRadius,
         child: ListTile(
           leading: const Icon(Icons.warning_amber_outlined),
           title: const Text('副作用审计暂不可用'),
@@ -1030,6 +1041,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     if (report == null) return const SizedBox.shrink();
     final metrics = report.metrics;
     return SectionCard(
+      borderRadius: _kCardRadius,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: NexusDisclosure(
         leading: const Icon(Icons.fact_check_outlined, size: 18),
@@ -1227,6 +1239,7 @@ class _PipelineTimelineCard extends StatelessWidget {
         const [];
 
     return SectionCard(
+      borderRadius: _kCardRadius,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1598,6 +1611,7 @@ class _ChangeReviewCard extends StatelessWidget {
     final review = this.review;
     final plan = this.plan;
     return SectionCard(
+      borderRadius: _kCardRadius,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
