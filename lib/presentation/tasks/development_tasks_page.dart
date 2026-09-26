@@ -321,6 +321,10 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
     final theme = Theme.of(context);
     final isWaitingApproval =
         task.status == 'waiting_approval' || task.status == 'awaiting_approval';
+    // W2：类型标签显示中文短名；标题已以该名开头（如「问题修复：…」）时不重复。
+    final typeLabel = TaskService.taskTypeLabel(task.type);
+    final showTypeLabel = !task.title.startsWith(typeLabel);
+    final metaColor = theme.colorScheme.onSurfaceVariant;
 
     // W1：任务卡片与其他页面统一 16 圆角（只传参，不改 SectionCard）。
     return SectionCard(
@@ -373,25 +377,26 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
               // 任务类型与工作区/模型说明
               Row(
                 children: [
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer
-                          .withValues(alpha: 0.6),
-                      borderRadius:
-                          BorderRadius.circular(AppTokens.radiusControl),
-                    ),
-                    child: Text(
-                      task.type,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: theme.colorScheme.onPrimaryContainer,
+                  if (showTypeLabel) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: metaColor.withValues(alpha: 0.1),
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusPill),
+                      ),
+                      child: Text(
+                        typeLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: metaColor,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       '${_relativeTime(task.updatedAt)}'
