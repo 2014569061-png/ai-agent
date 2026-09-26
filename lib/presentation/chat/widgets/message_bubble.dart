@@ -86,6 +86,13 @@ class MessageBubble extends StatelessWidget {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    // Z2：表格只保留横向细分隔线，表头左对齐 + 浅底，与正文对齐。
+    final tableRule = BorderSide(
+      color: textColor.withValues(alpha: isDark ? 0.12 : 0.10),
+    );
+    final tableHeadFill = BoxDecoration(
+      color: textColor.withValues(alpha: isDark ? 0.06 : 0.04),
+    );
 
     final imageParts =
         message.parts.where((part) => part.type == 'image').toList();
@@ -267,6 +274,21 @@ class MessageBubble extends StatelessWidget {
                         height: 1.55,
                         fontWeight: FontWeight.w400,
                       ),
+                      tableHeadAlign: TextAlign.left,
+                      tableHeadCellsDecoration: tableHeadFill,
+                      tableBorder: TableBorder(
+                        top: tableRule,
+                        bottom: tableRule,
+                        horizontalInside: tableRule,
+                      ),
+                      tableCellsPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      tableHeadCellsPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       blockquoteDecoration: BoxDecoration(
                         color: surface,
                         borderRadius:
@@ -356,6 +378,21 @@ class MessageBubble extends StatelessWidget {
                         fontSize: AppTokens.fontSizeCaption,
                         height: 1.55,
                         fontWeight: FontWeight.w400,
+                      ),
+                      tableHeadAlign: TextAlign.left,
+                      tableHeadCellsDecoration: tableHeadFill,
+                      tableBorder: TableBorder(
+                        top: tableRule,
+                        bottom: tableRule,
+                        horizontalInside: tableRule,
+                      ),
+                      tableCellsPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      tableHeadCellsPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
                       ),
                       blockquoteDecoration: BoxDecoration(
                         color: surface,
