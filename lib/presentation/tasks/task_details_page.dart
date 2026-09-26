@@ -1419,7 +1419,7 @@ class _PipelineTimelineCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Step $stepNum',
+                    '步骤 $stepNum',
                     style: TextStyle(
                       fontSize: AppTokens.fontSizeBadge,
                       fontWeight: FontWeight.w600,
