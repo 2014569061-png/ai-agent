@@ -122,8 +122,8 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
     if (!widget.streaming) {
       if (d == null) return '已思考';
       final seconds = d.inSeconds < 1 ? 1 : d.inSeconds;
-      if (seconds < 60) return '已思考（用时 $seconds 秒）';
-      return '已思考（用时 ${seconds ~/ 60} 分 ${seconds % 60} 秒）';
+      if (seconds < 60) return '已思考 $seconds 秒';
+      return '已思考 ${seconds ~/ 60} 分 ${seconds % 60} 秒';
     }
 
     // 保留无进度数据时的兼容文案，也让旧消息和单独使用该组件的场景
@@ -204,148 +204,121 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
         children: [
           Semantics(
             label: '处理进度：$_label',
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final compact = constraints.maxWidth < 320;
-                  return Row(
-                    children: [
-                      Icon(
-                        Icons.lightbulb_outline_rounded,
-                        size: 15,
-                        color: AppPalette.brandTextFor(isDark),
-                      ),
-                      const SizedBox(width: 5),
-                      if (thinking)
-                        Container(
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.only(right: 6),
-                          decoration: BoxDecoration(
-                            color: AppPalette.brandTextFor(isDark),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      Text(
-                        thinking && widget.progress != null
-                            ? '进度'
-                            : 'REASONING',
-                        style: TextStyle(
-                          fontFamily: AppTokens.fontFamilyMono,
-                          fontSize: AppTokens.fontSizeBadge,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.06,
+            child: InkWell(
+              // S6：整行可点展开/收起思考过程，不再单独放「思考过程」按钮。
+              onTap: hasReasoning ? _toggleReasoning : null,
+              borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compact = constraints.maxWidth < 320;
+                    final showProgressTag = thinking && widget.progress != null;
+                    return Row(
+                      children: [
+                        Icon(
+                          Icons.lightbulb_outline_rounded,
+                          size: 15,
                           color: AppPalette.brandTextFor(isDark),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        // M9：思考中标题流光；响应变慢时停止，避免「假装在忙」。
-                        child: ShimmerText(
-                          enabled: thinking && !_isStalled,
-                          child: Text(
-                            _label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                        const SizedBox(width: 6),
+                        if (thinking)
+                          Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.only(right: 6),
+                            decoration: BoxDecoration(
+                              color: AppPalette.brandTextFor(isDark),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        if (showProgressTag) ...[
+                          Text(
+                            '进度',
                             style: TextStyle(
                               fontSize: AppTokens.fontSizeSubcaption,
-                              fontWeight: FontWeight.w500,
+                              fontWeight: FontWeight.w600,
+                              color: AppPalette.brandTextFor(isDark),
+                            ),
+                          ),
+                          Text(
+                            ' · ',
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeSubcaption,
                               color: textMuted,
                             ),
                           ),
-                        ),
-                      ),
-                      if (!compact && thinking) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDuration(widget.progress == null
-                              ? widget.duration
-                              : _liveElapsed),
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontFamily: AppTokens.fontFamilyMono,
-                            fontSize: AppTokens.fontSizeMetricSmall,
-                            color: textMuted,
-                          ),
-                        ),
-                      ] else if (!compact) ...[
-                        const SizedBox(width: 4),
-                        Text(
-                          _formatDuration(widget.duration),
-                          maxLines: 1,
-                          style: TextStyle(
-                            fontFamily: AppTokens.fontFamilyMono,
-                            fontSize: AppTokens.fontSizeMetricSmall,
-                            color: textMuted,
-                          ),
-                        ),
-                      ],
-                      if (widget.onStop != null && thinking)
-                        Semantics(
-                          button: true,
-                          label: '停止生成',
-                          child: IconButton(
-                            onPressed: widget.onStop,
-                            tooltip: '停止生成',
-                            icon: const Icon(Icons.stop_rounded),
-                            color: isDark
-                                ? AppPalette.darkDanger
-                                : AppPalette.lightDanger,
-                            iconSize: 16,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 36,
-                              minHeight: 36,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      if (hasReasoning) ...[
-                        const SizedBox(width: 2),
-                        if (compact)
-                          IconButton(
-                            onPressed: _toggleReasoning,
-                            tooltip: _expanded ? '收起思考过程' : '展开思考过程',
-                            icon: Icon(_expanded
-                                ? Icons.expand_less_rounded
-                                : Icons.expand_more_rounded),
-                            color: textMuted,
-                            iconSize: 20,
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(
-                              minWidth: 36,
-                              minHeight: 36,
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          )
-                        else
-                          TextButton.icon(
-                            onPressed: _toggleReasoning,
-                            icon: Icon(
-                              _expanded
-                                  ? Icons.expand_less_rounded
-                                  : Icons.expand_more_rounded,
-                              size: 17,
-                            ),
-                            label: Text(thinking ? '思考过程（生成中）' : '思考过程'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: textMuted,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 4),
-                              minimumSize: const Size(0, 32),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                              textStyle: const TextStyle(
-                                fontSize: AppTokens.fontSizeBadge,
-                                fontWeight: FontWeight.w600,
+                        ],
+                        Expanded(
+                          // M9：思考中标题流光；响应变慢时停止，避免「假装在忙」。
+                          child: ShimmerText(
+                            enabled: thinking && !_isStalled,
+                            child: Text(
+                              _label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: AppTokens.fontSizeSubcaption,
+                                fontWeight: FontWeight.w500,
+                                color: textMuted,
                               ),
                             ),
                           ),
+                        ),
+                        // 完成态的耗时已写在标题里；只有运行中且有真实进度时显示计时。
+                        if (!compact && showProgressTag) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            _formatDuration(_liveElapsed),
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontFamily: AppTokens.fontFamilyMono,
+                              fontSize: AppTokens.fontSizeMetricSmall,
+                              color: textMuted,
+                            ),
+                          ),
+                        ],
+                        if (widget.onStop != null && thinking)
+                          Semantics(
+                            button: true,
+                            label: '停止生成',
+                            child: IconButton(
+                              onPressed: widget.onStop,
+                              tooltip: '停止生成',
+                              icon: const Icon(Icons.stop_rounded),
+                              color: isDark
+                                  ? AppPalette.darkDanger
+                                  : AppPalette.lightDanger,
+                              iconSize: 16,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 36,
+                                minHeight: 36,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        if (hasReasoning) ...[
+                          const SizedBox(width: 4),
+                          Tooltip(
+                            message: _expanded ? '收起思考过程' : '展开思考过程',
+                            child: AnimatedRotation(
+                              turns: _expanded ? 0.5 : 0,
+                              duration: NexusMotion.durationFast(context),
+                              curve: NexusMotion.curveStandard,
+                              child: Icon(
+                                Icons.expand_more_rounded,
+                                size: 18,
+                                color: textMuted,
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
           ),

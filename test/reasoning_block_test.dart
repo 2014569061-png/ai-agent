@@ -14,7 +14,7 @@ void main() {
     ));
 
     expect(find.byType(MathMarkdown), findsNothing);
-    await tester.tap(find.text('思考过程'));
+    await tester.tap(find.text('已思考'));
     await tester.pumpAndSettle();
     expect(find.byType(MathMarkdown), findsOneWidget);
   });
@@ -29,7 +29,7 @@ void main() {
       ),
     ));
 
-    await tester.tap(find.textContaining('思考过程'));
+    await tester.tap(find.text('正在思考…'));
     await tester.pumpAndSettle();
     expect(find.byType(MathMarkdown), findsNothing);
     expect(find.byType(SelectableText), findsOneWidget);
@@ -124,7 +124,7 @@ void main() {
 
     expect(find.text('已收到请求'), findsNothing);
     expect(find.text('已生成 42 字'), findsNothing);
-    expect(find.textContaining('思考过程'), findsOneWidget);
+    expect(find.byTooltip('展开思考过程'), findsOneWidget);
   });
 
   testWidgets('does not call waiting slow when waiting for user',

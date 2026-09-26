@@ -74,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('REASONING'), findsOneWidget);
+    expect(find.text('正在思考…'), findsOneWidget);
   });
 
   testWidgets('compact tool timeline keeps completed failures out of the tail',
