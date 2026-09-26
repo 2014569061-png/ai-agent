@@ -28,7 +28,6 @@ import '../widgets/glass_surface.dart';
 import '../widgets/nexus_disclosure.dart';
 import '../widgets/nexus_execution_status.dart';
 import '../widgets/nexus_loading_skeleton.dart';
-import '../widgets/nexus_metric_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_section.dart';
 import '../widgets/nexus_status_pill.dart';
@@ -243,6 +242,19 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     );
     if (result.ok) await _loadAudit();
   }
+
+  /// Y2：总览里的执行状态用中文，文案与页头状态徽标一致。
+  static String _statusLabel(String status) =>
+      switch (status.toLowerCase().trim()) {
+        'draft' || 'pending' => '待确认',
+        'running' || 'executing' => '执行中',
+        'paused' => '已暂停',
+        'waiting_approval' || 'awaiting_approval' || 'approval' => '等待审批',
+        'completed' || 'success' || 'done' => '已完成',
+        'failed' || 'error' => '执行失败',
+        'cancelled' || 'canceled' => '已取消',
+        _ => status,
+      };
 
   /// Y1：任务来源显示中文；未知来源原样显示，避免丢信息。
   static String _sourceLabel(String source) => switch (source) {
@@ -468,12 +480,12 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                             spacing: 12,
                             runSpacing: 10,
                             children: [
-                              NexusMetricTile(
+                              _OverviewStat(
                                 label: '执行状态',
-                                value: _task.status,
+                                value: _statusLabel(_task.status),
                                 icon: Icons.sync_rounded,
                               ),
-                              NexusMetricTile(
+                              _OverviewStat(
                                 label: '指定模型',
                                 value: taskModel != null && taskModel.isNotEmpty
                                     ? taskModel
@@ -481,7 +493,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                                 icon: Icons.psychology_outlined,
                               ),
                               if (_task.resumeCount > 0)
-                                NexusMetricTile(
+                                _OverviewStat(
                                   label: '恢复执行',
                                   value: '${_task.resumeCount}',
                                   unit: '次',
@@ -1627,6 +1639,87 @@ class _ChangeReviewCard extends StatelessWidget {
                 ),
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Y2：总览卡内的小指标格。卡片里不再嵌套玻璃 / 描边小卡，
+/// 浅色与深色统一为文字色低透明度的浅填充。
+class _OverviewStat extends StatelessWidget {
+  const _OverviewStat({
+    required this.label,
+    required this.value,
+    this.unit,
+    this.icon,
+  });
+
+  final String label;
+  final String value;
+  final String? unit;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: textColor.withValues(alpha: isDark ? 0.06 : 0.04),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: textMuted),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                style: TextStyle(
+                  color: textMuted,
+                  fontSize: AppTokens.fontSizeBadge,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: AppTokens.fontSizeBody,
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              if (unit != null && unit!.isNotEmpty) ...[
+                const SizedBox(width: 3),
+                Text(
+                  unit!,
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeBadge,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ],
       ),
     );
