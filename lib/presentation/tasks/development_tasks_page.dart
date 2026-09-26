@@ -256,7 +256,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                       onRefresh: _load,
                       child: ListView.separated(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                         itemCount: tasks.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) =>
@@ -283,7 +283,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
       height: 48,
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
         children: values.entries.map((entry) {
           final count = _countFor(entry.key);
           final isSelected = _filter == entry.key;
@@ -322,9 +322,11 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
     final isWaitingApproval =
         task.status == 'waiting_approval' || task.status == 'awaiting_approval';
 
+    // W1：任务卡片与其他页面统一 16 圆角（只传参，不改 SectionCard）。
     return SectionCard(
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+        borderRadius: BorderRadius.circular(16),
         onTap: () {
           HapticFeedback.lightImpact();
           _openTaskDetails(task);
