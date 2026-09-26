@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
-import '../theme/app_tokens.dart';
 import '../widgets/glass_surface.dart';
 
 /// 设置模块统一色彩入口。
@@ -89,6 +88,9 @@ class SettingsSectionTitle extends StatelessWidget {
   }
 }
 
+/// 设置分组卡片圆角：与设置主页（T3）、历史、任务、任务详情等页面统一为 16（Q6）。
+const kSettingsCardRadius = 16.0;
+
 class SettingsGroupCard extends StatelessWidget {
   const SettingsGroupCard({
     super.key,
@@ -105,7 +107,7 @@ class SettingsGroupCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final intensity = AppAppearanceController.resolvedGlassIntensity;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final radius = BorderRadius.circular(AppTokens.radiusCard);
+    final radius = BorderRadius.circular(kSettingsCardRadius);
     final cardMargin = margin ?? const EdgeInsets.symmetric(horizontal: 16);
 
     final content = Column(
