@@ -1,4 +1,5 @@
 import '../theme/app_palette.dart';
+import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 
@@ -325,9 +326,11 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                     icon: _status!.startsWith('连接测试成功')
                         ? Icons.check_circle_rounded
                         : Icons.info_rounded,
+                    // R5：用当前主题的语义色；AppPalette 常量在深色主题下会被
+                    // normalizeIconTint 降成灰色，成功 / 失败就分不清了。
                     iconColor: _status!.startsWith('连接测试成功')
-                        ? AppPalette.success
-                        : AppPalette.danger,
+                        ? AppTheme.semanticOf(context).success
+                        : AppTheme.semanticOf(context).danger,
                     title: _status!,
                     showChevron: false,
                   ),
