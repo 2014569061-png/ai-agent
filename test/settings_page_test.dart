@@ -218,15 +218,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('受控工具清单'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, '全部'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, '安全 (Safe)'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, '需确认'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, '高危'), findsOneWidget);
-    expect(find.widgetWithText(ChoiceChip, '敏感工具'), findsOneWidget);
+    for (final (key, label) in [
+      ('all', '全部'),
+      ('safe', '安全 (Safe)'),
+      ('requiresConfirmation', '需确认'),
+      ('dangerous', '高危'),
+      ('sensitive', '敏感工具'),
+    ]) {
+      final pill = find.byKey(Key('tool-filter-$key'));
+      expect(pill, findsOneWidget);
+      expect(find.descendant(of: pill, matching: find.text(label)),
+          findsOneWidget);
+    }
 
     // Should find web search and http request
     expect(find.text('网页搜索 (Web Search)'), findsOneWidget);
     expect(find.text('数学计算器 (Calculator)'), findsOneWidget);
+
+    // 筛选胶囊仍可切换：高危筛选下不再出现安全工具。
+    await tester.tap(find.byKey(const Key('tool-filter-dangerous')));
+    await tester.pumpAndSettle();
+    expect(find.text('数学计算器 (Calculator)'), findsNothing);
   });
 
   testWidgets('ToolListPage 没有免审批项时明确说明，而不是留一片空白', (tester) async {

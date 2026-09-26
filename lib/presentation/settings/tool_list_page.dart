@@ -658,20 +658,15 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
           ),
           const SettingsSectionTitle('免审批范围'),
           SettingsGroupCard(children: _trustTiles()),
-          // iOS Search Field
+          // X3：无描边填充胶囊搜索框（与设置首页 T2 一致）。
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Container(
               height: 38,
               decoration: BoxDecoration(
-                color:
-                    isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
+                color: (isDark ? AppPalette.darkText : AppPalette.lightText)
+                    .withValues(alpha: isDark ? 0.08 : 0.05),
                 borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                border: Border.all(
-                  color: isDark
-                      ? AppPalette.darkHairline
-                      : AppPalette.lightHairline,
-                ),
               ),
               child: TextField(
                 controller: _searchController,
@@ -766,38 +761,45 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
     );
   }
 
+  /// X3：无描边填充筛选胶囊（与任务页 W4 一致）——选中品牌浅底 + 品牌字。
   Widget _buildFilterChip(String label, _RiskFilter value) {
     final selected = _filter == value;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return ChoiceChip(
-      label: Text(
-        label,
-        style: TextStyle(
-          fontSize: AppTokens.fontSizeMeta,
-          fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-          color: selected
-              ? Colors.white
-              : (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted),
+    final base = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final fg = selected
+        ? AppPalette.brandTextFor(isDark)
+        : base.withValues(alpha: 0.72);
+    final radius = BorderRadius.circular(AppTokens.radiusPill);
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: Key('tool-filter-${value.name}'),
+          borderRadius: radius,
+          onTap: () => setState(() => _filter = value),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected
+                  ? (isDark
+                      ? AppPalette.brandSoftDark
+                      : AppPalette.brandSoftLight)
+                  : base.withValues(alpha: isDark ? 0.08 : 0.05),
+              borderRadius: radius,
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: fg,
+              ),
+            ),
+          ),
         ),
       ),
-      selected: selected,
-      selectedColor: AppPalette.brandAction,
-      backgroundColor:
-          isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-      side: BorderSide(
-        color: selected
-            ? Colors.transparent
-            : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-      ),
-      visualDensity: VisualDensity.compact,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      onSelected: (val) {
-        if (val) setState(() => _filter = value);
-      },
     );
   }
 }
