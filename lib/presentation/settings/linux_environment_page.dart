@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import '../theme/app_palette.dart';
+import '../theme/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -346,15 +346,17 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
   }
 
   Color get _targetStatusColor {
+    // X6：状态徽标使用当前主题语义色，深色下对比度足够。
+    final semantic = AppTheme.semanticOf(context);
     if (_target == DevelopmentTarget.staticWeb || _targetReady) {
-      return AppPalette.success;
+      return semantic.success;
     }
     if (_target == DevelopmentTarget.windowsExe ||
         !_target.canBuildHere ||
         _targetHasInstallableMissingTool) {
-      return AppPalette.warning;
+      return semantic.warning;
     }
-    return AppPalette.danger;
+    return semantic.danger;
   }
 
   bool get _showTargetSetup {
@@ -466,9 +468,10 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
     final snapshot = _snapshot;
     final ready = snapshot?.selected.available == true;
     final needsCommonTools = _targetHasInstallableMissingTool;
+    final semantic = AppTheme.semanticOf(context);
     final bridgeColor = kIsWeb
-        ? AppPalette.lightTextMuted
-        : (ready ? AppPalette.success : AppPalette.warning);
+        ? semantic.textMuted
+        : (ready ? semantic.success : semantic.warning);
     final bridgeText = kIsWeb ? '仅预览' : (ready ? '已连接' : '待配置');
 
     return Scaffold(
@@ -584,8 +587,8 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
                 SettingsGroupCard(
                   children: [
                     SettingsTile(
-                      icon: Icons.folder_rounded,
-                      iconColor: AppPalette.warning,
+                      // X6：去掉无语义的装饰色，统一描边图标。
+                      icon: Icons.folder_outlined,
                       title: '默认工作目录',
                       subtitle: _defaultWorkDir,
                       onTap: _editWorkDir,
@@ -593,7 +596,6 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.code_rounded,
-                      iconColor: settingsMutedColor(context),
                       title: 'Shell 类型',
                       trailingText: _shellType,
                       onTap: _chooseShell,
@@ -604,8 +606,7 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
                 SettingsGroupCard(
                   children: [
                     SettingsTile(
-                      icon: Icons.play_circle_filled_rounded,
-                      iconColor: AppPalette.success,
+                      icon: Icons.play_circle_outline_rounded,
                       title: '环境检测与安装引导',
                       subtitle: '检测 Alpine / Termux / Android Shell / 本机进程',
                       onTap: _openSetupGuide,
@@ -613,7 +614,6 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
                     const SettingsDivider(),
                     SettingsTile(
                       icon: Icons.restart_alt_rounded,
-                      iconColor: AppPalette.warning,
                       title: '重新初始化环境',
                       subtitle: '重设桥接状态并执行环境重新连接',
                       onTap: _reinitialize,

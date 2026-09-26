@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../theme/app_palette.dart';
+import '../theme/app_theme.dart';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -204,14 +205,16 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: AppPalette.success.withValues(alpha: 0.15),
+                          color: AppTheme.semanticOf(context)
+                              .success
+                              .withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Text(
+                        child: Text(
                           '受控安全',
                           style: TextStyle(
                             fontSize: 12,
-                            color: AppPalette.success,
+                            color: AppTheme.semanticOf(context).success,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -231,8 +234,8 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                     ),
                     const SettingsDivider(),
                     SettingsTile(
+                      // X6：导出为普通操作，去掉装饰琥珀色。
                       icon: Icons.file_download_rounded,
-                      iconColor: AppPalette.warning,
                       title: '导出会话与文件',
                       subtitle: '以 Markdown 或加密形式备份项目与对话',
                       onTap: _exportConversation,
@@ -302,7 +305,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                       icon: Icons.cleaning_services_rounded,
                       iconColor: AppPalette.danger,
                       title: '清理临时缓存文件',
-                      titleColor: AppPalette.danger,
+                      titleColor: AppTheme.semanticOf(context).danger,
                       subtitle: '清理临时预览、生成草稿与图片缓存（二次确认）',
                       onTap: _cleanTempFiles,
                     ),
