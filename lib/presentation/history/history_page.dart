@@ -18,7 +18,7 @@ import '../widgets/glass_surface.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_action_sheet.dart';
 import '../widgets/nexus_page_header.dart';
-import '../widgets/section_card.dart';
+import '../widgets/nexus_touch_light.dart';
 
 typedef HistoryConversationsLoader = Future<List<Conversation>> Function();
 typedef HistoryConversationsPageLoader = Future<List<Conversation>> Function({
@@ -195,7 +195,14 @@ class _HistoryPageState extends State<HistoryPage> {
     final rows = <_HistoryRow>[];
     for (final entry in grouped.entries) {
       rows.add(_HistoryGroupRow(entry.key, entry.value.length));
-      rows.addAll(entry.value.map(_HistoryConversationRow.new));
+      final items = entry.value;
+      for (var i = 0; i < items.length; i++) {
+        rows.add(_HistoryConversationRow(
+          items[i],
+          isFirst: i == 0,
+          isLast: i == items.length - 1,
+        ));
+      }
     }
     return rows;
   }
@@ -507,11 +514,11 @@ class _HistoryPageState extends State<HistoryPage> {
                     if (row is _HistoryGroupRow) {
                       return _groupHeader(row, isDark);
                     }
-                    final conversation =
-                        (row as _HistoryConversationRow).conversation;
+                    final item = row as _HistoryConversationRow;
+                    // V2：同组会话拼成一张圆角卡片，行之间不留缝。
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: _conversationTile(conversation),
+                      padding: EdgeInsets.zero,
+                      child: _conversationTile(item),
                     );
                   }),
                 ),
@@ -523,58 +530,112 @@ class _HistoryPageState extends State<HistoryPage> {
     );
   }
 
-  Widget _conversationTile(Conversation conversation) {
+  Widget _conversationTile(_HistoryConversationRow item) {
+    final conversation = item.conversation;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return SectionCard(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      child: ListTile(
-        leading: Icon(
-          conversation.isPinned ? Icons.push_pin : Icons.chat_bubble_outline,
-          color: conversation.isPinned
-              ? AppPalette.brand
-              : (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted),
-        ),
-        title: Row(
-          children: [
-            if (conversation.isFavorite) ...[
-              const Icon(Icons.star, size: 16, color: AppPalette.warning),
-              const SizedBox(width: 6),
-            ],
-            Expanded(
-              child: Text(
-                conversation.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
+    const cardRadius = Radius.circular(16);
+    final radius = BorderRadius.vertical(
+      top: item.isFirst ? cardRadius : Radius.zero,
+      bottom: item.isLast ? cardRadius : Radius.zero,
+    );
+    final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    // V2：分组卡片用浅填充代替描边；前导图标放进浅色圆底，置顶用品牌浅底。
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? AppPalette.darkSurface : AppPalette.lightCanvas,
+        borderRadius: radius,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: NexusTouchLightScope(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!item.isFirst)
+                Divider(
+                  height: 0.8,
+                  thickness: 0.8,
+                  indent: 64,
+                  color: isDark
+                      ? AppPalette.darkHairline
+                      : AppPalette.lightHairline,
                 ),
-              ),
-            ),
-          ],
-        ),
-        subtitle: Text(
-          _relativeTime(conversation.updatedAt),
-          style: TextStyle(
-            fontSize: 13,
-            color:
-                isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
+              _conversationListTile(conversation, isDark, muted),
+            ],
           ),
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.more_vert),
-          tooltip: '更多操作',
-          onPressed: () => _showConversationActions(conversation),
-        ),
-        onTap: () {
-          final callback = widget.onConversationSelected;
-          if (callback != null) {
-            callback(conversation);
-          } else {
-            Navigator.pop(context, conversation);
-          }
-        },
       ),
+    );
+  }
+
+  Widget _conversationListTile(
+    Conversation conversation,
+    bool isDark,
+    Color muted,
+  ) {
+    return ListTile(
+      contentPadding: const EdgeInsets.fromLTRB(16, 0, 4, 0),
+      minVerticalPadding: 10,
+      horizontalTitleGap: 12,
+      leading: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: conversation.isPinned
+              ? (isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight)
+              : muted.withValues(alpha: 0.1),
+        ),
+        child: Icon(
+          conversation.isPinned
+              ? Icons.push_pin_rounded
+              : Icons.chat_bubble_outline_rounded,
+          size: 18,
+          color: conversation.isPinned ? AppPalette.brand : muted,
+        ),
+      ),
+      title: Row(
+        children: [
+          if (conversation.isFavorite) ...[
+            const Icon(Icons.star, size: 16, color: AppPalette.warning),
+            const SizedBox(width: 6),
+          ],
+          Expanded(
+            child: Text(
+              conversation.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Text(
+        _relativeTime(conversation.updatedAt),
+        style: TextStyle(
+          fontSize: 12,
+          color: muted,
+        ),
+      ),
+      trailing: IconButton(
+        icon: const Icon(Icons.more_vert),
+        tooltip: '更多操作',
+        onPressed: () => _showConversationActions(conversation),
+      ),
+      onTap: () {
+        final callback = widget.onConversationSelected;
+        if (callback != null) {
+          callback(conversation);
+        } else {
+          Navigator.pop(context, conversation);
+        }
+      },
     );
   }
 
@@ -688,7 +749,13 @@ class _HistoryGroupRow extends _HistoryRow {
 }
 
 class _HistoryConversationRow extends _HistoryRow {
-  const _HistoryConversationRow(this.conversation);
+  const _HistoryConversationRow(
+    this.conversation, {
+    required this.isFirst,
+    required this.isLast,
+  });
 
   final Conversation conversation;
+  final bool isFirst;
+  final bool isLast;
 }
