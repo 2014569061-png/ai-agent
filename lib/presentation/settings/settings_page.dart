@@ -743,7 +743,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Widget _buildSectionHeader(String title, Color color) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      // T4：标题与卡片内图标对齐（卡片内边距 16），上方多留 8，
+      // 分组间距 16 + 8 = 24，组内标题到卡片 8，层级更清楚。
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Text(
         title,
         style: TextStyle(
@@ -759,6 +761,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     required List<Widget> children,
   }) {
     return SectionCard(
+      // T3：分组卡片与消息区卡片统一 16 圆角（只传参，不改 SectionCard）。
+      borderRadius: BorderRadius.circular(16),
       child: Column(mainAxisSize: MainAxisSize.min, children: children),
     );
   }
