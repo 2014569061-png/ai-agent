@@ -56,6 +56,7 @@
     <uses-permission android:name="android.permission.READ_LOGS"
         tools:ignore="ProtectedPermissions"/>
     <application
+            android:enableOnBackInvokedCallback="true"
             android:label="NEXUS Agent"
             android:name="${applicationName}"
             android:icon="@mipmap/ic_launcher"
