@@ -1,9 +1,17 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/scheduler.dart';
+
+import '../theme/app_tokens.dart';
 import '../widgets/nexus_background.dart';
 import 'motion_intensity.dart';
 import 'motion_preferences.dart';
 import 'motion_tier.dart';
 import 'nexus_motion.dart';
+import 'nexus_spring.dart';
+import 'tap_origin.dart';
 
 /// 页面层级转场表现形式
 enum RoutePresentation {
@@ -64,10 +72,66 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
           // BackdropFilter 在 Opacity 临时缓冲区中可能产生闪烁；这里关闭
           // Flutter 内置的路由快照，快照统一由本文件的 [_SnapshotWhile] 控制。
           allowSnapshotting: false,
-        );
+        ) {
+    // L5：详情页从被点击的卡片 / 行「展开」而来（容器变换）。
+    if (presentation == RoutePresentation.detail && !fullscreenDialog) {
+      originRect = captureOrigin();
+    }
+  }
+
+  /// L5 容器变换起点（全局坐标）；null 时退回整屏左右位移。
+  Rect? originRect;
+
+  bool get _morphs => originRect != null;
+
+  /// 按最近一次新鲜的按下位置命中测试当前布局，取「像卡片 / 行」的最内层盒子：
+  /// 高 ≥ 44、宽 ≥ 96，且面积不超过屏幕一半（再往外就是整页容器了）。
+  /// 找不到合适的盒子时，从按下点附近 48×48 的小方块展开。
+  static Rect? captureOrigin() {
+    final point = NexusTapOrigin.recent();
+    if (point == null) return null;
+    // 构建 / 布局进行中布局可能是脏的，不做命中测试。
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      return null;
+    }
+    try {
+      return _hitOrigin(point);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Rect? _hitOrigin(Offset point) {
+    final binding = WidgetsBinding.instance;
+    final view = binding.platformDispatcher.implicitView ??
+        (binding.platformDispatcher.views.isEmpty
+            ? null
+            : binding.platformDispatcher.views.first);
+    if (view == null) return null;
+    final screen = view.physicalSize / view.devicePixelRatio;
+    final result = HitTestResult();
+    binding.hitTestInView(result, point, view.viewId);
+    for (final entry in result.path) {
+      final target = entry.target;
+      if (target is! RenderBox || !target.attached || !target.hasSize) {
+        continue;
+      }
+      final size = target.size;
+      if (size.width * size.height > screen.width * screen.height * 0.5) {
+        break;
+      }
+      if (size.height < 44 || size.width < 96) continue;
+      return target.localToGlobal(Offset.zero) & size;
+    }
+    return Rect.fromCenter(center: point, width: 48, height: 48);
+  }
 
   /// 进入方向的弹簧曲线（离手弹簧归一化 + 钳制不越界）。
   static final Curve enterCurve = NexusSpringCurve(NexusMotion.springRelease);
+
+  /// L5 容器变换曲线：smooth 弹簧（无过冲，形变不晃）。
+  static final Curve containerCurve = NexusSprings.curveOf(NexusSprings.smooth);
 
   /// 下层视差位移比例（相对屏宽）。
   static const double parallaxFraction = 0.3;
@@ -78,8 +142,46 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
   bool get _slides => presentation != RoutePresentation.fade;
 
   @override
-  DelegatedTransitionBuilder? get delegatedTransition =>
-      _slides ? _delegatedSecondaryTransition : null;
+  DelegatedTransitionBuilder? get delegatedTransition => _morphs
+      ? _delegatedDimTransition
+      : (_slides ? _delegatedSecondaryTransition : null);
+
+  /// 容器变换时下层不视差位移，只暗化（卡片原地「长成」新页面）。
+  static Widget? _delegatedDimTransition(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    bool allowSnapshotting,
+    Widget? child,
+  ) {
+    final content = child ?? const SizedBox.shrink();
+    if (secondaryAnimation.isDismissed ||
+        MotionPreferences.shouldReduceMotion(context)) {
+      return content;
+    }
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        _SnapshotWhile(
+          animation: secondaryAnimation,
+          when: (status) =>
+              status == AnimationStatus.forward ||
+              status == AnimationStatus.reverse,
+          child: content,
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: FadeTransition(
+              opacity: secondaryAnimation,
+              child: ColoredBox(
+                color: Colors.black.withValues(alpha: dimOpacity),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   static Widget? _delegatedSecondaryTransition(
     BuildContext context,
@@ -98,7 +200,8 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
   void didChangeNext(Route<dynamic>? nextRoute) {
     super.didChangeNext(nextRoute);
     if (nextRoute == null) return;
-    _yieldsToNext = nextRoute is NexusPageRoute && nextRoute._slides;
+    _yieldsToNext =
+        nextRoute is NexusPageRoute && nextRoute._slides && !nextRoute._morphs;
   }
 
   @override
@@ -238,18 +341,43 @@ class NexusPageRoute<T> extends PageRouteBuilder<T> {
       );
     }
 
+    if (_morphs) {
+      return _ContainerMorph(
+        animation: _FollowGesture(
+          parent: animation,
+          curved: CurvedAnimation(
+            parent: animation,
+            curve: containerCurve,
+            reverseCurve: NexusMotion.curveStandard,
+          ),
+          gesture: () => navigator?.userGestureInProgress ?? false,
+        ),
+        origin: originRect!,
+        child: _SnapshotWhile(
+          animation: animation,
+          when: (status) => status == AnimationStatus.reverse,
+          child: canvasChild,
+        ),
+      );
+    }
+
     return _SnapshotWhile(
       animation: animation,
       // 只在返回期间快照：push 时页面是新的，第一帧必须真实绘制。
       when: (status) => status == AnimationStatus.reverse,
       child: SlideTransition(
+        // L5：系统返回手势进行中按手指进度线性跟手，不走曲线。
         position: Tween<Offset>(
           begin: const Offset(1, 0),
           end: Offset.zero,
-        ).animate(CurvedAnimation(
+        ).animate(_FollowGesture(
           parent: animation,
-          curve: enterCurve,
-          reverseCurve: NexusMotion.curveStandard,
+          curved: CurvedAnimation(
+            parent: animation,
+            curve: enterCurve,
+            reverseCurve: NexusMotion.curveStandard,
+          ),
+          gesture: () => navigator?.userGestureInProgress ?? false,
         )),
         child: _LeadingEdgeShadow(child: canvasChild),
       ),
@@ -420,6 +548,100 @@ class _SnapshotWhileState extends State<_SnapshotWhile> {
       controller: _controller,
       mode: SnapshotMode.permissive,
       child: widget.child,
+    );
+  }
+}
+
+/// 手势返回进行中直接使用控制器的线性进度（页面跟手），否则走 [curved]。
+class _FollowGesture extends Animation<double>
+    with AnimationWithParentMixin<double> {
+  _FollowGesture({
+    required this.parent,
+    required this.curved,
+    required this.gesture,
+  });
+
+  @override
+  final Animation<double> parent;
+  final Animation<double> curved;
+  final bool Function() gesture;
+
+  @override
+  double get value => gesture() ? parent.value : curved.value;
+}
+
+/// L5 容器变换：页面按全屏布局，缩放到起点矩形的宽度绘制并裁到矩形高度，
+/// 矩形与圆角随进度插值到全屏；前 35% 叠一层表面色面纱淡出，
+/// 让「卡片」先长大、内容再显现。不使用 Opacity（玻璃 BackdropFilter 会闪）。
+class _ContainerMorph extends StatelessWidget {
+  const _ContainerMorph({
+    required this.animation,
+    required this.origin,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final Rect origin;
+  final Widget child;
+
+  static const double veilEnd = 0.35;
+
+  @override
+  Widget build(BuildContext context) {
+    final veil = Theme.of(context).colorScheme.surface;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final full = Offset.zero & constraints.biggest;
+        return AnimatedBuilder(
+          animation: animation,
+          child: child,
+          builder: (context, child) {
+            // 落定后结构保持不变（只是数值归位），避免页面在转场结束时被重建。
+            final t = animation.value;
+            final done = t >= 1;
+            final rect = done ? full : Rect.lerp(origin, full, t)!;
+            final scale =
+                done || full.width == 0 ? 1.0 : rect.width / full.width;
+            final radius =
+                ui.lerpDouble(AppTokens.radiusCard, 0, t.clamp(0.0, 1.0))!;
+            final veilAlpha = (1 - t / veilEnd).clamp(0.0, 1.0);
+            return Stack(
+              children: [
+                Positioned.fromRect(
+                  rect: rect,
+                  child: ClipRRect(
+                    clipBehavior: done ? Clip.none : Clip.antiAlias,
+                    borderRadius: BorderRadius.circular(done ? 0 : radius),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        OverflowBox(
+                          alignment: Alignment.topLeft,
+                          minWidth: full.width,
+                          maxWidth: full.width,
+                          minHeight: full.height,
+                          maxHeight: full.height,
+                          child: Transform.scale(
+                            scale: scale,
+                            alignment: Alignment.topLeft,
+                            child: child,
+                          ),
+                        ),
+                        if (veilAlpha > 0)
+                          IgnorePointer(
+                            child: ColoredBox(
+                              color: veil.withValues(alpha: veilAlpha),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }
