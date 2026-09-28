@@ -4,8 +4,6 @@ import 'package:flutter/services.dart';
 import '../../../application/chat_controller.dart';
 import '../../../domain/tool_result.dart';
 import '../../../infrastructure/tools/tool_humanizer.dart';
-import '../../motion/motion_preferences.dart';
-import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
@@ -14,6 +12,7 @@ import '../../widgets/nexus_execution_status.dart';
 import '../../widgets/nexus_sheet.dart';
 import '../../widgets/nexus_status_badge.dart';
 import '../../widgets/nexus_surface.dart';
+import '../../motion/morph_icon.dart';
 
 /// 工具执行内联时间线：直接出现在消息流尾部（Agent 正在工作的位置），
 /// 无需点击即可看到每一步工具调用的状态与结果；行内可展开技术详情。
@@ -182,8 +181,7 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
               shrinkWrap: true,
               padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
               children: [
-                for (final activity in activities)
-                  _row(sheetContext, activity),
+                for (final activity in activities) _row(sheetContext, activity),
               ],
             ),
           ),
@@ -254,12 +252,8 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
             ),
           ),
           if (collapsible)
-            AnimatedRotation(
+            SpringTurns(
               turns: expanded ? 0.5 : 0.0,
-              duration: MotionPreferences.shouldReduceMotion(context)
-                  ? Duration.zero
-                  : NexusMotion.fast,
-              curve: NexusMotion.curveStandard,
               child: Icon(
                 Icons.keyboard_arrow_down_rounded,
                 size: 18,
@@ -437,7 +431,8 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
             margin: const EdgeInsets.only(top: 6),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: isDark ? AppPalette.terminalBg : AppPalette.terminalSurface,
+              color:
+                  isDark ? AppPalette.terminalBg : AppPalette.terminalSurface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isDark
@@ -515,12 +510,20 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
                 Builder(
                   builder: (context) {
                     final statusColor = running
-                        ? (isDark ? AppPalette.darkBrandHover : AppPalette.brand)
+                        ? (isDark
+                            ? AppPalette.darkBrandHover
+                            : AppPalette.brand)
                         : (done
-                            ? (isDark ? AppPalette.darkSuccess : AppPalette.lightSuccess)
+                            ? (isDark
+                                ? AppPalette.darkSuccess
+                                : AppPalette.lightSuccess)
                             : (failed
-                                ? (isDark ? AppPalette.darkDanger : AppPalette.lightDanger)
-                                : (isDark ? AppPalette.darkWarning : AppPalette.lightWarning)));
+                                ? (isDark
+                                    ? AppPalette.darkDanger
+                                    : AppPalette.lightDanger)
+                                : (isDark
+                                    ? AppPalette.darkWarning
+                                    : AppPalette.lightWarning)));
                     return Row(
                       children: [
                         Text(

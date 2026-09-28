@@ -4,6 +4,7 @@ import 'app_appearance_controller.dart';
 import 'app_palette.dart';
 import 'app_tokens.dart';
 import '../widgets/liquid_glass.dart';
+import '../motion/press_squash.dart';
 
 abstract final class AppTheme {
   // 品牌色与主要视觉色
@@ -406,7 +407,7 @@ abstract final class AppTheme {
         elevation: 4,
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
+        style: NexusPressStyle.apply(FilledButton.styleFrom(
           backgroundColor: isDark ? AppPalette.brand : AppPalette.brandAction,
           foregroundColor: Colors.white,
           disabledBackgroundColor: isDark
@@ -420,10 +421,10 @@ abstract final class AppTheme {
           minimumSize: const Size(0, AppTokens.kControlHeight),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-        ),
+        )),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
+        style: NexusPressStyle.apply(ElevatedButton.styleFrom(
           backgroundColor: isDark ? AppPalette.brand : AppPalette.brandAction,
           foregroundColor: Colors.white,
           disabledBackgroundColor: isDark
@@ -438,10 +439,10 @@ abstract final class AppTheme {
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 16),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-        ),
+        )),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
+        style: NexusPressStyle.apply(OutlinedButton.styleFrom(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
             side: BorderSide(color: hairline, width: 1.0),
@@ -449,18 +450,20 @@ abstract final class AppTheme {
           minimumSize: const Size(0, AppTokens.kControlHeight),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-        ),
+        )),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
+        style: NexusPressStyle.apply(TextButton.styleFrom(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
           minimumSize: const Size(0, AppTokens.kControlHeight),
           padding: const EdgeInsets.symmetric(horizontal: 12),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-        ),
+        )),
       ),
+      // L1：所有 IconButton 按下压缩、松手回弹。
+      iconButtonTheme: const IconButtonThemeData(style: NexusPressStyle.squash),
       listTileTheme: ListTileThemeData(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),

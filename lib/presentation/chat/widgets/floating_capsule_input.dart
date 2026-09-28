@@ -13,6 +13,7 @@ import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_execution_status.dart';
 import '../../widgets/nexus_pressable.dart';
 import '../../widgets/glass_surface.dart';
+import '../../motion/morph_icon.dart';
 
 /// 首页输入区（对标 DeepSeek App）。
 ///
@@ -548,25 +549,11 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
         key: const ValueKey('composer-primary-action-slot'),
         width: 48,
         height: 48,
+        // L1：发送 ↔ 停止以弹簧形变切换（缩放 + 轻旋转，5% 回弹）。
         child: AnimatedSwitcher(
-          duration: NexusMotion.durationFast(context),
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: ScaleTransition(
-                scale: Tween<double>(
-                        begin: MotionPreferences.shouldReduceMotion(context)
-                            ? 1.0
-                            : 0.94,
-                        end: 1.0)
-                    .animate(
-                  CurvedAnimation(
-                      parent: animation, curve: NexusMotion.curveStandard),
-                ),
-                child: child,
-              ),
-            );
-          },
+          duration: NexusMorph.duration(context),
+          transitionBuilder: NexusMorph.transition(context),
+          layoutBuilder: NexusMorph.layout,
           child: button,
         ),
       ),

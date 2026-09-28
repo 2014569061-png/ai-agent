@@ -17,6 +17,7 @@ import 'nexus_motion.dart';
 /// | [snappy] | 0.22s | 0.86 | ≈0.5% | ≈0.17s | 按压、开关、选中 |
 /// | [bouncy] | 0.28s | 0.69 | ≈5% | ≈0.31s | 弹出、回弹、图标切换 |
 /// | [smooth] | 0.30s | 0.92 | ≈0.1% | ≈0.28s | 形变、尺寸、弹层、页面 |
+/// | [release] | 0.30s | 0.52 | ≈15% | ≈0.44s | 按压松手回弹（L1） |
 abstract final class NexusSprings {
   static SpringDescription fromResponse(double response, double ratio) {
     final omega = 2 * math.pi / response;
@@ -35,6 +36,9 @@ abstract final class NexusSprings {
 
   /// 形变、尺寸变化、弹层与页面：无明显过冲。
   static final SpringDescription smooth = fromResponse(0.30, 0.92);
+
+  /// 按压松手回弹（L1）：偏软、过冲约 15%（相对压缩深度），让元素「弹回来」。
+  static final SpringDescription release = fromResponse(0.30, 0.52);
 
   /// 减少动态效果：临界阻尼、更短，无过冲。
   static final SpringDescription reduced = fromResponse(0.18, 1.0);

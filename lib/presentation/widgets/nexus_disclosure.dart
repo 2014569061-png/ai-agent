@@ -4,6 +4,7 @@ import '../motion/nexus_haptics.dart';
 import '../motion/nexus_motion.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../motion/press_squash.dart';
 
 /// 统一可折叠展开组件（用于推理过程、技术错误、工具输出、日志详情等）
 class NexusDisclosure extends StatefulWidget {
@@ -130,39 +131,42 @@ class _NexusDisclosureState extends State<NexusDisclosure>
             button: true,
             expanded: _isExpanded,
             label: effectiveSemanticLabel,
-            child: InkWell(
-              onTap: _toggleExpansion,
-              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(
-                  minHeight: AppTokens.kMinTouchTarget, // 确保最小 48dp 触控区
-                ),
-                child: Padding(
-                  padding: widget.headerPadding ??
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    children: [
-                      if (widget.leading != null) ...[
-                        widget.leading!,
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(child: widget.title),
-                      if (widget.trailingActions != null) ...[
-                        widget.trailingActions!,
-                        const SizedBox(width: 4),
-                      ],
-                      if (widget.trailing != null)
-                        widget.trailing!
-                      else
-                        RotationTransition(
-                          turns: _iconTurns,
-                          child: Icon(
-                            Icons.keyboard_arrow_right_rounded,
-                            size: 18,
-                            color: textMuted,
+            child: PressSquash(
+              scale: NexusPressScale.row,
+              child: InkWell(
+                onTap: _toggleExpansion,
+                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minHeight: AppTokens.kMinTouchTarget, // 确保最小 48dp 触控区
+                  ),
+                  child: Padding(
+                    padding: widget.headerPadding ??
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        if (widget.leading != null) ...[
+                          widget.leading!,
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(child: widget.title),
+                        if (widget.trailingActions != null) ...[
+                          widget.trailingActions!,
+                          const SizedBox(width: 4),
+                        ],
+                        if (widget.trailing != null)
+                          widget.trailing!
+                        else
+                          RotationTransition(
+                            turns: _iconTurns,
+                            child: Icon(
+                              Icons.keyboard_arrow_right_rounded,
+                              size: 18,
+                              color: textMuted,
+                            ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

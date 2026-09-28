@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
-import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_motion.dart';
 import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
@@ -15,6 +14,7 @@ import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_surface.dart';
 import '../../widgets/nexus_status_pill.dart';
 import '../../widgets/nexus_status_badge.dart';
+import '../../motion/morph_icon.dart';
 
 /// 执行计划浮层卡片 (PlanPanel)
 /// 严格依据 NEXUS UI 设计优化规范重构：
@@ -247,12 +247,8 @@ class _PlanPanelState extends State<PlanPanel> {
             ),
             IconButton(
               tooltip: '展开计划',
-              icon: AnimatedRotation(
+              icon: SpringTurns(
                 turns: _expanded ? 0.5 : 0.0,
-                duration: MotionPreferences.shouldReduceMotion(context)
-                    ? Duration.zero
-                    : NexusMotion.fast,
-                curve: NexusMotion.curveStandard,
                 child: const Icon(Icons.expand_more_rounded, size: 20),
               ),
               visualDensity: VisualDensity.compact,
@@ -312,12 +308,8 @@ class _PlanPanelState extends State<PlanPanel> {
               _threeDotMenu(muted),
               IconButton(
                 tooltip: '收起计划',
-                icon: AnimatedRotation(
+                icon: SpringTurns(
                   turns: _expanded ? 0.5 : 0.0,
-                  duration: MotionPreferences.shouldReduceMotion(context)
-                      ? Duration.zero
-                      : NexusMotion.fast,
-                  curve: NexusMotion.curveStandard,
                   child: const Icon(Icons.expand_more_rounded, size: 20),
                 ),
                 visualDensity: VisualDensity.compact,
@@ -374,7 +366,8 @@ class _PlanPanelState extends State<PlanPanel> {
             children: [
               Text('完成度 $done/$total',
                   style: const TextStyle(
-                      fontSize: AppTokens.fontSizeFootnote, fontWeight: FontWeight.w500)),
+                      fontSize: AppTokens.fontSizeFootnote,
+                      fontWeight: FontWeight.w500)),
               const SizedBox(width: 10),
               Expanded(
                 child: ClipRRect(

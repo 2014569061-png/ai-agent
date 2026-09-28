@@ -3,6 +3,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'glass_surface.dart';
+import '../motion/press_squash.dart';
 
 /// 液态玻璃 Chip，在 flat 模式下平滑降级为平面 Chip（白底/暗底 + 1px hairline + radiusPill）
 class GlassChip extends StatelessWidget {
@@ -85,16 +86,20 @@ class GlassChip extends StatelessWidget {
       );
     }
 
-    return Material(
-      color: bg,
-      shape: RoundedRectangleBorder(
-        borderRadius: pillRadius,
-        side: BorderSide(color: border, width: 1.0),
-      ),
-      child: InkWell(
-        borderRadius: pillRadius,
-        onTap: onPressed,
-        child: chipBody,
+    return PressSquash(
+      enabled: onPressed != null,
+      scale: NexusPressScale.button,
+      child: Material(
+        color: bg,
+        shape: RoundedRectangleBorder(
+          borderRadius: pillRadius,
+          side: BorderSide(color: border, width: 1.0),
+        ),
+        child: InkWell(
+          borderRadius: pillRadius,
+          onTap: onPressed,
+          child: chipBody,
+        ),
       ),
     );
   }

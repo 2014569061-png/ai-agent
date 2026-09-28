@@ -12,6 +12,7 @@ import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/shimmer_text.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../motion/morph_icon.dart';
 
 /// 思考过程与运行进度折叠块。
 ///
@@ -310,10 +311,8 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                           const SizedBox(width: 4),
                           Tooltip(
                             message: _expanded ? '收起思考过程' : '展开思考过程',
-                            child: AnimatedRotation(
+                            child: SpringTurns(
                               turns: _expanded ? 0.5 : 0,
-                              duration: NexusMotion.durationFast(context),
-                              curve: NexusMotion.curveStandard,
                               child: Icon(
                                 Icons.expand_more_rounded,
                                 size: 18,

@@ -5,6 +5,7 @@ import 'package:mobile_agent/presentation/theme/app_appearance_controller.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 import 'package:mobile_agent/presentation/widgets/glass_surface.dart';
 import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
+import 'package:mobile_agent/presentation/motion/press_squash.dart';
 
 void main() {
   setUp(() {
@@ -92,8 +93,16 @@ void main() {
       ),
     );
 
-    final scale = tester.widget<AnimatedScale>(find.byType(AnimatedScale));
-    expect(scale.scale, 1.0);
+    // L1：按下时 PressScale 在减少动态效果下保持 1.0。
+    final gesture =
+        await tester.startGesture(tester.getCenter(find.byType(GlassSurface)));
+    await tester.pump(const Duration(milliseconds: 100));
+    final transform = tester.widget<Transform>(find
+        .descendant(
+            of: find.byType(PressScale), matching: find.byType(Transform))
+        .first);
+    expect(transform.transform.entry(0, 0), 1.0);
+    await gesture.up();
     expect(tester.takeException(), isNull);
   });
 

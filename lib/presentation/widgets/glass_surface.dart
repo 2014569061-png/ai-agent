@@ -5,6 +5,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../motion/motion_preferences.dart';
 import 'liquid_glass.dart';
+import '../motion/press_squash.dart';
 
 export 'liquid_glass.dart' show GlassIntensity;
 
@@ -197,13 +198,11 @@ class _GlassSurfaceState extends State<GlassSurface> {
       child = ValueListenableBuilder<bool>(
         valueListenable: _pressed,
         child: child,
-        builder: (context, pressed, child) => AnimatedScale(
-          scale: reduceMotion ? 1.0 : (pressed ? 0.985 : 1.0),
-          duration: reduceMotion
-              ? Duration.zero
-              : const Duration(milliseconds: 120),
-          curve: Curves.easeOutCubic,
-          child: child,
+        // L1：弹簧压缩 + 松手回弹；reduced / off 下 PressScale 自身不缩放。
+        builder: (context, pressed, child) => PressScale(
+          pressed: pressed,
+          scale: NexusPressScale.card,
+          child: child!,
         ),
       );
     }

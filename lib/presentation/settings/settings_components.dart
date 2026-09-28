@@ -4,6 +4,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_surface.dart';
+import '../motion/press_squash.dart';
 
 /// 设置模块统一色彩入口。
 /// 全部委托给 AppPalette / AppSemanticColors，不再自带一套 iOS 色板。
@@ -259,101 +260,106 @@ class SettingsTile extends StatelessWidget {
         trailingWidget == null &&
         (selected == null);
 
-    return Material(
-      color: Colors.transparent,
-      child: Semantics(
-        button: onTap != null,
-        enabled: onTap != null,
-        container: true,
-        label: title,
-        value: trailingText,
-        hint: onTap == null ? null : '打开$title',
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: contentPadding ??
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                if (leadingWidget != null) ...[
-                  leadingWidget,
-                  const SizedBox(width: 12),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                          height: 1.4,
-                          color: titleColor ?? semantic.textPrimary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (subtitle != null && subtitle!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
+    return PressSquash(
+      enabled: onTap != null,
+      scale: NexusPressScale.row,
+      child: Material(
+        color: Colors.transparent,
+        child: Semantics(
+          button: onTap != null,
+          enabled: onTap != null,
+          container: true,
+          label: title,
+          value: trailingText,
+          hint: onTap == null ? null : '打开$title',
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: contentPadding ??
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  if (leadingWidget != null) ...[
+                    leadingWidget,
+                    const SizedBox(width: 12),
+                  ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                         Text(
-                          subtitle!,
+                          title,
                           style: TextStyle(
-                            fontSize: 13,
-                            height: 1.55,
-                            color: subtitleColor ?? semantic.textMuted,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w400,
+                            height: 1.4,
+                            color: titleColor ?? semantic.textPrimary,
                           ),
-                          maxLines: subtitleMaxLines,
+                          maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (trailingWidget != null) ...[
-                  trailingWidget!,
-                ] else ...[
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (trailingBadge != null) trailingBadge!,
-                      if (trailingText != null && trailingText!.isNotEmpty) ...[
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 150),
-                          child: Text(
-                            trailingText!,
+                        if (subtitle != null && subtitle!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!,
                             style: TextStyle(
                               fontSize: 13,
                               height: 1.55,
-                              color: trailingTextColor ?? semantic.textFaint,
+                              color: subtitleColor ?? semantic.textMuted,
                             ),
-                            maxLines: 1,
+                            maxLines: subtitleMaxLines,
                             overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.end,
                           ),
-                        ),
-                        const SizedBox(width: 4),
+                        ],
                       ],
-                      if (selected != null)
-                        if (selected == true)
-                          Icon(
-                            Icons.check_rounded,
-                            size: 20,
-                            color: semantic.brand,
-                          )
-                        else
-                          const SizedBox(width: 20),
-                      if (hasChevron)
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 16,
-                          color: semantic.textFaint,
-                        ),
-                    ],
+                    ),
                   ),
+                  if (trailingWidget != null) ...[
+                    trailingWidget!,
+                  ] else ...[
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (trailingBadge != null) trailingBadge!,
+                        if (trailingText != null &&
+                            trailingText!.isNotEmpty) ...[
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 150),
+                            child: Text(
+                              trailingText!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                height: 1.55,
+                                color: trailingTextColor ?? semantic.textFaint,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.end,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        if (selected != null)
+                          if (selected == true)
+                            Icon(
+                              Icons.check_rounded,
+                              size: 20,
+                              color: semantic.brand,
+                            )
+                          else
+                            const SizedBox(width: 20),
+                        if (hasChevron)
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: semantic.textFaint,
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

@@ -9,6 +9,7 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:markdown/markdown.dart' as md;
 
 import 'markdown_render_metrics.dart';
+import '../motion/morph_icon.dart';
 
 /// 轻量级正则语法高亮器，用于代码块内的关键字/字符串/注释/数字着色。
 ///
@@ -299,7 +300,8 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
     final highlighter = dark ? _darkHighlighter : _lightHighlighter;
 
     final isDiff = (widget.language?.toLowerCase().contains('diff') ?? false) ||
-        (trimmed.startsWith('@@') || (trimmed.contains('\n+') && trimmed.contains('\n-')));
+        (trimmed.startsWith('@@') ||
+            (trimmed.contains('\n+') && trimmed.contains('\n-')));
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -328,7 +330,9 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                   _formatHeaderTitle(widget.language, isDiff),
                   style: TextStyle(
                     fontSize: AppTokens.fontSizeFootnote,
-                    color: isDiff ? (dark ? Colors.white : AppPalette.lightText) : headerText,
+                    color: isDiff
+                        ? (dark ? Colors.white : AppPalette.lightText)
+                        : headerText,
                     fontWeight: FontWeight.w600,
                     fontFamily: AppTokens.fontFamilyMono,
                   ),
@@ -355,7 +359,7 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          MorphIcon(
                             _copied ? Icons.check_rounded : Icons.copy_rounded,
                             size: 13,
                             color: _copied ? AppPalette.success : headerText,
@@ -365,7 +369,8 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                             _copied ? '已复制' : '复制',
                             style: TextStyle(
                               fontSize: AppTokens.fontSizeSubcaption,
-                              fontWeight: _copied ? FontWeight.w500 : FontWeight.w400,
+                              fontWeight:
+                                  _copied ? FontWeight.w500 : FontWeight.w400,
                               color: _copied ? AppPalette.success : headerText,
                             ),
                           ),
@@ -469,7 +474,9 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                     style: TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 11,
-                      color: isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted,
+                      color: isDark
+                          ? AppPalette.darkTextFaint
+                          : AppPalette.lightTextMuted,
                     ),
                   ),
                 ),

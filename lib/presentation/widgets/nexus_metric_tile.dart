@@ -3,6 +3,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'glass_surface.dart';
+import '../motion/press_squash.dart';
 
 /// 统一的指标展示卡片 (NexusMetricTile)
 /// 用于 Token、耗时、缓存命中率、重试次数、预计费用等指标的统一排版与可读性解释。
@@ -140,18 +141,22 @@ class NexusMetricTile extends StatelessWidget {
       );
     }
 
-    return Material(
-      type: MaterialType.transparency,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: cardRadius,
-        child: Container(
-          decoration: BoxDecoration(
-            color: surface,
-            borderRadius: cardRadius,
-            border: Border.all(color: hairline, width: 1.0),
+    return PressSquash(
+      enabled: onTap != null,
+      scale: NexusPressScale.card,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: cardRadius,
+          child: Container(
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: cardRadius,
+              border: Border.all(color: hairline, width: 1.0),
+            ),
+            child: cardBody,
           ),
-          child: cardBody,
         ),
       ),
     );
