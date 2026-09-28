@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../../domain/models.dart';
 import '../../motion/motion_intensity.dart';
-import '../../motion/motion_preferences.dart';
 import '../../motion/motion_tier.dart';
 import '../../motion/nexus_entrance.dart';
 import '../../motion/nexus_haptics.dart';
@@ -14,6 +13,8 @@ import '../../widgets/nexus_execution_status.dart';
 import '../../widgets/nexus_pressable.dart';
 import '../../widgets/glass_surface.dart';
 import '../../motion/morph_icon.dart';
+import '../../motion/nexus_spring.dart';
+import '../../motion/send_flight.dart';
 
 /// 首页输入区（对标 DeepSeek App）。
 ///
@@ -87,6 +88,9 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
   late final ValueNotifier<bool> _focused;
   final FocusNode _focusNode = FocusNode();
 
+  /// L2：输入框文字区域，发送时把它的位置交给 [SendFlightBus]。
+  final GlobalKey _fieldKey = GlobalKey();
+
   /// 发送光圈（M5）：只在点击发送时从 0 播放到 1，其余时间静止不绘制。
   late final AnimationController _sendPulse = AnimationController(
     vsync: this,
@@ -126,6 +130,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     _focusNode.dispose();
     _focused.dispose();
     _sendPulse.dispose();
+    SendFlightBus.cancel();
     super.dispose();
   }
 
@@ -160,14 +165,14 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
       onceId: 'chat_composer',
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomPadding),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12),
+        child: _FocusMorphMargin(
+          focused: _focused,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // 运行状态提示（仅生成 / 计划模式时出现，首页态不显示）
-              _buildStatusLine(),
+              SpringAnimatedSize(child: _buildStatusLine()),
 
               // 外层容器：20px 圆角，聚焦时描边转 brand
               Builder(
@@ -176,37 +181,41 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // 输入行：最小高 44px
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(
-                            minHeight: AppTokens.kMinTouchTarget),
-                        child: TextField(
-                          focusNode: _focusNode,
-                          controller: widget.controller,
-                          minLines: 1,
-                          maxLines: 5,
-                          textInputAction: TextInputAction.newline,
-                          onTapOutside: (_) => _focusNode.unfocus(),
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w400,
-                            height: 1.6,
-                            color: textColor,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: widget.isRunning
-                                ? (widget.isPaused ? '补充要求后继续' : '补充要求')
-                                : '发消息',
-                            hintStyle: TextStyle(
+                      SpringAnimatedSize(
+                        key: _fieldKey,
+                        alignment: Alignment.bottomLeft,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                              minHeight: AppTokens.kMinTouchTarget),
+                          child: TextField(
+                            focusNode: _focusNode,
+                            controller: widget.controller,
+                            minLines: 1,
+                            maxLines: 5,
+                            textInputAction: TextInputAction.newline,
+                            onTapOutside: (_) => _focusNode.unfocus(),
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w400,
-                              color: textFaint,
+                              height: 1.6,
+                              color: textColor,
                             ),
-                            isDense: true,
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            filled: false,
-                            contentPadding: EdgeInsets.zero,
+                            decoration: InputDecoration(
+                              hintText: widget.isRunning
+                                  ? (widget.isPaused ? '补充要求后继续' : '补充要求')
+                                  : '发消息',
+                              hintStyle: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w400,
+                                color: textFaint,
+                              ),
+                              isDense: true,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              filled: false,
+                              contentPadding: EdgeInsets.zero,
+                            ),
                           ),
                         ),
                       ),
@@ -478,6 +487,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
         semanticLabel: '补充要求',
         onTap: () {
           NexusHaptics.medium(context);
+          SendFlightBus.launchFrom(_fieldKey.currentContext);
           widget.onSend();
         },
       );
@@ -522,6 +532,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
         onTap: () {
           NexusHaptics.light(context);
           _playSendRipple();
+          SendFlightBus.launchFrom(_fieldKey.currentContext);
           widget.onSend();
         },
       );
@@ -700,20 +711,11 @@ class _CircleIconButton extends StatelessWidget {
                 ),
               ),
               alignment: Alignment.center,
+              // L2：＋ ↔ × 以弹簧旋转形变切换。
               child: AnimatedSwitcher(
-                duration: MotionPreferences.shouldReduceMotion(context)
-                    ? Duration.zero
-                    : NexusMotion.fast,
-                switchInCurve: NexusMotion.curveEnter,
-                switchOutCurve: NexusMotion.curveExit,
-                transitionBuilder: (child, animation) => FadeTransition(
-                  opacity: animation,
-                  child: ScaleTransition(
-                    scale:
-                        Tween<double>(begin: 0.86, end: 1.0).animate(animation),
-                    child: child,
-                  ),
-                ),
+                duration: NexusMorph.duration(context),
+                transitionBuilder: NexusMorph.transition(context),
+                layoutBuilder: NexusMorph.layout,
                 child: Icon(
                   icon,
                   key: ValueKey(icon),
@@ -850,4 +852,30 @@ class _SendRipplePainter extends CustomPainter {
       oldDelegate.progress != progress ||
       oldDelegate.color != color ||
       oldDelegate.gain != gain;
+}
+
+/// L2：聚焦时胶囊向两侧舒展（左右边距 12 → 8dp），失焦收回，弹簧驱动。
+class _FocusMorphMargin extends StatelessWidget {
+  const _FocusMorphMargin({required this.focused, required this.child});
+
+  final ValueListenable<bool> focused;
+  final Widget child;
+
+  static const double rest = 12;
+  static const double focusedInset = 8;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+        valueListenable: focused,
+        child: child,
+        builder: (context, isFocused, child) => SpringValue(
+          value: isFocused ? focusedInset : rest,
+          spring: NexusSprings.smooth,
+          child: child,
+          builder: (context, inset, child) => Padding(
+            padding: EdgeInsets.symmetric(horizontal: inset),
+            child: child,
+          ),
+        ),
+      );
 }

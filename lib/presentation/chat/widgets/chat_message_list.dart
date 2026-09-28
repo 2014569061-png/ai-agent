@@ -8,6 +8,7 @@ import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_motion.dart';
 import '../../widgets/speaking_wave.dart';
 import 'message_bubble.dart';
+import '../../motion/send_flight.dart';
 
 /// 长会话消息列表：完整消息仍由上层持有，列表只按窗口构建可见消息。
 class ChatMessageList extends StatefulWidget {
@@ -458,6 +459,10 @@ class _MessageEntranceState extends State<_MessageEntrance>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
+  /// L2：用户刚从输入框发送的气泡认领一次「飞出」，从输入框位置飞入。
+  SendFlight? _flight;
+  bool _claimed = false;
+
   Duration get _baseDuration =>
       widget.isUser ? NexusMotion.bubbleRise : NexusMotion.base;
 
@@ -474,6 +479,20 @@ class _MessageEntranceState extends State<_MessageEntrance>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_claimed) {
+      _claimed = true;
+      if (widget.animate &&
+          widget.isUser &&
+          !MotionPreferences.shouldReduceMotion(context)) {
+        _flight = SendFlightBus.claim();
+      }
+    }
+    if (_flight != null) {
+      _controller
+        ..stop()
+        ..value = 1.0;
+      return;
+    }
     _controller.duration = MotionPreferences.adjustDuration(
       context,
       _baseDuration,
@@ -509,6 +528,14 @@ class _MessageEntranceState extends State<_MessageEntrance>
       return widget.child;
     }
     if (widget.isUser) {
+      final flight = _flight;
+      if (flight != null) {
+        return SendFlightLanding(
+          flight: flight,
+          onLanded: widget.onCompleted,
+          child: widget.child,
+        );
+      }
       return _buildUserRise();
     }
     final curve = CurvedAnimation(
