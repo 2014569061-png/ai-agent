@@ -27,6 +27,7 @@ import 'attachment_strip.dart';
 import 'reasoning_block.dart';
 import 'streaming_markdown.dart';
 import '../../motion/send_flight.dart';
+import '../../motion/micro_interactions.dart';
 
 /// 单个消息气泡：负责气泡布局、正文/思考/附件渲染与轻量操作（复制、重生成）。
 /// 用户消息：底 brandSoft、无描边、文字 15/400、内边距 10×14、圆角 20 20 6 20、最大宽 78%
@@ -755,10 +756,9 @@ class _ReplyActionRow extends StatelessWidget {
     final meta = metaLabel;
     return Row(
       children: [
-        _action(
-          icon: Icons.copy_outlined,
-          tooltip: '复制',
-          onPressed: () {
+        CopyFeedbackButton(
+          color: textMuted,
+          onCopy: () {
             Clipboard.setData(ClipboardData(text: copyText));
             NexusHaptics.light(context);
             FloatingToast.show(context, '已复制全文', tone: ToastTone.success);

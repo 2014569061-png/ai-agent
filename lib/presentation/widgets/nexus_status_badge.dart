@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../motion/micro_interactions.dart';
 
 /// 状态徽章语义色调
 enum NexusBadgeTone {
@@ -54,7 +55,8 @@ class NexusStatusBadge extends StatelessWidget {
         fg = isDark ? AppPalette.darkDanger : AppPalette.danger;
         break;
       case NexusBadgeTone.neutral:
-        bg = isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
+        bg =
+            isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
         fg = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
         break;
     }
@@ -95,6 +97,7 @@ class NexusStatusBadge extends StatelessWidget {
       ),
     );
 
+    content = PopOnChange(trigger: (label, tone), child: content);
     if (onTap != null) {
       return InkWell(
         onTap: onTap,

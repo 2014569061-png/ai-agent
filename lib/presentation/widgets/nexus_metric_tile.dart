@@ -4,6 +4,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'glass_surface.dart';
 import '../motion/press_squash.dart';
+import '../motion/micro_interactions.dart';
 
 /// 统一的指标展示卡片 (NexusMetricTile)
 /// 用于 Token、耗时、缓存命中率、重试次数、预计费用等指标的统一排版与可读性解释。
@@ -101,7 +102,7 @@ class NexusMetricTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
+              RollingText(
                 value,
                 style: TextStyle(
                   fontSize: 15,
