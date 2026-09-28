@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 
 import 'motion_preferences.dart';
 import 'nexus_spring.dart';
@@ -67,6 +67,47 @@ abstract final class SendFlightBus {
 /// 新用户气泡的「落地」（L2，FLIP）：首帧不可见地完成布局并测量自身位置，
 /// 随后从输入框底边弹簧（[NexusSprings.bouncy]）飞到自己的位置，同时从 0.94
 /// 放大到 1。位移异常（向下飞或超过 [maxTravel]）时直接显示。
+/// L2：标记"真正的气泡"。放在用户气泡外层；位于 [SendFlightLanding] 之下时，
+/// 落地动画以它的矩形 / 颜色 / 圆角作为形变终点；否则原样透传。
+class SendFlightAnchor extends StatefulWidget {
+  const SendFlightAnchor({
+    super.key,
+    required this.color,
+    required this.borderRadius,
+    required this.child,
+  });
+
+  final Color color;
+  final BorderRadius borderRadius;
+  final Widget child;
+
+  @override
+  State<SendFlightAnchor> createState() => _SendFlightAnchorState();
+}
+
+class _SendFlightAnchorState extends State<SendFlightAnchor> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    context.getInheritedWidgetOfExactType<_SendFlightScope>()?.landing._anchor =
+        this;
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
+class _SendFlightScope extends InheritedWidget {
+  const _SendFlightScope({required this.landing, required super.child});
+
+  final _SendFlightLandingState landing;
+
+  @override
+  bool updateShouldNotify(_SendFlightScope oldWidget) => false;
+}
+
+/// L2 发送飞出落地：输入框矩形（幽灵胶囊）以 bouncy 弹簧收缩形变为气泡矩形，
+/// 气泡内容随底边竖直飞入并在后半程淡入接棒——文字始终按最终宽度排版，不重排。
 class SendFlightLanding extends StatefulWidget {
   const SendFlightLanding({
     super.key,
@@ -81,6 +122,8 @@ class SendFlightLanding extends StatefulWidget {
 
   static const double startScale = 0.94;
   static const double maxTravel = 640;
+  static const Key contentKey = ValueKey('send_flight_content');
+  static const Key ghostKey = ValueKey('send_flight_ghost');
 
   @override
   State<SendFlightLanding> createState() => _SendFlightLandingState();
@@ -89,10 +132,16 @@ class SendFlightLanding extends StatefulWidget {
 class _SendFlightLandingState extends State<SendFlightLanding>
     with SingleTickerProviderStateMixin {
   static const Animation<double> _landed = AlwaysStoppedAnimation<double>(0);
+  static const BorderRadius _fallbackRadius =
+      BorderRadius.all(Radius.circular(20));
 
+  _SendFlightAnchorState? _anchor;
   SpringController? _spring;
-  Offset _delta = Offset.zero;
   bool _measured = false;
+  Rect? _source;
+  Rect _target = Rect.zero;
+  Color? _ghostColor;
+  BorderRadius _ghostRadius = _fallbackRadius;
 
   @override
   void initState() {
@@ -100,22 +149,41 @@ class _SendFlightLandingState extends State<SendFlightLanding>
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
   }
 
+  Rect? _localRect(RenderBox own, RenderObject? other) {
+    if (other is! RenderBox || !other.attached || !other.hasSize) return null;
+    final topLeft = own.globalToLocal(other.localToGlobal(Offset.zero));
+    return topLeft & other.size;
+  }
+
   void _measure() {
     if (!mounted) return;
-    final box = context.findRenderObject();
-    var dy = 0.0;
-    if (box is RenderBox && box.attached && box.hasSize) {
-      final bottom = box.localToGlobal(Offset(0, box.size.height)).dy;
-      dy = widget.flight.source.bottom - bottom;
-    }
+    final own = context.findRenderObject();
     final spring =
         NexusSpringPolicy.resolve(context, NexusSprings.bouncy, listen: false);
+    Rect? target;
+    Rect? source;
+    if (own is RenderBox && own.attached && own.hasSize) {
+      target = _localRect(own, _anchor?.context.findRenderObject()) ??
+          Offset.zero & own.size;
+      final src = widget.flight.source;
+      source = Rect.fromPoints(
+          own.globalToLocal(src.topLeft), own.globalToLocal(src.bottomRight));
+    }
+    final dy = (source?.bottom ?? 0) - (target?.bottom ?? 0);
     setState(() {
       _measured = true;
-      if (dy <= 0 || dy > SendFlightLanding.maxTravel || spring == null) {
+      if (target == null ||
+          source == null ||
+          dy <= 0 ||
+          dy > SendFlightLanding.maxTravel ||
+          spring == null) {
         return;
       }
-      _delta = Offset(0, dy);
+      _target = target;
+      _source = source;
+      final anchor = _anchor?.widget;
+      _ghostColor = anchor?.color ?? Theme.of(context).colorScheme.primary;
+      _ghostRadius = anchor?.borderRadius ?? _fallbackRadius;
       _spring = SpringController(vsync: this, value: 1);
     });
     final controller = _spring;
@@ -136,24 +204,65 @@ class _SendFlightLandingState extends State<SendFlightLanding>
   }
 
   @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-        animation: _spring ?? _landed,
-        child: widget.child,
-        builder: (context, child) {
-          final t = (_spring ?? _landed).value;
-          final scale =
-              1 - (1 - SendFlightLanding.startScale) * t.clamp(0.0, 1.0);
-          return Opacity(
-            opacity: _measured ? 1 : 0,
-            child: Transform.translate(
-              offset: _delta * t,
-              child: Transform.scale(
-                scale: scale,
-                alignment: Alignment.bottomRight,
-                child: child,
-              ),
-            ),
-          );
-        },
+  Widget build(BuildContext context) => _SendFlightScope(
+        landing: this,
+        child: AnimatedBuilder(
+          animation: _spring ?? _landed,
+          child: widget.child,
+          builder: (context, child) {
+            final source = _source;
+            final t = (_spring ?? _landed).value;
+            final ct = t.clamp(0.0, 1.0);
+            final flying = source != null && t != 0;
+            // 允许 t 轻微越过 0（bouncy 回弹），矩形随之外推形成回弹感。
+            final rect = flying ? Rect.lerp(_target, source, t)! : Rect.zero;
+            final radius = flying
+                ? BorderRadius.lerp(
+                    _ghostRadius, BorderRadius.circular(source.height / 2), ct)!
+                : _ghostRadius;
+            final contentOpacity = !_measured
+                ? 0.0
+                : flying
+                    ? (1 - (ct - 0.2) / 0.45).clamp(0.0, 1.0)
+                    : 1.0;
+            final ghostOpacity =
+                flying ? ((ct - 0.08) / 0.3).clamp(0.0, 1.0) : 0.0;
+            final scale = 1 - (1 - SendFlightLanding.startScale) * ct;
+            return Stack(
+              clipBehavior: Clip.none,
+              fit: StackFit.passthrough,
+              children: [
+                Opacity(
+                  key: SendFlightLanding.contentKey,
+                  opacity: contentOpacity,
+                  child: Transform.translate(
+                    offset:
+                        Offset(0, flying ? rect.bottom - _target.bottom : 0),
+                    child: Transform.scale(
+                      scale: scale,
+                      alignment: Alignment.bottomRight,
+                      child: child,
+                    ),
+                  ),
+                ),
+                Positioned.fromRect(
+                  rect: rect,
+                  child: IgnorePointer(
+                    child: Opacity(
+                      key: SendFlightLanding.ghostKey,
+                      opacity: ghostOpacity,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: _ghostColor,
+                          borderRadius: radius,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       );
 }

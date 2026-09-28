@@ -28,18 +28,18 @@ Widget _composer(TextEditingController controller) => Align(
       ),
     );
 
-double _translateY(WidgetTester tester) {
-  final t = tester.widget<Transform>(find
-      .descendant(
-          of: find.byType(SendFlightLanding), matching: find.byType(Transform))
-      .first);
-  return t.transform.getTranslation().y;
-}
+double _translateY(WidgetTester tester) => tester
+    .widget<Transform>(find
+        .descendant(
+            of: find.byKey(SendFlightLanding.contentKey),
+            matching: find.byType(Transform))
+        .first)
+    .transform
+    .getTranslation()
+    .y;
 
-double _opacity(WidgetTester tester) => tester
-    .widget<Opacity>(find.descendant(
-        of: find.byType(SendFlightLanding), matching: find.byType(Opacity)))
-    .opacity;
+double _opacity(WidgetTester tester, Key key) =>
+    tester.widget<Opacity>(find.byKey(key)).opacity;
 
 void main() {
   tearDown(SendFlightBus.reset);
@@ -61,39 +61,72 @@ void main() {
     expect(SendFlightBus.claim(), isNull);
   });
 
+  const bubble = Key('bubble');
   Widget landing(SendFlight flight, VoidCallback onLanded) => Stack(
         children: [
           Positioned(
             top: 100,
+            left: 16,
             right: 16,
             child: SendFlightLanding(
               flight: flight,
               onLanded: onLanded,
-              child: const SizedBox(width: 160, height: 40),
+              child: const Align(
+                alignment: Alignment.centerRight,
+                child: SendFlightAnchor(
+                  color: Color(0xFF3355FF),
+                  borderRadius: BorderRadius.all(Radius.circular(20)),
+                  child: SizedBox(key: bubble, width: 160, height: 40),
+                ),
+              ),
             ),
           ),
         ],
       );
 
-  testWidgets('落地：首帧不可见测量，随后从输入框底边弹簧飞到原位', (tester) async {
+  testWidgets('落地：幽灵胶囊从输入框矩形弹簧收缩为气泡矩形，内容后半程接棒', (tester) async {
     var landed = 0;
-    const flight =
-        SendFlight(source: Rect.fromLTWH(12, 500, 300, 40), at: Duration.zero);
+    const source = Rect.fromLTWH(12, 500, 360, 48);
+    const flight = SendFlight(source: source, at: Duration.zero);
     await tester.pumpWidget(_host(landing(flight, () => landed++)));
-    expect(_opacity(tester), 0);
+    expect(_opacity(tester, SendFlightLanding.contentKey), 0);
 
     await tester.pump();
-    final bottom = tester.getBottomLeft(find.byType(SendFlightLanding)).dy;
-    // 起点：气泡底边对齐输入框底边（540）。
-    expect(_translateY(tester), closeTo(540 - bottom, 1));
-    expect(_opacity(tester), 1);
+    final ghost = find.byKey(SendFlightLanding.ghostKey);
+    // 起点：幽灵与输入框重合，内容尚未出现。
+    final r0 = tester.getRect(ghost);
+    expect(r0.left, closeTo(source.left, 1));
+    expect(r0.width, closeTo(source.width, 1));
+    expect(r0.bottom, closeTo(source.bottom, 1));
+    expect(_opacity(tester, SendFlightLanding.ghostKey), 1);
+    expect(_opacity(tester, SendFlightLanding.contentKey), 0);
 
-    await tester.pump(const Duration(milliseconds: 120));
-    final mid = _translateY(tester);
-    expect(mid, lessThan(540 - bottom));
+    await tester.pump(const Duration(milliseconds: 90));
+    final r1 = tester.getRect(ghost);
+    expect(r1.width, lessThan(source.width));
+    expect(r1.bottom, lessThan(source.bottom));
+
     await tester.pumpAndSettle();
+    final target = tester.getRect(find.byKey(bubble));
+    expect(target.width, 160);
+    expect(_opacity(tester, SendFlightLanding.ghostKey), 0);
+    expect(_opacity(tester, SendFlightLanding.contentKey), 1);
     expect(_translateY(tester), closeTo(0, 0.5));
     expect(landed, 1);
+  });
+
+  testWidgets('落地：中途幽灵矩形趋向锚点气泡，而非整行', (tester) async {
+    const source = Rect.fromLTWH(12, 500, 360, 48);
+    const flight = SendFlight(source: source, at: Duration.zero);
+    await tester.pumpWidget(_host(landing(flight, () {})));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    final r = tester.getRect(find.byKey(SendFlightLanding.ghostKey));
+    final target = tester.getRect(find.byKey(bubble));
+    // 接近尾声：宽度已接近 160（气泡），远小于整行宽度。
+    expect(r.width, lessThan(220));
+    // bouncy 回弹允许约 5% 外推。
+    expect(r.right, closeTo(target.right, 32));
   });
 
   testWidgets('落地：来源在气泡上方（异常）时直接显示', (tester) async {
@@ -103,7 +136,18 @@ void main() {
     await tester.pumpWidget(_host(landing(flight, () => landed++)));
     await tester.pump();
     expect(_translateY(tester), 0);
+    expect(_opacity(tester, SendFlightLanding.contentKey), 1);
+    expect(_opacity(tester, SendFlightLanding.ghostKey), 0);
     expect(landed, 1);
+  });
+
+  testWidgets('无落地动画包裹时 SendFlightAnchor 原样透传', (tester) async {
+    await tester.pumpWidget(_host(const SendFlightAnchor(
+      color: Color(0xFF000000),
+      borderRadius: BorderRadius.zero,
+      child: Text('x'),
+    )));
+    expect(find.text('x'), findsOneWidget);
   });
 
   testWidgets('胶囊：点击发送发起飞出；reduced 下不发起', (tester) async {

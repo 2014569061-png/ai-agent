@@ -26,6 +26,7 @@ import '../../widgets/speaking_wave.dart';
 import 'attachment_strip.dart';
 import 'reasoning_block.dart';
 import 'streaming_markdown.dart';
+import '../../motion/send_flight.dart';
 
 /// 单个消息气泡：负责气泡布局、正文/思考/附件渲染与轻量操作（复制、重生成）。
 /// 用户消息：底 brandSoft、无描边、文字 15/400、内边距 10×14、圆角 20 20 6 20、最大宽 78%
@@ -176,22 +177,34 @@ class MessageBubble extends StatelessWidget {
     );
 
     final body = isUser
-        ? Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color:
-                  isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
-              // DeepSeek 式用户气泡：浅色品牌底、无描边，右下角收成小圆角。
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(6),
-              ),
+        ? SendFlightAnchor(
+            // L2：发送飞出的形变终点（与下方气泡底色 / 圆角一致）。
+            color:
+                isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(20),
+              topRight: Radius.circular(20),
+              bottomLeft: Radius.circular(20),
+              bottomRight: Radius.circular(6),
             ),
-            child: selecting
-                ? SelectableText(message.text, style: userTextStyle)
-                : Text(message.text, style: userTextStyle),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppPalette.darkBrandSoft
+                    : AppPalette.lightBrandSoft,
+                // DeepSeek 式用户气泡：浅色品牌底、无描边，右下角收成小圆角。
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(6),
+                ),
+              ),
+              child: selecting
+                  ? SelectableText(message.text, style: userTextStyle)
+                  : Text(message.text, style: userTextStyle),
+            ),
           )
         : selecting
             ? SelectableText(plainText, style: plainStyle)
