@@ -5,6 +5,7 @@ import '../motion/nexus_motion.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../motion/press_squash.dart';
+import '../motion/nexus_spring.dart';
 
 /// 统一可折叠展开组件（用于推理过程、技术错误、工具输出、日志详情等）
 class NexusDisclosure extends StatefulWidget {
@@ -233,13 +234,10 @@ class NexusExpandSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MotionPreferences.shouldReduceMotion(context);
-    return AnimatedSize(
-      duration: reduceMotion ? Duration.zero : (duration ?? NexusMotion.base),
-      reverseDuration:
-          reduceMotion ? Duration.zero : (reverseDuration ?? NexusMotion.fast),
-      curve: NexusMotion.curveStandard,
-      alignment: alignment,
-      child: expanded ? child : const SizedBox.shrink(),
-    );
+    final content = expanded ? child : const SizedBox.shrink();
+    // reduced 直接切换：零时长 AnimatedSize 会在布局中重新标脏自身。
+    if (reduceMotion) return content;
+    // L3：展开 / 收起以 smooth 弹簧形变（工具卡、计划面板、思考过程、披露区共用）。
+    return SpringAnimatedSize(alignment: alignment, child: content);
   }
 }

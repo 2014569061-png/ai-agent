@@ -220,7 +220,7 @@ void main() {
       expect(start.width / end.width, closeTo(0.96, 0.005));
     });
 
-    testWidgets('助手气泡保持原有入场（无缩放）', (tester) async {
+    testWidgets('L3：助手气泡弹簧入场（自 0.97 放大并上移落定）', (tester) async {
       final base = [_msg(MessageRole.user, 'question')];
       await tester.pumpWidget(list(base));
       await tester.pumpAndSettle();
@@ -229,7 +229,7 @@ void main() {
       final start = measure(tester, 'assistant reply');
       await tester.pumpAndSettle();
       final end = measure(tester, 'assistant reply');
-      expect(start.width, closeTo(end.width, 0.01));
+      expect(start.width, closeTo(end.width * 0.97, 1));
       expect(start.bottom, greaterThan(end.bottom));
     });
 

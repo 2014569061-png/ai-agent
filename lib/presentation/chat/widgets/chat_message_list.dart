@@ -9,6 +9,8 @@ import '../../motion/nexus_motion.dart';
 import '../../widgets/speaking_wave.dart';
 import 'message_bubble.dart';
 import '../../motion/send_flight.dart';
+import '../../motion/nexus_spring.dart';
+import '../../motion/spring_follow_height.dart';
 
 /// 长会话消息列表：完整消息仍由上层持有，列表只按窗口构建可见消息。
 class ChatMessageList extends StatefulWidget {
@@ -382,7 +384,10 @@ class ChatMessageListState extends State<ChatMessageList> {
               : null,
           child: Padding(
             padding: EdgeInsets.only(bottom: beforeNewTurn ? 12 : 0),
-            child: child,
+            // L3：流式输出时高度弹簧连续追随，不逐行跳变。
+            child: message.role == MessageRole.user
+                ? child
+                : SpringFollowHeight(enabled: liveIndex == index, child: child),
           ),
         );
       },
@@ -451,6 +456,10 @@ class _MessageEntrance extends StatefulWidget {
   static const double userRiseOffset = 16;
   static const double userRiseScale = 0.96;
 
+  /// L3：助手气泡入场上移距离与起始缩放（bouncy 弹簧带一次回弹）。
+  static const double assistantRiseOffset = 14;
+  static const double assistantRiseScale = 0.97;
+
   @override
   State<_MessageEntrance> createState() => _MessageEntranceState();
 }
@@ -461,6 +470,9 @@ class _MessageEntranceState extends State<_MessageEntrance>
 
   /// L2：用户刚从输入框发送的气泡认领一次「飞出」，从输入框位置飞入。
   SendFlight? _flight;
+
+  /// L3：助手入场位移 / 缩放曲线（bouncy 弹簧；关闭时回落到入场曲线）。
+  Curve _popCurve = NexusMotion.curveEnter;
   bool _claimed = false;
 
   Duration get _baseDuration =>
@@ -493,10 +505,14 @@ class _MessageEntranceState extends State<_MessageEntrance>
         ..value = 1.0;
       return;
     }
-    _controller.duration = MotionPreferences.adjustDuration(
-      context,
-      _baseDuration,
-    );
+    final pop = widget.isUser
+        ? null
+        : NexusSpringPolicy.resolve(context, NexusSprings.bouncy);
+    _popCurve =
+        pop == null ? NexusMotion.curveEnter : NexusSprings.curveOf(pop);
+    _controller.duration = pop == null
+        ? MotionPreferences.adjustDuration(context, _baseDuration)
+        : NexusSprings.settleOf(pop);
     if (!widget.animate || MotionPreferences.shouldReduceMotion(context)) {
       _controller
         ..stop()
@@ -538,18 +554,28 @@ class _MessageEntranceState extends State<_MessageEntrance>
       }
       return _buildUserRise();
     }
-    final curve = CurvedAnimation(
+    // L3：助手气泡弹簧入场——上移 + 轻微放大带一次回弹，透明度前 40% 完成。
+    final opacity = CurvedAnimation(
       parent: _controller,
-      curve: NexusMotion.curveEnter,
+      curve: const Interval(0, 0.4, curve: NexusMotion.curveEnter),
     );
     return FadeTransition(
-      opacity: curve,
-      child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.025),
-          end: Offset.zero,
-        ).animate(curve),
+      opacity: opacity,
+      child: AnimatedBuilder(
+        animation: _controller,
         child: widget.child,
+        builder: (context, child) {
+          final v = _popCurve.transform(_controller.value);
+          const rest = _MessageEntrance.assistantRiseScale;
+          return Transform.translate(
+            offset: Offset(0, _MessageEntrance.assistantRiseOffset * (1 - v)),
+            child: Transform.scale(
+              scale: rest + (1 - rest) * v,
+              alignment: Alignment.topLeft,
+              child: child,
+            ),
+          );
+        },
       ),
     );
   }
