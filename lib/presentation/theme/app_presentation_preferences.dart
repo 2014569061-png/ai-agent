@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import '../motion/motion_preferences.dart';
 import 'app_appearance_controller.dart';
+import '../motion/tap_origin.dart';
 
 /// Above the Navigator so already-open routes and dialogs see preference changes.
 class AppPresentationPreferences extends StatelessWidget {
@@ -9,24 +10,28 @@ class AppPresentationPreferences extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<String>(
-    valueListenable: AppAppearanceController.effects,
-    builder: (context, effects, child) => ValueListenableBuilder<double>(
-      valueListenable: AppAppearanceController.fontScale,
-      builder: (context, fontScale, child) {
-        final media = MediaQuery.of(context);
-        final level = MotionPreferences.parse(effects);
-        return NexusMotionScope(level: level, child: MediaQuery(
-          data: media.copyWith(
-            disableAnimations: media.disableAnimations || level == MotionLevel.off,
-            textScaler: AppTextScaler(media.textScaler, fontScale),
-          ),
-          child: child!,
-        ));
-      },
-      child: child,
-    ),
-    child: child,
-  );
+        valueListenable: AppAppearanceController.effects,
+        builder: (context, effects, child) => ValueListenableBuilder<double>(
+          valueListenable: AppAppearanceController.fontScale,
+          builder: (context, fontScale, child) {
+            final media = MediaQuery.of(context);
+            final level = MotionPreferences.parse(effects);
+            NexusTapOrigin.ensureInstalled(); // L4：弹窗从点击处长出
+            return NexusMotionScope(
+                level: level,
+                child: MediaQuery(
+                  data: media.copyWith(
+                    disableAnimations:
+                        media.disableAnimations || level == MotionLevel.off,
+                    textScaler: AppTextScaler(media.textScaler, fontScale),
+                  ),
+                  child: child!,
+                ));
+          },
+          child: child,
+        ),
+        child: child,
+      );
 }
 
 /// Preserve the platform's non-linear scaling curve instead of sampling at 1sp.
@@ -39,8 +44,10 @@ class AppTextScaler extends TextScaler {
   @override
   double get textScaleFactor => scale(14) / 14;
   @override
-  bool operator ==(Object other) => other is AppTextScaler &&
-      other.system == system && other.multiplier == multiplier;
+  bool operator ==(Object other) =>
+      other is AppTextScaler &&
+      other.system == system &&
+      other.multiplier == multiplier;
   @override
   int get hashCode => Object.hash(system, multiplier);
 }

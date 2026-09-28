@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 
 import '../l10n/app_strings.dart';
 import '../motion/motion_preferences.dart';
+import '../motion/nexus_haptics.dart';
 import '../motion/nexus_motion.dart';
+import '../motion/nexus_spring.dart';
+import '../motion/tap_origin.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
@@ -209,122 +211,179 @@ class _NexusSheetMotion extends StatefulWidget {
 
 class _NexusSheetMotionState extends State<_NexusSheetMotion>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _settleController;
-  var _dragFraction = 0.0;
-  var _settleFrom = 0.0;
-  var _settleTo = 0.0;
+  /// 下拉关闭阈值（占屏高比例）与甩动速度阈值（px/s）。
+  static const double dismissFraction = 0.18;
+  static const double dismissVelocity = 900;
 
-  @override
-  void initState() {
-    super.initState();
-    _settleController = AnimationController(
-      vsync: this,
-      duration: NexusMotion.base,
-    )..addListener(() {
-        final t = NexusMotion.curveSpring.transform(_settleController.value);
-        setState(
-            () => _dragFraction = ui.lerpDouble(_settleFrom, _settleTo, t)!);
-      });
-  }
+  /// 向上拖过静止位时的橡皮筋极限位移（px）。
+  static const double rubberLimit = 36;
+
+  /// 拖动位移（占屏高比例；负值 = 向上的橡皮筋区）。弹簧驱动，松手保留速度。
+  late final SpringController _drag = SpringController(vsync: this);
+
+  /// 手指累计位移（px，未经橡皮筋换算）。
+  double _rawDrag = 0;
+  bool _pastThreshold = false;
+
+  double get _dragFraction => _drag.value;
 
   @override
   void dispose() {
-    _settleController.dispose();
+    _drag.dispose();
     super.dispose();
+  }
+
+  double _screenHeight() => MediaQuery.sizeOf(context).height;
+
+  /// 向下 1:1 跟手；向上越过静止位按橡皮筋衰减，越拉越紧。
+  static double rubberBand(double raw) {
+    if (raw >= 0) return raw;
+    final x = -raw;
+    return -rubberLimit * (1 - 1 / (x * 0.55 / rubberLimit + 1));
+  }
+
+  void _dragBy(double delta) {
+    final height = _screenHeight();
+    if (_drag.isAnimating) {
+      // 接住回弹中的抽屉：从当前显示位置继续跟手。
+      _rawDrag = _dragFraction * height;
+      _drag.stop();
+    }
+    _rawDrag = (_rawDrag + delta).clamp(-height, height * 0.9);
+    _drag.jumpTo(rubberBand(_rawDrag) / height);
+    final past = _dragFraction > dismissFraction;
+    if (past != _pastThreshold) {
+      _pastThreshold = past;
+      NexusHaptics.selection(context);
+    }
+  }
+
+  void _release(double velocity) {
+    final height = _screenHeight();
+    _rawDrag = 0;
+    _pastThreshold = false;
+    final shouldDismiss =
+        _dragFraction > dismissFraction || velocity > dismissVelocity;
+    if (shouldDismiss) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    if (_dragFraction.abs() < 0.001 && velocity.abs() < 1) {
+      _drag.jumpTo(0);
+      return;
+    }
+    NexusHaptics.light(context);
+    // 带着手指速度弹回静止位：bouncy 允许一次轻回弹（reduced / off 已降级）。
+    _drag.animateTo(
+      0,
+      spring: NexusSpringPolicy.resolve(context, NexusSprings.bouncy,
+          listen: false),
+      velocity: velocity / height,
+    );
   }
 
   bool _onDrag(_SheetDragNotification notification) {
     if (!widget.isBottomDocked) return false;
-    if (!notification.isEnd) {
-      if (notification.delta <= 0 && _dragFraction <= 0) return true;
-      _settleController.stop();
-      final height = MediaQuery.sizeOf(context).height;
-      setState(() {
-        _dragFraction = (_dragFraction + notification.delta / height)
-            .clamp(0.0, 0.42)
-            .toDouble();
-      });
-      return true;
-    }
-
-    final velocity = notification.velocity!;
-    final shouldDismiss = _dragFraction > 0.18 || velocity > 900;
-    if (shouldDismiss) {
-      Navigator.of(context).maybePop();
-    } else if (MotionPreferences.shouldReduceMotion(context)) {
-      _settleController.stop();
-      setState(() => _dragFraction = 0.0);
+    if (notification.isEnd) {
+      _release(notification.velocity!);
     } else {
-      _settleFrom = _dragFraction;
-      _settleTo = 0.0;
-      _settleController.forward(from: 0);
+      // 下拉 1:1 跟手；静止位继续上推进入橡皮筋区。
+      _dragBy(notification.delta);
     }
     return true;
   }
 
+  /// 内容滚到顶后继续下拉 → 转交给抽屉跟手；抽屉已下移时上滑先收回抽屉。
+  bool _onScroll(ScrollNotification notification) {
+    if (!widget.isBottomDocked || notification.depth != 0) return false;
+    if (notification is OverscrollNotification &&
+        notification.dragDetails != null &&
+        notification.overscroll < 0) {
+      _dragBy(-notification.overscroll);
+    } else if (notification is ScrollUpdateNotification &&
+        notification.dragDetails != null &&
+        _dragFraction > 0 &&
+        (notification.scrollDelta ?? 0) > 0) {
+      _dragBy(-(notification.scrollDelta ?? 0));
+    } else if (notification is ScrollEndNotification &&
+        _dragFraction.abs() > 0.001) {
+      _release(notification.dragDetails?.velocity.pixelsPerSecond.dy ?? 0);
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final spring = NexusSpringPolicy.resolve(context, NexusSprings.bouncy);
     final entering = CurvedAnimation(
       parent: widget.animation,
-      curve: NexusMotion.curveSheetEnter,
+      // L4：入场按 bouncy 弹簧曲线，落位时带一次轻回弹。
+      curve: spring == null
+          ? NexusMotion.curveSheetEnter
+          : NexusSprings.curveOf(spring, allowOvershoot: true),
       reverseCurve: NexusMotion.curveExit,
     );
-    return NotificationListener<_SheetDragNotification>(
-      onNotification: _onDrag,
-      child: AnimatedBuilder(
-        animation: entering,
-        child: widget.child,
-        builder: (context, child) {
-          final dismissalProgress = widget.isBottomDocked
-              ? (_dragFraction / 0.42).clamp(0.0, 1.0)
-              : 0.0;
-          final barrierOpacity = entering.value * (1.0 - dismissalProgress);
-          final sheetScale = 1.0 - dismissalProgress * 0.015;
-          final barrier = Semantics(
-            button: true,
-            label: widget.barrierLabel,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.of(context).maybePop(),
-              child: ColoredBox(
-                color: widget.barrierColor.withValues(alpha: 0),
-                child: Opacity(
-                  opacity: barrierOpacity,
-                  child: ColoredBox(color: widget.barrierColor),
+    return NotificationListener<ScrollNotification>(
+      onNotification: _onScroll,
+      child: NotificationListener<_SheetDragNotification>(
+        onNotification: _onDrag,
+        child: AnimatedBuilder(
+          animation: Listenable.merge([entering, _drag]),
+          child: widget.child,
+          builder: (context, child) {
+            final enter = entering.value;
+            final dismissalProgress = widget.isBottomDocked
+                ? (_dragFraction / 0.42).clamp(0.0, 1.0)
+                : 0.0;
+            final barrierOpacity =
+                (enter * (1.0 - dismissalProgress)).clamp(0.0, 1.0);
+            final sheetScale = 1.0 - dismissalProgress * 0.015;
+            final barrier = Semantics(
+              button: true,
+              label: widget.barrierLabel,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).maybePop(),
+                child: ColoredBox(
+                  color: widget.barrierColor.withValues(alpha: 0),
+                  child: Opacity(
+                    opacity: barrierOpacity,
+                    child: ColoredBox(color: widget.barrierColor),
+                  ),
                 ),
               ),
-            ),
-          );
-          if (!widget.isBottomDocked) {
+            );
+            if (!widget.isBottomDocked) {
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  barrier,
+                  Transform.scale(
+                    scale: 0.95 + 0.05 * enter,
+                    child: child,
+                  ),
+                ],
+              );
+            }
+            // Keep the glass surface outside Opacity so BackdropFilter samples
+            // the scene directly. Only the separate barrier fades with drag.
+            final offset = (1 - enter) * 0.18 + _dragFraction;
             return Stack(
               fit: StackFit.expand,
               children: [
                 barrier,
-                ScaleTransition(
-                  scale: Tween<double>(begin: 0.95, end: 1.0).animate(entering),
-                  child: child,
+                FractionalTranslation(
+                  translation: Offset(0, offset),
+                  child: Transform.scale(
+                    alignment: Alignment.bottomCenter,
+                    scale: sheetScale,
+                    child: child,
+                  ),
                 ),
               ],
             );
-          }
-          // Keep the glass surface outside Opacity so BackdropFilter samples
-          // the scene directly. Only the separate barrier fades with drag.
-          final offset = (1 - entering.value) * 0.18 + _dragFraction;
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              barrier,
-              FractionalTranslation(
-                translation: Offset(0, offset),
-                child: Transform.scale(
-                  alignment: Alignment.bottomCenter,
-                  scale: sheetScale,
-                  child: child,
-                ),
-              ),
-            ],
-          );
-        },
+          },
+        ),
       ),
     );
   }
@@ -353,6 +412,9 @@ Future<T?> showNexusDialog<T>({
   // 只有返回裸内容（例如 Padding + Column）时才需要本函数提供卡片背景。
   bool selfContained = true,
 }) {
+  // L4：记住触发这次弹窗的按下位置，对话框从那里长出来。
+  NexusTapOrigin.ensureInstalled();
+  final origin = NexusTapOrigin.recent();
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: barrierDismissible,
@@ -463,11 +525,63 @@ Future<T?> showNexusDialog<T>({
       if (MotionPreferences.shouldReduceMotion(context)) {
         return child;
       }
-      final curve = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-      return ScaleTransition(
-        scale: Tween<double>(begin: 0.92, end: 1.0).animate(curve),
+      return _NexusDialogMotion(
+        animation: anim,
+        origin: origin,
+        // 玻璃外壳（非 selfContained）不能套 Opacity，否则 BackdropFilter 失效。
+        fade: selfContained,
         child: child,
       );
     },
   );
+}
+
+/// L4 对话框入场：自点击位置以 bouncy 弹簧放大长出（带一次轻回弹），
+/// 没有新鲜的点击位置时居中放大；退场沿原路收回。
+class _NexusDialogMotion extends StatelessWidget {
+  const _NexusDialogMotion({
+    required this.animation,
+    required this.origin,
+    required this.fade,
+    required this.child,
+  });
+
+  final Animation<double> animation;
+  final Offset? origin;
+  final bool fade;
+  final Widget child;
+
+  static const double fromTapScale = 0.72;
+  static const double centeredScale = 0.92;
+
+  @override
+  Widget build(BuildContext context) {
+    final spring = NexusSpringPolicy.resolve(context, NexusSprings.bouncy);
+    final curve = CurvedAnimation(
+      parent: animation,
+      curve: spring == null
+          ? Curves.easeOutCubic
+          : NexusSprings.curveOf(spring, allowOvershoot: true),
+      reverseCurve: NexusMotion.curveExit,
+    );
+    final fromTap = origin != null && fade;
+    Widget result = ScaleTransition(
+      alignment: NexusTapOrigin.alignmentIn(MediaQuery.sizeOf(context), origin),
+      scale: Tween<double>(
+        begin: fromTap ? fromTapScale : centeredScale,
+        end: 1.0,
+      ).animate(curve),
+      child: child,
+    );
+    if (fade) {
+      result = FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0, 0.45, curve: NexusMotion.curveEnter),
+        ),
+        child: result,
+      );
+    }
+    return result;
+  }
 }

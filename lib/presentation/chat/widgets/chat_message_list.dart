@@ -508,8 +508,9 @@ class _MessageEntranceState extends State<_MessageEntrance>
     final pop = widget.isUser
         ? null
         : NexusSpringPolicy.resolve(context, NexusSprings.bouncy);
-    _popCurve =
-        pop == null ? NexusMotion.curveEnter : NexusSprings.curveOf(pop);
+    _popCurve = pop == null
+        ? NexusMotion.curveEnter
+        : NexusSprings.curveOf(pop, allowOvershoot: true);
     _controller.duration = pop == null
         ? MotionPreferences.adjustDuration(context, _baseDuration)
         : NexusSprings.settleOf(pop);
