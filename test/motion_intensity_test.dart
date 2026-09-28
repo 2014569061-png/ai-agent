@@ -21,29 +21,30 @@ double _contrast(Color a, Color b) {
 }
 
 void main() {
-  test('强度枚举：增益、标签、未知值回落到鲜明', () {
+  test('强度枚举：增益、标签、未知值回落到轻盈', () {
     expect(MotionIntensity.values.map((e) => e.gain), [1.0, 1.5, 2.0]);
     expect(MotionIntensity.values.map((e) => e.label), ['轻盈', '标准', '鲜明']);
-    expect(MotionIntensity.parse(null), MotionIntensity.vivid);
-    expect(MotionIntensity.parse('bogus'), MotionIntensity.vivid);
-    expect(MotionIntensity.parse('subtle'), MotionIntensity.subtle);
+    expect(MotionIntensity.parse(null), MotionIntensity.subtle);
+    expect(MotionIntensity.parse('bogus'), MotionIntensity.subtle);
+    expect(MotionIntensity.parse('vivid'), MotionIntensity.vivid);
     expect(amplify(12, 2, 0.5), 18);
     expect(amplify(12, 1, 0.5), 12);
   });
 
-  test('偏好：默认鲜明，设置后持久化并可重新载入', () async {
+  test('偏好：默认轻盈，设置后持久化并可重新载入', () async {
     SharedPreferences.setMockInitialValues({});
     await AppAppearanceController.load();
     expect(
-        AppAppearanceController.motionIntensity.value, MotionIntensity.vivid);
-    await AppAppearanceController.setMotionIntensity(MotionIntensity.subtle);
+        AppAppearanceController.motionIntensity.value, MotionIntensity.subtle);
+    await AppAppearanceController.setMotionIntensity(MotionIntensity.vivid);
     final prefs = await SharedPreferences.getInstance();
     expect(
-        prefs.getString(AppAppearanceController.motionIntensityKey), 'subtle');
-    AppAppearanceController.motionIntensity.value = MotionIntensity.vivid;
+        prefs.getString(AppAppearanceController.motionIntensityKey), 'vivid');
+    AppAppearanceController.motionIntensity.value = MotionIntensity.subtle;
     await AppAppearanceController.load(prefs);
     expect(
-        AppAppearanceController.motionIntensity.value, MotionIntensity.subtle);
+        AppAppearanceController.motionIntensity.value, MotionIntensity.vivid);
+    AppAppearanceController.motionIntensity.value = MotionIntensity.subtle;
   });
 
   test('预算：增益只放大粒子数，不改变开关；默认增益为 1', () {

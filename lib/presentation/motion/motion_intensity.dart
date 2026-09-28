@@ -3,13 +3,15 @@
 /// 只影响「强度」（透明度、尺寸、位移、数量），不影响是否开启——
 /// 开关仍由 [MotionBudget] 的分档决定，reduced / off 下依旧全部关闭。
 enum MotionIntensity {
-  /// 轻盈：原始参数（M1–M10 的设计值）。
+  /// 轻盈：原始参数（M1–M10 的设计值，默认）。
+  ///
+  /// L0 起动效重心转向弹簧与形变，装饰光效默认弱化为轻盈。
   subtle,
 
   /// 标准：约 1.5 倍。
   standard,
 
-  /// 鲜明：约 2 倍（默认）。
+  /// 鲜明：约 2 倍。
   vivid;
 
   double get gain => switch (this) {
@@ -25,7 +27,7 @@ enum MotionIntensity {
       };
 
   static MotionIntensity parse(String? value) => MotionIntensity.values
-      .firstWhere((e) => e.name == value, orElse: () => MotionIntensity.vivid);
+      .firstWhere((e) => e.name == value, orElse: () => MotionIntensity.subtle);
 }
 
 /// 按增益放大一个基础值：`base × (1 + (gain − 1) × k)`。

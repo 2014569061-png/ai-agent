@@ -15,7 +15,7 @@ abstract final class AppAppearanceController {
 
   /// 动效强度（S1）。默认「鲜明」，只放大装饰效果，不改变动效等级开关。
   static final motionIntensity =
-      ValueNotifier<MotionIntensity>(MotionIntensity.vivid);
+      ValueNotifier<MotionIntensity>(MotionIntensity.subtle);
 
   /// Mobile devices have the widest performance range. Keep the initial
   /// composition to one inexpensive blur pass there; people can still select
