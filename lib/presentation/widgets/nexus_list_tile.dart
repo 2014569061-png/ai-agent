@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'nexus_touch_light.dart';
 import '../motion/press_squash.dart';
+import 'nexus_switch.dart';
 
 /// 二级页面统一的列表行，提供图标、标题、副标题、可选开关/尾巴、内嵌式分隔。
 /// 避免各页面各自用原始 ListTile + 硬编码字体颜色。
@@ -132,7 +133,7 @@ class _Switch extends StatelessWidget {
       height: 32,
       child: FittedBox(
         fit: BoxFit.scaleDown,
-        child: Switch(
+        child: NexusSwitch(
           value: value,
           onChanged: enabled ? onChanged : null,
         ),

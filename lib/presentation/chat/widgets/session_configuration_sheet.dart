@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import '../../../application/chat_controller.dart';
 import '../../../domain/models.dart';
 import '../../../infrastructure/tools/tool_humanizer.dart';
+import '../../widgets/nexus_switch.dart';
 
 /// 统一「会话配置」面板：一次看清并修改模型/服务、Agent、工作区、
 /// 思考程度、计划模式。把原先散落在头像菜单、底栏、顶部 chip、输入区的
@@ -112,7 +113,7 @@ class SessionConfigurationSheet extends StatelessWidget {
                   '${state.reasoningMode.label} · ${state.reasoningMode.description}',
               onTap: onSelectReasoningMode,
             ),
-            SwitchListTile(
+            NexusSwitchListTile(
               contentPadding: EdgeInsets.zero,
               secondary: Icon(Icons.language_rounded,
                   color: state.webSearchEnabled
@@ -167,7 +168,7 @@ class SessionConfigurationSheet extends StatelessWidget {
                     .join('、'),
               ),
             if (onSelectMode == null)
-              SwitchListTile(
+              NexusSwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: Icon(Icons.checklist_rounded,
                     color: state.planMode

@@ -23,6 +23,7 @@ import '../widgets/nexus_status_badge.dart';
 import '../widgets/section_card.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_segmented_button.dart';
+import '../widgets/nexus_switch.dart';
 
 /// 独立的 MCP 服务器管理页，供设置页和深链接复用。
 class McpServersPage extends StatefulWidget {
@@ -651,7 +652,7 @@ class _McpServersPageState extends State<McpServersPage> {
                                       ],
                                     ),
                                   ),
-                                  Switch(
+                                  NexusSwitch(
                                     value: server.enabled,
                                     onChanged: (enabled) async {
                                       unawaited(

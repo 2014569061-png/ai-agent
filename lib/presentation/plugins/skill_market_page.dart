@@ -14,6 +14,7 @@ import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_switch.dart';
 
 /// Skill 市场（v0.6）：通过 GitHub 地址安装纯指令 + 静态资源的 Skill 包。
 class SkillMarketPage extends ConsumerStatefulWidget {
@@ -267,20 +268,25 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                     children: [
                       Text('热门精选',
                           style: TextStyle(
-                              fontSize: AppTokens.fontSizeBody, fontWeight: FontWeight.w600)),
+                              fontSize: AppTokens.fontSizeBody,
+                              fontWeight: FontWeight.w600)),
                       SizedBox(height: 2),
-                      Text('随应用内置，离线即可使用', style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
+                      Text('随应用内置，离线即可使用',
+                          style:
+                              TextStyle(fontSize: AppTokens.fontSizeFootnote)),
                     ],
                   ),
                 ),
                 Text('${SkillCatalog.featuredCount} 款',
-                    style: TextStyle(fontSize: AppTokens.fontSizeFootnote, color: muted)),
+                    style: TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote, color: muted)),
               ],
             ),
             const SizedBox(height: 10),
             Text(
               '覆盖开发、调试、审查、测试、接口、数据库、Git 和文档等常用场景。启用后可在聊天中自动匹配，也可通过 /技能名 主动调用。',
-              style: TextStyle(fontSize: AppTokens.fontSizeMeta, color: muted, height: 1.35),
+              style: TextStyle(
+                  fontSize: AppTokens.fontSizeMeta, color: muted, height: 1.35),
             ),
             const SizedBox(height: 10),
             Wrap(
@@ -301,7 +307,8 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                       ),
                     ),
                     child: Text(name,
-                        style: TextStyle(fontSize: AppTokens.fontSizeBadge, color: muted)),
+                        style: TextStyle(
+                            fontSize: AppTokens.fontSizeBadge, color: muted)),
                   ),
               ],
             ),
@@ -479,7 +486,8 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                                         child: Text(
                                           pack.enabled ? '已启用' : '已停用',
                                           style: TextStyle(
-                                            fontSize: AppTokens.fontSizeMetricSmall,
+                                            fontSize:
+                                                AppTokens.fontSizeMetricSmall,
                                             fontWeight: FontWeight.w500,
                                             color: pack.enabled
                                                 ? AppPalette.success
@@ -512,7 +520,8 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                                                   ? '本地压缩包'
                                                   : 'GitHub',
                                           style: TextStyle(
-                                            fontSize: AppTokens.fontSizeMetricSmall,
+                                            fontSize:
+                                                AppTokens.fontSizeMetricSmall,
                                             fontWeight: FontWeight.w500,
                                             color: isDark
                                                 ? AppPalette.darkTextMuted
@@ -532,7 +541,8 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                                         child: const Text(
                                           '纯指令静态资源',
                                           style: TextStyle(
-                                            fontSize: AppTokens.fontSizeMetricSmall,
+                                            fontSize:
+                                                AppTokens.fontSizeMetricSmall,
                                             fontWeight: FontWeight.w500,
                                             color: AppPalette.brand,
                                           ),
@@ -543,7 +553,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
                                 ],
                               ),
                             ),
-                            Switch(
+                            NexusSwitch(
                               value: pack.enabled,
                               onChanged:
                                   frozen ? null : (v) => _toggle(pack, v),

@@ -19,6 +19,7 @@ import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import 'skill_market_page.dart';
+import '../widgets/nexus_switch.dart';
 
 /// 插件页：Tab 1 = 声明式插件（JSON manifest）；Tab 2 = Skill 市场（GitHub）。
 class PluginsPage extends ConsumerStatefulWidget {
@@ -349,7 +350,7 @@ class _DeclarativePluginsViewState
                                     ],
                                   ),
                                 ),
-                                Switch(
+                                NexusSwitch(
                                   value: plugin.enabled,
                                   onChanged: (v) => _toggle(plugin, v),
                                 ),

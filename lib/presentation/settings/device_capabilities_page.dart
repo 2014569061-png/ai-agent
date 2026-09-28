@@ -13,6 +13,7 @@ import '../theme/app_theme.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
+import '../widgets/nexus_switch.dart';
 
 class DeviceCapabilitiesPage extends ConsumerStatefulWidget {
   const DeviceCapabilitiesPage({
@@ -805,7 +806,7 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               _badge(status, color),
-              Switch(
+              NexusSwitch(
                 value: enabled,
                 onChanged: _actionBusy || (!enabled && !hasRules)
                     ? null

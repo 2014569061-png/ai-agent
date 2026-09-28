@@ -12,6 +12,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_switch.dart';
 
 /// 首次启动的 4 步引导：填 Key / 选模型 / 用工具 / 隐私（含崩溃上报授权）。
 class OnboardingPage extends StatefulWidget {
@@ -216,7 +217,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                         if (i == _steps.length - 1) ...[
                           const SizedBox(height: 24),
                           SectionCard(
-                            child: SwitchListTile(
+                            child: NexusSwitchListTile(
                               secondary: Container(
                                 width: 36,
                                 height: 36,

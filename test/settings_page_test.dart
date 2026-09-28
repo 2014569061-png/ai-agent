@@ -12,6 +12,7 @@ import 'package:mobile_agent/infrastructure/providers/tool_trust_store.dart';
 import 'package:mobile_agent/presentation/settings/settings_page.dart';
 import 'package:mobile_agent/presentation/settings/tool_list_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_switch.dart';
 
 class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   final Map<String, String> _store = {};
@@ -203,13 +204,14 @@ void main() {
 
     expect(find.text('允许 Agent 读写当前工作区文件'), findsOneWidget);
     expect(find.text('允许 Agent 执行终端命令'), findsOneWidget);
-    expect(find.byType(Switch), findsNWidgets(2));
+    expect(find.byType(NexusSwitch), findsNWidgets(2));
 
-    await tester.tap(find.byType(Switch).first);
+    await tester.tap(find.byType(NexusSwitch).first);
     await tester.pumpAndSettle();
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('settings.tool.workspace_files'), isFalse);
-    expect(tester.widget<Switch>(find.byType(Switch).last).onChanged, isNull);
+    expect(tester.widget<NexusSwitch>(find.byType(NexusSwitch).last).onChanged,
+        isNull);
   });
 
   testWidgets('ToolListPage renders filter chips and list of tools',

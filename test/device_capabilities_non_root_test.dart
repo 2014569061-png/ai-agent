@@ -5,6 +5,7 @@ import 'package:mobile_agent/application/environment_service.dart';
 import 'package:mobile_agent/infrastructure/terminal/linux_runtime.dart';
 import 'package:mobile_agent/infrastructure/tools/android_device_tool.dart';
 import 'package:mobile_agent/presentation/settings/device_capabilities_page.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_switch.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -102,7 +103,7 @@ void main() {
     expect(find.text('运行中'), findsOneWidget);
     expect(find.textContaining('ads.example.com'), findsOneWidget);
 
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byType(NexusSwitch));
     await tester.pumpAndSettle();
     expect(bridge.filterToggles, [false]);
   });

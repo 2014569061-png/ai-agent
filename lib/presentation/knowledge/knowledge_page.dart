@@ -19,6 +19,7 @@ import '../widgets/liquid_glass.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_switch.dart';
 
 /// 知识库 / RAG 管理页（C4）：文档列表 + 上传/粘贴 + 删除 + 总开关。
 class KnowledgePage extends ConsumerStatefulWidget {
@@ -403,11 +404,13 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: SectionCard(
-              child: SwitchListTile(
+              child: NexusSwitchListTile(
                 secondary: const Icon(Icons.library_books_outlined),
                 title: const Text(
                   '启用知识库检索',
-                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: AppTokens.fontSizeBody),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: AppTokens.fontSizeBody),
                 ),
                 subtitle: const Text(
                   '对话时自动注入相关片段（当前为 BM25 本地检索模式）',

@@ -5,6 +5,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../widgets/glass_surface.dart';
 import '../motion/press_squash.dart';
+import '../widgets/nexus_switch.dart';
 
 /// 设置模块统一色彩入口。
 /// 全部委托给 AppPalette / AppSemanticColors，不再自带一套 iOS 色板。
@@ -386,7 +387,7 @@ class SettingsSwitch extends StatelessWidget {
       height: 28,
       child: FittedBox(
         fit: BoxFit.contain,
-        child: Switch.adaptive(
+        child: NexusSwitch(
           value: value,
           onChanged: onChanged,
           activeTrackColor: activeColor,

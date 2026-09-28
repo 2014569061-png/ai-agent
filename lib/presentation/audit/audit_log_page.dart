@@ -16,6 +16,7 @@ import '../widgets/floating_toast.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_switch.dart';
 
 /// 审计日志页（G2）：展示工具调用审批链路，支持导出 Markdown / CSV。
 class AuditLogPage extends ConsumerStatefulWidget {
@@ -271,7 +272,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: SectionCard(
-            child: SwitchListTile(
+            child: NexusSwitchListTile(
               secondary: Container(
                 width: 36,
                 height: 36,

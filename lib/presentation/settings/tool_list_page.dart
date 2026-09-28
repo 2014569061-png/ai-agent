@@ -15,6 +15,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_sheet.dart';
 import 'settings_components.dart';
+import '../widgets/nexus_switch.dart';
 
 class ToolListPage extends ConsumerStatefulWidget {
   const ToolListPage({super.key});
@@ -637,7 +638,7 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
                 title: '允许 Agent 读写当前工作区文件',
                 subtitle: '创建和编辑网页、代码、文档等项目文件',
                 showChevron: false,
-                trailingWidget: Switch(
+                trailingWidget: NexusSwitch(
                   value: _workspaceFilesEnabled,
                   onChanged: _setWorkspaceFilesEnabled,
                 ),
@@ -648,7 +649,7 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
                 title: '允许 Agent 执行终端命令',
                 subtitle: '安装依赖、运行脚本和构建项目需要此权限',
                 showChevron: false,
-                trailingWidget: Switch(
+                trailingWidget: NexusSwitch(
                   value: _terminalEnabled,
                   onChanged:
                       _workspaceFilesEnabled ? _setTerminalEnabled : null,

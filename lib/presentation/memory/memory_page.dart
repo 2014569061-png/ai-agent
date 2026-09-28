@@ -18,6 +18,7 @@ import '../widgets/nexus_sheet.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_switch.dart';
 
 /// 长期记忆管理页：查看 / 编辑 / 删除 / 添加，以及注入总开关。
 class MemoryPage extends ConsumerStatefulWidget {
@@ -509,7 +510,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                       ),
               ),
               SectionCard(
-                child: SwitchListTile(
+                child: NexusSwitchListTile(
                   secondary: Container(
                     width: 36,
                     height: 36,

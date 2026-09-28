@@ -20,6 +20,7 @@ import '../widgets/nexus_sheet.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
+import '../widgets/nexus_switch.dart';
 
 class LinuxEnvironmentPage extends ConsumerStatefulWidget {
   const LinuxEnvironmentPage({
@@ -454,7 +455,7 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
               ? '显示所有运行时和工具（高级诊断）'
               : '只显示当前目标相关工具，避免误以为都必须安装',
           showChevron: false,
-          trailingWidget: Switch(
+          trailingWidget: NexusSwitch(
             value: _showFullInventory,
             onChanged: (value) => setState(() => _showFullInventory = value),
           ),
