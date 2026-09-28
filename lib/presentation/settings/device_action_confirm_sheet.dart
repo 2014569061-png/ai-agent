@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../application/device_action_runner.dart';
 import '../theme/app_palette.dart';
+import '../widgets/nexus_sheet.dart';
 
 /// 设备动作执行前的确认面板：逐项展示目标、范围、影响、实际执行流程、
 /// 是否可撤销与恢复方案。含 Root 或不可撤销动作时需要二次确认。
@@ -14,18 +15,18 @@ Future<bool?> showDeviceActionConfirmSheet(
   required List<PreparedDeviceAction> actions,
   String confirmLabel = '确认执行',
 }) {
-  return showModalBottomSheet<bool>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    showDragHandle: true,
-    builder: (context) => DeviceActionConfirmSheet(
+  return showNexusSheet<bool>(
+context: context,
+isScrollControlled: true,
+useSafeArea: true,
+showDragHandle: true,
+builder: (context) => DeviceActionConfirmSheet(
       title: title,
       subtitle: subtitle,
       actions: actions,
       confirmLabel: confirmLabel,
     ),
-  );
+);
 }
 
 class DeviceActionConfirmSheet extends StatefulWidget {

@@ -25,6 +25,8 @@ Future<T?> showNexusSheet<T>({
   Color? barrierColor,
   bool barrierDismissible = true,
   String? barrierLabel,
+  // L6：内容自己按 viewInsets 垫底时置 true，避免与抽屉上抬重复。
+  bool removeInnerViewInsets = false,
 }) {
   final effectiveBarrierColor = barrierColor ??
       Colors.black.withValues(
@@ -57,32 +59,42 @@ Future<T?> showNexusSheet<T>({
             shadowColor: Colors.transparent,
           ),
         ),
-        child: SafeArea(
-          top: false,
-          bottom: isBottomDocked,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (showDragHandle && isBottomDocked)
-                _SheetDragHandle(
-                  child: Center(
-                    child: Container(
-                      margin: const EdgeInsets.only(top: 8, bottom: 4),
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: (isDark ? Colors.white : Colors.black)
-                            .withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(2),
+        child: // L6：内容自带透明 Material，ListTile 等墨水波纹画在玻璃之上。
+            Material(
+          type: MaterialType.transparency,
+          child: SafeArea(
+            top: false,
+            bottom: isBottomDocked,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (showDragHandle && isBottomDocked)
+                  _SheetDragHandle(
+                    child: Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 8, bottom: 4),
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: (isDark ? Colors.white : Colors.black)
+                              .withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
                   ),
+                Flexible(
+                  child: removeInnerViewInsets
+                      ? MediaQuery.removeViewInsets(
+                          context: dialogContext,
+                          removeBottom: true,
+                          child: Builder(builder: builder),
+                        )
+                      : builder(dialogContext),
                 ),
-              Flexible(
-                child: builder(dialogContext),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );

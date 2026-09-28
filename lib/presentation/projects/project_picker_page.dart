@@ -78,10 +78,10 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
   }
 
   Future<void> _createFromTemplate() async {
-    final template = await showModalBottomSheet<ProjectTemplate>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
+    final template = await showNexusSheet<ProjectTemplate>(
+context: context,
+showDragHandle: true,
+builder: (context) {
         final templates = const ProjectTemplateService().all();
         return SafeArea(
           child: ListView(
@@ -98,7 +98,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
           ),
         );
       },
-    );
+);
     if (template == null || !mounted) return;
     final name = await _askName('新建 ${template.label}', template.label);
     if (name == null || name.trim().isEmpty) return;

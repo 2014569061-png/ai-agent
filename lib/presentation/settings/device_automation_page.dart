@@ -14,6 +14,7 @@ import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import 'device_action_confirm_sheet.dart';
 import 'settings_components.dart';
+import '../widgets/nexus_sheet.dart';
 
 /// 设备自动化：触发器状态、待确认触发、规则、执行记录与撤销。
 ///
@@ -172,11 +173,11 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
   }
 
   Future<void> _showRun(AutomationRun run) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
+    await showNexusSheet<void>(
+context: context,
+showDragHandle: true,
+isScrollControlled: true,
+builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -223,7 +224,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
           ],
         ),
       ),
-    );
+);
   }
 
   // -------------------------------------------------------------------------
@@ -306,10 +307,10 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
   }
 
   Future<void> _ruleMenu(AutomationRule rule) async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
+    final choice = await showNexusSheet<String>(
+context: context,
+showDragHandle: true,
+builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -332,7 +333,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
           ],
         ),
       ),
-    );
+);
     if (!mounted) return;
     switch (choice) {
       case 'run':
@@ -350,10 +351,10 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
   }
 
   Future<void> _addFromTemplate() async {
-    final template = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
+    final template = await showNexusSheet<String>(
+context: context,
+showDragHandle: true,
+builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -384,7 +385,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
           ],
         ),
       ),
-    );
+);
     if (!mounted || template == null) return;
     final draft = await showDialog<_RuleDraft>(
       context: context,

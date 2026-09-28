@@ -39,6 +39,7 @@ import '../workspace/file_tree_sheet.dart';
 import '../workspace/terminal_sheet.dart';
 import '../workspace/workspace_sheet_frame.dart';
 import '../workspace/workspace_editor_page.dart';
+import '../widgets/nexus_sheet.dart';
 
 class ProjectHomePage extends ConsumerStatefulWidget {
   const ProjectHomePage({super.key, required this.projectId});
@@ -466,15 +467,15 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
                 title: '打开文件树',
                 subtitle: '预览文本并引用到对话',
                 onTap: () {
-                  showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (sheetContext) => WorkspaceSheetFrame(
+                  showNexusSheet<void>(
+context: context,
+isScrollControlled: true,
+builder: (sheetContext) => WorkspaceSheetFrame(
                       child: FileTreeSheet(
                         workspacePath: project.canonicalRootPath,
                       ),
                     ),
-                  );
+);
                 },
               ),
               for (final entity in _files.take(40))
@@ -532,16 +533,16 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
               _terminal ??= TerminalCommandService(
                 workspacePath: project.canonicalRootPath,
               );
-              showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => WorkspaceSheetFrame(
+              showNexusSheet<void>(
+context: context,
+isScrollControlled: true,
+builder: (_) => WorkspaceSheetFrame(
                   child: TerminalSheet(
                     workspacePath: project.canonicalRootPath,
                     sharedService: _terminal,
                   ),
                 ),
-              );
+);
             },
           ),
         ),
@@ -751,10 +752,10 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
     );
     setState(() => _installJob = job);
     if (!mounted) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetContext) {
+    await showNexusSheet<void>(
+context: context,
+isScrollControlled: true,
+builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return InstallJobSheet(
@@ -769,13 +770,13 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
           },
         );
       },
-    );
+);
   }
 
   Future<String?> _chooseLockfile(LockfileConflict conflict) {
-    return showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
+    return showNexusSheet<String>(
+context: context,
+builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -789,7 +790,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
           ],
         ),
       ),
-    );
+);
   }
 
   Future<void> _runInstall(

@@ -82,16 +82,10 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
     final content = TextEditingController(text: existing?.content ?? '');
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final result = await showModalBottomSheet<(String, String, String)>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor:
-          isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
-      ),
-      builder: (sheetContext) {
+    final result = await showNexusSheet<(String, String, String)>(
+context: context,
+isScrollControlled: true,
+builder: (sheetContext) {
         return FractionallySizedBox(
           heightFactor: 0.85,
           child: SafeArea(
@@ -221,7 +215,8 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
           ),
         );
       },
-    );
+removeInnerViewInsets: true,
+);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       name.dispose();
       category.dispose();

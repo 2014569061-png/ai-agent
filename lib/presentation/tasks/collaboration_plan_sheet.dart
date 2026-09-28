@@ -10,6 +10,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/section_card.dart';
 import 'collaboration_timeline.dart';
+import '../widgets/nexus_segmented_button.dart';
 
 /// 协作方案确认底栏 (CollaborationPlanSheet)
 /// 严格依据 NEXUS UI 设计优化规范重构：
@@ -243,7 +244,7 @@ class _CollaborationPlanSheetState
 
                           // 3. 协作模式
                           _sectionTitle('协同模式'),
-                          SegmentedButton<CollaborationMode>(
+                          NexusSegmentedButton<CollaborationMode>(
                             segments: CollaborationMode.values
                                 .map((mode) => ButtonSegment(
                                       value: mode,

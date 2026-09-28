@@ -33,6 +33,7 @@ import '../widgets/nexus_section.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
 import 'collaboration_plan_sheet.dart';
+import '../widgets/nexus_sheet.dart';
 
 /// Y5：本页卡片与其他已改页面统一 16 圆角（只给 SectionCard 传参）。
 const _kCardRadius = BorderRadius.all(Radius.circular(16));
@@ -351,11 +352,11 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   }
 
   Future<void> _startCollaboration() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => CollaborationPlanSheet(
+    await showNexusSheet<void>(
+context: context,
+isScrollControlled: true,
+showDragHandle: true,
+builder: (_) => CollaborationPlanSheet(
         task: DevelopmentTaskInput(
           taskId: _task.id,
           prompt: _task.prompt,
@@ -364,7 +365,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
           model: _task.model,
         ),
       ),
-    );
+);
   }
 
   bool get _needsImmediateAction =>

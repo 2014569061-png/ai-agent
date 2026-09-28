@@ -21,6 +21,8 @@ import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_status_badge.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_sheet.dart';
+import '../widgets/nexus_segmented_button.dart';
 
 /// 独立的 MCP 服务器管理页，供设置页和深链接复用。
 class McpServersPage extends StatefulWidget {
@@ -127,7 +129,6 @@ class _McpServersPageState extends State<McpServersPage> {
     final argsCtrl = TextEditingController(text: server?.args.join(' ') ?? '');
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
@@ -137,14 +138,9 @@ class _McpServersPageState extends State<McpServersPage> {
     // 在 builder 外捕获：builder 闭包里拿不到 State 字段，且开表期间不应变化。
     final stdioEnabled = _stdioEnabled;
 
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showNexusSheet<bool>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
-      ),
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final isHttp = kind == McpServerKind.http;
@@ -280,7 +276,7 @@ class _McpServersPageState extends State<McpServersPage> {
 
                     // 模式选择 SegmentedButton
                     Center(
-                      child: SegmentedButton<McpServerKind>(
+                      child: NexusSegmentedButton<McpServerKind>(
                         segments: [
                           const ButtonSegment(
                             value: McpServerKind.http,
@@ -392,6 +388,7 @@ class _McpServersPageState extends State<McpServersPage> {
           );
         },
       ),
+      removeInnerViewInsets: true,
     );
 
     if (saved != true || !mounted) return;

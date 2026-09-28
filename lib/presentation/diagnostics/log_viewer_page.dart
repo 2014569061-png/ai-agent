@@ -17,6 +17,7 @@ import '../widgets/floating_toast.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_sheet.dart';
 
 class LogViewerPage extends ConsumerStatefulWidget {
   const LogViewerPage({super.key, this.runId});
@@ -144,10 +145,10 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
     var from = _from;
     var to = _to;
     final keyword = TextEditingController(text: _keywordController.text);
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => StatefulBuilder(
+    await showNexusSheet<void>(
+context: context,
+isScrollControlled: true,
+builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
               16, 16, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
@@ -243,7 +244,8 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
           ),
         ),
       ),
-    );
+removeInnerViewInsets: true,
+);
     WidgetsBinding.instance.addPostFrameCallback((_) => keyword.dispose());
     if (mounted) await _load();
   }

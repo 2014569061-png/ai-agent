@@ -376,6 +376,8 @@ abstract final class AppTheme {
           fontWeight: FontWeight.w500,
         ),
       ),
+      // L6：Tab 指示器滑动时弹性拉伸。
+      tabBarTheme: const TabBarThemeData(indicatorAnimation: TabIndicatorAnimation.elastic),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: isFlat
             ? canvas

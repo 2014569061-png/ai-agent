@@ -16,6 +16,7 @@ import '../motion/nexus_page_route_factory.dart';
 import 'model_list_page.dart';
 import 'provider_presets.dart';
 import 'settings_components.dart';
+import '../widgets/nexus_segmented_button.dart';
 
 class ProviderDetailPage extends StatefulWidget {
   const ProviderDetailPage({super.key, this.config, this.preset});
@@ -356,7 +357,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        SegmentedButton<ReasoningEffort>(
+                        NexusSegmentedButton<ReasoningEffort>(
                           segments: const [
                             ButtonSegment(
                               value: ReasoningEffort.auto,

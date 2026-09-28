@@ -6,6 +6,7 @@ import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/nexus_surface.dart';
+import '../../widgets/nexus_sheet.dart';
 
 /// 底部输入框小工具呼出 8 宫格面板
 /// 替代原输入框内展开的拥挤微型图标行，提供现代聊天应用标准的工具操作台。
@@ -50,14 +51,13 @@ class InputToolGridSheet extends StatelessWidget {
   }) {
     HapticFeedback.mediumImpact();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      barrierColor: isDark
+    return showNexusSheet(
+context: context,
+barrierColor: isDark
           ? Colors.black.withValues(alpha: 0.35)
           : Colors.black.withValues(alpha: 0.06),
-      isScrollControlled: true,
-      builder: (_) => InputToolGridSheet(
+isScrollControlled: true,
+builder: (_) => InputToolGridSheet(
         onCommandMenu: onCommandMenu,
         onMcpMenu: onMcpMenu,
         onTerminalPreview: onTerminalPreview,
@@ -69,7 +69,7 @@ class InputToolGridSheet extends StatelessWidget {
         approvalMode: approvalMode,
         onApprovalModeTap: onApprovalModeTap,
       ),
-    );
+);
   }
 
   String _approvalLabel(ApprovalMode mode) => switch (mode) {

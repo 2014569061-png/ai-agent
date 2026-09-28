@@ -8,6 +8,7 @@ import '../../infrastructure/terminal/termux_ssh_credentials.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'terminal_accessory_bar.dart';
+import '../widgets/nexus_sheet.dart';
 
 /// 沉浸式 Linux 终端全屏操作页面。
 class TerminalPage extends StatefulWidget {
@@ -214,14 +215,10 @@ class _TerminalPageState extends State<TerminalPage> {
     const setupCommand =
         'pkg update && pkg install -y openssh nodejs python git && passwd && whoami && sshd';
 
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppPalette.terminalSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
+    showNexusSheet<void>(
+context: context,
+isScrollControlled: true,
+builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
             left: 20,
@@ -441,7 +438,8 @@ class _TerminalPageState extends State<TerminalPage> {
           ),
         );
       },
-    );
+removeInnerViewInsets: true,
+);
   }
 
   Widget _buildStatusIndicator() {

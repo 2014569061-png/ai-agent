@@ -18,6 +18,7 @@ import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
+import '../widgets/nexus_sheet.dart';
 
 /// 定时任务管理页（C5）：新建「每天/每周某时刻」执行指定提示词的 Agent 任务。
 class ScheduledTasksPage extends ConsumerStatefulWidget {
@@ -188,16 +189,10 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
     var days = <int>[];
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor:
-          isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-      shape: const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppTokens.radiusModal)),
-      ),
-      builder: (sheetContext) => StatefulBuilder(
+    final saved = await showNexusSheet<bool>(
+context: context,
+isScrollControlled: true,
+builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) => FractionallySizedBox(
           heightFactor: 0.85,
           child: SafeArea(
@@ -402,7 +397,8 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
           ),
         ),
       ),
-    );
+removeInnerViewInsets: true,
+);
     if (saved != true || !mounted) return;
     final db = await ref.read(databaseProvider.future);
     await ref.read(scheduledTaskServiceProvider).create(

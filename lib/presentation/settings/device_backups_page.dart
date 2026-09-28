@@ -12,6 +12,8 @@ import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import 'device_action_confirm_sheet.dart';
 import 'settings_components.dart';
+import '../widgets/nexus_sheet.dart';
+import '../widgets/nexus_segmented_button.dart';
 
 /// 备份与恢复：通讯录/短信/通话记录导出、应用数据与目录备份（Root）、
 /// 按备份恢复。所有写操作都经 android_device 预览 → 确认 → 审计。
@@ -123,10 +125,10 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
   }
 
   Future<void> _newBackup() async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
+    final choice = await showNexusSheet<String>(
+context: context,
+showDragHandle: true,
+builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -163,7 +165,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
           ],
         ),
       ),
-    );
+);
     if (!mounted || choice == null) return;
     switch (choice) {
       case 'contacts':
@@ -228,7 +230,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
               ),
               if (withScope) ...[
                 const SizedBox(height: 12),
-                SegmentedButton<String>(
+                NexusSegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'config', label: Text('配置包')),
                     ButtonSegment(value: 'full', label: Text('完整数据')),
@@ -270,10 +272,10 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
     final canRestoreApp = kind == 'app_data' && backup['restorable'] == true;
     final canRestoreContacts =
         kind == 'personal' && backup['category'] == 'contacts';
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
+    final choice = await showNexusSheet<String>(
+context: context,
+showDragHandle: true,
+builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -305,7 +307,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
           ],
         ),
       ),
-    );
+);
     if (!mounted || choice == null) return;
     switch (choice) {
       case 'inspect':
@@ -334,11 +336,11 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
     if (!mounted) return;
     final entries = detail['entries'] is List ? detail['entries'] as List : [];
     final files = detail['files'] is List ? detail['files'] as List : [];
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (context) => SafeArea(
+    await showNexusSheet<void>(
+context: context,
+showDragHandle: true,
+isScrollControlled: true,
+builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -384,7 +386,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
           ],
         ),
       ),
-    );
+);
   }
 
   String _size(Object? bytes) {
