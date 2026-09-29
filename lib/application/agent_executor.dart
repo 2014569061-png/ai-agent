@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart' show CancelToken;
@@ -12,7 +11,6 @@ import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/providers/provider_config.dart';
 import 'context_window.dart';
-import '../domain/model_failure.dart';
 import 'context_snapshot_builder.dart';
 import 'context_compression_applier.dart';
 import 'run_controller.dart';
@@ -20,6 +18,10 @@ import 'tool_pipeline/execution_interceptors.dart';
 import 'tool_pipeline/tool_invocation.dart';
 import 'tool_pipeline/tool_pipeline.dart';
 import 'tool_pipeline/tool_run_context.dart';
+import 'agent_loop/loop_messages.dart';
+import 'agent_loop/model_retry_policy.dart';
+import 'agent_loop/step_budget_policy.dart';
+import 'agent_loop/system_prompt_merge.dart';
 
 class AgentExecutor {
   AgentExecutor({
@@ -93,63 +95,14 @@ class AgentExecutor {
       ));
       return ToolResultEvent(call, result, metadata: metadata);
     }
-    // 内置环境规则与业务 system prompt 分开构造，确保调用方未传 prompt 或
-    // 历史已带 system 消息时，模型仍然知道当前设备的真实能力边界。
-    final builtInRules = <String>[];
-    if (Platform.isAndroid &&
-        tools.manifests.any((t) => t.name == 'terminal')) {
-      builtInRules.add(
-        '[运行环境说明] 当前运行在 Android 手机上。terminal 工具优先使用内置 '
-        'Alpine Linux（PRoot + ARM64 rootfs），不可用时回退到 Termux，再回退到 Android Shell。'
-        '内置 Alpine 默认是精简 rootfs，提供 sh/ash/BusyBox 基础命令；Go/Git/Node/Python 等工具'
-        '可能尚未安装，需要先在 Alpine 中执行 apk add，或使用已配置的 Termux 工具链。'
-        '不要默认声称环境无法运行 Linux 命令；编译或测试报错时先检查当前 Runtime 和缺失工具，'
-        '再安装依赖或切换备用 Runtime。',
-      );
-      builtInRules.add(
-        '[共享存储] 手机共享存储只有在用户授予「所有文件访问权限」后，才会挂载到内置 '
-        'Alpine 的 /sdcard 与 /storage/emulated/0。访问这些路径报 No such file 或 '
-        'Permission denied 时说明尚未授权：不要换路径反复重试，直接请用户到系统设置 → '
-        '应用 → 本应用 → 权限中开启「所有文件访问」，授权后再继续。',
-      );
-    }
-    final builtInSystemText = builtInRules.join('\n\n');
-    final requestedSystemText = systemPrompt?.trim() ?? '';
-    final systemIndex =
-        messages.indexWhere((m) => m.role == MessageRole.system);
-    if (systemIndex >= 0) {
-      final existing = messages[systemIndex];
-      final additions = <String>[];
-      if (requestedSystemText.isNotEmpty &&
-          !existing.text.contains(requestedSystemText)) {
-        additions.add(requestedSystemText);
-      }
-      if (builtInSystemText.isNotEmpty &&
-          !existing.text.contains(builtInSystemText)) {
-        additions.add(builtInSystemText);
-      }
-      if (additions.isNotEmpty) {
-        final combined = [existing.text.trim(), ...additions]
-            .where((value) => value.isNotEmpty)
-            .join('\n\n');
-        messages[systemIndex] = existing.copyWith(
-          parts: [MessagePart.text(combined)],
-        );
-      }
-    } else {
-      final systemText = [requestedSystemText, builtInSystemText]
-          .where((value) => value.isNotEmpty)
-          .join('\n\n');
-      if (systemText.isNotEmpty) {
-        messages.insert(
-          0,
-          ChatMessage(
-            role: MessageRole.system,
-            parts: [MessagePart.text(systemText)],
-          ),
-        );
-      }
-    }
+    mergeSystemPrompt(
+      messages,
+      requested: systemPrompt,
+      builtInRules: builtInEnvironmentRules(
+        isAndroid: Platform.isAndroid,
+        hasTerminal: tools.manifests.any((t) => t.name == 'terminal'),
+      ),
+    );
     // 上下文预算：每步请求前裁剪一次，同时约束初始历史与多步工具循环
     // 中持续追加的工具结果。
     // 工具定义也占模型输入窗口；历史裁剪必须先扣除这部分固定成本，
@@ -204,75 +157,27 @@ class AgentExecutor {
 
     void appendSteering(Iterable<String> instructions) {
       for (final instruction in instructions) {
-        messages.add(ChatMessage(
-          role: MessageRole.user,
-          parts: [
-            MessagePart.text(
-              '用户补充指令：$instruction\n请继续执行，不要从头重复已完成的步骤。',
-            ),
-          ],
-        ));
+        messages.add(LoopMessages.steering(instruction));
       }
     }
 
-    // 失败熔断与进展判断：只统计真正执行过的工具结果。
-    final recentOutcomes = <bool>[];
-    final failuresByCall = <String, int>{};
-    final hintedCalls = <String>{};
-    final failureHints = <String>[];
-    var consecutiveFailures = 0;
-
-    String callSignature(ToolCall call) {
-      try {
-        return '${call.name} ${jsonEncode(call.arguments)}';
-      } catch (_) {
-        return '${call.name} ${call.arguments}';
-      }
-    }
-
-    void recordToolOutcome(ToolCall call, ToolResult result) {
-      recentOutcomes.add(result.ok);
-      if (recentOutcomes.length > 12) recentOutcomes.removeAt(0);
-      final signature = callSignature(call);
-      if (result.ok) {
-        consecutiveFailures = 0;
-        failuresByCall.remove(signature);
-        return;
-      }
-      consecutiveFailures++;
-      final count = (failuresByCall[signature] ?? 0) + 1;
-      failuresByCall[signature] = count;
-      if (count >= 2 && hintedCalls.add(signature)) {
-        failureHints.add(
-          '[系统提示] 工具 ${call.name} 以完全相同的参数已经失败 $count 次。不要再原样'
-          '重试：先分析失败原因（权限、路径、依赖是否存在）并换一种方法；如果需要'
-          '用户授权或补充信息，请直接向用户说明。',
-        );
-      }
-    }
-
-    // 进展判断：最近有工具成功，且最后 4 次不全是失败。
-    bool hasRecentProgress() {
-      if (!recentOutcomes.contains(true)) return false;
-      final tail = recentOutcomes.length > 4
-          ? recentOutcomes.sublist(recentOutcomes.length - 4)
-          : recentOutcomes;
-      return tail.contains(true);
-    }
-
-    var budget = maxSteps;
-    var autoContinued = 0;
+    // 步数预算、自动续跑与连续失败熔断；模型请求失败重试。
+    final budgetPolicy = StepBudgetPolicy(
+      maxSteps: maxSteps,
+      autoContinueLimit: autoContinueLimit,
+      failurePauseThreshold: failurePauseThreshold,
+    );
+    final retryPolicy =
+        ModelRetryPolicy(maxRetries: maxRetries, backoff: retryBackoff);
     for (var step = 0;; step++) {
-      if (step >= budget) {
-        // 预算用完但最近仍有进展：自动再给一轮预算（最多 autoContinueLimit
-        // 次），不打断用户；没有进展或次数用完才暂停。
-        if (autoContinued >= autoContinueLimit || !hasRecentProgress()) break;
-        autoContinued++;
-        budget += maxSteps;
+      final budgetDecision = budgetPolicy.beforeStep(step);
+      if (budgetDecision is BudgetExhausted) break;
+      if (budgetDecision is BudgetExtended) {
+        // 预算用完但最近仍有进展：自动再给一轮预算，不打断用户。
         yield AgentBudgetExtendedEvent(
-          round: autoContinued,
-          limit: autoContinueLimit,
-          addedSteps: maxSteps,
+          round: budgetDecision.round,
+          limit: budgetDecision.limit,
+          addedSteps: budgetDecision.addedSteps,
         );
       }
       yield* pausePoint();
@@ -453,43 +358,32 @@ class AgentExecutor {
         // 暂停中断时 provider 按约定会静默结束；即便个别实现仍产出错误，也按
         // 中断处理：不重试，也不当作失败。
         if (failure == null || (pauseInterrupted && !isCancelled())) break;
-        final classified = ModelFailure.classify(
-          failure.message,
-          statusCode: failure.statusCode,
-          failureKind: failure.failureKind,
+        final decision = retryPolicy.decide(
+          failure,
+          hasContent: textBuffer.isNotEmpty ||
+              reasoningBuffer.isNotEmpty ||
+              pendingCalls.isNotEmpty,
+          attempts: attempts,
         );
-        if (!classified.retryable) {
+        if (decision is! RetryAfter) {
           cancelToken?.cancel();
           yield AgentErrorEvent(
             failure.message,
-            retryable: false,
-            failureKind: classified.kind,
-            statusCode: classified.statusCode,
+            retryable: decision is RetryGiveUp,
+            failureKind: decision.failure.kind,
+            statusCode: decision.failure.statusCode,
           );
           return;
         }
-        final hasContent = textBuffer.isNotEmpty ||
-            reasoningBuffer.isNotEmpty ||
-            pendingCalls.isNotEmpty;
-        if (hasContent || attempts >= maxRetries) {
-          cancelToken?.cancel();
-          yield AgentErrorEvent(
-            failure.message,
-            retryable: true,
-            failureKind: classified.kind,
-            statusCode: classified.statusCode,
-          );
-          return;
-        }
-        attempts++;
+        attempts = decision.attempt;
         yield AgentRetryEvent(attempts);
         if (isCancelled()) {
           yield const AgentStatusEvent(RunStatus.cancelled);
           return;
         }
-        // 指数退避：第 1/2/3 次重试分别等待 2/4/8 秒。退避只针对
-        // 尚未产生任何模型输出的瞬态失败，避免把已有工具调用重复提交。
-        final delay = retryBackoff * (1 << (attempts - 1));
+        // 指数退避只针对尚未产生任何模型输出的瞬态失败，避免把已有工具调用
+        // 重复提交。
+        final delay = decision.delay;
         final cancelled =
             cancellationToken?.whenCancelled ?? runController?.whenCancelled;
         if (cancelled == null) {
@@ -520,15 +414,7 @@ class AgentExecutor {
             role: MessageRole.assistant,
             parts: [MessagePart.text(partial)],
           ));
-          messages.add(ChatMessage(
-            role: MessageRole.user,
-            parts: const [
-              MessagePart.text(
-                '[系统提示] 上一段回复因用户暂停被中断。继续时请从中断处接着完成，'
-                '不要重复已经输出的内容。',
-              ),
-            ],
-          ));
+          messages.add(LoopMessages.pauseInterrupted());
         }
         continue;
       }
@@ -583,8 +469,8 @@ class AgentExecutor {
             ? ToolCodes.truncatedToolCall
             : ToolCodes.unexpectedToolCall;
         final message = stopReason == StopReason.outputLimit
-            ? '模型输出达到长度上限，工具参数可能不完整，本次未执行'
-            : '模型停因不是工具调用，本次夹带的工具调用未执行';
+            ? LoopMessages.truncatedToolCallMessage
+            : LoopMessages.unexpectedToolCallMessage;
         for (final pendingCall in pendingCalls) {
           yield settle(
             pendingCall,
@@ -673,40 +559,28 @@ class AgentExecutor {
           _ => const <String, dynamic>{},
         };
         yield settle(pendingCall, toolResult, metadata: metadata);
-        recordToolOutcome(pendingCall, toolResult);
+        budgetPolicy.recordToolOutcome(pendingCall, toolResult);
       }
       // 同一调用反复失败：在本步全部工具结果之后提醒模型换方法（不能插在
       // 工具结果中间，否则会破坏 assistant tool_calls → tool 的消息顺序）。
+      final failureHints = budgetPolicy.drainFailureHints();
       if (failureHints.isNotEmpty) {
-        messages.add(ChatMessage(
-          role: MessageRole.user,
-          parts: [MessagePart.text(failureHints.join('\n'))],
-        ));
-        failureHints.clear();
+        messages.add(LoopMessages.failureHints(failureHints));
       }
       // 计划审批只负责放行首轮工具调用。工具返回后必须显式告诉模型继续
       // 执行已批准的计划，否则模型可能把“计划已提交”误判为本轮任务结束。
-      if (planApproved) {
-        messages.add(ChatMessage(
-          role: MessageRole.user,
-          parts: [
-            const MessagePart.text(
-              '[计划已确认] 用户已批准执行以上计划。请继续按照计划执行剩余步骤；需要工具时直接调用工具，不要只输出计划或提前结束。完成全部步骤后再总结结果。',
-            )
-          ],
-        ));
-      }
+      if (planApproved) messages.add(LoopMessages.planConfirmed());
       appendSteering(runController?.drainSteering() ?? const []);
       // 连续失败熔断：多次失败且中间没有任何成功，提前暂停交给用户决定，
       // 避免模型在没有权限或环境缺失时空转到预算耗尽。
-      if (failurePauseThreshold > 0 &&
-          consecutiveFailures >= failurePauseThreshold) {
+      if (budgetPolicy.shouldPauseForFailures) {
         yield const AgentStatusEvent(RunStatus.paused);
         yield AgentBudgetExhaustedEvent(
           context: messages,
           maxSteps: step + 1,
           reason: AgentPauseReason.repeatedFailures,
-          message: '连续 $consecutiveFailures 次工具调用失败，任务已暂停，可继续执行',
+          message:
+              '连续 ${budgetPolicy.consecutiveFailures} 次工具调用失败，任务已暂停，可继续执行',
         );
         return;
       }
@@ -717,7 +591,7 @@ class AgentExecutor {
     yield const AgentStatusEvent(RunStatus.paused);
     yield AgentBudgetExhaustedEvent(
       context: messages,
-      maxSteps: budget,
+      maxSteps: budgetPolicy.budget,
     );
   }
 
