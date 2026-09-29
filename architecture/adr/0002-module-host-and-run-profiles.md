@@ -30,6 +30,6 @@ request observer / tool outcome observer / turn-stopping）。但谁来提供这
 
 - `HeadlessExecutor.runDetailed` / `BackgroundExecutionGateway.run` 新增 `profile`
   （默认 `background`）；定时、子 Agent、协作调用方显式传入各自的 profile。
-- 聊天路径仍直接使用 `SessionRecorder`，后续迁移到 ModuleHost，届时
-  `session_log_chat_wiring_test` 必须保持不变。
+- 聊天路径同样通过 ModuleHost 挂载（`RunProfile.chat`，阶段 3c），
+  `session_log_chat_wiring_test` 未改动即通过。
 - 远程/桌面连接（阶段 5 以后）预计也以模块形式挂载，不改执行器。
