@@ -131,6 +131,7 @@ class BackgroundExecutionGateway {
                 cancelToken: activeCancelToken,
                 approveTool: approveTool,
                 approvalMode: approvalMode,
+                taskId: taskId,
               );
       return await runner();
     } finally {

@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart' show CancelToken;
+import 'package:drift/drift.dart' show Value;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models.dart';
 import '../domain/tool_codes.dart';
 import '../domain/tool_result.dart';
+import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
@@ -15,6 +17,9 @@ import '../infrastructure/tools/workspace_tools.dart';
 import '../infrastructure/tools/command_tool.dart';
 import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
+import 'file_baseline_store.dart';
+import 'run_event_tracker.dart';
+import 'tool_pipeline/run_event_interceptor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
 import 'project_kind_detector.dart';
@@ -121,9 +126,11 @@ class HeadlessExecutor {
     CancelToken? cancelToken,
     ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
+    String? taskId,
   }) async {
     final provider =
         config.isConfigured ? createLlmProvider(config) : DemoProvider();
+    final model = config.isConfigured ? config.model : 'demo-model';
     final assembled = await assembleTools(
       db: db,
       config: config,
@@ -133,7 +140,29 @@ class HeadlessExecutor {
     );
     final registry = assembled.registry;
     final mcpProvider = assembled.mcpProvider;
-    final executor = AgentExecutor(provider: provider, tools: registry);
+    // 绑定任务的后台运行与聊天运行一样留下运行记录与工具审计（RunRecords /
+    // RunEvents），并在改文件前保存原始内容，供任务变更集回退。
+    final runStartedAt = DateTime.now();
+    final tracker = taskId == null
+        ? null
+        : await _startRunRecord(db,
+            taskId: taskId, model: model, startedAt: runStartedAt);
+    final executor = AgentExecutor(
+      provider: provider,
+      tools: registry,
+      toolPipeline: buildToolPipeline(
+        runEvents: tracker,
+        baseline: taskId != null &&
+                workspacePath != null &&
+                workspacePath.trim().isNotEmpty
+            ? FileBaselineStore(taskId: taskId, workspacePath: workspacePath)
+            : null,
+        // 保存失败不阻断工具；转交 NexusGuard 仅用于上报（若用户已授权）。
+        onBaselineError: (error, stackTrace) => NexusGuard.silently<void>(
+            'headless.fileBaseline',
+            () => Error.throwWithStackTrace(error, stackTrace)),
+      ),
+    );
     var persona = systemPrompt ?? '你是一个有帮助的 AI Agent。';
     if (workspacePath != null && workspacePath.trim().isNotEmpty) {
       await NexusGuard.silentlyAsync<void>('headless.taskTemplateRules',
@@ -188,7 +217,7 @@ class HeadlessExecutor {
     try {
       await for (final event in executor.run(
         history: history,
-        model: config.isConfigured ? config.model : 'demo-model',
+        model: model,
         systemPrompt: system,
         capabilities: ModelCapabilities.infer(config.model),
         maxSteps: maxSteps,
@@ -229,15 +258,87 @@ class HeadlessExecutor {
     }
     final text = answer.toString().trim();
     await mcpProvider.dispose();
+    final finalStatus =
+        status == RunStatus.created ? RunStatus.completed : status;
+    if (tracker != null) {
+      await _finishRunRecord(
+        db,
+        tracker,
+        status: finalStatus,
+        startedAt: runStartedAt,
+        inputTokens: inputTokens,
+        outputTokens: outputTokens,
+        cachedTokens: cachedTokens,
+      );
+    }
     return HeadlessRunResult(
       text: text.isEmpty && errorMessage != null ? errorMessage : text,
-      status: status == RunStatus.created ? RunStatus.completed : status,
+      status: finalStatus,
       inputTokens: inputTokens,
       outputTokens: outputTokens,
       cachedTokens: cachedTokens,
       context: checkpoint,
       error: errorMessage,
     );
+  }
+
+  /// Inserts the run record; `null` (no auditing) when the database write
+  /// fails, so observability never blocks the run.
+  static Future<RunEventTracker?> _startRunRecord(
+    AppDatabase db, {
+    required String taskId,
+    required String model,
+    required DateTime startedAt,
+  }) async {
+    final runId = UniqueId.generate('run');
+    try {
+      await db.insertRunRecord(RunRecordsCompanion.insert(
+        runId: runId,
+        conversationId: 'headless',
+        taskId: Value(taskId),
+        model: Value(model),
+        status: const Value('running'),
+        startedAt: startedAt,
+      ));
+      return RunEventTracker(database: db, runId: runId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> _finishRunRecord(
+    AppDatabase db,
+    RunEventTracker tracker, {
+    required RunStatus status,
+    required DateTime startedAt,
+    required int inputTokens,
+    required int outputTokens,
+    required int cachedTokens,
+  }) async {
+    try {
+      await tracker.flush();
+      final endedAt = DateTime.now();
+      await db.updateRunRecord(
+        tracker.runId,
+        RunRecordsCompanion(
+          // 与聊天路径相同的状态词：success / failed / paused / cancelled。
+          status: Value(switch (status) {
+            RunStatus.failed => 'failed',
+            RunStatus.paused => 'paused',
+            RunStatus.cancelled => 'cancelled',
+            _ => 'success',
+          }),
+          endedAt: Value(endedAt),
+          totalDurationMs: Value(endedAt.difference(startedAt).inMilliseconds),
+          inputTokens: Value(inputTokens),
+          outputTokens: Value(outputTokens),
+          cachedTokens: Value(cachedTokens),
+          eventCount: Value(tracker.nextSequence),
+        ),
+      );
+    } catch (_) {
+      // 运行记录收尾失败只影响统计与审计完整度，不改变任务结果。
+    }
   }
 
   static Future<HeadlessToolAssembly> assembleTools({
