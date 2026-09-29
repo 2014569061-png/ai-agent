@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../infrastructure/database/app_database.dart';
@@ -6,6 +8,9 @@ import '../infrastructure/mcp/mcp_tool_provider.dart';
 import '../infrastructure/providers/provider_config_store.dart';
 import '../infrastructure/providers/tool_trust_store.dart';
 import 'mcp_service.dart';
+import 'nexus_guard.dart';
+import 'session_log/session_event_store.dart';
+import 'session_log/session_log_maintenance.dart';
 
 /// Agent 网络重试参数。生产环境保留指数退避；测试或离线模式可注入零等待，
 /// 避免把外部网络不可用误差放大成整组测试的长等待。
@@ -23,8 +28,18 @@ final agentRetrySettingsProvider =
     Provider<AgentRetrySettings>((ref) => const AgentRetrySettings());
 
 /// 数据库注入点（可在测试中 override 为内存数据库）。
-final databaseProvider =
-    FutureProvider<AppDatabase>((ref) => DatabaseProvider.instance.database);
+///
+/// 首次打开后在后台做一次会话日志维护（给中断的运行封口），不阻塞启动。
+final databaseProvider = FutureProvider<AppDatabase>((ref) async {
+  final db = await DatabaseProvider.instance.database;
+  unawaited(SessionLogMaintenance.runOnStartup(
+    DriftSessionEventStore(db),
+    onError: (error, stackTrace) => NexusGuard.silently<void>(
+        'sessionLog.startupMaintenance',
+        () => Error.throwWithStackTrace(error, stackTrace)),
+  ));
+  return db;
+});
 
 /// Provider 配置存储注入点（可在测试中 override）。
 final providerConfigStoreProvider =

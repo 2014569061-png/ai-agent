@@ -392,4 +392,7 @@ class _FailingStore implements SessionEventStore {
 
   @override
   Future<Map<String, int>> messageKeys(String conversationId) async => {};
+
+  @override
+  Future<List<UnsealedRun>> unsealedRuns() async => const [];
 }

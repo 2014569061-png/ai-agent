@@ -21,6 +21,24 @@ abstract interface class SessionEventStore {
 
   /// 会话全部事件，按 seq 升序。
   Future<List<SessionEvent>> events(String conversationId);
+
+  /// 所有会话中已有 turn/start、但没有 turn/end 的运行。
+  Future<List<UnsealedRun>> unsealedRuns();
+}
+
+/// 未封口的运行（进程被杀、崩溃，或仍在其他 isolate 中运行）。
+class UnsealedRun {
+  const UnsealedRun({
+    required this.conversationId,
+    required this.runId,
+    required this.lastActivity,
+  });
+
+  final String conversationId;
+  final String runId;
+
+  /// 该运行最后一条事件的写入时间。
+  final DateTime lastActivity;
 }
 
 /// 测试与无数据库场景使用的内存实现。
@@ -64,6 +82,32 @@ class InMemorySessionEventStore implements SessionEventStore {
   @override
   Future<List<SessionEvent>> events(String conversationId) async =>
       List.unmodifiable(_byConversation[conversationId] ?? const []);
+
+  @override
+  Future<List<UnsealedRun>> unsealedRuns() async {
+    final result = <UnsealedRun>[];
+    for (final MapEntry(key: conversationId, value: events)
+        in _byConversation.entries) {
+      final last = <String, DateTime>{};
+      final started = <String>{};
+      final ended = <String>{};
+      for (final e in events) {
+        final runId = e.runId;
+        if (runId == null) continue;
+        last[runId] = e.createdAt;
+        if (e.type == SessionEventType.turnStart) started.add(runId);
+        if (e.type == SessionEventType.turnEnd) ended.add(runId);
+      }
+      for (final runId in started.difference(ended)) {
+        result.add(UnsealedRun(
+          conversationId: conversationId,
+          runId: runId,
+          lastActivity: last[runId]!,
+        ));
+      }
+    }
+    return result;
+  }
 }
 
 /// 基于 `session_events` 裸 SQL 表的持久化实现（建表见
@@ -149,6 +193,30 @@ class DriftSessionEventStore implements SessionEventStore {
               jsonDecode(row.read<String>('payload_json')) as Map),
           formatVersion: row.read<int>('format_version'),
           createdAt: DateTime.parse(row.read<String>('created_at')),
+        ),
+    ];
+  }
+
+  @override
+  Future<List<UnsealedRun>> unsealedRuns() async {
+    final rows = await _db.customSelect(
+      'SELECT s.conversation_id AS conversation_id, s.run_id AS run_id, '
+      'MAX(e.created_at) AS last_at '
+      'FROM session_events s '
+      'JOIN session_events e '
+      'ON e.conversation_id = s.conversation_id AND e.run_id = s.run_id '
+      "WHERE s.type = '${SessionEventType.turnStart}' AND NOT EXISTS ("
+      'SELECT 1 FROM session_events t '
+      'WHERE t.conversation_id = s.conversation_id AND t.run_id = s.run_id '
+      "AND t.type = '${SessionEventType.turnEnd}') "
+      'GROUP BY s.conversation_id, s.run_id',
+    ).get();
+    return [
+      for (final row in rows)
+        UnsealedRun(
+          conversationId: row.read<String>('conversation_id'),
+          runId: row.read<String>('run_id'),
+          lastActivity: DateTime.parse(row.read<String>('last_at')),
         ),
     ];
   }
