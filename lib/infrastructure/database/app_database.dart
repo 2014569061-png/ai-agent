@@ -618,6 +618,7 @@ class AppDatabase extends _$AppDatabase {
         await (delete(taskFeedback)..where((row) => row.taskId.isIn(taskIds)))
             .go();
         await (delete(tasks)..where((row) => row.id.isIn(taskIds))).go();
+        await _deleteTaskSessionLogs(taskIds);
       }
       final runs = await (select(runRecords)
             ..where((row) => row.conversationId.equals(id)))
@@ -1261,7 +1262,19 @@ class AppDatabase extends _$AppDatabase {
         await _deleteCollaborationForTasks([id]);
         await deleteTaskFeedback(id);
         await (delete(tasks)..where((row) => row.id.equals(id))).go();
+        await _deleteTaskSessionLogs([id]);
       });
+
+  /// 绑定任务的后台运行写入 `task:<id>` 会话日志（保存完整消息内容），
+  /// 必须随任务一起删除。
+  Future<void> _deleteTaskSessionLogs(List<String> taskIds) async {
+    for (final id in taskIds) {
+      await customStatement(
+        'DELETE FROM session_events WHERE conversation_id = ?',
+        ['task:$id'],
+      );
+    }
+  }
 
   /// 协作表没有依赖数据库外键，必须在删除任务时显式清理，避免审计导出
   /// 或协作时间线继续暴露已经删除任务的只读上下文与结果。

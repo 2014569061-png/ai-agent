@@ -9,6 +9,7 @@ import '../infrastructure/providers/provider_config.dart';
 import 'agent_executor.dart';
 import 'execution_lease_service.dart';
 import 'headless_executor.dart';
+import 'modules/run_profile.dart';
 import 'project_service.dart';
 import 'task_service.dart';
 
@@ -52,6 +53,7 @@ class BackgroundExecutionGateway {
     ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
     bool keepAlive = false,
+    RunProfile profile = RunProfile.background,
     Future<HeadlessRunResult> Function()? execute,
   }) async {
     ExecutionLease? lease;
@@ -132,6 +134,7 @@ class BackgroundExecutionGateway {
                 approveTool: approveTool,
                 approvalMode: approvalMode,
                 taskId: taskId,
+                profile: profile,
               );
       return await runner();
     } finally {

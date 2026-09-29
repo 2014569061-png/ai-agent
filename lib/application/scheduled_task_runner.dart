@@ -19,6 +19,7 @@ import '../infrastructure/providers/provider_config_store.dart';
 import '../infrastructure/files/vault_exporter_io.dart';
 import '../infrastructure/files/local_crypto_service.dart';
 import '../domain/unique_id.dart';
+import 'modules/run_profile.dart';
 
 /// C5 定时任务的后台入口（WorkManager 回调）。
 /// 在独立 isolate 中打开数据库、取到点任务、无 UI 运行 Agent、写入结果并弹通知。
@@ -76,6 +77,7 @@ void scheduledTaskCallbackDispatcher() {
                 topP: agent?.topP ?? 1.0,
                 cancellationToken: cancellationToken,
                 cancelToken: cancelToken,
+                profile: RunProfile.scheduled,
               )
               .then((result) => result.text);
           String result;

@@ -56,6 +56,7 @@ import 'log_service.dart';
 import 'nexus_guard.dart';
 import 'run_event_tracker.dart';
 import 'session_log/session_event_store.dart';
+import 'modules/run_profile.dart';
 import 'session_log/session_log_settings.dart';
 import 'session_log/session_recorder.dart';
 import 'run_controller.dart';
@@ -1999,6 +2000,7 @@ class ChatController extends Notifier<ChatState> {
         prompt: prompt,
         systemPrompt: systemPrompt,
         maxTokens: SubAgentTool.clampBudget(budget),
+        profile: RunProfile.subagent,
       ))
           .text;
     } catch (error) {

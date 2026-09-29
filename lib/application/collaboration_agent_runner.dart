@@ -2,6 +2,7 @@ import 'package:crypto/crypto.dart';
 
 import 'agent_executor.dart';
 import 'background_execution_gateway.dart';
+import 'modules/run_profile.dart';
 import '../domain/collaboration_models.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/provider_config.dart';
@@ -79,6 +80,7 @@ $context
       maxSteps: 3,
       maxTokens: maxTokens,
       cancellationToken: cancellationToken,
+      profile: RunProfile.collaboration,
     );
     return CollaborationAgentOutput(
       role: role,

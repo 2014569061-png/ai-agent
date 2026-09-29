@@ -17,6 +17,11 @@ import '../infrastructure/tools/workspace_tools.dart';
 import '../infrastructure/tools/command_tool.dart';
 import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
+import 'modules/agent_module.dart';
+import 'modules/module_host.dart';
+import 'modules/run_profile.dart';
+import 'modules/session_log_module.dart';
+import 'session_log/session_event_store.dart';
 import 'file_baseline_store.dart';
 import 'run_event_tracker.dart';
 import 'tool_pipeline/run_event_interceptor.dart';
@@ -127,6 +132,10 @@ class HeadlessExecutor {
     ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
     String? taskId,
+    RunProfile profile = RunProfile.background,
+
+    /// 本次运行挂载的模块；默认 [defaultModules]（会话日志）。
+    ModuleHost? modules,
   }) async {
     final provider =
         config.isConfigured ? createLlmProvider(config) : DemoProvider();
@@ -143,13 +152,24 @@ class HeadlessExecutor {
     // 绑定任务的后台运行与聊天运行一样留下运行记录与工具审计（RunRecords /
     // RunEvents），并在改文件前保存原始内容，供任务变更集回退。
     final runStartedAt = DateTime.now();
+    final runId = UniqueId.generate('run');
     final tracker = taskId == null
         ? null
         : await _startRunRecord(db,
-            taskId: taskId, model: model, startedAt: runStartedAt);
+            runId: runId, taskId: taskId, model: model, startedAt: runStartedAt);
+    // 绑定任务的运行写入 task:<id> 会话日志：同一任务多次恢复依次追加。
+    final moduleSession = await (modules ?? defaultModules(db)).open(RunScope(
+      profile: profile,
+      runId: runId,
+      model: model,
+      sessionId: taskId == null ? null : RunScope.taskSessionId(taskId),
+      taskId: taskId,
+      workspacePath: workspacePath,
+    ));
     final executor = AgentExecutor(
       provider: provider,
       tools: registry,
+      hooks: moduleSession.hooks,
       toolPipeline: buildToolPipeline(
         runEvents: tracker,
         baseline: taskId != null &&
@@ -214,6 +234,7 @@ class HeadlessExecutor {
     var cachedTokens = 0;
     String? errorMessage;
     List<ChatMessage>? checkpoint;
+    var outcome = const RunOutcome.finished();
     try {
       await for (final event in executor.run(
         history: history,
@@ -235,6 +256,7 @@ class HeadlessExecutor {
                 : ToolApproval.reject,
         approvalMode: approvalMode,
       )) {
+        moduleSession.observe(event);
         if (event is TextEvent) answer.write(event.text);
         if (event is AgentUsageEvent) {
           inputTokens += event.promptTokens;
@@ -255,7 +277,9 @@ class HeadlessExecutor {
     } catch (error) {
       status = RunStatus.failed;
       errorMessage = error.toString();
+      outcome = const RunOutcome.aborted('unexpected_error');
     }
+    await moduleSession.finish(outcome);
     final text = answer.toString().trim();
     await mcpProvider.dispose();
     final finalStatus =
@@ -282,15 +306,30 @@ class HeadlessExecutor {
     );
   }
 
+  /// 无 UI 运行默认挂载的第一方模块。模块失败只上报，不影响任务。
+  static ModuleHost defaultModules(AppDatabase db) => ModuleHost(
+        [
+          SessionLogModule(
+            store: () => DriftSessionEventStore(db),
+            onError: (error, stackTrace) => NexusGuard.silently<void>(
+                'headless.sessionLog',
+                () => Error.throwWithStackTrace(error, stackTrace)),
+          ),
+        ],
+        onError: (moduleId, error, stackTrace) => NexusGuard.silently<void>(
+            'headless.module.$moduleId',
+            () => Error.throwWithStackTrace(error, stackTrace)),
+      );
+
   /// Inserts the run record; `null` (no auditing) when the database write
   /// fails, so observability never blocks the run.
   static Future<RunEventTracker?> _startRunRecord(
     AppDatabase db, {
+    required String runId,
     required String taskId,
     required String model,
     required DateTime startedAt,
   }) async {
-    final runId = UniqueId.generate('run');
     try {
       await db.insertRunRecord(RunRecordsCompanion.insert(
         runId: runId,
