@@ -218,14 +218,10 @@ void main() {
       projectId: 'p1',
       taskId: 't1',
       workspacePath: dir.path,
-      review: const ChangeReview(
+      review: ChangeReview(
         files: [
-          FileChangeSummary(
-            path: 'a.txt',
-            operation: 'edit',
-            linesAdded: 1,
-            linesRemoved: 0,
-          ),
+          const ChangeReviewService()
+              .summarizeEdit(path: 'a.txt', before: 'before', after: 'after'),
         ],
         mark: ChangeVerificationMark.passed,
       ),

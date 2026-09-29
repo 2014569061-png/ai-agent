@@ -54,12 +54,16 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
             files: [],
             mark: ChangeVerificationMark.unverified,
           );
-      final set = await const ChangeSetService().capture(
-        projectId: widget.projectId,
-        taskId: tasks.first.id,
-        workspacePath: widget.workspacePath,
-        review: review,
-      );
+      // Reuse the set captured the first time this task was opened; capturing
+      // again after manual edits would treat those edits as the task's output.
+      const service = ChangeSetService();
+      final set = await service.load(taskId: tasks.first.id) ??
+          await service.capture(
+            projectId: widget.projectId,
+            taskId: tasks.first.id,
+            workspacePath: widget.workspacePath,
+            review: review,
+          );
       if (!mounted) return;
       setState(() {
         _set = set;
@@ -80,9 +84,6 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
     final conflicts = await const ChangeSetService().rollback(
       workspacePath: widget.workspacePath,
       changeSet: set,
-      currentHashes: {
-        for (final file in set.files) file.relativePath: file.afterHash,
-      },
     );
     if (!mounted) return;
     if (conflicts.isEmpty) {
@@ -90,7 +91,7 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
     } else {
       FloatingToast.show(
         context,
-        '部分文件无法静默覆盖：${conflicts.map((item) => item.path).join('、')}',
+        '部分文件未回退：${conflicts.map((item) => '${item.path}（${item.reason}）').join('、')}',
         tone: ToastTone.warning,
       );
     }
@@ -126,7 +127,7 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
                             title: file.relativePath,
                             subtitle: file.reversible
                                 ? file.operation
-                                : '${file.operation} · 不可自动回退',
+                                : '${file.operation} · ${file.note ?? '不可自动回退'}',
                           ),
                       ],
                     ),

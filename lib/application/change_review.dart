@@ -32,6 +32,8 @@ class FileChangeSummary {
     this.diff = '',
     this.truncated = false,
     this.mark = ChangeVerificationMark.unverified,
+    this.contentHashBefore,
+    this.contentHashAfter,
   });
 
   final String path;
@@ -42,6 +44,11 @@ class FileChangeSummary {
   final bool truncated;
   final ChangeVerificationMark mark;
 
+  /// sha256 of the UTF-8 text before/after this change; `null` when the side
+  /// was empty or the producer did not record it (older task records).
+  final String? contentHashBefore;
+  final String? contentHashAfter;
+
   Map<String, dynamic> toJson() => {
         'path': path,
         'operation': operation,
@@ -50,6 +57,8 @@ class FileChangeSummary {
         if (diff.isNotEmpty) 'diff': diff,
         if (truncated) 'truncated': true,
         'mark': mark.id,
+        if (contentHashBefore != null) 'contentHashBefore': contentHashBefore,
+        if (contentHashAfter != null) 'contentHashAfter': contentHashAfter,
       };
 
   factory FileChangeSummary.fromJson(Map<String, dynamic> json) {
@@ -61,6 +70,8 @@ class FileChangeSummary {
       diff: json['diff']?.toString() ?? '',
       truncated: json['truncated'] as bool? ?? false,
       mark: ChangeVerificationMarkX.parse(json['mark']?.toString()),
+      contentHashBefore: json['contentHashBefore']?.toString(),
+      contentHashAfter: json['contentHashAfter']?.toString(),
     );
   }
 }
@@ -123,6 +134,8 @@ class ChangeReviewService {
         diff: metadata['diff']?.toString() ?? '',
         truncated: metadata['diffTruncated'] == true,
         mark: mark,
+        contentHashBefore: metadata['contentHashBefore']?.toString(),
+        contentHashAfter: metadata['contentHashAfter']?.toString(),
       ));
     }
     return ChangeReview(
@@ -154,6 +167,8 @@ class ChangeReviewService {
       diff: diff.diff,
       truncated: diff.truncated,
       mark: mark,
+      contentHashBefore: diff.contentHashBefore,
+      contentHashAfter: diff.contentHashAfter,
     );
   }
 
@@ -178,6 +193,8 @@ class ChangeReviewService {
             diff: file.diff,
             truncated: file.truncated,
             mark: mark,
+            contentHashBefore: file.contentHashBefore,
+            contentHashAfter: file.contentHashAfter,
           ),
       ],
       mark: mark,
