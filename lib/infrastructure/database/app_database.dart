@@ -49,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   void markKnowledgeChanged() => _knowledgeGeneration++;
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -86,6 +86,7 @@ class AppDatabase extends _$AppDatabase {
           );
           await _ensurePendingApprovals();
           await _ensureDataMaintenanceJobs();
+          await ensureSessionEventsTable();
         },
         onUpgrade: (m, from, to) async {
           Future<bool> hasTable(String tableName) async {
@@ -368,8 +369,39 @@ class AppDatabase extends _$AppDatabase {
           if (from < 24) {
             await _ensureDataMaintenanceJobs();
           }
+          if (from < 26) {
+            await ensureSessionEventsTable();
+          }
         },
       );
+
+  /// 建 session_events 表（追加式会话日志，阶段 1 与 messages 双写）。
+  ///
+  /// onCreate 与 onUpgrade 共用；裸 SQL 沿用 artifacts / pending_approvals 的
+  /// 先例，不重新生成 app_database.g.dart。读写见 DriftSessionEventStore。
+  Future<void> ensureSessionEventsTable() async {
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS session_events ('
+      'conversation_id TEXT NOT NULL, '
+      'seq INTEGER NOT NULL, '
+      'type TEXT NOT NULL, '
+      'run_id TEXT, '
+      'content_key TEXT, '
+      'payload_json TEXT NOT NULL, '
+      'format_version INTEGER NOT NULL DEFAULT 1, '
+      'created_at TEXT NOT NULL, '
+      'PRIMARY KEY (conversation_id, seq))',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_session_events_content_key '
+      'ON session_events (conversation_id, content_key) '
+      'WHERE content_key IS NOT NULL',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_session_events_run '
+      'ON session_events (run_id)',
+    );
+  }
 
   /// 建 pending_approvals 表与索引（锁屏审批的决策通道）。
   ///
@@ -601,6 +633,11 @@ class AppDatabase extends _$AppDatabase {
           .go();
       await (delete(messages)..where((row) => row.conversationId.equals(id)))
           .go();
+      // 会话日志保存完整消息内容，必须随会话一起删除。
+      await customStatement(
+        'DELETE FROM session_events WHERE conversation_id = ?',
+        [id],
+      );
       await (delete(conversations)..where((row) => row.id.equals(id))).go();
     });
   }
@@ -1679,6 +1716,7 @@ class AppDatabase extends _$AppDatabase {
       // 一次性审批握手数据：不进备份，但清库时必须一并抹掉，否则残留记录会
       // 让清库后的下一个同名请求拿到一个早已过期的决定。
       await customStatement('DELETE FROM pending_approvals');
+      await customStatement('DELETE FROM session_events');
     });
     markKnowledgeChanged();
   }

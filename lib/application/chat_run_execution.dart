@@ -67,6 +67,7 @@ extension ChatRunExecution on ChatController {
     var retryCount = 0;
     var foregroundStarted = false;
     RunEventTracker? tracker;
+    SessionRecorder? sessionRecorder;
     try {
       final database = await _ref.read(databaseProvider.future);
       await database.insertRunRecord(RunRecordsCompanion.insert(
@@ -79,6 +80,19 @@ extension ChatRunExecution on ChatController {
         startedAt: runStartedAt,
       ));
       tracker = RunEventTracker(database: database, runId: runId);
+      // 会话日志（阶段 1 双写）：记录模型每次请求真正看到的消息，
+      // 失败只降级上报，不影响本轮运行。
+      if (SessionLogSettings.dualWrite && runConversationId != null) {
+        sessionRecorder = SessionRecorder(
+          store: DriftSessionEventStore(database),
+          conversationId: runConversationId,
+          runId: runId,
+          model: model,
+          onError: (error, stackTrace) => NexusGuard.degradeCaught(
+              'chat.sessionLog', error, stackTrace,
+              logger: _logDegrade),
+        )..start();
+      }
     } catch (_) {
       unawaited(logService.warning(
         'Run record initialization failed',
@@ -523,7 +537,9 @@ extension ChatRunExecution on ChatController {
         // 默认聊天：40 轮预算，最近有进展时自动续跑 2 次；选了 Agent 时尊重
         // 它自己设定的最大步数上限，不自动续跑。
         autoContinueLimit: _currentState.agentId == null ? 2 : 0,
+        onRequest: sessionRecorder?.onRequest,
       )) {
+        sessionRecorder?.observe(event);
         if (event is ContextSnapshotEvent) {
           final record = ContextStepRecord(
             step: event.step,
@@ -1254,6 +1270,7 @@ extension ChatRunExecution on ChatController {
     } catch (error) {
       // 兜底：任何未预期异常（DB 写入失败、附件解析、审批回调等）都不能让
       // UI 永久停留在"运行中"。写入错误信息并恢复可交互状态。
+      sessionRecorder?.abort('unexpected_error');
       runStatus = 'failed';
       await tracker?.finish(activeNetworkEvent,
           status: 'failed', outputSummary: error.toString());
@@ -1274,6 +1291,10 @@ extension ChatRunExecution on ChatController {
           error: error,
           stackTrace: StackTrace.current);
     } finally {
+      // 事件流未给出终态就结束（提前跳出、外部取消）时封口；已结束则无操作。
+      sessionRecorder?.abort('stream_ended_without_status');
+      final pendingSessionLog = sessionRecorder?.flush();
+      if (pendingSessionLog != null) unawaited(pendingSessionLog);
       flushTimer?.cancel();
       flushTimer = null;
       finishModelTiming();

@@ -70,6 +70,12 @@ class AgentExecutor {
 
     /// 连续多少次工具失败（中间没有任何成功）后提前暂停；0 表示不熔断。
     int failurePauseThreshold = 4,
+
+    /// 每次发送模型请求前回调一次，参数为**不可变快照**：`request.messages`
+    /// 不会再被执行器修改（实际发送的请求与工作列表是同一对象，事后读取会
+    /// 看到后续追加的消息）。用于会话日志记录模型真正看到的内容。
+    /// 重试复用同一请求，不重复回调；回调抛出的异常被吞掉，不影响运行。
+    void Function(int step, UnifiedRequest request)? onRequest,
   }) async* {
     var messages = List<ChatMessage>.of(history);
 
@@ -304,6 +310,24 @@ class AgentExecutor {
         topP: topP,
         reasoningEffort: reasoningEffort,
       );
+      if (onRequest != null) {
+        try {
+          onRequest(
+            step + 1,
+            UnifiedRequest(
+              model: model,
+              messages: List<ChatMessage>.unmodifiable(messages),
+              tools: requestTools,
+              temperature: temperature,
+              maxTokens: reservedOutputTokens,
+              topP: topP,
+              reasoningEffort: reasoningEffort,
+            ),
+          );
+        } on Object {
+          // 观察者（会话日志）失败不能影响模型请求。
+        }
+      }
       final snapshot = ContextSnapshotBuilder.build(
         messages: messages,
         tools: requestTools,
