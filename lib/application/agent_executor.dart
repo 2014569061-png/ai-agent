@@ -10,19 +10,35 @@ import '../domain/tool_codes.dart';
 import '../domain/tool_result.dart';
 import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/tools/tool_registry.dart';
-import '../infrastructure/tools/schema_validator.dart';
 import '../infrastructure/providers/provider_config.dart';
 import 'context_window.dart';
-import 'approval_policy.dart';
 import '../domain/model_failure.dart';
 import 'context_snapshot_builder.dart';
 import 'context_compression_applier.dart';
 import 'run_controller.dart';
+import 'tool_pipeline/execution_interceptors.dart';
+import 'tool_pipeline/tool_invocation.dart';
+import 'tool_pipeline/tool_pipeline.dart';
+import 'tool_pipeline/tool_run_context.dart';
 
 class AgentExecutor {
-  AgentExecutor({required this.provider, required this.tools});
+  AgentExecutor({
+    required this.provider,
+    required this.tools,
+    ToolPipeline? toolPipeline,
+  }) : toolPipeline = toolPipeline ?? defaultToolPipeline;
   final LlmProvider provider;
   final ToolRegistry tools;
+
+  /// 本执行器使用的工具调用管线。未指定时使用 [defaultToolPipeline]；
+  /// 调用方可在默认拦截器基础上插入审计、网络策略等环节，
+  /// 例如 `ToolPipeline([...defaultToolInterceptors(), myInterceptor])`。
+  final ToolPipeline toolPipeline;
+
+  /// 默认管线：前置守卫 → 审批 → 检查点 → 执行边界 → 授权 → 超时执行。
+  /// 拦截器均为无状态实现，可在所有执行器间共享。
+  static final ToolPipeline defaultToolPipeline =
+      ToolPipeline(defaultToolInterceptors());
 
   Stream<AgentEvent> run({
     required List<ChatMessage> history,
@@ -56,7 +72,21 @@ class AgentExecutor {
     int failurePauseThreshold = 4,
   }) async* {
     var messages = List<ChatMessage>.of(history);
-    const schemaValidator = SchemaValidator();
+
+    // 结算一次工具调用：追加对应的 tool 消息并返回结果事件。
+    // 每个调用必须恰好结算一次，且顺序与模型给出的调用顺序一致。
+    ToolResultEvent settle(
+      ToolCall call,
+      ToolResult result, {
+      Map<String, dynamic> metadata = const <String, dynamic>{},
+    }) {
+      messages.add(ChatMessage(
+        role: MessageRole.tool,
+        toolCallId: call.id,
+        parts: [MessagePart.text(result.encode())],
+      ));
+      return ToolResultEvent(call, result, metadata: metadata);
+    }
     // 内置环境规则与业务 system prompt 分开构造，确保调用方未传 prompt 或
     // 历史已带 system 消息时，模型仍然知道当前设备的真实能力边界。
     final builtInRules = <String>[];
@@ -532,16 +562,10 @@ class AgentExecutor {
             ? '模型输出达到长度上限，工具参数可能不完整，本次未执行'
             : '模型停因不是工具调用，本次夹带的工具调用未执行';
         for (final pendingCall in pendingCalls) {
-          final toolResult = ToolResult.failure(
-            code: code,
-            message: message,
+          yield settle(
+            pendingCall,
+            ToolResult.failure(code: code, message: message),
           );
-          yield ToolResultEvent(pendingCall, toolResult);
-          messages.add(ChatMessage(
-            role: MessageRole.tool,
-            toolCallId: pendingCall.id,
-            parts: [MessagePart.text(toolResult.encode())],
-          ));
         }
         continue;
       }
@@ -562,166 +586,69 @@ class AgentExecutor {
       ));
       for (final pendingCall in pendingCalls) {
         final registration = tools.findRegistration(pendingCall.name);
-        if (registration == null) {
-          final toolResult = ToolResult.failure(
-            code: ToolCodes.unknownTool,
-            message: '工具未注册：${pendingCall.name}，请改用当前能力目录中的工具',
-          );
-          yield ToolResultEvent(pendingCall, toolResult);
-          messages.add(ChatMessage(
-            role: MessageRole.tool,
-            toolCallId: pendingCall.id,
-            parts: [MessagePart.text(toolResult.encode())],
-          ));
-          continue;
-        }
-        if (pendingCall.arguments.containsKey('_unparsed') ||
-            pendingCall.arguments
-                .containsKey(ContextWindow.truncatedArgumentMark)) {
-          final toolResult = ToolResult.failure(
-            code: ToolCodes.truncatedToolCall,
-            message: '工具参数不完整或超过上下文上限，本次未执行，请重新生成完整参数',
-          );
-          yield ToolResultEvent(pendingCall, toolResult);
-          messages.add(ChatMessage(
-            role: MessageRole.tool,
-            toolCallId: pendingCall.id,
-            parts: [MessagePart.text(toolResult.encode())],
-          ));
-          continue;
-        }
-        final validation = schemaValidator.validate(
-          pendingCall.arguments,
-          registration.spec.parametersSchema,
+        final channel = StreamController<_ToolEmission>();
+        final context = ToolRunContext(
+          approvalMode: approvalMode,
+          approveTool: approveTool,
+          isToolTrusted: isToolTrusted,
+          isCancelled: isCancelled,
+          isPaused: () => runController?.isPaused ?? false,
+          waitForResume: checkpoint,
+          emit: (event) {
+            final emission = _ToolEmission(event);
+            channel.add(emission);
+            return emission.delivered.future;
+          },
         );
-        if (!validation.isValid) {
-          final toolResult = ToolResult.failure(
-            code: ToolCodes.invalidArguments,
-            message: '工具参数校验失败：${validation.error}',
-          );
-          yield ToolResultEvent(pendingCall, toolResult);
-          messages.add(ChatMessage(
-            role: MessageRole.tool,
-            toolCallId: pendingCall.id,
-            parts: [MessagePart.text(toolResult.encode())],
-          ));
-          continue;
+        ToolResult? pipelineResult;
+        Object? pipelineError;
+        StackTrace? pipelineTrace;
+        final settled = toolPipeline
+            .run(
+              ToolInvocation(
+                call: pendingCall,
+                registration: registration,
+                context: context,
+              ),
+              executeWithTimeout,
+            )
+            .then<void>(
+              (result) => pipelineResult = result,
+              onError: (Object error, StackTrace trace) {
+                pipelineError = error;
+                pipelineTrace = trace;
+              },
+            )
+            .whenComplete(channel.close);
+        // 管线事件逐个 yield：消费方处理完毕、恢复本生成器后才确认送达，
+        // 拦截器随后才继续（例如先落库「等待确认」，再调用 approveTool）。
+        await for (final emission in channel.stream) {
+          yield emission.event;
+          emission.delivered.complete();
         }
-        final approvalGate = registration.executor is ToolApprovalGate
-            ? registration.executor as ToolApprovalGate
-            : null;
-        final risk = approvalGate?.riskForArguments(pendingCall.arguments) ??
-            registration.spec.risk;
-        final approvalDetails =
-            approvalGate?.approvalDetailsFor(pendingCall.arguments);
-        if ((approvalGate?.requiresPreviewPlan(pendingCall.arguments) ??
-                false) &&
-            approvalDetails == null) {
-          final toolResult = ToolResult.failure(
-            code: ToolCodes.invalidArguments,
-            message: '该设备变更没有匹配的有效预览，请先生成预览再请求执行',
-          );
-          yield ToolResultEvent(pendingCall, toolResult);
-          messages.add(ChatMessage(
-            role: MessageRole.tool,
-            toolCallId: pendingCall.id,
-            parts: [MessagePart.text(toolResult.encode())],
-          ));
-          continue;
-        }
-        final decision = const ApprovalPolicy().decide(
-          mode: approvalMode,
-          risk: risk,
-          sensitive: registration.spec.sensitive,
-          trusted: isToolTrusted?.call(
-                registration.spec.name,
-                risk,
-              ) ??
-              false,
-        );
-        if (decision.requiresUser) {
-          final approvalCall = approvalDetails == null
-              ? pendingCall
-              : pendingCall.copyWith(
-                  arguments: {
-                    ...pendingCall.arguments,
-                    '_approvalDetails': approvalDetails,
-                  },
-                );
-          yield ApprovalRequiredEvent(approvalCall, risk);
-          final userDecision = await approveTool?.call(
-                approvalCall,
-                risk,
-                registration.spec.sensitive,
-              ) ??
-              ToolApproval.reject;
-          if (userDecision == ToolApproval.reject) {
-            approvalGate?.rejectApproval(pendingCall.arguments);
-            final toolResult = ToolResult.failure(
-              code: ToolCodes.approvalRejected,
-              message: '用户拒绝了该工具调用，请改用不需要该权限的方案继续',
-            );
-            yield ToolResultEvent(pendingCall, toolResult);
-            messages.add(ChatMessage(
-              role: MessageRole.tool,
-              toolCallId: pendingCall.id,
-              parts: [MessagePart.text(toolResult.encode())],
-            ));
-            continue;
-          }
-        }
-        if (isCancelled()) {
+        await settled;
+        final error = pipelineError;
+        if (error is ToolRunCancelled) {
           yield const AgentStatusEvent(RunStatus.cancelled);
           return;
         }
-        yield* pausePoint();
-        if (isCancelled()) {
-          yield const AgentStatusEvent(RunStatus.cancelled);
-          return;
+        if (error != null) {
+          Error.throwWithStackTrace(error, pipelineTrace ?? StackTrace.current);
         }
-        yield const AgentStatusEvent(RunStatus.executingTool);
-        ToolResult toolResult;
-        try {
-          // 强制超时：一个卡死的终端命令或网络工具若不设上限，会无限期挂住
-          // 整个 Agent 回合。这里只停止"等待"，**不保证中断底层进程/连接**——
-          // 现有工具没有统一的取消通道，因此结果按 effect=unknown 上报，让模型
-          // 先读取确认而不是盲目重试。
-          final executionArguments = approvalGate?.authorizeAfterApproval(
-                pendingCall.arguments,
-              ) ??
-              pendingCall.arguments;
-          toolResult =
-              await registration.executor.execute(executionArguments).timeout(
-                    registration.spec.timeout,
-                    onTimeout: () => ToolResult.failure(
-                      code: ToolCodes.timeout,
-                      message:
-                          '工具执行超时（${registration.spec.timeout.inSeconds}s），已中止等待；'
-                          '副作用无法确认，请先检查目标状态',
-                      effect: ToolEffect.unknown,
-                    ),
-                  );
-        } on ToolApprovalAuthorizationException catch (error) {
-          toolResult = ToolResult.failure(
-            code: ToolCodes.invalidArguments,
-            message: error.message,
-          );
-        } catch (error) {
-          // 异常发生在工具边界内，无法证明副作用是否发生；先让模型确认状态。
-          toolResult = ToolResult.failure(
-            code: ToolCodes.toolError,
-            message: '工具执行异常：$error；副作用无法确认，请先检查目标状态',
-            effect: ToolEffect.unknown,
-          );
+        final toolResult = pipelineResult;
+        if (toolResult == null) {
+          throw StateError('工具管线未产出结果：${pendingCall.name}');
         }
-        final metadata = registration.executor is ToolExecutionMetadata
-            ? (registration.executor as ToolExecutionMetadata).lastMetadata
-            : const <String, dynamic>{};
-        yield ToolResultEvent(pendingCall, toolResult, metadata: metadata);
-        messages.add(ChatMessage(
-            role: MessageRole.tool,
-            toolCallId: pendingCall.id,
-            parts: [MessagePart.text(toolResult.encode())]));
+        // 未进入执行边界（守卫短路或审批拒绝）：不附带元数据，也不计入熔断。
+        if (!context.executionStarted) {
+          yield settle(pendingCall, toolResult);
+          continue;
+        }
+        final metadata = switch (registration?.executor) {
+          final ToolExecutionMetadata source => source.lastMetadata,
+          _ => const <String, dynamic>{},
+        };
+        yield settle(pendingCall, toolResult, metadata: metadata);
         recordToolOutcome(pendingCall, toolResult);
       }
       // 同一调用反复失败：在本步全部工具结果之后提醒模型换方法（不能插在
@@ -1013,4 +940,12 @@ class ToolResultEvent extends AgentEvent {
   final ToolCall call;
   final ToolResult result;
   final Map<String, dynamic> metadata;
+}
+
+/// 管线发往执行器事件流的一条事件；[delivered] 在消费方处理完毕后完成。
+final class _ToolEmission {
+  _ToolEmission(this.event);
+
+  final AgentEvent event;
+  final delivered = Completer<void>();
 }
