@@ -1372,6 +1372,10 @@ extension ChatRunExecution on ChatController {
           // 可忽略：运行记录清理失败只影响历史表体积，不影响本轮结果。
           // 下次启动或后续运行会再次尝试。
         }
+        // 任务变更集与保存的原始文件：保留 30 天内、最近 50 个任务；
+        // 刚结束的任务始终保留。不阻塞收尾，失败下次再试。
+        unawaited(pruneChangeSets(protect: {if (taskId != null) taskId})
+            .catchError((Object _) => 0));
       } catch (_) {
         // 可忽略（有意降级）：运行指标持久化整体失败时不改变控制流——
         // 到此为止用户回答已生成完毕。指标缺失只影响统计面板的完整度。
