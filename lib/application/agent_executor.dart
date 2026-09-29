@@ -11,7 +11,6 @@ import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/providers/provider_config.dart';
 import 'context_window.dart';
-import 'context_snapshot_builder.dart';
 import 'run_controller.dart';
 import 'tool_pipeline/execution_interceptors.dart';
 import 'tool_pipeline/tool_invocation.dart';
@@ -19,10 +18,14 @@ import 'tool_pipeline/tool_pipeline.dart';
 import 'tool_pipeline/tool_run_context.dart';
 import 'agent_loop/agent_loop_hooks.dart';
 import 'agent_loop/builtin_hooks.dart';
+import 'agent_loop/context_reporter.dart';
 import 'agent_loop/loop_messages.dart';
 import 'agent_loop/model_retry_policy.dart';
+import 'agent_loop/model_step.dart';
+import 'agent_loop/request_shape.dart';
 import 'agent_loop/step_budget_policy.dart';
 import 'agent_loop/system_prompt_merge.dart';
+import 'agent_loop/usage_tally.dart';
 
 class AgentExecutor {
   AgentExecutor({
@@ -110,41 +113,14 @@ class AgentExecutor {
         hasTerminal: tools.manifests.any((t) => t.name == 'terminal'),
       ),
     );
-    // 上下文预算：每步请求前裁剪一次，同时约束初始历史与多步工具循环
-    // 中持续追加的工具结果。
-    // 工具定义也占模型输入窗口；历史裁剪必须先扣除这部分固定成本，
-    // 并为本次模型输出预留 maxTokens，避免输入与输出合计超过窗口。
-    // 工具目录在下方排序后计算固定成本，保持与快照和实际请求一致。
-    // 工具定义数组是 Provider 前缀缓存的一部分（Anthropic 还显式在 tools
-    // 段打缓存断点）。目录按装配顺序生成（内置/MCP/插件/工作区），装配顺序
-    // 受运行环境影响；这里按名称稳定排序，保证同一份工具目录在整个运行期
-    // 的每一步请求中字节级一致，不因装配差异打爆前缀缓存。
-    final requestTools = capabilities.tools
-        ? (tools.manifests.toList()..sort((a, b) => a.name.compareTo(b.name)))
-        : const <UnifiedTool>[];
-    final fixedToolTokens =
-        ContextSnapshotBuilder.estimateToolTokens(requestTools);
-    final reservedOutputTokens = ContextBudget.outputReservationFor(
-      contextWindow: contextBudgetTokens,
+    final shape = RequestShape.resolve(
+      manifests: tools.manifests,
+      toolsEnabled: capabilities.tools,
+      contextBudgetTokens: contextBudgetTokens,
       requestedOutputTokens: maxTokens,
     );
-    final inputBudget = ContextBudget.inputBudgetFor(
-      contextWindow: contextBudgetTokens,
-      reservedOutputTokens: reservedOutputTokens,
-    );
-    final contextWindow = ContextWindow(
-      maxTokens: inputBudget,
-      fixedTokens: fixedToolTokens,
-    );
-    var totalPromptTokens = 0;
-    var totalCompletionTokens = 0;
-    var totalCachedTokens = 0;
-    var totalCacheWriteTokens = 0;
-    var totalReasoningTokens = 0;
-    var sawUsageStats = false;
-    var sawCacheStats = false;
-    ContextSnapshot? previousSnapshot;
-    var contextWasCompressed = false;
+    final requestTools = shape.tools;
+    final reservedOutputTokens = shape.reservedOutputTokens;
     bool isCancelled() =>
         (cancellationToken?.isCancelled ?? false) ||
         (runController?.isCancelled ?? false);
@@ -177,24 +153,45 @@ class AgentExecutor {
     final retryPolicy =
         ModelRetryPolicy(maxRetries: maxRetries, backoff: retryBackoff);
 
-    // 本次运行的阶段钩子：内置实现 + 执行器级外部钩子。
-    final requestTransforms = <RequestTransform>[
-      QueuedCompressionTransform(runController),
-      ...hooks.requestTransforms,
-      ContextWindowTransform(contextWindow),
-    ];
-    final requestObservers = <RequestObserver>[
-      ...hooks.requestObservers,
-      if (onRequest != null) onRequest,
-    ];
-    final toolOutcomeObservers = <ToolOutcomeObserver>[
-      budgetPolicy,
-      ...hooks.toolOutcomeObservers,
-    ];
-    final turnStoppingHandlers = <TurnStoppingHandler>[
-      ...hooks.turnStopping,
-      SteeringTurnStopping(runController),
-    ];
+    // 本次运行的阶段钩子：内置实现包在执行器级外部钩子两侧。顺序即语义——
+    // 压缩先于外部 transform、裁剪最后；预算观察最先；steering 最后（它会封存
+    // 控制器，之后外部 handler 无法再续跑）。
+    final loop = AgentLoopHooks(
+      requestTransforms: [QueuedCompressionTransform(runController)],
+      toolOutcomeObservers: [budgetPolicy],
+    ).merge(hooks).merge(AgentLoopHooks(
+          requestTransforms: [ContextWindowTransform(shape.contextWindow)],
+          requestObservers: [if (onRequest != null) onRequest],
+          turnStopping: [SteeringTurnStopping(runController)],
+        ));
+
+    final usage = UsageTally();
+    final contextReporter = ContextReporter(
+      tools: requestTools,
+      contextWindow: contextBudgetTokens,
+      reservedOutputTokens: reservedOutputTokens,
+    );
+    final modelStep = ModelStepRunner(
+      provider: provider,
+      requestTimeout: requestTimeout,
+      retryPolicy: retryPolicy,
+      usage: usage,
+      isCancelled: isCancelled,
+      cancellationToken: cancellationToken,
+      runController: runController,
+      cancelToken: cancelToken,
+    );
+    UnifiedRequest buildRequest(List<ChatMessage> requestMessages) =>
+        UnifiedRequest(
+          model: model,
+          messages: requestMessages,
+          tools: requestTools,
+          temperature: temperature,
+          maxTokens: reservedOutputTokens,
+          topP: topP,
+          reasoningEffort: reasoningEffort,
+        );
+
     for (var step = 0;; step++) {
       final budgetDecision = budgetPolicy.beforeStep(step);
       if (budgetDecision is BudgetExhausted) break;
@@ -213,7 +210,7 @@ class AgentExecutor {
       }
       yield const AgentStatusEvent(RunStatus.waitingModel);
       final requestContext = RequestContext(step: step + 1, model: model);
-      for (final transform in requestTransforms) {
+      for (final transform in loop.requestTransforms) {
         final result = transform.apply(requestContext, messages);
         if (!identical(result.messages, messages)) {
           messages = List<ChatMessage>.of(result.messages);
@@ -222,209 +219,22 @@ class AgentExecutor {
           yield event;
         }
       }
-      final request = UnifiedRequest(
-        model: model,
-        messages: messages,
-        tools: requestTools,
-        temperature: temperature,
-        maxTokens: reservedOutputTokens,
-        topP: topP,
-        reasoningEffort: reasoningEffort,
-      );
-      if (requestObservers.isNotEmpty) {
-        final frozen = UnifiedRequest(
-          model: model,
-          messages: List<ChatMessage>.unmodifiable(messages),
-          tools: requestTools,
-          temperature: temperature,
-          maxTokens: reservedOutputTokens,
-          topP: topP,
-          reasoningEffort: reasoningEffort,
-        );
-        for (final observer in requestObservers) {
-          try {
-            observer(step + 1, frozen);
-          } on Object {
-            // 观察者（会话日志等）失败不能影响模型请求。
-          }
-        }
+      final request = buildRequest(messages);
+      _notifyRequestObservers(loop.requestObservers, step + 1,
+          () => buildRequest(List.unmodifiable(messages)));
+      for (final event in contextReporter.report(step + 1, messages)) {
+        yield event;
       }
-      final snapshot = ContextSnapshotBuilder.build(
-        messages: messages,
-        tools: requestTools,
-        contextWindow: contextBudgetTokens,
-        reservedOutputTokens: reservedOutputTokens,
-      );
-      final anchorMessageId = messages.reversed
-          .where((message) => message.role != MessageRole.system)
-          .map((message) => message.id)
-          .whereType<String>()
-          .firstOrNull;
-      yield ContextSnapshotEvent(
-        step: step + 1,
-        snapshot: snapshot,
-        anchorMessageId: anchorMessageId,
-      );
-      if (snapshot.budgetLevel != ContextBudgetLevel.normal) {
-        yield ContextBudgetWarningEvent(
-          level: snapshot.budgetLevel,
-          usedTokens: snapshot.usedTokens,
-          contextWindow: snapshot.contextWindow,
-          remainingTokens: snapshot.remainingTokens,
-          dominantPart: snapshot.dominantPart?.type.name,
-        );
-      }
-      for (final change in _contextChanges(
-        step: step + 1,
-        previous: previousSnapshot,
-        current: snapshot,
-        compressed: messages.any(
-            (message) => message.text.contains(ContextWindow.compactionNotice)),
-        wasCompressed: contextWasCompressed,
-      )) {
-        yield change;
-      }
-      contextWasCompressed = messages.any(
-          (message) => message.text.contains(ContextWindow.compactionNotice));
-      previousSnapshot = snapshot;
-      final textBuffer = StringBuffer();
-      final reasoningBuffer = StringBuffer();
-      var stepPromptTokens = 0;
-      var stepCompletionTokens = 0;
-      var stepCachedTokens = 0;
-      var stepCacheWriteTokens = 0;
-      var stepReasoningTokens = 0;
-      var stepUsageReported = false;
-      var stepCacheStatsReported = false;
-      final pendingCalls = <ToolCall>[];
-      var stopReason = StopReason.unknown;
-      // 暂停即中断：本轮模型请求使用独立的 CancelToken，并与运行级 token 联动
-      // （停止时一并取消）。用户点暂停时，若本轮还没产出工具调用，就立即掐断
-      // 流式输出；已输出的半截文字留作上下文，恢复后让模型从中断处接着写。
-      final stepCancelToken = CancelToken();
-      final runCancelToken = cancelToken;
-      if (runCancelToken != null) {
-        unawaited(runCancelToken.whenCancel.then<void>((_) {
-          if (!stepCancelToken.isCancelled) stepCancelToken.cancel();
-        }));
-      }
-      var pauseInterrupted = false;
-      runController?.onPauseInterrupt = () {
-        if (pendingCalls.isNotEmpty || stepCancelToken.isCancelled) return;
-        pauseInterrupted = true;
-        stepCancelToken.cancel('paused');
-      };
-      // 失败自动重试：本轮尚未产出任何内容（无文本/推理/工具调用）且底层
-      // 请求失败时，指数退避后整体重发；已产出内容则不重试，避免文本重复
-      // 渲染与工具重复副作用。Dio 层 RetryInterceptor 对流式请求不重试，
-      // 这里是 SSE 失败的唯一重试路径。
-      var attempts = 0;
-      while (true) {
-        ProviderErrorEvent? failure;
-        try {
-          await for (final event in provider
-              .stream(request, cancelToken: stepCancelToken)
-              .timeout(requestTimeout)) {
-            if (isCancelled()) {
-              yield const AgentStatusEvent(RunStatus.cancelled);
-              return;
-            }
-            if (pauseInterrupted) break;
-            if (event is TextDeltaEvent) {
-              textBuffer.write(event.text);
-              yield TextEvent(event.text);
-            } else if (event is ReasoningDeltaEvent) {
-              reasoningBuffer.write(event.text);
-              yield ReasoningEvent(event.text);
-            } else if (event is ToolCallEvent) {
-              pendingCalls.add(event.call);
-              yield ToolRequestedEvent(event.call);
-            } else if (event is CompletedEvent) {
-              stopReason = event.stopReason;
-            } else if (event is UsageEvent) {
-              totalPromptTokens += event.promptTokens;
-              totalCompletionTokens += event.completionTokens;
-              totalCachedTokens += event.cachedTokens;
-              totalCacheWriteTokens += event.cacheWriteTokens;
-              totalReasoningTokens += event.reasoningTokens;
-              stepPromptTokens += event.promptTokens;
-              stepCompletionTokens += event.completionTokens;
-              stepCachedTokens += event.cachedTokens;
-              stepCacheWriteTokens += event.cacheWriteTokens;
-              stepReasoningTokens += event.reasoningTokens;
-              sawUsageStats = sawUsageStats || event.usageReported;
-              stepUsageReported = stepUsageReported || event.usageReported;
-              if (event.usageReported && event.cacheStatsReported) {
-                sawCacheStats = true;
-                stepCacheStatsReported = true;
-              }
-            } else if (event is ProviderErrorEvent) {
-              failure = event;
-              break;
-            }
-          }
-        } on TimeoutException {
-          // 空闲超时属于 transient failure，先让统一重试分类决定是否重试。
-          // 只有最终失败时才取消调用方持有的底层 HTTP token。
-          failure = ProviderErrorEvent(
-            '模型请求超时（${requestTimeout.inSeconds} 秒）',
-            failureKind: 'receiveTimeout',
-          );
-        }
-        // 暂停中断时 provider 按约定会静默结束；即便个别实现仍产出错误，也按
-        // 中断处理：不重试，也不当作失败。
-        if (failure == null || (pauseInterrupted && !isCancelled())) break;
-        final decision = retryPolicy.decide(
-          failure,
-          hasContent: textBuffer.isNotEmpty ||
-              reasoningBuffer.isNotEmpty ||
-              pendingCalls.isNotEmpty,
-          attempts: attempts,
-        );
-        if (decision is! RetryAfter) {
-          cancelToken?.cancel();
-          yield AgentErrorEvent(
-            failure.message,
-            retryable: decision is RetryGiveUp,
-            failureKind: decision.failure.kind,
-            statusCode: decision.failure.statusCode,
-          );
-          return;
-        }
-        attempts = decision.attempt;
-        yield AgentRetryEvent(attempts);
-        if (isCancelled()) {
-          yield const AgentStatusEvent(RunStatus.cancelled);
-          return;
-        }
-        // 指数退避只针对尚未产生任何模型输出的瞬态失败，避免把已有工具调用
-        // 重复提交。
-        final delay = decision.delay;
-        final cancelled =
-            cancellationToken?.whenCancelled ?? runController?.whenCancelled;
-        if (cancelled == null) {
-          await Future<void>.delayed(delay);
-        } else {
-          await Future.any<void>([Future<void>.delayed(delay), cancelled]);
-        }
-        if (isCancelled()) {
-          cancelToken?.cancel();
-          yield const AgentStatusEvent(RunStatus.cancelled);
-          return;
-        }
-      }
-      runController?.onPauseInterrupt = null;
-      // 流被主动取消（底层 HTTP 已真正中断）时，不产出 completed。
-      if (isCancelled()) {
-        cancelToken?.cancel();
-        yield const AgentStatusEvent(RunStatus.cancelled);
-        return;
-      }
-      if (pauseInterrupted) {
+
+      final out = ModelStepResult();
+      yield* modelStep.run(request, out);
+      if (out.terminated) return;
+      final pendingCalls = out.pendingCalls;
+      if (out.pauseInterrupted) {
         // 本轮被暂停中断：丢弃可能不完整的工具调用；已输出的半截文字作为
         // assistant 上下文保留，并提示模型恢复后从中断处接着写。回到循环
         // 顶部，由暂停检查点发出 paused，等待继续或停止。
-        final partial = textBuffer.toString();
+        final partial = out.text.toString();
         if (partial.trim().isNotEmpty) {
           messages.add(ChatMessage(
             role: MessageRole.assistant,
@@ -434,55 +244,24 @@ class AgentExecutor {
         }
         continue;
       }
-      yield AgentStepUsageEvent(
-        step: step + 1,
-        usage: Usage(
-          promptTokens: stepPromptTokens,
-          completionTokens: stepCompletionTokens,
-          cachedTokens: stepCachedTokens,
-          cacheWriteTokens: stepCacheWriteTokens,
-          reasoningTokens: stepReasoningTokens,
-          usageReported: stepUsageReported,
-          cacheStatsReported: stepCacheStatsReported,
-        ),
-      );
+      yield AgentStepUsageEvent(step: step + 1, usage: usage.stepUsage);
       if (pendingCalls.isEmpty) {
         // turn-stopping：任一 handler 可否决结束并让运行继续。
         final stopping = TurnStoppingContext(
           step: step + 1,
-          finalText: textBuffer.toString(),
+          finalText: out.text.toString(),
         );
-        TurnContinuation? continuation;
-        for (final handler in turnStoppingHandlers) {
-          continuation = handler.onTurnStopping(stopping);
-          if (continuation != null) break;
-        }
+        final continuation =
+            _resolveContinuation(loop.turnStopping, stopping);
         if (continuation != null && continuation.messages.isNotEmpty) {
           if (continuation.keepAssistantText) {
-            messages.add(ChatMessage(
-              role: MessageRole.assistant,
-              parts: [MessagePart.text(textBuffer.toString())],
-              reasoning:
-                  reasoningBuffer.isEmpty ? null : reasoningBuffer.toString(),
-            ));
+            messages.add(out.assistantMessage());
           }
           messages.addAll(continuation.messages);
           continue;
         }
-        messages.add(ChatMessage(
-          role: MessageRole.assistant,
-          parts: [MessagePart.text(textBuffer.toString())],
-          reasoning:
-              reasoningBuffer.isEmpty ? null : reasoningBuffer.toString(),
-        ));
-        yield AgentUsageEvent(
-            promptTokens: totalPromptTokens,
-            completionTokens: totalCompletionTokens,
-            cachedTokens: totalCachedTokens,
-            cacheWriteTokens: totalCacheWriteTokens,
-            reasoningTokens: totalReasoningTokens,
-            usageReported: sawUsageStats,
-            cacheStatsReported: sawCacheStats);
+        messages.add(out.assistantMessage());
+        yield usage.totalEvent;
         yield const AgentStatusEvent(RunStatus.completed);
         return;
       }
@@ -490,109 +269,50 @@ class AgentExecutor {
       // 只有模型明确以 toolUse 结束本轮时，夹带的调用才具备可执行资格。
       // outputLimit 通常意味着参数可能被截断，其他停因则属于协议矛盾；两者都必须
       // 回灌结构化错误，让模型重新规划，而不是把不完整调用交给真实工具。
-      if (stopReason != StopReason.toolUse) {
-        messages.add(ChatMessage(
-          role: MessageRole.assistant,
-          parts: [MessagePart.text(textBuffer.toString())],
-          toolCalls: List<ToolCall>.unmodifiable(pendingCalls),
-          reasoning:
-              reasoningBuffer.isEmpty ? null : reasoningBuffer.toString(),
-        ));
-        final code = stopReason == StopReason.outputLimit
-            ? ToolCodes.truncatedToolCall
-            : ToolCodes.unexpectedToolCall;
-        final message = stopReason == StopReason.outputLimit
-            ? LoopMessages.truncatedToolCallMessage
-            : LoopMessages.unexpectedToolCallMessage;
+      if (out.stopReason != StopReason.toolUse) {
+        messages.add(out.assistantMessage(withToolCalls: true));
+        final rejection = _rejectedCallResult(out.stopReason);
         for (final pendingCall in pendingCalls) {
-          yield settle(
-            pendingCall,
-            ToolResult.failure(code: code, message: message),
-          );
+          yield settle(pendingCall, rejection);
         }
         continue;
       }
       var planApproved = false;
       if (step == 0 && confirmPlan != null && pendingCalls.isNotEmpty) {
-        final approved = await confirmPlan(pendingCalls, textBuffer.toString());
+        final approved = await confirmPlan(pendingCalls, out.text.toString());
         if (!approved) {
           yield const AgentStatusEvent(RunStatus.cancelled);
           return;
         }
         planApproved = true;
       }
-      messages.add(ChatMessage(
-        role: MessageRole.assistant,
-        parts: [MessagePart.text(textBuffer.toString())],
-        toolCalls: List<ToolCall>.unmodifiable(pendingCalls),
-        reasoning: reasoningBuffer.isEmpty ? null : reasoningBuffer.toString(),
-      ));
+      messages.add(out.assistantMessage(withToolCalls: true));
       for (final pendingCall in pendingCalls) {
         final registration = tools.findRegistration(pendingCall.name);
-        final channel = StreamController<_ToolEmission>();
-        final context = ToolRunContext(
-          approvalMode: approvalMode,
-          approveTool: approveTool,
-          isToolTrusted: isToolTrusted,
-          isCancelled: isCancelled,
-          isPaused: () => runController?.isPaused ?? false,
-          waitForResume: checkpoint,
-          emit: (event) {
-            final emission = _ToolEmission(event);
-            channel.add(emission);
-            return emission.delivered.future;
-          },
+        final outcome = _ToolCallOutcome();
+        yield* _executeTool(
+          pendingCall,
+          registration,
+          outcome,
+          (emit) => ToolRunContext(
+            approvalMode: approvalMode,
+            approveTool: approveTool,
+            isToolTrusted: isToolTrusted,
+            isCancelled: isCancelled,
+            isPaused: () => runController?.isPaused ?? false,
+            waitForResume: checkpoint,
+            emit: emit,
+          ),
         );
-        ToolResult? pipelineResult;
-        Object? pipelineError;
-        StackTrace? pipelineTrace;
-        final settled = toolPipeline
-            .run(
-              ToolInvocation(
-                call: pendingCall,
-                registration: registration,
-                context: context,
-              ),
-              executeWithTimeout,
-            )
-            .then<void>(
-              (result) => pipelineResult = result,
-              onError: (Object error, StackTrace trace) {
-                pipelineError = error;
-                pipelineTrace = trace;
-              },
-            )
-            .whenComplete(channel.close);
-        // 管线事件逐个 yield：消费方处理完毕、恢复本生成器后才确认送达，
-        // 拦截器随后才继续（例如先落库「等待确认」，再调用 approveTool）。
-        await for (final emission in channel.stream) {
-          yield emission.event;
-          emission.delivered.complete();
-        }
-        await settled;
-        final error = pipelineError;
-        if (error is ToolRunCancelled) {
-          yield const AgentStatusEvent(RunStatus.cancelled);
-          return;
-        }
-        if (error != null) {
-          Error.throwWithStackTrace(error, pipelineTrace ?? StackTrace.current);
-        }
-        final toolResult = pipelineResult;
-        if (toolResult == null) {
-          throw StateError('工具管线未产出结果：${pendingCall.name}');
-        }
+        if (outcome.cancelled) return;
+        final toolResult = outcome.result!;
         // 未进入执行边界（守卫短路或审批拒绝）：不附带元数据，也不计入熔断。
-        if (!context.executionStarted) {
+        if (!outcome.executionStarted) {
           yield settle(pendingCall, toolResult);
           continue;
         }
-        final metadata = switch (registration?.executor) {
-          final ToolExecutionMetadata source => source.lastMetadata,
-          _ => const <String, dynamic>{},
-        };
-        yield settle(pendingCall, toolResult, metadata: metadata);
-        for (final observer in toolOutcomeObservers) {
+        yield settle(pendingCall, toolResult, metadata: outcome.metadata);
+        for (final observer in loop.toolOutcomeObservers) {
           observer.onToolOutcome(pendingCall, toolResult);
         }
       }
@@ -630,48 +350,110 @@ class AgentExecutor {
     );
   }
 
-  List<AgentContextChangeEvent> _contextChanges({
-    required int step,
-    required ContextSnapshot? previous,
-    required ContextSnapshot current,
-    required bool compressed,
-    required bool wasCompressed,
-  }) {
-    if (previous == null) {
-      return compressed
-          ? [
-              AgentContextChangeEvent(
-                step: step,
-                kind: 'context_compress',
-                category: 'history',
-                deltaTokens: 0,
-              ),
-            ]
-          : const [];
+  /// 请求观察者收到不可变快照；任何观察者（会话日志等）失败都不影响请求。
+  static void _notifyRequestObservers(List<RequestObserver> observers,
+      int step, UnifiedRequest Function() snapshot) {
+    if (observers.isEmpty) return;
+    final frozen = snapshot();
+    for (final observer in observers) {
+      try {
+        observer(step, frozen);
+      } on Object {
+        // 忽略：观察失败不能影响模型请求。
+      }
     }
-    final events = <AgentContextChangeEvent>[];
-    for (final type in ContextPartType.values) {
-      final before = previous.tokensFor(type);
-      final after = current.tokensFor(type);
-      final delta = after - before;
-      if (delta == 0) continue;
-      events.add(AgentContextChangeEvent(
-        step: step,
-        kind: delta > 0 ? 'context_inject' : 'context_prune',
-        category: type.name,
-        deltaTokens: delta,
-      ));
-    }
-    if (compressed && !wasCompressed) {
-      events.add(AgentContextChangeEvent(
-        step: step,
-        kind: 'context_compress',
-        category: 'history',
-        deltaTokens: current.usedTokens - previous.usedTokens,
-      ));
-    }
-    return events;
   }
+
+  /// 模型未以 toolUse 结束却夹带了工具调用时回灌的结构化错误。
+  static ToolResult _rejectedCallResult(StopReason stopReason) =>
+      stopReason == StopReason.outputLimit
+          ? ToolResult.failure(
+              code: ToolCodes.truncatedToolCall,
+              message: LoopMessages.truncatedToolCallMessage)
+          : ToolResult.failure(
+              code: ToolCodes.unexpectedToolCall,
+              message: LoopMessages.unexpectedToolCallMessage);
+
+  /// turn-stopping：按顺序询问，第一个非空的续跑决定生效。
+  static TurnContinuation? _resolveContinuation(
+      List<TurnStoppingHandler> handlers, TurnStoppingContext context) {
+    for (final handler in handlers) {
+      final continuation = handler.onTurnStopping(context);
+      if (continuation != null) return continuation;
+    }
+    return null;
+  }
+
+  /// 经工具管线执行单个调用，逐个转发管线事件（消费方处理完毕、恢复本
+  /// 生成器后才确认送达，拦截器随后才继续——例如先落库「等待确认」，再调用
+  /// approveTool）。结果写入 [outcome]；取消时产出 cancelled 并置
+  /// [_ToolCallOutcome.cancelled]，其他异常原样抛出。
+  Stream<AgentEvent> _executeTool(
+    ToolCall call,
+    ToolRegistration? registration,
+    _ToolCallOutcome outcome,
+    ToolRunContext Function(ToolEventEmitter emit) contextFor,
+  ) async* {
+    final channel = StreamController<_ToolEmission>();
+    final context = contextFor((event) {
+      final emission = _ToolEmission(event);
+      channel.add(emission);
+      return emission.delivered.future;
+    });
+    ToolResult? pipelineResult;
+    Object? pipelineError;
+    StackTrace? pipelineTrace;
+    final settled = toolPipeline
+        .run(
+          ToolInvocation(
+            call: call,
+            registration: registration,
+            context: context,
+          ),
+          executeWithTimeout,
+        )
+        .then<void>(
+          (result) => pipelineResult = result,
+          onError: (Object error, StackTrace trace) {
+            pipelineError = error;
+            pipelineTrace = trace;
+          },
+        )
+        .whenComplete(channel.close);
+    await for (final emission in channel.stream) {
+      yield emission.event;
+      emission.delivered.complete();
+    }
+    await settled;
+    final error = pipelineError;
+    if (error is ToolRunCancelled) {
+      outcome.cancelled = true;
+      yield const AgentStatusEvent(RunStatus.cancelled);
+      return;
+    }
+    if (error != null) {
+      Error.throwWithStackTrace(error, pipelineTrace ?? StackTrace.current);
+    }
+    final result = pipelineResult;
+    if (result == null) {
+      throw StateError('工具管线未产出结果：${call.name}');
+    }
+    outcome.result = result;
+    outcome.executionStarted = context.executionStarted;
+    if (context.executionStarted) {
+      outcome.metadata = switch (registration?.executor) {
+        final ToolExecutionMetadata source => source.lastMetadata,
+        _ => const <String, dynamic>{},
+      };
+    }
+  }
+}
+
+final class _ToolCallOutcome {
+  ToolResult? result;
+  bool cancelled = false;
+  bool executionStarted = false;
+  Map<String, dynamic> metadata = const <String, dynamic>{};
 }
 
 class AgentCancellationToken {
