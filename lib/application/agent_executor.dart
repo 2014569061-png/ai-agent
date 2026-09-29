@@ -12,12 +12,13 @@ import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/providers/provider_config.dart';
 import 'context_window.dart';
 import 'context_snapshot_builder.dart';
-import 'context_compression_applier.dart';
 import 'run_controller.dart';
 import 'tool_pipeline/execution_interceptors.dart';
 import 'tool_pipeline/tool_invocation.dart';
 import 'tool_pipeline/tool_pipeline.dart';
 import 'tool_pipeline/tool_run_context.dart';
+import 'agent_loop/agent_loop_hooks.dart';
+import 'agent_loop/builtin_hooks.dart';
 import 'agent_loop/loop_messages.dart';
 import 'agent_loop/model_retry_policy.dart';
 import 'agent_loop/step_budget_policy.dart';
@@ -28,9 +29,15 @@ class AgentExecutor {
     required this.provider,
     required this.tools,
     ToolPipeline? toolPipeline,
+    this.hooks = AgentLoopHooks.empty,
   }) : toolPipeline = toolPipeline ?? defaultToolPipeline;
   final LlmProvider provider;
   final ToolRegistry tools;
+
+  /// 执行循环的阶段钩子（request / 请求观察 / 工具结果 / turn-stopping）。
+  /// 内置行为（压缩、上下文裁剪、步数预算、插话）始终存在，外部钩子按
+  /// [AgentLoopHooks] 文档描述的位置插入。
+  final AgentLoopHooks hooks;
 
   /// 本执行器使用的工具调用管线。未指定时使用 [defaultToolPipeline]；
   /// 调用方可在默认拦截器基础上插入审计、网络策略等环节，
@@ -169,6 +176,25 @@ class AgentExecutor {
     );
     final retryPolicy =
         ModelRetryPolicy(maxRetries: maxRetries, backoff: retryBackoff);
+
+    // 本次运行的阶段钩子：内置实现 + 执行器级外部钩子。
+    final requestTransforms = <RequestTransform>[
+      QueuedCompressionTransform(runController),
+      ...hooks.requestTransforms,
+      ContextWindowTransform(contextWindow),
+    ];
+    final requestObservers = <RequestObserver>[
+      ...hooks.requestObservers,
+      if (onRequest != null) onRequest,
+    ];
+    final toolOutcomeObservers = <ToolOutcomeObserver>[
+      budgetPolicy,
+      ...hooks.toolOutcomeObservers,
+    ];
+    final turnStoppingHandlers = <TurnStoppingHandler>[
+      ...hooks.turnStopping,
+      SteeringTurnStopping(runController),
+    ];
     for (var step = 0;; step++) {
       final budgetDecision = budgetPolicy.beforeStep(step);
       if (budgetDecision is BudgetExhausted) break;
@@ -186,26 +212,16 @@ class AgentExecutor {
         return;
       }
       yield const AgentStatusEvent(RunStatus.waitingModel);
-      final compressionIds =
-          runController?.drainCompressionToolCallIds() ?? const <String>{};
-      if (compressionIds.isNotEmpty) {
-        final compression = const ContextCompressionApplier()
-            .applyToolCallIds(messages, compressionIds);
-        messages = List<ChatMessage>.of(compression.messages);
-        if (compression.appliedCandidates.isNotEmpty) {
-          yield AgentContextCompressionEvent(
-            toolCallIds: compression.appliedCandidates
-                .map((candidate) => candidate.toolCallId)
-                .whereType<String>()
-                .toList(growable: false),
-            candidateCount: compression.appliedCandidates.length,
-            estimatedSavedTokens: compression.savedTokens,
-            originalTokens: compression.originalTokens,
-            compressedTokens: compression.compressedTokens,
-          );
+      final requestContext = RequestContext(step: step + 1, model: model);
+      for (final transform in requestTransforms) {
+        final result = transform.apply(requestContext, messages);
+        if (!identical(result.messages, messages)) {
+          messages = List<ChatMessage>.of(result.messages);
+        }
+        for (final event in result.events) {
+          yield event;
         }
       }
-      messages = contextWindow.apply(messages);
       final request = UnifiedRequest(
         model: model,
         messages: messages,
@@ -215,22 +231,22 @@ class AgentExecutor {
         topP: topP,
         reasoningEffort: reasoningEffort,
       );
-      if (onRequest != null) {
-        try {
-          onRequest(
-            step + 1,
-            UnifiedRequest(
-              model: model,
-              messages: List<ChatMessage>.unmodifiable(messages),
-              tools: requestTools,
-              temperature: temperature,
-              maxTokens: reservedOutputTokens,
-              topP: topP,
-              reasoningEffort: reasoningEffort,
-            ),
-          );
-        } on Object {
-          // 观察者（会话日志）失败不能影响模型请求。
+      if (requestObservers.isNotEmpty) {
+        final frozen = UnifiedRequest(
+          model: model,
+          messages: List<ChatMessage>.unmodifiable(messages),
+          tools: requestTools,
+          temperature: temperature,
+          maxTokens: reservedOutputTokens,
+          topP: topP,
+          reasoningEffort: reasoningEffort,
+        );
+        for (final observer in requestObservers) {
+          try {
+            observer(step + 1, frozen);
+          } on Object {
+            // 观察者（会话日志等）失败不能影响模型请求。
+          }
         }
       }
       final snapshot = ContextSnapshotBuilder.build(
@@ -431,9 +447,26 @@ class AgentExecutor {
         ),
       );
       if (pendingCalls.isEmpty) {
-        final steering = runController?.pollSteeringOrSeal() ?? const [];
-        if (steering.isNotEmpty) {
-          appendSteering(steering);
+        // turn-stopping：任一 handler 可否决结束并让运行继续。
+        final stopping = TurnStoppingContext(
+          step: step + 1,
+          finalText: textBuffer.toString(),
+        );
+        TurnContinuation? continuation;
+        for (final handler in turnStoppingHandlers) {
+          continuation = handler.onTurnStopping(stopping);
+          if (continuation != null) break;
+        }
+        if (continuation != null && continuation.messages.isNotEmpty) {
+          if (continuation.keepAssistantText) {
+            messages.add(ChatMessage(
+              role: MessageRole.assistant,
+              parts: [MessagePart.text(textBuffer.toString())],
+              reasoning:
+                  reasoningBuffer.isEmpty ? null : reasoningBuffer.toString(),
+            ));
+          }
+          messages.addAll(continuation.messages);
           continue;
         }
         messages.add(ChatMessage(
@@ -559,7 +592,9 @@ class AgentExecutor {
           _ => const <String, dynamic>{},
         };
         yield settle(pendingCall, toolResult, metadata: metadata);
-        budgetPolicy.recordToolOutcome(pendingCall, toolResult);
+        for (final observer in toolOutcomeObservers) {
+          observer.onToolOutcome(pendingCall, toolResult);
+        }
       }
       // 同一调用反复失败：在本步全部工具结果之后提醒模型换方法（不能插在
       // 工具结果中间，否则会破坏 assistant tool_calls → tool 的消息顺序）。

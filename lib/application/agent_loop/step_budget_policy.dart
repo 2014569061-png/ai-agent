@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../domain/models.dart';
 import '../../domain/tool_result.dart';
+import 'agent_loop_hooks.dart';
 import 'loop_messages.dart';
 
 /// 步数预算的判定结果。
@@ -36,7 +37,7 @@ final class BudgetExhausted extends BudgetDecision {
 ///
 /// 只统计真正进入执行边界的工具结果；守卫短路与审批拒绝不计入。
 /// 阶段 3 起作为 `agent/pre-step` 与 `tools/post-execute` 的监听模块挂载。
-class StepBudgetPolicy {
+class StepBudgetPolicy implements ToolOutcomeObserver {
   StepBudgetPolicy({
     required this.maxSteps,
     this.autoContinueLimit = 0,
@@ -73,6 +74,10 @@ class StepBudgetPolicy {
       addedSteps: maxSteps,
     );
   }
+
+  @override
+  void onToolOutcome(ToolCall call, ToolResult result) =>
+      recordToolOutcome(call, result);
 
   /// 记录一次已执行的工具结果。
   void recordToolOutcome(ToolCall call, ToolResult result) {
