@@ -54,16 +54,14 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
             files: [],
             mark: ChangeVerificationMark.unverified,
           );
-      // Reuse the set captured the first time this task was opened; capturing
-      // again after manual edits would treat those edits as the task's output.
-      const service = ChangeSetService();
-      final set = await service.load(taskId: tasks.first.id) ??
-          await service.capture(
-            projectId: widget.projectId,
-            taskId: tasks.first.id,
-            workspacePath: widget.workspacePath,
-            review: review,
-          );
+      // Reuse the persisted set unless the task has changed files since;
+      // capturing again after manual edits would treat them as task output.
+      final set = await const ChangeSetService().loadOrCapture(
+        projectId: widget.projectId,
+        taskId: tasks.first.id,
+        workspacePath: widget.workspacePath,
+        review: review,
+      );
       if (!mounted) return;
       setState(() {
         _set = set;

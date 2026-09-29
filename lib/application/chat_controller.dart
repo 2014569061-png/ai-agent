@@ -36,6 +36,7 @@ import '../infrastructure/tools/workspace_tools.dart';
 import '../infrastructure/tools/command_tool.dart';
 import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
+import 'tool_pipeline/file_baseline_interceptor.dart';
 import 'audit_service.dart';
 import 'android_automation_tool.dart';
 import 'device_automation_service.dart';

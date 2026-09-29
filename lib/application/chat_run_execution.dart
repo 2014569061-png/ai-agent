@@ -141,7 +141,18 @@ extension ChatRunExecution on ChatController {
         runId: runId, category: 'system', detail: {'model': model});
     final provider =
         config.isConfigured ? createLlmProvider(config) : DemoProvider();
-    final executor = AgentExecutor(provider: provider, tools: registry);
+    final executor = AgentExecutor(
+      provider: provider,
+      tools: registry,
+      // 写/改/删/移文件前按任务保存原始内容，供任务变更集精确回退。
+      toolPipeline: fileBaselinePipeline(
+        taskId: taskId,
+        workspacePath: _currentState.currentWorkspacePath,
+        onError: (error, stackTrace) => NexusGuard.degradeCaught(
+            'chat.fileBaseline', error, stackTrace,
+            logger: _logDegrade),
+      ),
+    );
     final retrySettings = _ref.read(agentRetrySettingsProvider);
     final cancellationToken = AgentCancellationToken();
     final dioCancelToken = CancelToken();

@@ -9,6 +9,7 @@ import '../domain/unique_id.dart';
 import '../infrastructure/observability/unified_diff.dart';
 import '../infrastructure/tools/workspace_tools.dart';
 import 'change_review.dart';
+import 'file_baseline_store.dart';
 
 class ChangeSetFile {
   const ChangeSetFile({
@@ -113,13 +114,32 @@ class RollbackConflict {
 
 /// Result of reconstructing one file's pre-task content.
 class _Baseline {
-  const _Baseline.create() : content = null, note = null, isCreate = true;
-  const _Baseline.restore(String this.content) : note = null, isCreate = false;
+  const _Baseline.create()
+      : content = null,
+        ref = null,
+        hash = null,
+        note = null,
+        isCreate = true;
+  const _Baseline.restore(String this.content)
+      : ref = null,
+        hash = null,
+        note = null,
+        isCreate = false;
+
+  /// Original bytes saved by [FileBaselineStore] before the first mutation.
+  const _Baseline.stored(String this.ref, String this.hash)
+      : content = null,
+        note = null,
+        isCreate = false;
   const _Baseline.irreversible(String this.note)
       : content = null,
+        ref = null,
+        hash = null,
         isCreate = false;
 
   final String? content;
+  final String? ref;
+  final String? hash;
   final String? note;
   final bool isCreate;
   bool get reversible => note == null;
@@ -155,11 +175,37 @@ class ChangeSetService {
     }
   }
 
-  /// Snapshots the task's end state and reconstructs each file's pre-task
-  /// content by reverse-applying the recorded diffs (newest first).
+  /// Returns the persisted change set for [taskId], capturing a new one when
+  /// none exists or the task has mutated files since it was captured.
+  Future<ChangeSet> loadOrCapture({
+    required String projectId,
+    required String taskId,
+    required String workspacePath,
+    required ChangeReview review,
+  }) async {
+    final cached = await load(taskId: taskId);
+    if (cached != null) {
+      final known = {for (final file in cached.files) file.relativePath};
+      final baselineAt = await FileBaselineStore.lastModified(taskId);
+      final stale = review.files
+              .any((f) => !known.contains(normalizeWorkspacePath(f.path))) ||
+          (baselineAt != null && baselineAt.isAfter(cached.createdAt));
+      if (!stale) return cached;
+    }
+    return capture(
+      projectId: projectId,
+      taskId: taskId,
+      workspacePath: workspacePath,
+      review: review,
+    );
+  }
+
+  /// Snapshots the task's end state and determines each file's pre-task
+  /// content: the original saved by [FileBaselineStore] when available,
+  /// otherwise reconstructed by reverse-applying recorded diffs (newest first).
   ///
-  /// A file is only marked reversible when the baseline can be rebuilt
-  /// exactly; otherwise it carries a [ChangeSetFile.note] explaining why.
+  /// A file is only marked reversible when the baseline is exact; otherwise it
+  /// carries a [ChangeSetFile.note] explaining why.
   Future<ChangeSet> capture({
     required String projectId,
     required String taskId,
@@ -173,7 +219,13 @@ class ChangeSetService {
 
     final byPath = <String, List<FileChangeSummary>>{};
     for (final change in review.files) {
-      byPath.putIfAbsent(change.path, () => []).add(change);
+      byPath
+          .putIfAbsent(normalizeWorkspacePath(change.path), () => [])
+          .add(change);
+    }
+    final stored = await FileBaselineStore.read(taskId);
+    for (final path in stored.keys) {
+      byPath.putIfAbsent(path, () => []);
     }
 
     for (final entry in byPath.entries) {
@@ -192,13 +244,25 @@ class ChangeSetService {
           afterRef = '$stem.after';
           await File(afterRef).writeAsBytes(bytes, flush: true);
         }
-        baseline = _reconstruct(changes, bytes);
+        final entry = stored[path];
+        if (entry != null && changes.isEmpty) {
+          // Touched by a tool but absent from the review (e.g. a move source,
+          // or a call that failed). Skip when nothing actually changed.
+          final unchanged = entry.existed
+              ? entry.captured && entry.hash == afterHash
+              : bytes == null;
+          if (unchanged) continue;
+        }
+        baseline = _fromStore(entry) ??
+            (changes.isEmpty
+                ? _Baseline.irreversible(entry?.note ?? '缺少改动记录')
+                : _reconstruct(changes, bytes));
       } catch (error) {
         baseline = _Baseline.irreversible('读取失败：$error');
       }
 
-      String beforeHash = '';
-      String? beforeRef;
+      String beforeHash = baseline.hash ?? '';
+      String? beforeRef = baseline.ref;
       final content = baseline.content;
       if (content != null) {
         final beforeBytes = utf8.encode(content);
@@ -208,7 +272,7 @@ class ChangeSetService {
       }
       files.add(ChangeSetFile(
         relativePath: path,
-        operation: baseline.isCreate ? 'create' : changes.first.operation,
+        operation: _operationLabel(baseline, changes),
         beforeHash: beforeHash,
         afterHash: afterHash,
         beforeRef: beforeRef,
@@ -227,6 +291,25 @@ class ChangeSetService {
     await File(p.join(objectDir.path, 'changeset.json'))
         .writeAsString(jsonEncode(set.toJson()), flush: true);
     return set;
+  }
+
+  static String _operationLabel(
+      _Baseline baseline, List<FileChangeSummary> changes) {
+    if (baseline.isCreate) return 'create';
+    if (changes.isEmpty) return 'modified';
+    final first = changes.first.operation;
+    // write_file labels an existing-but-empty file as 'create'; the stored
+    // baseline proved it existed, so undo must restore rather than delete.
+    return first == 'create' ? 'write' : first;
+  }
+
+  static _Baseline? _fromStore(FileBaselineEntry? entry) {
+    if (entry == null || !entry.captured) return null;
+    if (!entry.existed) return const _Baseline.create();
+    final ref = entry.ref;
+    final hash = entry.hash;
+    if (ref == null || hash == null) return null;
+    return _Baseline.stored(ref, hash);
   }
 
   _Baseline _reconstruct(List<FileChangeSummary> changes, List<int>? bytes) {
@@ -322,6 +405,7 @@ class ChangeSetService {
           ));
           continue;
         }
+        await target.parent.create(recursive: true);
         await target.writeAsBytes(await File(beforeRef).readAsBytes(),
             flush: true);
         journal.add('restored:${file.relativePath}');
