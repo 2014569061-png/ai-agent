@@ -51,6 +51,10 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
 
   /// 开启时保存 [OutputTokenPolicy.legacyDefault]，运行时按模型自动决定上限。
   late bool _autoMaxTokens;
+
+  /// 当前生效服务商的模型与上下文窗口，用于显示自动上限的实际数值。
+  String? _activeModel;
+  int _activeContextTokens = 0;
   late double _topP;
 
   late Set<String> _enabledTools;
@@ -111,6 +115,20 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     _isDirty = draft != null;
 
     _loadTools();
+    _loadActiveModel();
+  }
+
+  Future<void> _loadActiveModel() async {
+    try {
+      final config = await ref.read(providerConfigStoreProvider).load();
+      if (!mounted || !config.isConfigured) return;
+      setState(() {
+        _activeModel = config.model;
+        _activeContextTokens = config.effectiveContextTokens;
+      });
+    } catch (_) {
+      // 读不到服务商配置时只显示通用规则，不影响编辑。
+    }
   }
 
   int get _savedMaxTokens =>
@@ -385,10 +403,12 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                         ),
                       ),
                       subtitle: Text(
-                        _autoMaxTokens
-                            ? '推理模型 ${OutputTokenPolicy.reasoningDefault}、其他模型 '
-                                '${OutputTokenPolicy.standardDefault} Tokens，且不超过上下文窗口的一半'
-                            : '已关闭：使用下方的固定上限',
+                        agentMaxTokensSubtitle(
+                          auto: _autoMaxTokens,
+                          manualTokens: _maxTokens,
+                          activeModel: _activeModel,
+                          activeContextTokens: _activeContextTokens,
+                        ),
                         style: const TextStyle(
                             fontSize: AppTokens.fontSizeFootnote),
                       ),
@@ -679,6 +699,36 @@ class _SectionTitle extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Agent 编辑页“单次最大输出”开关下的说明：自动时给出当前服务商模型的
+/// 实际生效值，手动且为推理模型时提示过小的风险。
+@visibleForTesting
+String agentMaxTokensSubtitle({
+  required bool auto,
+  required int manualTokens,
+  String? activeModel,
+  int activeContextTokens = 0,
+}) {
+  final model = activeModel?.trim();
+  final hasModel = model != null && model.isNotEmpty;
+  final reasoning = hasModel && OutputTokenPolicy.isReasoningModel(model);
+  if (auto) {
+    const rule = '推理模型 ${OutputTokenPolicy.reasoningDefault}、其他模型 '
+        '${OutputTokenPolicy.standardDefault} Tokens，且不超过上下文窗口的一半';
+    if (!hasModel) return rule;
+    final effective = OutputTokenPolicy.resolve(
+      model: model,
+      configured: OutputTokenPolicy.legacyDefault,
+      contextWindow: activeContextTokens,
+    );
+    return '当前 $model（${reasoning ? '推理模型' : '普通模型'}）：$effective Tokens\n$rule';
+  }
+  if (reasoning && manualTokens < 8192) {
+    return '已关闭：使用下方的固定上限。当前 $model 是推理模型，上限同时包含'
+        '思考过程，过小容易被截断';
+  }
+  return '已关闭：使用下方的固定上限';
 }
 
 /// 手动输出上限的可选刻度。刻意不含 2048：它是“自动”的存储值
