@@ -68,6 +68,7 @@ import '../workspace/file_tree_sheet.dart';
 import '../workspace/development_workbench_page.dart';
 import '../workbench/session_workbench_page.dart';
 import '../presets/run_presets_sheet.dart';
+import '../branches/branch_tree_sheet.dart';
 import '../projects/project_home_page.dart';
 import '../projects/project_picker_page.dart';
 import '../utils/keyboard_insets.dart';

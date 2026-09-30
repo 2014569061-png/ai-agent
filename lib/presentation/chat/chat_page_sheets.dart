@@ -435,6 +435,17 @@ extension _ChatSheets on _ChatPageState {
           onTap: () => showRunPresetsSheet(context),
         ),
         ActionSheetItem(
+          icon: Icons.account_tree_outlined,
+          title: '分支',
+          subtitle: '查看本会话的来源与分支，并在分支间切换',
+          enabled: state.conversationId != null,
+          onTap: () => showBranchTreeSheet(
+            context,
+            currentConversationId: state.conversationId!,
+            onSelect: _switchConversation,
+          ),
+        ),
+        ActionSheetItem(
           icon: Icons.task_alt_outlined,
           title: '开发任务',
           subtitle: '查看任务状态、结果与恢复记录',
