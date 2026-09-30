@@ -8,12 +8,17 @@ import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import '../observability/unified_diff.dart';
 import '../files/bounded_text_reader.dart';
+import '../files/workspace_fs.dart';
 import 'tool_registry.dart';
 
 /// 工作区沙盒辅助类：防止路径穿越超出工作区根目录
 class WorkspaceSandbox {
-  WorkspaceSandbox(this.rootPath);
+  WorkspaceSandbox(this.rootPath, {WorkspaceFs? fs})
+      : fs = fs ?? const LocalWorkspaceFs();
   final String rootPath;
+
+  /// 文件工具经由它访问文件（能力 seam）；路径校验仍在本类完成。
+  final WorkspaceFs fs;
 
   /// 真实根目录缓存（解析符号链接后的 realpath，惰性求值一次）。
   String? _realRoot;
@@ -171,16 +176,15 @@ class ReadFileTool with _FileMetadata implements AgentTool {
       );
     }
     try {
-      final file = File(fullPath);
-
-      if (!await file.exists()) {
+      final fs = sandbox.fs;
+      if (await fs.kindOf(fullPath) != WorkspaceEntryKind.file) {
         return ToolResult.failure(
           code: ToolCodes.notFound,
           message: '文件不存在：$path',
         );
       }
 
-      final content = await BoundedTextReader.read(file);
+      final content = await fs.readText(fullPath);
       recordFile(operation: 'read', path: path, after: content);
       final lines = const LineSplitter().convert(content);
 
@@ -273,21 +277,17 @@ class WriteFileTool with _FileMetadata implements AgentTool {
       );
     }
 
-    final file = File(fullPath);
+    final fs = sandbox.fs;
     // committed 之前抛错说明还没碰过磁盘（effect=none）；
     // 之后抛错必须按“可能已经写进去了”上报，让模型先读再决定是否重试。
     var committed = false;
     try {
-      final before =
-          await file.exists() ? await BoundedTextReader.read(file) : '';
+      final before = await fs.kindOf(fullPath) == WorkspaceEntryKind.file
+          ? await fs.readText(fullPath)
+          : '';
 
       // 自动创建父目录
-      final parentDir = file.parent;
-      if (!await parentDir.exists()) {
-        await parentDir.create(recursive: true);
-      }
-
-      await file.writeAsString(content);
+      await fs.writeText(fullPath, content);
       committed = true;
       recordFile(
           operation: before.isEmpty ? 'create' : 'write',
@@ -369,17 +369,17 @@ class EditFileTool with _FileMetadata implements AgentTool {
       );
     }
 
-    final file = File(fullPath);
+    final fs = sandbox.fs;
     var committed = false;
     try {
-      if (!await file.exists()) {
+      if (await fs.kindOf(fullPath) != WorkspaceEntryKind.file) {
         return ToolResult.failure(
           code: ToolCodes.notFound,
           message: '编辑失败：文件不存在 $path',
         );
       }
 
-      final content = await BoundedTextReader.read(file);
+      final content = await fs.readText(fullPath);
       final firstMatch = content.indexOf(target);
       if (firstMatch < 0) {
         return ToolResult.failure(
@@ -397,7 +397,7 @@ class EditFileTool with _FileMetadata implements AgentTool {
         );
       }
       final newContent = content.replaceFirst(target, replacement);
-      await file.writeAsString(newContent);
+      await fs.writeText(fullPath, newContent);
       committed = true;
       recordFile(
           operation: 'edit', path: path, before: content, after: newContent);
@@ -457,10 +457,10 @@ class ListDirectoryTool with _FileMetadata implements AgentTool {
       );
     }
     try {
-      final dir = Directory(fullPath);
+      final fs = sandbox.fs;
       final displayPath = relativePath.isEmpty ? '.' : relativePath;
 
-      if (!await dir.exists()) {
+      if (await fs.kindOf(fullPath) != WorkspaceEntryKind.directory) {
         recordMetadata({
           'operation': 'list',
           'path': displayPath,
@@ -474,11 +474,9 @@ class ListDirectoryTool with _FileMetadata implements AgentTool {
       }
 
       final entries = <String>[];
-      final lister = dir.list(recursive: recursive, followLinks: false);
-
-      await for (final entity in lister) {
+      await for (final entity in fs.list(fullPath, recursive: recursive)) {
         final rel = sandbox.toRelative(entity.path);
-        final isDir = entity is Directory;
+        final isDir = entity.isDirectory;
         entries.add('${isDir ? "📁 [目录]" : "📄 [文件]"} $rel');
       }
 
@@ -557,9 +555,9 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
     final offset = (arguments['offset'] as num?)?.toInt() ?? 0;
     final limit = ((arguments['limit'] as num?)?.toInt() ?? 50).clamp(1, 100);
     try {
-      final dir = Directory(sandbox.rootPath);
+      final fs = sandbox.fs;
 
-      if (!await dir.exists()) {
+      if (await fs.kindOf(sandbox.rootPath) != WorkspaceEntryKind.directory) {
         recordMetadata({
           'operation': 'search',
           'path': pathPrefix ?? '.',
@@ -574,11 +572,11 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
 
       final results = <String>[];
       var skipped = 0;
-      Future<void> walk(Directory current) async {
+      Future<void> walk(String current) async {
         if (results.length >= limit) return;
-        await for (final entity in current.list(followLinks: false)) {
+        await for (final entity in fs.list(current)) {
           if (results.length >= limit) return;
-          if (entity is Directory) {
+          if (entity.isDirectory) {
             final name = p.basename(entity.path);
             if (const {
               '.git',
@@ -596,10 +594,10 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
             }.contains(name)) {
               continue;
             }
-            await walk(entity);
+            await walk(entity.path);
             continue;
           }
-          if (entity is! File) continue;
+          if (!entity.isFile) continue;
           if (BoundedTextReader.binaryExtensions
               .contains(p.extension(entity.path).toLowerCase())) {
             continue;
@@ -612,7 +610,7 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
             continue;
           }
           try {
-            final content = await BoundedTextReader.read(entity,
+            final content = await fs.readText(entity.path,
                 maxBytes: BoundedTextReader.maxSearchBytes);
             if (!content.contains(query)) continue;
             final lines = const LineSplitter().convert(content);
@@ -638,7 +636,7 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
         }
       }
 
-      await walk(dir);
+      await walk(sandbox.rootPath);
 
       if (results.isEmpty) {
         recordMetadata({
@@ -721,19 +719,19 @@ class DeleteFileTool with _FileMetadata implements AgentTool {
       );
     }
 
-    final file = File(fullPath);
-    final dir = Directory(fullPath);
+    final fs = sandbox.fs;
     var committed = false;
     try {
-      if (await file.exists()) {
+      final kind = await fs.kindOf(fullPath);
+      if (kind == WorkspaceEntryKind.file) {
         // 二进制文件读不成字符串也必须能删，否则删除会被前置读取卡死。
         String? before;
         try {
-          before = await BoundedTextReader.read(file);
+          before = await fs.readText(fullPath);
         } catch (_) {
           before = null;
         }
-        await file.delete();
+        await fs.deleteFile(fullPath);
         committed = true;
         recordFile(operation: 'delete', path: path, before: before ?? '');
         return ToolResult.success(
@@ -741,8 +739,8 @@ class DeleteFileTool with _FileMetadata implements AgentTool {
           data: {'path': path, 'kind': 'file', 'recoverable': false},
           effect: ToolEffect.applied,
         );
-      } else if (await dir.exists()) {
-        await dir.delete();
+      } else if (kind == WorkspaceEntryKind.directory) {
+        await fs.deleteEmptyDirectory(fullPath);
         committed = true;
         recordFile(operation: 'delete', path: path);
         return ToolResult.success(
@@ -836,9 +834,9 @@ class MoveFileTool with _FileMetadata implements AgentTool {
         );
       }
 
-      final sourceFile = File(sourcePath);
-      final sourceDir = Directory(sourcePath);
-      if (!await sourceFile.exists() && !await sourceDir.exists()) {
+      final fs = sandbox.fs;
+      final sourceKind = await fs.kindOf(sourcePath);
+      if (sourceKind == WorkspaceEntryKind.notFound) {
         recordMetadata({
           'operation': 'move',
           'path': newPath,
@@ -851,8 +849,7 @@ class MoveFileTool with _FileMetadata implements AgentTool {
           message: '源文件或目录不存在：$oldPath',
         );
       }
-      if (await File(targetPath).exists() ||
-          await Directory(targetPath).exists()) {
+      if (await fs.kindOf(targetPath) != WorkspaceEntryKind.notFound) {
         recordMetadata({
           'operation': 'move',
           'path': newPath,
@@ -866,23 +863,21 @@ class MoveFileTool with _FileMetadata implements AgentTool {
         );
       }
 
-      final targetParent = Directory(targetPath).parent;
-      if (!await targetParent.exists()) {
-        await targetParent.create(recursive: true);
+      final targetParent = p.dirname(targetPath);
+      if (await fs.kindOf(targetParent) != WorkspaceEntryKind.directory) {
+        await fs.ensureDirectory(targetParent);
         touched = true;
       }
 
       String? content;
-      if (await sourceFile.exists()) {
+      if (sourceKind == WorkspaceEntryKind.file) {
         try {
-          content = await sourceFile.readAsString();
+          content = await fs.readText(sourcePath);
         } catch (_) {
           content = null;
         }
-        await sourceFile.rename(targetPath);
-      } else {
-        await sourceDir.rename(targetPath);
       }
+      await fs.rename(sourcePath, targetPath);
       recordMove(oldPath: oldPath, newPath: newPath, content: content);
       return ToolResult.success(
         message: '成功移动：$oldPath -> $newPath',
