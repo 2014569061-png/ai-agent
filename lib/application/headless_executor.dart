@@ -7,9 +7,8 @@ import '../domain/tool_codes.dart';
 import '../domain/tool_result.dart';
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
-import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
-import '../infrastructure/providers/provider_factory.dart';
+import '../infrastructure/providers/model_route.dart';
 import '../infrastructure/tools/core_tools.dart';
 import '../infrastructure/tools/image_gen_tool.dart';
 import '../infrastructure/tools/tool_registry.dart';
@@ -92,6 +91,7 @@ class HeadlessExecutor {
     CancelToken? cancelToken,
     ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
+    ModelRouter? modelRouter,
   }) async {
     final result = await runDetailed(
       db: db,
@@ -110,6 +110,7 @@ class HeadlessExecutor {
       cancelToken: cancelToken,
       approveTool: approveTool,
       approvalMode: approvalMode,
+      modelRouter: modelRouter,
     );
     return result.text;
   }
@@ -136,10 +137,13 @@ class HeadlessExecutor {
 
     /// 本次运行挂载的模块；默认 [defaultModules]（会话日志）。
     ModuleHost? modules,
+
+    /// 模型路由；默认 [ModelRouter.standard]（直连厂商，未配置时演示）。
+    ModelRouter? modelRouter,
   }) async {
-    final provider =
-        config.isConfigured ? createLlmProvider(config) : DemoProvider();
-    final model = config.isConfigured ? config.model : 'demo-model';
+    final route = (modelRouter ?? ModelRouter.standard).resolve(config);
+    final provider = route.provider;
+    final model = route.model;
     final assembled = await assembleTools(
       db: db,
       config: config,

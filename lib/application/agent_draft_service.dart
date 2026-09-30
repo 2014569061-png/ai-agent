@@ -6,7 +6,7 @@ import '../domain/agent_draft.dart';
 import '../domain/models.dart';
 import '../infrastructure/providers/llm_provider.dart';
 import '../infrastructure/providers/provider_config.dart';
-import '../infrastructure/providers/provider_factory.dart';
+import '../infrastructure/providers/model_route.dart';
 
 /// 把用户的一句话目标转成一份 Agent 草稿。
 ///
@@ -155,7 +155,7 @@ class AgentDraftService {
     }
 
     final client =
-        provider ?? (config.isConfigured ? createLlmProvider(config) : null);
+        provider ?? ModelRouter.standard.tryResolve(config)?.provider;
     if (client == null) {
       return _fallbackDraft(
           goal: goal, tools: tools, notes: const ['尚未配置可用的模型，已用本地草稿预填']);

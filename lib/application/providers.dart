@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/database/database_provider.dart';
 import '../infrastructure/mcp/mcp_tool_provider.dart';
+import '../infrastructure/providers/model_route.dart';
 import '../infrastructure/providers/provider_config_store.dart';
 import '../infrastructure/providers/tool_trust_store.dart';
 import 'mcp_service.dart';
@@ -62,6 +63,10 @@ final databaseProvider = FutureProvider<AppDatabase>((ref) async {
 });
 
 /// Provider 配置存储注入点（可在测试中 override）。
+/// 模型路由能力；将来的远端路由（例如桌面端转发）在这里接入。
+final modelRouterProvider =
+    Provider<ModelRouter>((ref) => ModelRouter.standard);
+
 final providerConfigStoreProvider =
     Provider<ProviderConfigStore>((ref) => ProviderConfigStore());
 

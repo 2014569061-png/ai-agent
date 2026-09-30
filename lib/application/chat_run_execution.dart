@@ -164,8 +164,7 @@ extension ChatRunExecution on ChatController {
     }
     await logService.info('Agent 开始执行',
         runId: runId, category: 'system', detail: {'model': model});
-    final provider =
-        config.isConfigured ? createLlmProvider(config) : DemoProvider();
+    final provider = _ref.read(modelRouterProvider).resolve(config).provider;
     final executor = AgentExecutor(
       provider: provider,
       tools: registry,
