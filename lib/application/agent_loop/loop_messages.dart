@@ -43,7 +43,29 @@ abstract final class LoopMessages {
         ],
       );
 
+  /// 回复因单次输出上限被截断后的续写提示。[hadText] 为 false 表示思考就
+  /// 耗尽了上限、没有产出任何正文。
+  static ChatMessage outputLimitContinue({required bool hadText}) => ChatMessage(
+        role: MessageRole.user,
+        parts: [
+          MessagePart.text(
+            hadText
+                ? '[系统提示] 上一段回复因达到单次输出长度上限被截断。请从中断处直接'
+                    '接着输出，不要重复已输出的内容，也不要重新开场或总结。'
+                : '[系统提示] 上一次输出在给出正文前就达到了单次输出长度上限（思考'
+                    '过长）。请精简思考，直接给出回答；内容较多时分段输出。',
+          ),
+        ],
+      );
+
+  /// 续写次数用完仍被截断时，追加在可见回复末尾的提示（同样进入后续上下文）。
+  static const String outputLimitNotice =
+      '\n\n> ⚠️ 回复因达到单次输出长度上限被截断（已自动续写仍未完成）。'
+      '可以发送“继续”让模型接着写，或在 Agent 设置中调大“最大输出 Token”。';
+
   static const String truncatedToolCallMessage =
-      '模型输出达到长度上限，工具参数可能不完整，本次未执行';
+      '模型输出达到长度上限，工具参数可能不完整，本次未执行。请缩短本次调用：'
+      '大文件分多次写入（先 write_file 写出骨架，再用 edit_file 分段补充），'
+      '并精简思考过程后重试';
   static const String unexpectedToolCallMessage = '模型停因不是工具调用，本次夹带的工具调用未执行';
 }

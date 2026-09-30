@@ -42,9 +42,16 @@ abstract interface class ToolOutcomeObserver {
 
 /// 模型准备结束本轮（没有工具调用）时的上下文。
 class TurnStoppingContext {
-  const TurnStoppingContext({required this.step, required this.finalText});
+  const TurnStoppingContext({
+    required this.step,
+    required this.finalText,
+    this.stopReason = StopReason.unknown,
+  });
   final int step;
   final String finalText;
+
+  /// 本步模型给出的停因。[StopReason.outputLimit] 表示回复被单次输出上限截断。
+  final StopReason stopReason;
 }
 
 /// [TurnStoppingHandler] 要求继续运行时的指令。

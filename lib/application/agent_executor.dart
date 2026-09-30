@@ -22,6 +22,7 @@ import 'agent_loop/context_reporter.dart';
 import 'agent_loop/loop_messages.dart';
 import 'agent_loop/model_retry_policy.dart';
 import 'agent_loop/model_step.dart';
+import 'agent_loop/output_token_policy.dart';
 import 'agent_loop/request_shape.dart';
 import 'agent_loop/step_budget_policy.dart';
 import 'agent_loop/system_prompt_merge.dart';
@@ -117,7 +118,11 @@ class AgentExecutor {
       manifests: tools.manifests,
       toolsEnabled: capabilities.tools,
       contextBudgetTokens: contextBudgetTokens,
-      requestedOutputTokens: maxTokens,
+      requestedOutputTokens: OutputTokenPolicy.resolve(
+        model: model,
+        configured: maxTokens,
+        contextWindow: contextBudgetTokens,
+      ),
     );
     final requestTools = shape.tools;
     final reservedOutputTokens = shape.reservedOutputTokens;
@@ -156,13 +161,17 @@ class AgentExecutor {
     // 本次运行的阶段钩子：内置实现包在执行器级外部钩子两侧。顺序即语义——
     // 压缩先于外部 transform、裁剪最后；预算观察最先；steering 最后（它会封存
     // 控制器，之后外部 handler 无法再续跑）。
+    final outputLimit = OutputLimitTurnStopping();
     final loop = AgentLoopHooks(
       requestTransforms: [QueuedCompressionTransform(runController)],
       toolOutcomeObservers: [budgetPolicy],
     ).merge(hooks).merge(AgentLoopHooks(
           requestTransforms: [ContextWindowTransform(shape.contextWindow)],
           requestObservers: [if (onRequest != null) onRequest],
-          turnStopping: [SteeringTurnStopping(runController)],
+          turnStopping: [
+            outputLimit,
+            SteeringTurnStopping(runController),
+          ],
         ));
 
     final usage = UsageTally();
@@ -250,6 +259,7 @@ class AgentExecutor {
         final stopping = TurnStoppingContext(
           step: step + 1,
           finalText: out.text.toString(),
+          stopReason: out.stopReason,
         );
         final continuation =
             _resolveContinuation(loop.turnStopping, stopping);
@@ -259,6 +269,11 @@ class AgentExecutor {
           }
           messages.addAll(continuation.messages);
           continue;
+        }
+        if (out.stopReason == StopReason.outputLimit) {
+          // 续写次数已用完仍被截断：给用户一个可见的说明，而不是静默结束
+          // （思考耗尽上限时回复甚至为空）。
+          yield const TextEvent(LoopMessages.outputLimitNotice);
         }
         messages.add(out.assistantMessage());
         yield usage.totalEvent;

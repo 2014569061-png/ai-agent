@@ -60,6 +60,7 @@ import 'modules/agent_module.dart';
 import 'modules/module_host.dart';
 import 'modules/session_log_module.dart';
 import 'agent_loop/agent_loop_hooks.dart';
+import 'agent_loop/output_token_policy.dart';
 import 'run_controller.dart';
 import '../domain/sensitive_tool_policy.dart';
 import 'task_service.dart';

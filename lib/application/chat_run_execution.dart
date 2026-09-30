@@ -29,6 +29,13 @@ extension ChatRunExecution on ChatController {
     List<ChatMessage>? resumeContext,
   }) async {
     if (!_runs.ownsRun(runGeneration, runConversationId)) return;
+    // 旧默认 2048 视为未设置：推理模型的输出上限同时约束思考与正文，
+    // 2048 在长对话中会被思考耗尽（见 OutputTokenPolicy）。
+    final effectiveMaxTokens = OutputTokenPolicy.resolve(
+      model: model,
+      configured: maxTokens,
+      contextWindow: config.contextTokens,
+    );
     // Capture the run's anchor before any await or conversation switch.
     final assistantMessageId = assistantIndex < _currentState.messages.length
         ? _currentState.messages[assistantIndex].id ??
@@ -481,7 +488,7 @@ extension ChatRunExecution on ChatController {
           tools: registry.manifests,
           history: _currentState.messages.take(assistantIndex).toList(),
           projectContext: context,
-          reservedOutputTokens: maxTokens,
+          reservedOutputTokens: effectiveMaxTokens,
         );
         context = budgetPlan.projectContext;
         projectContextBlock = context.toPromptBlock();
@@ -536,7 +543,7 @@ extension ChatRunExecution on ChatController {
         capabilities: ModelCapabilities.infer(model),
         maxSteps: maxSteps,
         temperature: temperature,
-        maxTokens: maxTokens,
+        maxTokens: effectiveMaxTokens,
         topP: topP,
         reasoningEffort: reasoningEffort,
         contextBudgetTokens: config.contextTokens,
