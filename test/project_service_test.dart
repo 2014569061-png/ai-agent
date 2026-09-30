@@ -36,8 +36,8 @@ void main() {
     }
   });
 
-  test('schemaVersion is 26', () {
-    expect(db.schemaVersion, 26);
+  test('schemaVersion is 27', () {
+    expect(db.schemaVersion, 27);
   });
 
   test('creates a static web project from template', () async {

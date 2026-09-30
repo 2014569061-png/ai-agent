@@ -142,10 +142,15 @@ class SessionRecorder {
       final key = ChatMessageCodec.contentKey(message);
       var seq = known[key];
       if (seq == null) {
+        final encoded = ChatMessageCodec.encodeForLog(message);
+        // 先写附件再写消息：消息落盘时引用的 blob 一定存在。
+        if (encoded.blobs.isNotEmpty) {
+          await store.putBlobs(conversationId, encoded.blobs);
+        }
         final event = await store.append(
           conversationId: conversationId,
           type: SessionEventType.message,
-          payload: ChatMessageCodec.encode(message),
+          payload: encoded.payload,
           runId: runId,
           contentKey: key,
         );

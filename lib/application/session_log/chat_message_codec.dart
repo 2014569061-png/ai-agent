@@ -9,6 +9,9 @@ import '../../domain/models.dart';
 /// 只编码**模型可见**的字段：role、parts、toolCallId、toolCalls、reasoning。
 /// id、用量、耗时等展示元数据不进入模型请求，因此既不参与编码，也不参与
 /// 内容哈希——同样内容的消息在日志里只存一份。
+/// 拆出的附件内容。
+typedef SessionBlobData = ({String data, String? mimeType});
+
 abstract final class ChatMessageCodec {
   static Map<String, dynamic> encode(ChatMessage message) => {
         'role': message.role.name,
@@ -35,11 +38,58 @@ abstract final class ChatMessageCodec {
         if (message.reasoning != null) 'reasoning': message.reasoning,
       };
 
-  static ChatMessage decode(Map<String, dynamic> json) => ChatMessage(
+  /// 超过这个长度的附件内容（图片、文件、音视频的 base64 或路径）不内联进
+  /// 日志，改存 session_blobs，payload 里只留 `blob`（sha256）与 `size`。
+  static const blobThreshold = 512;
+
+  /// 附件缺失（已被清理）时代替原内容的文本。
+  static const missingBlobText = '[附件已清理]';
+
+  /// 日志用编码：与 [encode] 相同，但把大附件拆出为 blob。
+  ///
+  /// [contentKey] 仍按 [encode] 的完整内容计算，与拆分前的日志保持一致。
+  static ({Map<String, dynamic> payload, Map<String, SessionBlobData> blobs})
+      encodeForLog(ChatMessage message) {
+    final payload = encode(message);
+    final blobs = <String, SessionBlobData>{};
+    final parts = <Map<String, dynamic>>[];
+    for (final part in message.parts) {
+      if (part.type == 'text' || part.value.length <= blobThreshold) {
+        parts.add({
+          'type': part.type,
+          'value': part.value,
+          if (part.mimeType != null) 'mimeType': part.mimeType,
+        });
+        continue;
+      }
+      final hash = sha256.convert(utf8.encode(part.value)).toString();
+      blobs[hash] = (data: part.value, mimeType: part.mimeType);
+      parts.add({
+        'type': part.type,
+        'blob': hash,
+        'size': part.value.length,
+        if (part.mimeType != null) 'mimeType': part.mimeType,
+      });
+    }
+    payload['parts'] = parts;
+    return (payload: payload, blobs: blobs);
+  }
+
+  /// payload 引用的 blob 哈希。
+  static Iterable<String> blobRefs(Map<String, dynamic> payload) sync* {
+    for (final raw in (payload['parts'] as List<dynamic>? ?? const [])) {
+      if (raw is Map && raw['blob'] is String) yield raw['blob'] as String;
+    }
+  }
+
+  /// [blobs] 为 blob 哈希 → 内容；引用缺失的附件解码为 [missingBlobText]。
+  static ChatMessage decode(Map<String, dynamic> json,
+          {Map<String, String> blobs = const {}}) =>
+      ChatMessage(
         role: MessageRole.values.byName(json['role'] as String),
         parts: [
           for (final raw in (json['parts'] as List<dynamic>? ?? const []))
-            _decodePart(Map<String, dynamic>.from(raw as Map)),
+            _decodePart(Map<String, dynamic>.from(raw as Map), blobs),
         ],
         toolCallId: json['toolCallId'] as String?,
         toolCalls: [
@@ -61,8 +111,14 @@ abstract final class ChatMessageCodec {
       _keyCache[message] ??=
           sha256.convert(utf8.encode(canonicalJson(message))).toString();
 
-  static MessagePart _decodePart(Map<String, dynamic> json) {
-    final value = json['value'] as String? ?? '';
+  static MessagePart _decodePart(
+      Map<String, dynamic> json, Map<String, String> blobs) {
+    final blob = json['blob'];
+    if (blob is String && !blobs.containsKey(blob)) {
+      return const MessagePart.text(missingBlobText);
+    }
+    final value =
+        blob is String ? blobs[blob]! : json['value'] as String? ?? '';
     final mimeType = json['mimeType'] as String?;
     return switch (json['type']) {
       'file' => MessagePart.file(value, mimeType: mimeType),

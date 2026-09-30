@@ -1,16 +1,34 @@
 import '../../domain/models.dart';
 import 'chat_message_codec.dart';
 import 'session_event.dart';
+import 'session_event_store.dart';
 
 /// 从会话日志推导模型历史（Harness 的 deriveMessages 对应物）。
 class SessionLogReader {
-  SessionLogReader(List<SessionEvent> events)
-      : _events = List.unmodifiable(events),
+  /// [blobs]：附件哈希 → 内容，用 [load] 一并读取；缺失的附件解码为占位文本。
+  SessionLogReader(List<SessionEvent> events,
+      {Map<String, String> blobs = const {}})
+      : _blobs = blobs,
+        _events = List.unmodifiable(events),
         _messages = {
           for (final e in events)
             if (e.type == SessionEventType.message) e.seq: e,
         };
 
+  /// 读取会话的全部事件及其引用的附件。
+  static Future<SessionLogReader> load(
+      SessionEventStore store, String conversationId) async {
+    final events = await store.events(conversationId);
+    final refs = {
+      for (final e in events)
+        if (e.type == SessionEventType.message)
+          ...ChatMessageCodec.blobRefs(e.payload),
+    };
+    return SessionLogReader(events,
+        blobs: refs.isEmpty ? const {} : await store.blobs(refs));
+  }
+
+  final Map<String, String> _blobs;
   final List<SessionEvent> _events;
   final Map<int, SessionEvent> _messages;
 
@@ -23,6 +41,7 @@ class SessionLogReader {
             (_messages[seq] ??
                     (throw StateError('会话日志缺少 message #$seq')))
                 .payload,
+            blobs: _blobs,
           ),
       ];
 

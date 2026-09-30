@@ -163,7 +163,7 @@ abstract final class SessionLogShadowCheck {
   static Future<ShadowComparison?> compare(
       AppDatabase db, SessionEventStore store, String conversationId) async {
     final derived =
-        SessionLogReader(await store.events(conversationId)).deriveMessages();
+        (await SessionLogReader.load(store, conversationId)).deriveMessages();
     if (derived == null) return null;
     final logged = [
       for (final m in derived)

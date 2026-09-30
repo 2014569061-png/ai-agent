@@ -400,4 +400,15 @@ class _FailingStore implements SessionEventStore {
   Future<bool> appendAllIfEmpty(
           String conversationId, List<NewSessionEvent> events) async =>
       throw StateError('disk full');
+
+  @override
+  Future<void> putBlobs(
+          String conversationId, Map<String, SessionBlobData> blobs) async =>
+      throw StateError('disk full');
+
+  @override
+  Future<Map<String, String>> blobs(Iterable<String> hashes) async => const {};
+
+  @override
+  Future<int> pruneBlobs({required DateTime unusedSince}) async => 0;
 }

@@ -10,9 +10,13 @@ abstract final class SessionLogMaintenance {
   /// 有 2 分钟超时，15 分钟留足余量。
   static const staleAfter = Duration(minutes: 15);
 
+  /// 会话日志附件的保留期：超过这个时长未再被请求使用的附件会被清理，
+  /// 之后解码为占位文本（Messages 表与界面不受影响）。
+  static const blobRetention = Duration(days: 30);
+
   static bool _startupDone = false;
 
-  /// 每个进程只执行一次的启动维护：先封口，再依次执行 [extraSteps]
+  /// 每个进程只执行一次的启动维护：先封口、清理附件，再依次执行 [extraSteps]
   /// （旧数据导入、影子比对等）。每一步单独兜底，失败交给 [onError]，
   /// 不影响后续步骤与启动。
   static Future<void> runOnStartup(
@@ -22,7 +26,12 @@ abstract final class SessionLogMaintenance {
   }) async {
     if (_startupDone) return;
     _startupDone = true;
-    for (final step in [() => sealStaleRuns(store), ...extraSteps]) {
+    for (final step in [
+      () => sealStaleRuns(store),
+      () => store.pruneBlobs(
+          unusedSince: DateTime.now().subtract(blobRetention)),
+      ...extraSteps,
+    ]) {
       try {
         await step();
       } on Object catch (error, stackTrace) {

@@ -70,7 +70,10 @@ NEXUS 现状：
 
 ## 后果与待办
 
-- 附件（base64 图片）会随 message 事件内联保存。阶段 4 前改为 blobRef，并接入 30 天 / 50 任务的清理策略。
+- ~~附件内联~~ 已改为 blobRef（schema 27）：超过 512 字符的附件存 `session_blobs`（按 sha256 去重），
+  payload 只留 `blob` 与 `size`；`session_blob_refs` 记录会话引用，删除会话或任务时一并删除。
+  启动维护清理无引用的附件以及 30 天未再使用的附件，之后解码为占位文本 `[附件已清理]`。
+  `contentKey` 仍按完整内容计算，与拆分前的日志一致。读取须用 `SessionLogReader.load`。
 - 事件格式变化时走相邻版本迁移链，不原地改写旧事件。
 - release 默认开启双写的前提：在真机上 debug 使用一段时间，确认 `recorder.failures == 0`、影子比对零差异。
 

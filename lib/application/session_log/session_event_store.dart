@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../infrastructure/database/app_database.dart';
+import 'chat_message_codec.dart';
 import 'session_event.dart';
 
 /// 会话日志存储。实现必须保证：同一会话内 seq 从 1 开始连续递增，
@@ -29,6 +30,15 @@ abstract interface class SessionEventStore {
   /// 则什么都不写并返回 false。用于旧数据导入，避免与并发运行交错。
   Future<bool> appendAllIfEmpty(
       String conversationId, List<NewSessionEvent> events);
+
+  /// 保存附件内容并登记该会话对它的引用；已存在的 blob 只刷新使用时间。
+  Future<void> putBlobs(String conversationId, Map<String, SessionBlobData> blobs);
+
+  /// 按哈希读取附件内容；不存在的哈希不出现在结果中。
+  Future<Map<String, String>> blobs(Iterable<String> hashes);
+
+  /// 删除没有任何会话引用、或自 [unusedSince] 起未再使用的附件，返回删除数。
+  Future<int> pruneBlobs({required DateTime unusedSince});
 }
 
 /// 待写入的事件（seq 由存储分配）。
@@ -95,6 +105,43 @@ class InMemorySessionEventStore implements SessionEventStore {
   @override
   Future<List<SessionEvent>> events(String conversationId) async =>
       List.unmodifiable(_byConversation[conversationId] ?? const []);
+
+  final Map<String, ({String data, DateTime lastUsed})> _blobs = {};
+  final Map<String, Set<String>> _blobRefs = {};
+
+  /// 模拟删除会话（测试用）：与数据库删除会话时一并清理引用的行为一致。
+  void deleteConversation(String conversationId) {
+    _byConversation.remove(conversationId);
+    _blobRefs.remove(conversationId);
+  }
+
+  @override
+  Future<void> putBlobs(
+      String conversationId, Map<String, SessionBlobData> blobs) async {
+    final now = DateTime.now();
+    for (final MapEntry(key: hash, value: blob) in blobs.entries) {
+      _blobs[hash] = (data: blob.data, lastUsed: now);
+      _blobRefs.putIfAbsent(conversationId, () => {}).add(hash);
+    }
+  }
+
+  @override
+  Future<Map<String, String>> blobs(Iterable<String> hashes) async => {
+        for (final hash in hashes)
+          if (_blobs[hash] case final blob?) hash: blob.data,
+      };
+
+  @override
+  Future<int> pruneBlobs({required DateTime unusedSince}) async {
+    final referenced = {for (final refs in _blobRefs.values) ...refs};
+    final remove = [
+      for (final MapEntry(key: hash, value: blob) in _blobs.entries)
+        if (!referenced.contains(hash) || blob.lastUsed.isBefore(unusedSince))
+          hash,
+    ];
+    remove.forEach(_blobs.remove);
+    return remove.length;
+  }
 
   @override
   Future<bool> appendAllIfEmpty(
@@ -224,6 +271,75 @@ class DriftSessionEventStore implements SessionEventStore {
           createdAt: DateTime.parse(row.read<String>('created_at')),
         ),
     ];
+  }
+
+  @override
+  Future<void> putBlobs(
+      String conversationId, Map<String, SessionBlobData> blobs) {
+    return _db.transaction(() async {
+      final now = DateTime.now().toUtc().toIso8601String();
+      for (final MapEntry(key: hash, value: blob) in blobs.entries) {
+        await _db.customInsert(
+          'INSERT OR IGNORE INTO session_blobs '
+          '(hash, mime_type, size, data, created_at, last_used_at) '
+          'VALUES (?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(hash),
+            Variable<String>(blob.mimeType),
+            Variable<int>(blob.data.length),
+            Variable<String>(blob.data),
+            Variable<String>(now),
+            Variable<String>(now),
+          ],
+        );
+        await _db.customUpdate(
+          'UPDATE session_blobs SET last_used_at = ? WHERE hash = ?',
+          variables: [Variable<String>(now), Variable<String>(hash)],
+        );
+        await _db.customInsert(
+          'INSERT OR IGNORE INTO session_blob_refs (conversation_id, hash) '
+          'VALUES (?, ?)',
+          variables: [Variable<String>(conversationId), Variable<String>(hash)],
+        );
+      }
+    });
+  }
+
+  @override
+  Future<Map<String, String>> blobs(Iterable<String> hashes) async {
+    final wanted = hashes.toSet().toList();
+    final result = <String, String>{};
+    // SQLite 变量上限默认 999，分批查询。
+    for (var i = 0; i < wanted.length; i += 500) {
+      final batch = wanted.sublist(
+          i, i + 500 > wanted.length ? wanted.length : i + 500);
+      final rows = await _db.customSelect(
+        'SELECT hash, data FROM session_blobs WHERE hash IN '
+        '(${List.filled(batch.length, '?').join(', ')})',
+        variables: [for (final h in batch) Variable<String>(h)],
+      ).get();
+      for (final row in rows) {
+        result[row.read<String>('hash')] = row.read<String>('data');
+      }
+    }
+    return result;
+  }
+
+  @override
+  Future<int> pruneBlobs({required DateTime unusedSince}) {
+    return _db.transaction(() async {
+      final removed = await _db.customUpdate(
+        'DELETE FROM session_blobs WHERE last_used_at < ? '
+        'OR hash NOT IN (SELECT hash FROM session_blob_refs)',
+        variables: [Variable<String>(unusedSince.toUtc().toIso8601String())],
+        updateKind: UpdateKind.delete,
+      );
+      await _db.customStatement(
+        'DELETE FROM session_blob_refs '
+        'WHERE hash NOT IN (SELECT hash FROM session_blobs)',
+      );
+      return removed;
+    });
   }
 
   @override

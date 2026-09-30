@@ -49,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   void markKnowledgeChanged() => _knowledgeGeneration++;
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -369,7 +369,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 24) {
             await _ensureDataMaintenanceJobs();
           }
-          if (from < 26) {
+          if (from < 27) {
+            // 26：session_events；27：session_blobs / session_blob_refs。
+            // 建表语句全部 IF NOT EXISTS，可重复执行。
             await ensureSessionEventsTable();
           }
         },
@@ -400,6 +402,27 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_session_events_run '
       'ON session_events (run_id)',
+    );
+    // 会话日志中的大附件按内容哈希存一份；引用表记录哪些会话用到它，
+    // 会话删除后无引用的附件由启动维护清理。
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS session_blobs ('
+      'hash TEXT NOT NULL PRIMARY KEY, '
+      'mime_type TEXT, '
+      'size INTEGER NOT NULL, '
+      'data TEXT NOT NULL, '
+      'created_at TEXT NOT NULL, '
+      'last_used_at TEXT NOT NULL)',
+    );
+    await customStatement(
+      'CREATE TABLE IF NOT EXISTS session_blob_refs ('
+      'conversation_id TEXT NOT NULL, '
+      'hash TEXT NOT NULL, '
+      'PRIMARY KEY (conversation_id, hash))',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_session_blob_refs_hash '
+      'ON session_blob_refs (hash)',
     );
   }
 
@@ -637,6 +660,10 @@ class AppDatabase extends _$AppDatabase {
       // 会话日志保存完整消息内容，必须随会话一起删除。
       await customStatement(
         'DELETE FROM session_events WHERE conversation_id = ?',
+        [id],
+      );
+      await customStatement(
+        'DELETE FROM session_blob_refs WHERE conversation_id = ?',
         [id],
       );
       await (delete(conversations)..where((row) => row.id.equals(id))).go();
@@ -1273,6 +1300,10 @@ class AppDatabase extends _$AppDatabase {
         'DELETE FROM session_events WHERE conversation_id = ?',
         ['task:$id'],
       );
+      await customStatement(
+        'DELETE FROM session_blob_refs WHERE conversation_id = ?',
+        ['task:$id'],
+      );
     }
   }
 
@@ -1730,6 +1761,8 @@ class AppDatabase extends _$AppDatabase {
       // 让清库后的下一个同名请求拿到一个早已过期的决定。
       await customStatement('DELETE FROM pending_approvals');
       await customStatement('DELETE FROM session_events');
+      await customStatement('DELETE FROM session_blob_refs');
+      await customStatement('DELETE FROM session_blobs');
     });
     markKnowledgeChanged();
   }
