@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../infrastructure/database/app_database.dart';
 import '../../application/error_humanizer.dart';
 import '../../application/nexus_guard.dart';
 import '../history/history_page.dart';
+import '../jobs/jobs_inbox_page.dart';
+import '../../application/jobs/job_board_providers.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../motion/nexus_motion.dart';
@@ -92,7 +93,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
     _refreshTimer = Timer.periodic(
       DashboardPage.refreshInterval,
       (_) {
-        if (mounted) ref.invalidate(dashboardSummaryProvider);
+        if (!mounted) return;
+        ref.invalidate(dashboardSummaryProvider);
+        ref.invalidate(inboxUnreadProvider);
       },
     );
   }
@@ -124,7 +127,17 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
 
   Future<void> _refresh() async {
     ref.invalidate(dashboardSummaryProvider);
+    ref.invalidate(inboxUnreadProvider);
     await ref.read(dashboardSummaryProvider.future);
+  }
+
+  Future<void> _openInbox() async {
+    await Navigator.of(context).push(NexusPageRoute.detail(
+      builder: (_) => JobsInboxPage(
+        onConversationSelected: widget.onConversationSelected,
+      ),
+    ));
+    if (mounted) ref.invalidate(inboxUnreadProvider);
   }
 
   @override
@@ -144,6 +157,18 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
         subtitle: AppStrings.dashboardSubtitle,
         onBack: () => Navigator.of(context).pop(),
         actions: [
+          Builder(builder: (context) {
+            final unread = ref.watch(inboxUnreadProvider).value ?? 0;
+            return IconButton(
+              tooltip: unread > 0 ? '任务与收件箱（$unread 条未读）' : '任务与收件箱',
+              icon: Badge(
+                isLabelVisible: unread > 0,
+                label: Text(unread > 99 ? '99+' : '$unread'),
+                child: const Icon(Icons.inbox_outlined, size: 20),
+              ),
+              onPressed: _openInbox,
+            );
+          }),
           IconButton(
             tooltip: AppStrings.refreshDashboard,
             icon: const Icon(Icons.refresh_rounded, size: 20),
