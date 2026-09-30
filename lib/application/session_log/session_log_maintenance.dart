@@ -12,17 +12,22 @@ abstract final class SessionLogMaintenance {
 
   static bool _startupDone = false;
 
-  /// 每个进程只执行一次的启动维护；失败交给 [onError]，不影响启动。
+  /// 每个进程只执行一次的启动维护：先封口，再依次执行 [extraSteps]
+  /// （旧数据导入、影子比对等）。每一步单独兜底，失败交给 [onError]，
+  /// 不影响后续步骤与启动。
   static Future<void> runOnStartup(
     SessionEventStore store, {
+    List<Future<Object?> Function()> extraSteps = const [],
     void Function(Object error, StackTrace stackTrace)? onError,
   }) async {
     if (_startupDone) return;
     _startupDone = true;
-    try {
-      await sealStaleRuns(store);
-    } on Object catch (error, stackTrace) {
-      onError?.call(error, stackTrace);
+    for (final step in [() => sealStaleRuns(store), ...extraSteps]) {
+      try {
+        await step();
+      } on Object catch (error, stackTrace) {
+        onError?.call(error, stackTrace);
+      }
     }
   }
 

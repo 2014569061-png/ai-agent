@@ -9,8 +9,11 @@ import '../infrastructure/providers/provider_config_store.dart';
 import '../infrastructure/providers/tool_trust_store.dart';
 import 'mcp_service.dart';
 import 'nexus_guard.dart';
+import 'log_service.dart';
+import 'session_log/legacy_import.dart';
 import 'session_log/session_event_store.dart';
 import 'session_log/session_log_maintenance.dart';
+import 'session_log/session_log_settings.dart';
 
 /// Agent 网络重试参数。生产环境保留指数退避；测试或离线模式可注入零等待，
 /// 避免把外部网络不可用误差放大成整组测试的长等待。
@@ -29,11 +32,28 @@ final agentRetrySettingsProvider =
 
 /// 数据库注入点（可在测试中 override 为内存数据库）。
 ///
-/// 首次打开后在后台做一次会话日志维护（给中断的运行封口），不阻塞启动。
+/// 首次打开后在后台做一次会话日志维护，不阻塞启动：给中断的运行封口；
+/// 双写开启时再导入旧会话，并对最近的会话做影子比对（不一致只记日志）。
 final databaseProvider = FutureProvider<AppDatabase>((ref) async {
   final db = await DatabaseProvider.instance.database;
+  final store = DriftSessionEventStore(db);
+  // 不能 ref.read(logServiceProvider)：它 watch 了本 provider，会形成依赖环。
+  final logs = LogService(Future.value(db));
   unawaited(SessionLogMaintenance.runOnStartup(
-    DriftSessionEventStore(db),
+    store,
+    extraSteps: [
+      if (SessionLogSettings.dualWrite) ...[
+        () => LegacySessionImporter(db, store).importPending(),
+        () async {
+          for (final mismatch
+              in await SessionLogShadowCheck.compareRecent(db, store)) {
+            await logs.warning('Session log shadow mismatch',
+                category: 'session_log', detail: mismatch.toJson());
+          }
+          return null;
+        },
+      ],
+    ],
     onError: (error, stackTrace) => NexusGuard.silently<void>(
         'sessionLog.startupMaintenance',
         () => Error.throwWithStackTrace(error, stackTrace)),

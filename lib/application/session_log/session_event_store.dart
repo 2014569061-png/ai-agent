@@ -24,7 +24,20 @@ abstract interface class SessionEventStore {
 
   /// 所有会话中已有 turn/start、但没有 turn/end 的运行。
   Future<List<UnsealedRun>> unsealedRuns();
+
+  /// 会话为空时原子地写入一批事件（seq 从 1 起依次分配）；会话已有事件
+  /// 则什么都不写并返回 false。用于旧数据导入，避免与并发运行交错。
+  Future<bool> appendAllIfEmpty(
+      String conversationId, List<NewSessionEvent> events);
 }
+
+/// 待写入的事件（seq 由存储分配）。
+typedef NewSessionEvent = ({
+  String type,
+  Map<String, dynamic> payload,
+  String? runId,
+  String? contentKey,
+});
 
 /// 未封口的运行（进程被杀、崩溃，或仍在其他 isolate 中运行）。
 class UnsealedRun {
@@ -82,6 +95,22 @@ class InMemorySessionEventStore implements SessionEventStore {
   @override
   Future<List<SessionEvent>> events(String conversationId) async =>
       List.unmodifiable(_byConversation[conversationId] ?? const []);
+
+  @override
+  Future<bool> appendAllIfEmpty(
+      String conversationId, List<NewSessionEvent> events) async {
+    if (_byConversation[conversationId]?.isNotEmpty ?? false) return false;
+    for (final e in events) {
+      await append(
+        conversationId: conversationId,
+        type: e.type,
+        payload: e.payload,
+        runId: e.runId,
+        contentKey: e.contentKey,
+      );
+    }
+    return true;
+  }
 
   @override
   Future<List<UnsealedRun>> unsealedRuns() async {
@@ -195,6 +224,48 @@ class DriftSessionEventStore implements SessionEventStore {
           createdAt: DateTime.parse(row.read<String>('created_at')),
         ),
     ];
+  }
+
+  @override
+  Future<bool> appendAllIfEmpty(
+      String conversationId, List<NewSessionEvent> events) {
+    return _db.transaction(() async {
+      final existing = await _db.customSelect(
+        'SELECT 1 FROM session_events WHERE conversation_id = ? LIMIT 1',
+        variables: [Variable<String>(conversationId)],
+      ).getSingleOrNull();
+      if (existing != null) return false;
+      final now = DateTime.now();
+      var seq = 0;
+      for (final e in events) {
+        seq++;
+        final event = SessionEvent(
+          conversationId: conversationId,
+          seq: seq,
+          type: e.type,
+          runId: e.runId,
+          contentKey: e.contentKey,
+          payload: e.payload,
+          createdAt: now,
+        );
+        await _db.customInsert(
+          'INSERT INTO session_events (conversation_id, seq, type, run_id, '
+          'content_key, payload_json, format_version, created_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          variables: [
+            Variable<String>(conversationId),
+            Variable<int>(seq),
+            Variable<String>(e.type),
+            Variable<String>(e.runId),
+            Variable<String>(e.contentKey),
+            Variable<String>(event.payloadJson),
+            Variable<int>(event.formatVersion),
+            Variable<String>(now.toUtc().toIso8601String()),
+          ],
+        );
+      }
+      return true;
+    });
   }
 
   @override

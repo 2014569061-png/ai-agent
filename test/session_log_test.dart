@@ -395,4 +395,9 @@ class _FailingStore implements SessionEventStore {
 
   @override
   Future<List<UnsealedRun>> unsealedRuns() async => const [];
+
+  @override
+  Future<bool> appendAllIfEmpty(
+          String conversationId, List<NewSessionEvent> events) async =>
+      throw StateError('disk full');
 }
