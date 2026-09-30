@@ -58,8 +58,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _model = TextEditingController(
         text: config?.model ?? preset?.defaultModel ?? '');
     _apiKey = TextEditingController(text: config?.apiKey ?? '');
-    _contextTokens =
-        TextEditingController(text: config?.contextTokens.toString() ?? '');
+    _contextTokens = TextEditingController(text: _initialContextText);
     _inputPrice = TextEditingController(
         text: config?.inputPricePerMillionCents?.toString() ?? '');
     _outputPrice = TextEditingController(
@@ -81,6 +80,52 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     _outputPrice.dispose();
     _cachedPrice.dispose();
     super.dispose();
+  }
+
+  /// 默认值 32000 视为“自动”（运行时按模型推断，见
+  /// [ProviderConfig.effectiveContextTokens]），输入框留空显示。
+  String get _initialContextText {
+    final tokens = widget.config?.contextTokens;
+    if (tokens == null || tokens == ProviderConfig.defaultContextTokens) {
+      return '';
+    }
+    return tokens.toString();
+  }
+
+  static String _formatTokens(int tokens) {
+    if (tokens >= 1000000 && tokens % 1000000 == 0) {
+      return '${tokens ~/ 1000000}M';
+    }
+    return tokens >= 1000 && tokens % 1000 == 0
+        ? '${tokens ~/ 1000}K'
+        : '$tokens';
+  }
+
+  String _contextHelper() {
+    final raw = _contextTokens.text.trim();
+    final parsed = int.tryParse(raw);
+    if (raw.isNotEmpty && parsed == null) return '请输入数字；留空即自动';
+    if (parsed != null && parsed != ProviderConfig.defaultContextTokens) {
+      return '手动设置；清空即恢复自动';
+    }
+    final probe = ProviderConfig(
+      baseUrl: _baseUrl.text.trim(),
+      model: _model.text.trim(),
+      apiKey: '',
+    );
+    final effective = probe.effectiveContextTokens;
+    final prefix = parsed != null ? '与默认值相同，按自动处理：' : '自动：';
+    if (ProviderConfig.isLocalBaseUrl(probe.baseUrl)) {
+      return '$prefix本地服务使用 ${_formatTokens(effective)}，建议按实际加载参数填写';
+    }
+    if (effective != ProviderConfig.defaultContextTokens) {
+      final known = ModelContextWindows.knownFor(probe.model) ?? effective;
+      final capped = known > effective
+          ? '（模型支持 ${_formatTokens(known)}，自动值封顶以控制费用）'
+          : '';
+      return '$prefix按模型推断为 ${_formatTokens(effective)}$capped';
+    }
+    return '$prefix未识别该模型，使用 ${_formatTokens(effective)}；可手动填写';
   }
 
   int? _price(TextEditingController controller) {
@@ -179,8 +224,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         _apiKey.text != origApiKey ||
         _type != origType ||
         _reasoning != origReasoning ||
-        _contextTokens.text !=
-            (widget.config?.contextTokens.toString() ?? '') ||
+        _contextTokens.text != _initialContextText ||
         _inputPrice.text !=
             (widget.config?.inputPricePerMillionCents?.toString() ?? '') ||
         _outputPrice.text !=
@@ -381,11 +425,19 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                               setState(() => _reasoning = value.first),
                         ),
                         const SizedBox(height: 16),
-                        TextField(
-                          controller: _contextTokens,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: '上下文窗口上限（Token）',
+                        ListenableBuilder(
+                          listenable: Listenable.merge(
+                              [_contextTokens, _model, _baseUrl]),
+                          builder: (context, _) => TextField(
+                            key: const ValueKey('provider-context-tokens'),
+                            controller: _contextTokens,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: '上下文窗口上限（Token）',
+                              hintText: '自动',
+                              helperText: _contextHelper(),
+                              helperMaxLines: 2,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 18),

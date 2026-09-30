@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/agent_loop/output_token_policy.dart';
 import '../../application/agent_tool_catalog.dart';
 import '../../application/mojibake_repair.dart';
 import '../../application/providers.dart';
@@ -47,6 +48,9 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   late int _steps;
   late double _temperature;
   late int _maxTokens;
+
+  /// 开启时保存 [OutputTokenPolicy.legacyDefault]，运行时按模型自动决定上限。
+  late bool _autoMaxTokens;
   late double _topP;
 
   late Set<String> _enabledTools;
@@ -74,7 +78,12 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     _steps = (a?.maxSteps ?? draft?.maxSteps ?? AgentDraft.defaultMaxSteps)
         .clamp(1, 100);
     _temperature = (a?.temperature ?? draft?.temperature ?? 0.7).clamp(0.0, 2.0);
-    _maxTokens = (a?.maxTokens ?? draft?.maxTokens ?? 2048).clamp(256, 8192);
+    final storedMaxTokens =
+        a?.maxTokens ?? draft?.maxTokens ?? OutputTokenPolicy.legacyDefault;
+    _autoMaxTokens = storedMaxTokens == OutputTokenPolicy.legacyDefault;
+    _maxTokens = _autoMaxTokens
+        ? OutputTokenPolicy.standardDefault
+        : storedMaxTokens.clamp(256, _maxTokenSteps.last).toInt();
     _topP = (a?.topP ?? draft?.topP ?? 1.0).clamp(0.0, 1.0);
 
     if (a == null) {
@@ -103,6 +112,9 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
 
     _loadTools();
   }
+
+  int get _savedMaxTokens =>
+      _autoMaxTokens ? OutputTokenPolicy.legacyDefault : _maxTokens;
 
   void _markDirty() {
     if (!_isDirty) setState(() => _isDirty = true);
@@ -167,7 +179,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
           modelProfileId: 'default',
           maxSteps: Value(_steps),
           temperature: Value(_temperature),
-          maxTokens: Value(_maxTokens),
+          maxTokens: Value(_savedMaxTokens),
           topP: Value(_topP),
           enabledToolsJson: Value(jsonEncode(_enabledTools.toList())),
           updatedAt: now,
@@ -178,7 +190,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
           systemPrompt: prompt,
           maxSteps: _steps,
           temperature: _temperature,
-          maxTokens: _maxTokens,
+          maxTokens: _savedMaxTokens,
           topP: _topP,
           enabledToolsJson: jsonEncode(_enabledTools.toList()),
           updatedAt: now,
@@ -362,19 +374,45 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                       },
                     ),
                     const Divider(height: 24),
-                    _ParamSlider(
-                      label: '单次最大输出 (Max Tokens)',
-                      valueText: '$_maxTokens Tokens',
-                      description: '单轮回答生成的最大长度保护上限',
-                      value: _maxTokens.toDouble(),
-                      min: 256,
-                      max: 8192,
-                      divisions: 31,
-                      onChanged: (val) {
+                    SwitchListTile.adaptive(
+                      key: const ValueKey('agent-max-tokens-auto'),
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        '单次最大输出：自动（推荐）',
+                        style: TextStyle(
+                          fontSize: AppTokens.fontSizeBodySmall,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        _autoMaxTokens
+                            ? '推理模型 ${OutputTokenPolicy.reasoningDefault}、其他模型 '
+                                '${OutputTokenPolicy.standardDefault} Tokens，且不超过上下文窗口的一半'
+                            : '已关闭：使用下方的固定上限',
+                        style: const TextStyle(
+                            fontSize: AppTokens.fontSizeFootnote),
+                      ),
+                      value: _autoMaxTokens,
+                      onChanged: (value) {
                         _markDirty();
-                        setState(() => _maxTokens = val.round());
+                        setState(() => _autoMaxTokens = value);
                       },
                     ),
+                    if (!_autoMaxTokens)
+                      _ParamSlider(
+                        label: '单次最大输出 (Max Tokens)',
+                        valueText: '$_maxTokens Tokens',
+                        description: '推理模型的上限同时包含思考与正文，过小会导致回答被截断',
+                        value: _maxTokenStepIndex(_maxTokens).toDouble(),
+                        min: 0,
+                        max: (_maxTokenSteps.length - 1).toDouble(),
+                        divisions: _maxTokenSteps.length - 1,
+                        onChanged: (val) {
+                          _markDirty();
+                          setState(
+                              () => _maxTokens = _maxTokenSteps[val.round()]);
+                        },
+                      ),
                     const Divider(height: 24),
                     _ParamSlider(
                       label: '核采样阈值 (Top P)',
@@ -641,6 +679,24 @@ class _SectionTitle extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 手动输出上限的可选刻度。刻意不含 2048：它是“自动”的存储值
+/// （[OutputTokenPolicy.legacyDefault]），手动选中会与自动混淆。
+const _maxTokenSteps = <int>[
+  256, 512, 1024, 1536, 2560, 3072, 4096, 6144, 8192, 12288, 16384, 24576, //
+  32768,
+];
+
+int _maxTokenStepIndex(int value) {
+  var best = 0;
+  for (var i = 1; i < _maxTokenSteps.length; i++) {
+    if ((_maxTokenSteps[i] - value).abs() <
+        (_maxTokenSteps[best] - value).abs()) {
+      best = i;
+    }
+  }
+  return best;
 }
 
 class _ParamSlider extends StatelessWidget {
