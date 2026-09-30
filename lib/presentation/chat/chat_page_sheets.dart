@@ -420,6 +420,15 @@ extension _ChatSheets on _ChatPageState {
         ),
         const ActionSheetItem.section('工作台'),
         ActionSheetItem(
+          icon: Icons.space_dashboard_outlined,
+          title: '会话工作台',
+          subtitle: '本会话改动的文件、每轮结果与运行状态',
+          enabled: state.messages.isNotEmpty || state.toolActivities.isNotEmpty,
+          onTap: () => Navigator.of(context).push(
+            NexusPageRoute.detail(builder: (_) => const SessionWorkbenchPage()),
+          ),
+        ),
+        ActionSheetItem(
           icon: Icons.task_alt_outlined,
           title: '开发任务',
           subtitle: '查看任务状态、结果与恢复记录',

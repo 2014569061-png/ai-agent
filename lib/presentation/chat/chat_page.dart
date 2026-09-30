@@ -66,6 +66,7 @@ import 'skill_suggestion_rules.dart';
 import 'slash_skill_query.dart';
 import '../workspace/file_tree_sheet.dart';
 import '../workspace/development_workbench_page.dart';
+import '../workbench/session_workbench_page.dart';
 import '../projects/project_home_page.dart';
 import '../projects/project_picker_page.dart';
 import '../utils/keyboard_insets.dart';
