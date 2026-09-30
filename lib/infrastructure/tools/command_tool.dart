@@ -1263,6 +1263,10 @@ class TerminalCommandTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'terminal',
+    traits: ToolTraits(
+      readOnly: false,
+      scopes: {ToolEffectScope.process, ToolEffectScope.workspace},
+    ),
     description: '在当前工作区内运行终端命令（git/python/node 等）。默认始终需要用户确认；在“完全访问”模式下可自动执行。'
         '禁止 shell 管道、重定向与解释器内联求值参数（如 python -c）。'
         '注意：cwd 仅限制命令启动目录，不是完整沙箱；python/node 等解释器执行的脚本代码可能访问工作区外资源。'

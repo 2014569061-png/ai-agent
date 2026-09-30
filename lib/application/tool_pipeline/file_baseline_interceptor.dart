@@ -17,7 +17,8 @@ final class FileBaselineInterceptor implements ToolInterceptor {
   final FileBaselineStore store;
   final void Function(Object error, StackTrace stackTrace)? onError;
 
-  /// Mutating workspace tools and the argument keys naming the paths they touch.
+  /// Legacy fallback for tools that do not declare [ToolTraits]: mutating
+  /// workspace tools and the argument keys naming the paths they touch.
   static const mutatingTools = <String, List<String>>{
     'write_file': ['path'],
     'edit_file': ['path'],
@@ -30,7 +31,10 @@ final class FileBaselineInterceptor implements ToolInterceptor {
 
   @override
   Future<ToolResult> intercept(ToolInvocation invocation, ToolNext next) async {
-    final keys = mutatingTools[invocation.call.name];
+    final traits = invocation.registration?.spec.traits;
+    final keys = traits != null && traits.declared
+        ? (traits.writesWorkspace ? traits.pathArguments : null)
+        : mutatingTools[invocation.call.name];
     if (keys != null) {
       final arguments = invocation.arguments;
       final paths = [

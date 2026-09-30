@@ -140,6 +140,7 @@ class ReadFileTool with _FileMetadata implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'read_file',
+    traits: ToolTraits.workspaceRead,
     description: '读取工作区内的指定文件内容。可选择起止行号切片读取。',
     risk: ToolRisk.safe,
     parametersSchema: {
@@ -238,6 +239,7 @@ class WriteFileTool with _FileMetadata implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'write_file',
+    traits: ToolTraits.workspaceWrite,
     description: '在工作区中创建新文件或覆写文件。会自动递归创建缺失的父级目录。',
     risk: ToolRisk.requiresConfirmation,
     parametersSchema: {
@@ -328,6 +330,7 @@ class EditFileTool with _FileMetadata implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'edit_file',
+    traits: ToolTraits.workspaceWrite,
     description: '局部替换文件中的某一段文本。适用于修改已存在文件的局部代码。',
     risk: ToolRisk.requiresConfirmation,
     parametersSchema: {
@@ -431,6 +434,7 @@ class ListDirectoryTool with _FileMetadata implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'list_directory',
+    traits: ToolTraits.workspaceRead,
     description: '列出工作区内指定目录的文件和子文件夹结构。',
     risk: ToolRisk.safe,
     parametersSchema: {
@@ -522,6 +526,11 @@ class SearchFilesTool with _FileMetadata implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'search_files',
+    traits: ToolTraits(
+      readOnly: true,
+      scopes: {ToolEffectScope.workspace},
+      fileOperation: true,
+    ),
     description: '在工作区的所有文本/代码文件中快速全文搜索指定关键字。',
     risk: ToolRisk.safe,
     parametersSchema: {
@@ -688,6 +697,7 @@ class DeleteFileTool with _FileMetadata implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'delete_file',
+    traits: ToolTraits.workspaceWrite,
     description: '删除工作区中的指定文件或空目录。此操作不可逆，需要用户确认。',
     risk: ToolRisk.dangerous,
     parametersSchema: {
@@ -776,6 +786,12 @@ class MoveFileTool with _FileMetadata implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'move_file',
+    traits: ToolTraits(
+      readOnly: false,
+      scopes: {ToolEffectScope.workspace},
+      pathArguments: ['path', 'newPath'],
+      fileOperation: true,
+    ),
     description: '在工作区内移动文件或目录，同时保留移动元数据。',
     risk: ToolRisk.requiresConfirmation,
     parametersSchema: {

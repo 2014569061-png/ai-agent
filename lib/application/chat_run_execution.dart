@@ -928,7 +928,7 @@ extension ChatRunExecution on ChatController {
           modelEvent = null;
           toolStartedAt[event.call.id] = DateTime.now();
           toolEvents[event.call.id] = await tracker?.start(
-            type: _isFileOperationTool(event.call.name)
+            type: _isFileOperationTool(registry, event.call.name)
                 ? 'file_operation'
                 : 'tool_call',
             name: event.call.name,
@@ -1123,11 +1123,11 @@ extension ChatRunExecution on ChatController {
             'tool': event.call.name,
             'effect': event.result.effect.name,
             'toolCode': event.result.code,
-            'fileOperation': _isFileOperationTool(event.call.name),
+            'fileOperation': _isFileOperationTool(registry, event.call.name),
             if (!SensitiveToolPolicy.isArgumentSensitive(event.call.name) &&
                 event.call.arguments['path'] != null)
               'path': event.call.arguments['path'],
-            if (_isFileOperationTool(event.call.name) &&
+            if (_isFileOperationTool(registry, event.call.name) &&
                 !event.metadata.containsKey('operation'))
               'operation': event.call.name,
           };
@@ -1145,7 +1145,7 @@ extension ChatRunExecution on ChatController {
           // 才补写一条完整记录，保证审计仍然可见。
           if (toolHandle == null) {
             await recordRunEvent(
-              type: _isFileOperationTool(event.call.name)
+              type: _isFileOperationTool(registry, event.call.name)
                   ? 'file_operation'
                   : 'tool_call',
               name: event.call.name,

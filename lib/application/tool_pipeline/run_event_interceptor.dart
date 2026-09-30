@@ -11,12 +11,6 @@ import 'tool_invocation.dart';
 import 'tool_pipeline.dart';
 import 'tool_run_context.dart';
 
-/// Workspace file tools; recorded as `file_operation` instead of `tool_call`.
-/// Mirrors the chat path so both produce the same audit shape.
-bool isFileOperationTool(String name) =>
-    name.endsWith('_file') ||
-    const {'list_directory', 'search_files'}.contains(name);
-
 /// Records every tool call as one RunEvents row (started → finished), for
 /// runs that have no UI consumer doing it (headless / background runs).
 ///
@@ -35,7 +29,10 @@ final class RunEventInterceptor implements ToolInterceptor {
   @override
   Future<ToolResult> intercept(ToolInvocation invocation, ToolNext next) async {
     final call = invocation.call;
-    final fileOperation = isFileOperationTool(call.name);
+    // Workspace file tools are recorded as `file_operation` instead of
+    // `tool_call`, mirroring the chat path so both produce the same audit shape.
+    final fileOperation =
+        isFileOperation(invocation.registration?.spec, call.name);
     final argumentSensitive = SensitiveToolPolicy.isArgumentSensitive(call.name);
     final path = argumentSensitive ? null : call.arguments['path'];
     final newPath = argumentSensitive ? null : call.arguments['newPath'];

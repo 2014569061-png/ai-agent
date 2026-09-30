@@ -2911,9 +2911,8 @@ class ChatController extends Notifier<ChatState> {
   ToolRisk _riskFor(ToolRegistry registry, String name) =>
       registry.findRegistration(name)?.spec.risk ?? ToolRisk.safe;
 
-  bool _isFileOperationTool(String name) =>
-      name.endsWith('_file') ||
-      const {'list_directory', 'search_files'}.contains(name);
+  bool _isFileOperationTool(ToolRegistry registry, String name) =>
+      isFileOperation(registry.findRegistration(name)?.spec, name);
 
   /// 取 assistantIndex 之前最近的一条用户文本，作为知识库检索的 query。
   String _lastUserText(int assistantIndex) {

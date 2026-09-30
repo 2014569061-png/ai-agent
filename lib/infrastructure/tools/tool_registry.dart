@@ -31,6 +31,7 @@ class ToolSpec {
     this.sensitive = false,
     this.requirement = const ToolRequirement(),
     this.timeout = UnifiedTool.defaultTimeout,
+    this.traits = ToolTraits.undeclared,
   });
 
   ToolSpec.fromManifest(
@@ -44,6 +45,7 @@ class ToolSpec {
           sensitive: manifest.sensitive,
           requirement: requirement,
           timeout: manifest.timeout,
+          traits: manifest.traits,
         );
 
   final String name;
@@ -56,6 +58,9 @@ class ToolSpec {
   /// 单次执行的超时上限，随 manifest 声明；由 AgentExecutor 统一包装。
   final Duration timeout;
 
+  /// 行为特征，随 manifest 声明（ToolSpec v2）。
+  final ToolTraits traits;
+
   UnifiedTool get manifest => toManifest();
 
   UnifiedTool toManifest() => UnifiedTool(
@@ -65,6 +70,7 @@ class ToolSpec {
         risk: risk,
         sensitive: sensitive,
         timeout: timeout,
+        traits: traits,
       );
 
   ToolSpec copyWith({
@@ -75,6 +81,7 @@ class ToolSpec {
     bool? sensitive,
     ToolRequirement? requirement,
     Duration? timeout,
+    ToolTraits? traits,
   }) =>
       ToolSpec(
         name: name ?? this.name,
@@ -85,7 +92,19 @@ class ToolSpec {
         sensitive: sensitive ?? this.sensitive,
         requirement: requirement ?? this.requirement,
         timeout: timeout ?? this.timeout,
+        traits: traits ?? this.traits,
       );
+}
+
+/// 审计时是否按「文件操作」记录。
+///
+/// 已声明特征的工具看 [ToolTraits.fileOperation]；未声明或未注册的工具沿用旧的
+/// 名称规则（`*_file`、`list_directory`、`search_files`），保持 MCP 等外部工具的原有记录形态。
+bool isFileOperation(ToolSpec? spec, String name) {
+  final traits = spec?.traits;
+  if (traits != null && traits.declared) return traits.fileOperation;
+  return name.endsWith('_file') ||
+      const {'list_directory', 'search_files'}.contains(name);
 }
 
 abstract interface class AgentTool implements ToolExecutor {
@@ -201,6 +220,7 @@ class CalculatorTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'calculator',
+    traits: ToolTraits.pure,
     description: '计算两个数字的加法。',
     parametersSchema: {
       'type': 'object',

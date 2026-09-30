@@ -1,3 +1,7 @@
+export 'tool_traits.dart';
+
+import 'tool_traits.dart';
+
 enum MessageRole { system, user, assistant, tool }
 
 /// User-facing reasoning preference. [auto] lets the application choose a
@@ -392,6 +396,7 @@ class UnifiedTool {
     required this.risk,
     this.sensitive = false,
     this.timeout = defaultTimeout,
+    this.traits = ToolTraits.undeclared,
   });
 
   /// 单次工具执行的默认超时上限。
@@ -417,6 +422,9 @@ class UnifiedTool {
   /// 单次执行的超时上限，默认 [defaultTimeout]。
   final Duration timeout;
 
+  /// 行为特征（ToolSpec v2）；未声明时为 [ToolTraits.undeclared]。
+  final ToolTraits traits;
+
   /// 返回只包含新容器的声明副本，避免能力投影改写下一轮共用的 schema。
   UnifiedTool copyWith({
     String? name,
@@ -425,6 +433,7 @@ class UnifiedTool {
     ToolRisk? risk,
     bool? sensitive,
     Duration? timeout,
+    ToolTraits? traits,
   }) =>
       UnifiedTool(
         name: name ?? this.name,
@@ -434,6 +443,7 @@ class UnifiedTool {
         risk: risk ?? this.risk,
         sensitive: sensitive ?? this.sensitive,
         timeout: timeout ?? this.timeout,
+        traits: traits ?? this.traits,
       );
 
   Map<String, dynamic> toOpenAiSchema() => {
