@@ -206,7 +206,7 @@ class HeadlessExecutor {
     var skillBlock = '';
     try {
       memoryBlock = await MemoryService()
-          .buildInjectionBlock(db, contextTokens: config.contextTokens);
+          .buildInjectionBlock(db, contextTokens: config.effectiveContextTokens);
       knowledgeBlock = await KnowledgeService().buildInjectionBlock(db, prompt);
       // 只有本轮真正注册了 skills_read，才注入可按需读取的 Skill 索引。
       // Agent 的 allow-list 可能明确关闭 Skill 工具。
@@ -249,7 +249,7 @@ class HeadlessExecutor {
         temperature: temperature,
         maxTokens: maxTokens,
         topP: topP,
-        contextBudgetTokens: config.contextTokens,
+        contextBudgetTokens: config.effectiveContextTokens,
         cancellationToken: cancellationToken,
         cancelToken: cancelToken,
         // 无 UI 的后台路径（子 Agent/定时任务）没有真人审批，敏感或非 safe 工具一律拒绝。

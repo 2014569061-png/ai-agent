@@ -65,6 +65,16 @@ class ProviderConfig {
             cachedPricePerMillionCents ?? this.cachedPricePerMillionCents,
       );
 
+  /// 本次运行实际使用的上下文窗口。[contextTokens] 仍是默认值（视为“未
+  /// 设置”）且模型在已知表中时，按模型自动推断（见 [ModelContextWindows]）；
+  /// 用户显式填过的值一律尊重。本地地址（Ollama 等）的实际窗口取决于本地
+  /// 加载参数，不做推断。
+  int get effectiveContextTokens {
+    if (contextTokens != defaultContextTokens) return contextTokens;
+    if (isLocalBaseUrl(baseUrl)) return contextTokens;
+    return ModelContextWindows.autoFor(model) ?? contextTokens;
+  }
+
   bool get isConfigured {
     if (model.trim().isEmpty) return false;
     // 云端服务必须携带 API Key。
@@ -123,5 +133,57 @@ class ModelCapabilities {
           !lower.contains('tts') &&
           !lower.contains('whisper'),
     );
+  }
+}
+
+/// 常见模型的上下文窗口（按模型名推断，偏保守）。
+///
+/// 自动值封顶 [autoCap]：窗口越大，每次请求携带的历史越多、费用越高；需要
+/// 更大窗口时可在服务商设置中手动填写。
+abstract final class ModelContextWindows {
+  static const autoCap = 128000;
+
+  /// 自动采用的窗口；未知模型返回 null。
+  static int? autoFor(String model) {
+    final known = knownFor(model);
+    if (known == null) return null;
+    return known > autoCap ? autoCap : known;
+  }
+
+  /// 模型标称的上下文窗口；未知模型返回 null。
+  static int? knownFor(String model) {
+    final lower = model.trim().toLowerCase();
+    if (lower.isEmpty) return null;
+    final name = lower.contains('/') ? lower.split('/').last : lower;
+    // 名称自带窗口大小：step-1-32k、moonshot-v1-128k 等。
+    final sized = RegExp(r'-(\d{1,4})k(?:$|[-_.])').firstMatch(name);
+    if (sized != null) return int.parse(sized.group(1)!) * 1000;
+    if (name.startsWith('step-5')) return 1000000;
+    if (name.startsWith('step-3.7') || name.startsWith('step-3.5')) {
+      return 256000;
+    }
+    if (name.startsWith('step-3')) return 64000;
+    if (name.startsWith('deepseek-')) return 128000;
+    if (name.startsWith('gpt-5')) return 400000;
+    if (name.startsWith('gpt-4.1')) return 1000000;
+    if (name.startsWith('gpt-4o') || name.startsWith('gpt-4-turbo')) {
+      return 128000;
+    }
+    if (name.startsWith('o1') || name.startsWith('o3') || name.startsWith('o4')) {
+      return 200000;
+    }
+    if (name.startsWith('claude-')) return 200000;
+    if (name.startsWith('gemini-')) return 1000000;
+    if (name.startsWith('qwen3') ||
+        name.startsWith('qwen-plus') ||
+        name.startsWith('qwen-turbo') ||
+        name.startsWith('qwen-long')) {
+      return 128000;
+    }
+    if (name.startsWith('kimi-k2')) return 128000;
+    if (name.startsWith('glm-4.5') || name.startsWith('glm-4.6')) {
+      return 128000;
+    }
+    return null;
   }
 }

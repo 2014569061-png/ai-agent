@@ -34,7 +34,7 @@ extension ChatRunExecution on ChatController {
     final effectiveMaxTokens = OutputTokenPolicy.resolve(
       model: model,
       configured: maxTokens,
-      contextWindow: config.contextTokens,
+      contextWindow: config.effectiveContextTokens,
     );
     // Capture the run's anchor before any await or conversation switch.
     final assistantMessageId = assistantIndex < _currentState.messages.length
@@ -378,7 +378,7 @@ extension ChatRunExecution on ChatController {
       }
       memoryBlock = await MemoryService().buildInjectionBlock(
         database,
-        contextTokens: config.contextTokens,
+        contextTokens: config.effectiveContextTokens,
         projectId: _currentState.currentProjectId,
       );
       knowledgeBlock = await KnowledgeService()
@@ -477,7 +477,7 @@ extension ChatRunExecution on ChatController {
           query: query,
         );
         budgetPlan = const PromptBudgetAllocator().allocate(
-          contextTokens: config.contextTokens,
+          contextTokens: config.effectiveContextTokens,
           systemPrompt: [
             runSystemPrompt,
             if (taskTemplateRules.isNotEmpty) taskTemplateRules,
@@ -546,7 +546,7 @@ extension ChatRunExecution on ChatController {
         maxTokens: effectiveMaxTokens,
         topP: topP,
         reasoningEffort: reasoningEffort,
-        contextBudgetTokens: config.contextTokens,
+        contextBudgetTokens: config.effectiveContextTokens,
         maxRetries: retrySettings.maxRetries,
         retryBackoff: retrySettings.retryBackoff,
         cancellationToken: cancellationToken,
