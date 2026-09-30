@@ -187,6 +187,7 @@ builder: (context) => StatefulBuilder(
                   DropdownMenuItem(value: 'cache', child: Text('缓存')),
                   DropdownMenuItem(value: 'network', child: Text('网络')),
                   DropdownMenuItem(value: 'system', child: Text('系统')),
+                  DropdownMenuItem(value: 'session_log', child: Text('会话日志')),
                 ],
                 onChanged: (value) => setSheetState(() => category = value),
               ),
