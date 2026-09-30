@@ -429,6 +429,12 @@ extension _ChatSheets on _ChatPageState {
           ),
         ),
         ActionSheetItem(
+          icon: Icons.tune_rounded,
+          title: '运行预设',
+          subtitle: '保存并一键切换模型、模式、审批与 Agent 组合',
+          onTap: () => showRunPresetsSheet(context),
+        ),
+        ActionSheetItem(
           icon: Icons.task_alt_outlined,
           title: '开发任务',
           subtitle: '查看任务状态、结果与恢复记录',
