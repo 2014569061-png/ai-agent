@@ -159,6 +159,40 @@ abstract final class SessionLogShadowCheck {
         m.text,
       ].join('|');
 
+  /// 日志中的消息与 Messages 行是否对应同一条消息。
+  ///
+  /// 日志一侧更完整：角色、工具调用 ID 与工具名必须一致；正文只在日志消息为纯文本
+  /// 且非工具结果时比较——Messages 行把附件存成占位标记（如「[图片附件]」），
+  /// 敏感工具结果会脱敏，这些都不算不一致。
+  static bool sameMessage(ChatMessage logged, ChatMessage stored) {
+    if (logged.role != stored.role ||
+        (logged.toolCallId ?? '') != (stored.toolCallId ?? '') ||
+        !_sameNames(logged.toolCalls, stored.toolCalls)) {
+      return false;
+    }
+    final comparable = logged.role != MessageRole.tool &&
+        logged.parts.every((part) => part.type == 'text');
+    return !comparable || logged.text == stored.text;
+  }
+
+  /// 按下标逐条 [sameMessage]；返回第一处不一致的下标，完全一致时为 null。
+  static int? firstMismatch(List<ChatMessage> logged, List<ChatMessage> stored) {
+    final common =
+        logged.length < stored.length ? logged.length : stored.length;
+    for (var i = 0; i < common; i++) {
+      if (!sameMessage(logged[i], stored[i])) return i;
+    }
+    return logged.length == stored.length ? null : common;
+  }
+
+  static bool _sameNames(List<ToolCall> a, List<ToolCall> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].name != b[i].name) return false;
+    }
+    return true;
+  }
+
   /// 会话还没有已结束的运行时返回 null。
   static Future<ShadowComparison?> compare(
       AppDatabase db, SessionEventStore store, String conversationId) async {
@@ -167,25 +201,16 @@ abstract final class SessionLogShadowCheck {
     if (derived == null) return null;
     final logged = [
       for (final m in derived)
-        if (m.role != MessageRole.system) view(m),
+        if (m.role != MessageRole.system) m,
     ];
     final stored = [
       for (final row in await db.messagesFor(conversationId))
-        view(chatMessageFromRow(row)),
+        chatMessageFromRow(row),
     ];
-    final common =
-        logged.length < stored.length ? logged.length : stored.length;
-    int? mismatch;
-    for (var i = 0; i < common; i++) {
-      if (logged[i] != stored[i]) {
-        mismatch = i;
-        break;
-      }
-    }
-    if (mismatch == null && logged.length != stored.length) mismatch = common;
-    String? describe(List<String> list) =>
+    final mismatch = firstMismatch(logged, stored);
+    String? describe(List<ChatMessage> list) =>
         mismatch != null && mismatch < list.length
-            ? _describe(list[mismatch])
+            ? _describe(view(list[mismatch]))
             : null;
     return ShadowComparison(
       conversationId: conversationId,

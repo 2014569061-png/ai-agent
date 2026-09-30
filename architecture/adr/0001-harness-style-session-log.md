@@ -87,6 +87,21 @@ NEXUS 现状：
   逐行转换后的全部消息。通过 `appendAllIfEmpty` 原子写入，会话已有日志时不做任何事，
   所以不会与并发运行交错。每次启动最多导入 20 个会话。
 - **影子比对**（仅在双写开启时）：对最近更新的 20 个有日志的会话，比较日志推导历史
-  （去掉 system）与 Messages 表（角色、工具调用 ID、工具名、文本）。不一致只写入
+  （去掉 system）与 Messages 表（逐条 `sameMessage`：角色、工具调用 ID、工具名必须一致；
+  正文只在日志消息为纯文本且非工具结果时比较，因为 Messages 行把附件存成「[图片附件]」
+  这类占位标记，敏感工具结果会脱敏）。不一致只写入
   诊断日志，内容只有下标、条数，以及角色、长度、摘要，**不含正文**。
   读路径切换到日志之前，影子比对必须在真机上持续零差异。
+
+## 阶段 4c：在 turn 边界分叉
+
+- 分叉仍以 Messages 表为准：`ConversationForkService` 先在事务里复制到锚点消息；
+  调用方传入 `sessionLog`（聊天在双写开启时传入）后，再为分支建立日志。日志失败只上报
+  （`chat.forkSessionLog`），不影响分叉。
+- `SessionLogForker` 从新到旧查找原日志中历史与已复制行逐条对应的 `turn/end`：
+  - 找到时，把当时的模型可见历史（含 system 与附件）写成分支的一次合成运行：
+    `runId = fork:<branchId>`，`turn/start` 带 `forked`、`parentConversationId`、
+    `parentSeq`、`parentRunId`，`turn/end status = forked`。附件先登记到分支名下，
+    原会话删除后分支仍保留附件。
+  - 找不到时（锚点在一轮中间，或原会话没有日志），退回旧数据导入（`imported`）。
+- 分叉只复制历史，不重放任何工具副作用。

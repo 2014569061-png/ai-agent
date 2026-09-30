@@ -56,6 +56,7 @@ import 'log_service.dart';
 import 'nexus_guard.dart';
 import 'run_event_tracker.dart';
 import 'session_log/session_event_store.dart';
+import 'session_log/session_log_settings.dart';
 import 'modules/run_profile.dart';
 import 'modules/agent_module.dart';
 import 'modules/module_host.dart';
@@ -2816,7 +2817,13 @@ class ChatController extends Notifier<ChatState> {
     final branch = await const ConversationForkService().fork(
         db: database,
         sourceConversationId: conversationId,
-        forkMessageId: anchor);
+        forkMessageId: anchor,
+        sessionLog: SessionLogSettings.dualWrite
+            ? DriftSessionEventStore(database)
+            : null,
+        onSessionLogError: (error, stackTrace) => NexusGuard.degradeCaught(
+            'chat.forkSessionLog', error, stackTrace,
+            logger: _logDegrade));
     if (_mounted &&
         generation == _conversationSwitchGeneration &&
         !state.running) {
