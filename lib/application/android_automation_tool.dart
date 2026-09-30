@@ -27,6 +27,10 @@ class AndroidAutomationTool implements AgentTool, ToolApprovalGate {
   @override
   final manifest = const UnifiedTool(
     name: 'android_automation',
+    traits: ToolTraits(
+      readOnly: false,
+      scopes: {ToolEffectScope.device},
+    ),
     description: '管理设备自动化规则：定时、连上指定 Wi-Fi、电量低于阈值时触发。'
         '触发后只发送通知，用户点击后逐项预览并确认才执行，永不在后台静默执行。'
         '动作仅限白名单（打开/停止应用、深链、清缓存、Wi-Fi/蓝牙/勿扰/亮度/音量/旋转、'

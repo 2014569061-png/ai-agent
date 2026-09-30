@@ -590,6 +590,10 @@ class AndroidDeviceTool implements AgentTool, ToolApprovalGate {
   @override
   final manifest = const UnifiedTool(
     name: 'android_device',
+    traits: ToolTraits(
+      readOnly: false,
+      scopes: {ToolEffectScope.device},
+    ),
     description:
         '执行 Android 设备操作。变更前必须先调用 android_device_preview 获取目标、影响范围、风险和撤销信息，'
         '再将返回的 planId 与相同参数传入本工具。工具执行器会按 action 风险等级审批；Root、危险系统开关、网络规则与不可逆操作每次都需明确批准。'
@@ -3002,6 +3006,8 @@ UnifiedTool _androidDevicePreviewManifest() {
   schema['properties'] = properties;
   return UnifiedTool(
     name: 'android_device_preview',
+    // 只生成预览，不访问手机。
+    traits: ToolTraits.pure,
     description: '只读预览一项 Android 设备变更，不执行操作，也不签发执行票据。'
         '向用户展示预览后，再把 planId 和完全相同的目标交给 android_device；'
         '执行器会先完成对应风险等级的用户审批，批准后才签发一次性票据。',
@@ -3131,6 +3137,10 @@ class AndroidAppPrivateDataTool implements AgentTool, ToolApprovalGate {
   @override
   final manifest = const UnifiedTool(
     name: 'android_app_private_data',
+    traits: ToolTraits(
+      readOnly: true,
+      scopes: {ToolEffectScope.device},
+    ),
     description: '通过 Root 只读查看指定 Android 应用（Android 用户 0）的私有数据目录。'
         '只允许列举单个目录或读取受支持的 UTF-8 文本文件，单文件最多 64 KiB；'
         '不会写入、删除或修改应用数据。此能力属于危险级，每次实际读取都必须由用户确认。'
@@ -3234,6 +3244,7 @@ class AndroidAppPrivateDataPreviewTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'android_app_private_data_preview',
+    traits: ToolTraits.pure,
     description: '生成 Android 应用私有数据只读访问预览；只校验并描述目标，不访问手机。'
         '实际访问必须调用 android_app_private_data，并通过独立的危险级用户确认。',
     risk: ToolRisk.safe,

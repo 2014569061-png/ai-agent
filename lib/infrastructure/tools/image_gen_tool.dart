@@ -22,6 +22,10 @@ class ImageGenTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'generate_image',
+    traits: ToolTraits(
+      readOnly: false,
+      scopes: {ToolEffectScope.network},
+    ),
     description: '根据文字描述生成一张图片。当用户要求"画/生成一张图"时调用。',
     parametersSchema: {
       'type': 'object',

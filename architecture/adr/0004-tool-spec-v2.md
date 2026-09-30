@@ -38,8 +38,18 @@
 - 允许清单与任务模板里的工具名是策略数据（用户可见的配置），不改。
 - 并发安全等调度相关特征先不加，等执行器真的支持并行工具调用时再加。
 
-## 后续
+## 阶段 6b：补齐声明
 
-- 其余内置工具（设备、技能、子代理、图片生成、计划）逐步补声明；
-  未补之前按 `undeclared` 保守处理。
-- MCP / 插件工具可以在各自的清单里声明特征，届时由提供方映射到 `ToolTraits`。
+- 内置工具全部声明，只有 `sub_agent` 例外：它的影响取决于子代理拿到的工具，
+  保持 `undeclared`。
+  - pure：`get_time`、`json_query`、`memory_get`、`manage_plan`、`skills_read`、
+    `skills_read_resource`、`android_device_preview`、`android_app_private_data_preview`；
+  - network：`web_search`（只读）、`http_request`、`generate_image`；
+  - device：`android_device`、`android_automation`、`android_app_private_data`（只读）；
+  - 应用内状态：`remember`、`memory_write`（`readOnly: false`，无 scope）。
+- MCP：`McpTool.traitsFor(annotations)`，`readOnly` 取 `readOnlyHint`（缺省 false），
+  scope 为 network。注解是服务器自报的提示，**只用于描述性判断，不影响审批**。
+  MCP 工具作用在远端，所以 `mcp_*.*_file` 不再按本机文件操作记录（此前按名称规则会
+  误记为 `file_operation`），也不保存文件基线。
+- 插件声明式工具：`DeclarativeTool.traitsFor(request)`，GET/HEAD 只读，其余有副作用，
+  scope 为 network。

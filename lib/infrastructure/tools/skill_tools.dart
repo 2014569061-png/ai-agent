@@ -15,6 +15,7 @@ class SkillsReadTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'skills_read',
+    traits: ToolTraits.pure,
     description: '按 Skill id 或名称读取 SKILL.md 正文，默认最多 16000 字符',
     parametersSchema: {
       'type': 'object',
@@ -79,6 +80,7 @@ class SkillsReadResourceTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'skills_read_resource',
+    traits: ToolTraits.pure,
     description: '读取已安装 Skill 目录中的白名单资源文件',
     parametersSchema: {
       'type': 'object',

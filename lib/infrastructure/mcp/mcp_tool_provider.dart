@@ -237,6 +237,17 @@ class McpTool implements AgentTool {
         // MCP 远端工具可执行任意操作，默认需要用户确认。
         risk: ToolRisk.requiresConfirmation,
         sensitive: true,
+        traits: traitsFor(tool.annotations),
+      );
+
+  /// 把 MCP 工具注解映射为 [ToolTraits]。
+  ///
+  /// 注解是服务器自报的**提示**，不可信：只用于审计形态等描述性判断，
+  /// 绝不降低审批要求（审批仍看上面的 risk / sensitive）。MCP 工具作用在远端
+  /// 服务器上，不是本机工作区，所以不算文件操作，也不保存文件基线。
+  static ToolTraits traitsFor(mcp.ToolAnnotations? annotations) => ToolTraits(
+        readOnly: annotations?.readOnlyHint ?? false,
+        scopes: const {ToolEffectScope.network},
       );
 
   @override

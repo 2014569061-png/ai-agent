@@ -193,7 +193,22 @@ class DeclarativeTool implements AgentTool {
           parametersSchema: (map['schema'] as Map<String, dynamic>?) ??
               const {'type': 'object', 'properties': {}},
           risk: ToolRisk.requiresConfirmation,
+          traits: traitsFor(map['request'] as Map<String, dynamic>?),
         );
+
+  /// 声明式工具只发 HTTP 请求：GET/HEAD 视为只读，其余方法视为有副作用。
+  static ToolTraits traitsFor(Map<String, dynamic>? request) {
+    final raw = request?['method'];
+    final method = raw == null
+        ? 'GET'
+        : raw is String
+            ? raw.trim().toUpperCase()
+            : '';
+    return ToolTraits(
+      readOnly: method == 'GET' || method == 'HEAD',
+      scopes: const {ToolEffectScope.network},
+    );
+  }
 
   final Map<String, dynamic> _request;
   final NetworkAccessPolicy _policy;

@@ -11,6 +11,8 @@ class ManagePlanTool implements AgentTool {
   @override
   final manifest = const UnifiedTool(
     name: 'manage_plan',
+    // 只改本次运行的计划状态。
+    traits: ToolTraits.pure,
     description: '创建或更新分步执行计划。必须在计划模式的首步调用此工具，传入严格的 JSON 步骤数组。',
     risk: ToolRisk.safe,
     parametersSchema: {

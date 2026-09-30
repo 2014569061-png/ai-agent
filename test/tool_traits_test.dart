@@ -8,6 +8,9 @@ import 'package:mobile_agent/application/tool_pipeline/tool_invocation.dart';
 import 'package:mobile_agent/application/tool_pipeline/tool_run_context.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/domain/tool_result.dart';
+import 'package:mcp_dart/mcp_dart.dart' as mcp;
+import 'package:mobile_agent/infrastructure/mcp/mcp_tool_provider.dart';
+import 'package:mobile_agent/infrastructure/plugins/plugin_store.dart';
 import 'package:mobile_agent/infrastructure/tools/command_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/tool_registry.dart';
 import 'package:mobile_agent/infrastructure/tools/workspace_tools.dart';
@@ -120,6 +123,30 @@ void main() {
     final custom = ToolSpec.fromManifest(
         _manifest('save_note', ToolTraits.workspaceWrite));
     expect(isFileOperation(custom, 'save_note'), isTrue);
+  });
+
+  test('MCP annotations map to advisory traits', () {
+    final readOnly = McpTool.traitsFor(const mcp.ToolAnnotations(readOnlyHint: true));
+    expect(readOnly.declared, isTrue);
+    expect(readOnly.readOnly, isTrue);
+    expect(readOnly.scopes, {ToolEffectScope.network});
+    expect(McpTool.traitsFor(null).readOnly, isFalse, reason: '缺省按有副作用处理');
+    // 远端服务器上的 *_file 工具不是本机工作区的文件操作。
+    final spec = ToolSpec.fromManifest(_manifest('mcp_fs.write_file', readOnly));
+    expect(isFileOperation(spec, 'mcp_fs.write_file'), isFalse);
+    expect(readOnly.writesWorkspace, isFalse);
+  });
+
+  test('plugin tools derive traits from their HTTP method', () {
+    ToolTraits traits(Map<String, dynamic>? request) =>
+        DeclarativeTool.fromManifest({
+          'name': 'p',
+          if (request != null) 'request': request,
+        }).manifest.traits;
+    expect(traits(null).readOnly, isTrue, reason: '缺省 GET');
+    expect(traits({'method': 'head'}).readOnly, isTrue);
+    expect(traits({'method': 'POST'}).readOnly, isFalse);
+    expect(traits({'method': 'PUT'}).scopes, {ToolEffectScope.network});
   });
 
   group('FileBaselineInterceptor', () {
