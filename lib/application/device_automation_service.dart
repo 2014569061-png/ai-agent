@@ -11,6 +11,7 @@ import '../infrastructure/tools/android_device_tool.dart';
 import 'audit_service.dart';
 import 'device_action_runner.dart';
 import 'providers.dart';
+import '../infrastructure/observability/silent_failure.dart';
 
 /// 原生触发器通道（`nexus/device_automation`）。
 class DeviceAutomationBridge {
@@ -187,7 +188,8 @@ class DeviceAutomationService {
       ];
       _rulesCache = List.unmodifiable(parsed);
       return parsed;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('deviceAutomationService.Function', error, stackTrace);
       return const [];
     }
   }
@@ -557,7 +559,8 @@ class DeviceAutomationService {
     try {
       final result = await _runner.tool.execute({'action': 'system_settings'});
       return result.ok ? (result.data ?? const {}) : const {};
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('deviceAutomationService._resolve', error, stackTrace);
       return const {};
     }
   }
@@ -621,7 +624,8 @@ class DeviceAutomationService {
           if (AutomationRun.fromJson(item) case final run?)
             if (ruleId == null || run.ruleId == ruleId) run,
       ];
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('deviceAutomationService.executeUndo', error, stackTrace);
       return [];
     }
   }
@@ -659,7 +663,8 @@ class DeviceAutomationService {
         irreversible: rule.hasIrreversibleAction,
         userRequest: userRequest,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('deviceAutomationService._auditRule', error, stackTrace);
       // 审计服务内部已记录失败。
     }
   }

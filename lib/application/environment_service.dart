@@ -12,6 +12,7 @@ import 'project_environment_policy.dart';
 import 'project_kind.dart';
 import 'project_settings.dart';
 import 'project_template_service.dart';
+import '../infrastructure/observability/silent_failure.dart';
 
 class EnvironmentToolStatus {
   const EnvironmentToolStatus({
@@ -579,7 +580,8 @@ class EnvironmentService {
     if (reader != null) {
       try {
         return await reader().timeout(storageReadTimeout);
-      } catch (_) {
+      } catch (error, stackTrace) {
+        reportSilentFailure('environmentService._readFreeBytes', error, stackTrace);
         return null;
       }
     }
@@ -588,7 +590,8 @@ class EnvironmentService {
       // 当前 path_provider 接口只能确认应用目录是否可访问，不能提供剩余字节数；
       // 这里不把「目录可访问」伪装成一个空间数，freeBytes 保持未知。
       await getApplicationDocumentsDirectory().timeout(storageReadTimeout);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('environmentService._readFreeBytes.2', error, stackTrace);
       // 目录探测失败同样只能表达为未知空间；调用方会按 null 展示，而不是误报
       // 一个看似精确的可用空间。
     }
@@ -740,7 +743,8 @@ Future<String?> _runtimeProbeWorkingDirectory(LinuxRuntimeKind kind) async {
     );
     await directory.create(recursive: true);
     return directory.path;
-  } catch (_) {
+  } catch (error, stackTrace) {
+    reportSilentFailure('environmentService._architecture', error, stackTrace);
     return null;
   }
 }
@@ -879,7 +883,8 @@ Future<TerminalCommandService?> _sharedProbeTerminal() {
       );
       _probeTerminal = terminal;
       return terminal;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('environmentService._architecture.2', error, stackTrace);
       return null;
     }
   }();

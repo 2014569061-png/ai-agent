@@ -15,6 +15,7 @@ import 'project_settings.dart';
 import 'project_template_service.dart';
 import 'providers.dart';
 import 'workspace_service.dart';
+import '../infrastructure/observability/silent_failure.dart';
 
 class ProjectException implements Exception {
   const ProjectException(this.message);
@@ -161,7 +162,8 @@ class ProjectService {
       await probe.writeAsString('ok');
       await probe.delete();
       return true;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('projectService.probeWritable', error, stackTrace);
       return false;
     }
   }
@@ -346,7 +348,8 @@ class ProjectService {
   Archive _decodeZip(List<int> bytes) {
     try {
       return ZipDecoder().decodeBytes(bytes);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('projectService._decodeZip', error, stackTrace);
       throw const ProjectException('仅支持 ZIP 项目压缩包');
     }
   }
@@ -432,7 +435,8 @@ class ProjectService {
       if (await directory.exists()) {
         await directory.delete(recursive: true);
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('projectService._deleteQuietly', error, stackTrace);
       // 名字即约定：尽力删除，失败不改变调用方对结果的判定。
     }
   }

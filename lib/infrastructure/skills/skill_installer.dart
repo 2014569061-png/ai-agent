@@ -17,6 +17,7 @@ import '../../domain/tool_codes.dart';
 import '../../domain/unique_id.dart';
 import 'skill_parser.dart';
 import 'skill_change_notifier.dart';
+import '../observability/silent_failure.dart';
 
 /// 解析后的 GitHub Skill 来源引用。
 class GithubSkillRef {
@@ -309,7 +310,8 @@ class SkillInstaller {
           final current = Directory(installRoot);
           if (current.existsSync()) await current.delete(recursive: true);
           await backupDir!.rename(installRoot);
-        } catch (_) {
+        } catch (error, stackTrace) {
+          reportSilentFailure('skillInstaller.install', error, stackTrace);
           // 回滚失败时仍保留冻结标记，宁可停用也不让模型猜测状态。
         }
       }
@@ -320,7 +322,8 @@ class SkillInstaller {
       if (stagingDir.existsSync()) {
         try {
           await stagingDir.delete(recursive: true);
-        } catch (_) {
+        } catch (error, stackTrace) {
+          reportSilentFailure('skillInstaller.install.2', error, stackTrace);
           // 暂存目录清理失败不影响本次安装的结论（成功或已冻结），只留下一个
           // 残留目录；下次安装会先重建同名暂存目录。
         }
@@ -329,7 +332,8 @@ class SkillInstaller {
       if (backupDir?.existsSync() == true && committed) {
         try {
           await backupDir!.delete(recursive: true);
-        } catch (_) {
+        } catch (error, stackTrace) {
+          reportSilentFailure('skillInstaller.install.3', error, stackTrace);
           // 提交成功后旧备份删不掉：只占磁盘，不影响已生效的新版本。
         }
       }
@@ -343,7 +347,8 @@ class SkillInstaller {
         'code=${ToolCodes.nextTurnRequired}\n$reason\n',
         flush: true,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillInstaller._freezeDirectory', error, stackTrace);
       // 冻结标记本身失败时无法进一步保证状态，错误仍由调用方回灌。
     }
   }
@@ -370,7 +375,8 @@ class SkillInstaller {
           subPath: source.subPath,
         );
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillInstaller._resolveRef', error, stackTrace);
       // 解析默认分支失败时以 main 兜底，下载失败再由用户看到错误。
     }
     return GithubSkillRef(
@@ -425,7 +431,8 @@ class SkillInstaller {
       return TarDecoder().decodeBytes(output.getBytes());
     } on SkillValidationException {
       rethrow;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillInstaller._decodeArchive', error, stackTrace);
       throw SkillValidationException('仅支持 ZIP 或 tar.gz 格式的 Skill 压缩包');
     }
   }
