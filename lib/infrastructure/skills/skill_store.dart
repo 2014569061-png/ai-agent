@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../database/app_database.dart';
 import 'skill_change_notifier.dart';
 import 'skill_parser.dart';
+import '../observability/silent_failure.dart';
 
 class SkillStore {
   static const int _defaultInjectionBudget = 2000;
@@ -37,7 +38,8 @@ class SkillStore {
               FileSystemEntityType.directory) {
         await dir.delete(recursive: true);
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore.delete', error, stackTrace);
       // 文件缺失不影响记录删除。
     }
     await db.deleteSkillPack(pack.id);
@@ -91,7 +93,8 @@ class SkillStore {
       }
       final actual = sha256.convert(hashInput).toString();
       return actual == expected ? true : _freeze(pack);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore.verifyIntegrity', error, stackTrace);
       return _freeze(pack);
     }
   }
@@ -115,7 +118,8 @@ class SkillStore {
         'code=NEXT_TURN_REQUIRED\nreason=integrity-check-failed\n',
         flush: true,
       );
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore._freeze', error, stackTrace);
       // 冻结标记写失败时仍返回 false；调用方不会把完整性检查当成成功，最多是
       // 少了供下一轮读取的持久化原因。
     }
@@ -133,7 +137,8 @@ class SkillStore {
         if (normalized == null || !result.add(normalized)) return null;
       }
       return result.length == raw.length ? result : null;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore._strictDeclaredFiles', error, stackTrace);
       return null;
     }
   }
@@ -180,7 +185,8 @@ class SkillStore {
         return null;
       }
       return parseSkillMarkdown(file.readAsStringSync()).metadata;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore.readMetadata', error, stackTrace);
       return null;
     }
   }
@@ -235,7 +241,8 @@ class SkillStore {
           return 'skills_read, resources:${resources.join(',')}';
         }
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore._capabilities', error, stackTrace);
       // 旧版本 fileListJson 损坏时仍保留最小可用能力声明。
     }
     return 'skills_read';
@@ -254,7 +261,8 @@ class SkillStore {
       return body.length <= maxChars
           ? body
           : '${body.substring(0, maxChars)}\n[内容已截断]';
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore.readBody', error, stackTrace);
       return null;
     }
   }
@@ -282,7 +290,8 @@ class SkillStore {
       final bytes = File(path).readAsBytesSync();
       if (bytes.length > maxBytes.clamp(1, kSkillMaxBytes).toInt()) return null;
       return bytes;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore.readResourceBytes', error, stackTrace);
       return null;
     }
   }
@@ -310,7 +319,8 @@ class SkillStore {
       return text.length <= maxChars
           ? text
           : '${text.substring(0, maxChars)}\n[资源已截断]';
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore.readResource', error, stackTrace);
       return null;
     }
   }
@@ -338,7 +348,8 @@ class SkillStore {
         if (normalized != null) result.add(normalized);
       }
       return result;
-    } catch (_) {
+    } catch (error, stackTrace) {
+      reportSilentFailure('skillStore._declaredFiles', error, stackTrace);
       return const <String>{};
     }
   }
