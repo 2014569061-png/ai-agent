@@ -86,6 +86,10 @@ import '../infrastructure/plugins/plugin_store.dart';
 import '../infrastructure/skills/skill_store.dart';
 import '../infrastructure/notifications/notification_service.dart';
 import '../infrastructure/background/foreground_service.dart';
+import 'chat_plan_status.dart';
+import 'chat_prompt_rules.dart';
+import 'chat_task_json.dart';
+import 'usage_cost_estimator.dart';
 
 part 'chat_run_execution.dart';
 part 'chat_state.dart';
@@ -871,27 +875,10 @@ class ChatController extends Notifier<ChatState> {
 
   /// Keeps ordinary questions in chat mode while routing explicit project work
   /// through Agent mode, where workspace tools can be registered.
-  static bool requiresAgentModeForRequest(
-    String text, {
+  static bool requiresAgentModeForRequest(String text, {
     String taskType = 'general',
-  }) {
-    if (taskType != 'general') return true;
-    final normalized = text.trim().toLowerCase();
-    if (normalized.isEmpty) return false;
-    final hasAction = RegExp(
-      r'创建|新建|生成|制作|做|开发|实现|修改|编辑|修复|构建|编译|写一个|create|build|implement|edit|fix',
-    ).hasMatch(normalized);
-    final hasDevelopmentTarget = RegExp(
-      r'html|网页|网站|页面|项目|代码|程序|应用|文件|exe|flutter|react|vue|python|go|node|file|app',
-    ).hasMatch(normalized);
-    final isDeviceAction = RegExp(
-      r'打开.{0,12}(应用|软件|微信|支付宝|相机|设置|浏览器)|'
-      r'(搜索|查找|找一下|找找).{0,16}(本地|手机|文件|照片|图片|pdf)|'
-      r'(本地|手机).{0,10}(搜索|查找|找一下|找找).{0,12}(文件|照片|图片|pdf)|'
-      r'找.{0,10}(本地|手机)?(文件|照片|图片)',
-    ).hasMatch(normalized);
-    return (hasAction && hasDevelopmentTarget) || isDeviceAction;
-  }
+  }) =>
+      chatRequiresAgentModeForRequest(text, taskType: taskType);
 
   Future<void> send({
     required String text,
@@ -1674,25 +1661,11 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  Map<String, dynamic> _decodeTaskRequest(String json) {
-    try {
-      final decoded = jsonDecode(json);
-      return decoded is Map<String, dynamic> ? decoded : const {};
-    } catch (_) {
-      return const {};
-    }
-  }
+  Map<String, dynamic> _decodeTaskRequest(String json) =>
+      decodeTaskJsonObject(json);
 
-  Map<String, dynamic> _decodeTaskProgress(String json) {
-    try {
-      final decoded = jsonDecode(json);
-      return decoded is Map<String, dynamic>
-          ? Map<String, dynamic>.from(decoded)
-          : const {};
-    } catch (_) {
-      return const {};
-    }
-  }
+  Map<String, dynamic> _decodeTaskProgress(String json) =>
+      decodeTaskJsonObject(json);
 
   Future<String?> pickWorkspace() async {
     final service = ref.read(workspaceServiceProvider);
@@ -2024,19 +1997,8 @@ class ChatController extends Notifier<ChatState> {
 
   /// 主 Agent 的 sub_agent 委派规则。开启自主委派时给出自主边界；关闭时
   /// 要求先获得用户确认（与审批模式兼容）。
-  static String _delegationRules(bool autonomous) {
-    if (autonomous) {
-      return '[自主委派规则]\n'
-          '- 可将可独立、并行推进的只读子任务委派给 sub_agent 执行以加快处理。\n'
-          '- 通过 maxTokens 为每个子任务分配受限预算（上限 ${SubAgentTool.maxBudget}），不要超预算。\n'
-          '- 子 Agent 仅放行安全工具；写文件、执行命令、提交、联网发布等危险操作必须由你亲自处理并走审批，不得委派。\n'
-          '- 委派只是优化手段，你仍对最终结果负责，应核实并汇总子 Agent 返回。';
-    }
-    return '[委派规则]\n'
-        '- 委派子任务前必须先获得用户确认（sub_agent 调用需审批）。\n'
-        '- 仅可委派只读、安全的子任务；危险操作由你亲自处理并走审批。\n'
-        '- 通过 maxTokens 为每个子任务分配受限预算（上限 ${SubAgentTool.maxBudget}），不要超预算；委派后应核实并汇总结果。';
-  }
+  static String _delegationRules(bool autonomous) =>
+      chatDelegationRules(autonomous);
 
   /// 工作区与工具可用性注入：注册表里文件/终端工具是否存在由工作区绑定和
   /// 「设置 → 工具」开关共同决定。没有这些工具时模型倾向于回答“设备没有
@@ -2047,40 +2009,13 @@ class ChatController extends Notifier<ChatState> {
     required bool fileToolsAvailable,
     required bool terminalAvailable,
     ChatMode mode = ChatMode.agent,
-  }) {
-    final ws = workspacePath?.trim() ?? '';
-    if (mode == ChatMode.chat) {
-      return '[工作区环境]\n'
-          '- 当前会话为“聊天”模式，未装配文件或终端工具；这不是设置或设备能力问题。\n'
-          '- 用户要求创建、修改、保存文件或执行构建时，请引导其切换到 Agent 模式并选择项目目录后重试。\n'
-          '- 不要要求用户寻找不存在的“文件/终端开关”，也不要编造文件已创建。';
-    }
-    if (ws.isEmpty) {
-      return '[工作区环境]\n'
-          '- 当前未选择工作区，文件读写与终端工具未启用。这是应用内配置，不是设备能力缺失。\n'
-          '- 若任务需要读写文件或执行命令（编译、脚本、构建等），请先简短告诉用户：'
-          '点击聊天页顶栏的工作区入口选择一个项目目录，然后重发任务。\n'
-          '- 不要声称设备无法完成，也不要在无工具时编造执行结果。';
-    }
-    if (!fileToolsAvailable) {
-      return '[工作区环境]\n'
-          '- 工作区：$ws，但工作区文件工具未启用，相关文件操作不可用。\n'
-          '- 若任务需要读写文件，请提示用户到“设置 → 扩展与环境 → 工具列表”开启“允许 Agent 读写当前工作区文件”后再试。';
-    }
-    if (!terminalAvailable) {
-      return '[工作区环境]\n'
-          '- 工作区目录：$ws，文件工具可用，可创建、读取和编辑项目文件。\n'
-          '- 终端命令当前不可用。静态 HTML/CSS/JS、Markdown 等文件任务仍应直接完成；仅安装依赖、构建或运行命令需要用户开启终端或配置运行环境。';
-    }
-    return '[工作区环境]\n'
-        '- 工作区目录：$ws（文件工具与终端的默认工作目录；仅默认目录，不是完整文件系统沙箱）。\n'
-        '- 可用工具：read_file / write_file / edit_file / list_directory / search_files / '
-        'move_file / delete_file / terminal。\n'
-        '- 终端命令运行在 Android Linux 运行时中（优先内置 Alpine PRoot 环境，回落 Termux 或系统 '
-        'shell），可在环境内用 apk 等包管理器安装工具链（需网络）；单条命令默认 120s 超时，'
-        '可用 timeoutSeconds 参数放宽。\n'
-        '- 手机开发任务（编译、构建、运行脚本）必须基于真实命令输出汇报结果，禁止伪造成功。';
-  }
+  }) =>
+      chatWorkspaceToolRules(
+        workspacePath: workspacePath,
+        fileToolsAvailable: fileToolsAvailable,
+        terminalAvailable: terminalAvailable,
+        mode: mode,
+      );
 
   void _updatePlanStepStatus(String status) {
     final plan = state.planState;
@@ -2163,24 +2098,8 @@ class ChatController extends Notifier<ChatState> {
   /// - 其他（paused 等）保持不变。
   @visibleForTesting
   static List<PlanStep> normalizePlanStepsForTerminal(
-      List<PlanStep> steps, String terminal) {
-    final String? replacement;
-    if (terminal == 'completed') {
-      replacement = 'completed';
-    } else if (terminal == 'failed' || terminal == 'cancelled') {
-      replacement = 'failed';
-    } else {
-      replacement = null;
-    }
-    if (replacement == null) return steps;
-    return [
-      for (final step in steps)
-        if (step.status == 'running' || step.status == 'pending')
-          step.copyWith(status: replacement)
-        else
-          step,
-    ];
-  }
+      List<PlanStep> steps, String terminal) =>
+      planNormalizeStepsForTerminal(steps, terminal);
 
   /// 纯函数：依据步骤终态与运行结果，解析计划应进入的顶层状态。
   /// - [runStatus] 为 null 表示运行尚未结束，只依据步骤终态收敛；
@@ -2191,27 +2110,13 @@ class ChatController extends Notifier<ChatState> {
     required String currentStatus,
     String? runStatus,
     bool cancelled = false,
-  }) {
-    if (steps.isEmpty) return null;
-    final allCompleted = steps.every((step) => step.status == 'completed');
-    final allTerminal = steps
-        .every((step) => step.status == 'completed' || step.status == 'failed');
-    final anyFailed = steps.any((step) => step.status == 'failed');
-
-    // 运行尚未结束：仅在步骤全部走到终态时收敛，避免提前改态。
-    if (runStatus == null) {
-      if (allCompleted) return 'completed';
-      if (allTerminal && anyFailed) return 'failed';
-      return null;
-    }
-
-    // 运行已结束：按运行结果解析。
-    if (cancelled || runStatus == 'cancelled') return 'cancelled';
-    if (runStatus == 'success') return 'completed';
-    if (allCompleted) return 'completed';
-    if (runStatus == 'paused') return 'paused';
-    return 'failed';
-  }
+  }) =>
+      planResolveTerminalStatus(
+        steps: steps,
+        currentStatus: currentStatus,
+        runStatus: runStatus,
+        cancelled: cancelled,
+      );
 
   void respondToPlan(bool approved) {
     final completer = _planCompleter;
@@ -2319,39 +2224,8 @@ class ChatController extends Notifier<ChatState> {
     return text.length > 90 ? '${text.substring(0, 90)}…' : text;
   }
 
-  ({int? costCents, int? savedCostCents}) _estimateUsageCost(
-      ProviderConfig config, Usage usage) {
-    const rates = <String, (int, int)>{
-      'gpt-4o-mini': (2, 9),
-      'gpt-4o': (35, 140),
-      'claude-sonnet-4-5': (45, 190),
-      'deepseek-chat': (3, 11),
-      'deepseek-reasoner': (6, 22),
-    };
-    final fallback = rates[config.model];
-    final inputRate = config.inputPricePerMillionCents ?? fallback?.$1;
-    final outputRate = config.outputPricePerMillionCents ?? fallback?.$2;
-    final cachedRate = config.cachedPricePerMillionCents ??
-        (inputRate == null ? null : (inputRate / 10).round());
-    final effectiveCachedRate = cachedRate;
-    if (inputRate == null ||
-        outputRate == null ||
-        effectiveCachedRate == null ||
-        usage.totalTokens == 0) {
-      return (costCents: null, savedCostCents: null);
-    }
-    final freshInput =
-        (usage.promptTokens - usage.cachedTokens).clamp(0, 1 << 30);
-    final cost = ((freshInput * inputRate +
-                usage.cachedTokens * effectiveCachedRate +
-                usage.completionTokens * outputRate) /
-            1000000)
-        .ceil();
-    final saved =
-        ((usage.cachedTokens * (inputRate - effectiveCachedRate)) / 1000000)
-            .ceil();
-    return (costCents: cost, savedCostCents: saved);
-  }
+  ({int? costCents, int? savedCostCents}) _estimateUsageCost(ProviderConfig config, Usage usage) =>
+      estimateUsageCostCents(config, usage);
 
   /// 任务真正发起前申请通知权限（任务跑完要通知用户），失败静默降级。
   /// 放在控制器里，展示层就不必直接依赖通知基础设施（见 layering_test）。
