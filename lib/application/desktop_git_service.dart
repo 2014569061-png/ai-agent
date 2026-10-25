@@ -295,6 +295,19 @@ class DesktopGitService {
     return parseWorktrees(output);
   }
 
+  Future<bool> _sameDirectory(String first, String second) async {
+    if (p.equals(p.normalize(first), p.normalize(second))) return true;
+    final firstDirectory = Directory(first);
+    final secondDirectory = Directory(second);
+    if (!await firstDirectory.exists() || !await secondDirectory.exists()) {
+      return false;
+    }
+    // Git expands Windows 8.3 paths while callers may retain a short TEMP path.
+    // Resolve existing aliases before deciding whether this is the main tree.
+    return p.equals(await firstDirectory.resolveSymbolicLinks(),
+        await secondDirectory.resolveSymbolicLinks());
+  }
+
   /// 为多 Agent 线程在指定路径创建 worktree 隔离工作区。
   Future<DesktopWorktreeInfo> addWorktree(
     String root, {
@@ -307,7 +320,7 @@ class DesktopGitService {
         (await _run(root, ['rev-parse', '--show-toplevel'])).trim();
     final normalizedTarget =
         p.normalize(p.isAbsolute(path) ? path : p.join(topLevel, path));
-    if (p.equals(p.normalize(topLevel), normalizedTarget)) {
+    if (await _sameDirectory(topLevel, normalizedTarget)) {
       throw ArgumentError('不能在主工作区根目录上创建 worktree');
     }
 
@@ -324,13 +337,15 @@ class DesktopGitService {
     await _run(topLevel, args);
 
     final worktrees = await listWorktrees(topLevel);
-    return worktrees.firstWhere(
-      (wt) => p.equals(p.normalize(wt.path), normalizedTarget),
-      orElse: () => DesktopWorktreeInfo(
-        path: normalizedTarget,
-        head: '',
-        branch: branch ?? '',
-      ),
+    for (final worktree in worktrees) {
+      if (await _sameDirectory(worktree.path, normalizedTarget)) {
+        return worktree;
+      }
+    }
+    return DesktopWorktreeInfo(
+      path: normalizedTarget,
+      head: '',
+      branch: branch ?? '',
     );
   }
 
@@ -345,9 +360,13 @@ class DesktopGitService {
     final normalizedTarget =
         p.normalize(p.isAbsolute(path) ? path : p.join(topLevel, path));
     final worktrees = await listWorktrees(topLevel);
-    final target = worktrees
-        .where((wt) => p.equals(p.normalize(wt.path), normalizedTarget))
-        .firstOrNull;
+    DesktopWorktreeInfo? target;
+    for (final worktree in worktrees) {
+      if (await _sameDirectory(worktree.path, normalizedTarget)) {
+        target = worktree;
+        break;
+      }
+    }
     if (target != null && target.isMain) {
       throw StateError('不能删除主工作区');
     }

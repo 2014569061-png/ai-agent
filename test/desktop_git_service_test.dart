@@ -161,7 +161,10 @@ prunable gitdir file points to non-existent location
       branch: 'thread-agent-1',
       newBranch: true,
     );
-    expect(p.normalize(created.path), p.normalize(wtPath));
+    expect(await Directory(created.path).resolveSymbolicLinks(),
+        await Directory(wtPath).resolveSymbolicLinks());
+    expect(created.branch, 'thread-agent-1');
+    expect(created.head, isNotEmpty);
 
     // 3. 在 worktree 中写入专属文件，主仓库不受影响（强隔离）
     await File(p.join(wtPath, 'thread_output.dart')).writeAsString('void threadMain() {}\n');
@@ -183,13 +186,25 @@ prunable gitdir file points to non-existent location
   });
 
   test('cannot remove main worktree and invalid path rejected', () async {
-    expect(
+    await expectLater(
       git.removeWorktree(directory.path, path: directory.path),
       throwsStateError,
     );
-    expect(
+    await expectLater(
       git.addWorktree(directory.path, path: directory.path),
       throwsArgumentError,
     );
+    final canonical = await directory.resolveSymbolicLinks();
+    await expectLater(
+      git.addWorktree(canonical, path: directory.path),
+      throwsArgumentError,
+    );
+    await expectLater(
+      git.removeWorktree(directory.path, path: canonical),
+      throwsStateError,
+    );
+    expect(await git.listWorktrees(directory.path), hasLength(1));
+    expect(await File(p.join(directory.path, 'app.txt')).readAsString(),
+        'before\n');
   });
 }
