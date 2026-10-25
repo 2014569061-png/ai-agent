@@ -6,7 +6,7 @@ import 'package:mobile_agent/presentation/chat/widgets/input_tool_grid_sheet.dar
 import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.dart';
 import 'package:mobile_agent/presentation/theme/app_palette.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
-import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
+import 'package:mobile_agent/presentation/theme/mobile_theme.dart';
 
 void main() {
   testWidgets('InputToolGridSheet renders all tools and triggers callbacks',
@@ -19,7 +19,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.light(),
+        theme: MobileTheme.apply(AppTheme.light()),
         home: Scaffold(
           body: Builder(
             builder: (context) => ElevatedButton(
@@ -48,17 +48,33 @@ void main() {
     await tester.tap(find.text('Open Sheet'));
     await tester.pumpAndSettle();
 
-    // 验证标题与各工具
     expect(find.text('工作台工具箱'), findsOneWidget);
-    expect(find.text('提示词库'), findsOneWidget);
-    expect(find.text('MCP 服务'), findsOneWidget);
-    expect(find.text('终端预览'), findsOneWidget);
-    expect(find.text('开发环境'), findsOneWidget);
-    expect(find.text('仪表盘'), findsOneWidget);
-    expect(find.text('计划模式'), findsOneWidget);
-    expect(find.text('审批策略'), findsOneWidget);
+    expect(find.byType(GridView), findsNothing);
+    // List entries are built on demand and remain reachable by scrolling.
+    for (final title in [
+      '提示词库',
+      'MCP 服务',
+      '终端预览',
+      '开发环境',
+      '仪表盘',
+      '计划模式',
+      '审批策略'
+    ]) {
+      await tester.scrollUntilVisible(find.text(title), 150,
+          scrollable: find
+              .descendant(
+                  of: find.byType(ListView), matching: find.byType(Scrollable))
+              .first);
+      expect(find.text(title), findsOneWidget);
+    }
+    await tester.scrollUntilVisible(find.text('提示词库'), -200,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView), matching: find.byType(Scrollable))
+            .first);
 
     // 点击提示词库
+    await tester.pumpAndSettle();
     await tester.tap(find.text('提示词库'));
     await tester.pumpAndSettle();
     expect(promptCalled, isTrue);
@@ -80,6 +96,12 @@ void main() {
     // 重新打开 Sheet 并点击仪表盘
     await tester.tap(find.text('Open Sheet'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('仪表盘'), 150,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView), matching: find.byType(Scrollable))
+            .first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('仪表盘'));
     await tester.pumpAndSettle();
     expect(dashboardCalled, isTrue);
@@ -87,21 +109,28 @@ void main() {
     // 重新打开 Sheet 并点击计划模式
     await tester.tap(find.text('Open Sheet'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('计划模式'), 150,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView), matching: find.byType(Scrollable))
+            .first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('计划模式'));
     await tester.pumpAndSettle();
     expect(planModeCalled, isTrue);
   });
 
-  testWidgets('首页输入区只呈现模式入口，高级选项不再堆在输入区', (tester) async {
+  testWidgets('首页输入区保留审批入口，不重复模式与高级选项', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
     bool modeTapped = false;
+    bool approvalTapped = false;
     bool attachTapped = false;
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.light(),
+        theme: MobileTheme.apply(AppTheme.light()),
         home: Scaffold(
           body: FloatingCapsuleInput(
             controller: controller,
@@ -110,6 +139,8 @@ void main() {
             onStop: () {},
             onAttachmentMenu: () => attachTapped = true,
             onModeTap: () => modeTapped = true,
+            approvalMode: ApprovalMode.fullAccess,
+            onApprovalModeTap: () => approvalTapped = true,
           ),
         ),
       ),
@@ -117,20 +148,24 @@ void main() {
     await tester.pumpAndSettle();
 
     // 占位符按新规范显示为「发消息」
-    expect(find.text('发消息'), findsOneWidget);
+    expect(find.text('说说你想做什么…'), findsOneWidget);
 
-    // 只保留一个模式入口，高级选项统一放进模式面板。
-    // 入口是圆形磁贴：可读名称走语义标签（tooltip 长按可见），不再渲染长胶囊。
-    expect(find.bySemanticsLabel('聊天模式'), findsOneWidget);
+    // 模式由输入区上方的三态切换器控制，输入卡不再重复模式入口。
+    // 审批策略仍可直接访问，其可读名称由语义标签提供。
+    expect(find.bySemanticsLabel('聊天模式'), findsNothing);
+    expect(find.byTooltip('更多输入工具'), findsOneWidget);
     expect(find.text('聊天模式'), findsNothing);
     expect(find.text('深度思考'), findsNothing);
     expect(find.text('智能搜索'), findsNothing);
     expect(find.text('工具'), findsNothing);
     expect(find.text('计划'), findsNothing);
 
-    await tester.tap(find.bySemanticsLabel('聊天模式'));
+    await tester.tap(find.byTooltip('更多输入工具'));
     await tester.pumpAndSettle();
-    expect(modeTapped, isTrue);
+    await tester.tap(find.text('审批 · 完全访问'));
+    await tester.pumpAndSettle();
+    expect(approvalTapped, isTrue);
+    expect(modeTapped, isFalse);
 
     // 「＋」按钮触发附件 / 更多工具菜单
     await tester.tap(find.byIcon(Icons.add_rounded));
@@ -146,7 +181,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.light(),
+        theme: MobileTheme.apply(AppTheme.light()),
         home: Scaffold(
           body: FloatingCapsuleInput(
             controller: controller,
@@ -174,20 +209,20 @@ void main() {
     controller.text = '你好';
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.arrow_upward_rounded), findsOneWidget);
-    expect(_trailingButtonColor(tester), AppPalette.brand);
+    expect(_trailingButtonColor(tester), MobileTheme.blue);
 
     await tester.tap(find.byIcon(Icons.arrow_upward_rounded));
     await tester.pumpAndSettle();
     expect(sent, isTrue);
   });
 
-  testWidgets('输入文字只更新发送按钮，不重建玻璃输入层', (tester) async {
+  testWidgets('输入文字保留编辑状态并更新发送按钮', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.light(),
+        theme: MobileTheme.apply(AppTheme.light()),
         home: Scaffold(
           body: FloatingCapsuleInput(
             controller: controller,
@@ -201,21 +236,21 @@ void main() {
     );
     await tester.pump();
 
-    final before = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+    final before = tester.state<EditableTextState>(find.byType(EditableText));
     controller.text = 'hello';
     await tester.pump();
-    final after = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+    final after = tester.state<EditableTextState>(find.byType(EditableText));
 
     expect(identical(before, after), isTrue);
   });
 
-  testWidgets('输入框获得焦点时不重建玻璃输入层', (tester) async {
+  testWidgets('输入框获得焦点时保留编辑状态', (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.light(),
+        theme: MobileTheme.apply(AppTheme.light()),
         home: Scaffold(
           body: FloatingCapsuleInput(
             controller: controller,
@@ -229,10 +264,10 @@ void main() {
     );
     await tester.pump();
 
-    final before = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+    final before = tester.state<EditableTextState>(find.byType(EditableText));
     await tester.tap(find.byType(TextField));
     await tester.pump();
-    final after = tester.widget<LiquidGlass>(find.byType(LiquidGlass));
+    final after = tester.state<EditableTextState>(find.byType(EditableText));
 
     expect(identical(before, after), isTrue);
   });

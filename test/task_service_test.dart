@@ -41,6 +41,40 @@ void main() {
     expect(running.map((t) => t.id), contains(task.id));
   });
 
+  test('change set snapshots never cross the requested project boundary',
+      () async {
+    final own = await taskService.create(
+      db: db,
+      conversationId: 'c1',
+      requestJson: '{}',
+      metadata: {'projectId': 'project-a'},
+    );
+    final other = await taskService.create(
+      db: db,
+      conversationId: 'c2',
+      requestJson: '{}',
+      metadata: {'projectId': 'project-b'},
+    );
+    final snapshots =
+        await taskService.changeSetTasks(db, projectId: 'project-a');
+    expect(snapshots.map((task) => task.id), [own.id]);
+    expect(snapshots.single.projectId, 'project-a');
+    expect(
+        await taskService.changeSetTasks(db,
+            projectId: 'project-a', taskId: other.id),
+        isEmpty);
+    expect(
+        await taskService.changeSetTasks(db,
+            projectId: 'project-a', taskId: 'missing'),
+        isEmpty);
+    expect(
+        (await taskService.changeSetTasks(db,
+                projectId: 'project-a', taskId: own.id))
+            .single
+            .id,
+        own.id);
+  });
+
   test('rapid creates never collide on id (Windows clock granularity)',
       () async {
     final ids = <String>{};

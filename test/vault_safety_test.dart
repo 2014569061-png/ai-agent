@@ -77,14 +77,20 @@ class _FailOnceDatabase extends AppDatabase {
   final requested = Completer<void>();
   final release = Completer<void>();
   @override
-  Future<void> clearAllUserData() async {
+  Future<void> clearAllUserData({
+    bool preservePersonalContext = false,
+    bool preserveMobileData = false,
+  }) async {
     if (failNext) {
       failNext = false;
       requested.complete();
       await release.future;
       throw StateError('injected database failure');
     }
-    await super.clearAllUserData();
+    await super.clearAllUserData(
+      preservePersonalContext: preservePersonalContext,
+      preserveMobileData: preserveMobileData,
+    );
   }
 }
 

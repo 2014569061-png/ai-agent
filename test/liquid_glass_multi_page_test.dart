@@ -18,8 +18,10 @@ void main() {
   });
 
   group('NexusBackground liquid glass behavior', () {
-    testWidgets('renders gradient when glass intensity is liquid', (tester) async {
-      await AppAppearanceController.setGlassIntensityMode(GlassIntensity.liquid);
+    testWidgets('renders gradient when glass intensity is liquid',
+        (tester) async {
+      await AppAppearanceController.setGlassIntensityMode(
+          GlassIntensity.liquid);
 
       await tester.pumpWidget(
         const MaterialApp(
@@ -39,7 +41,8 @@ void main() {
       expect(decoration.gradient, isNotNull);
     });
 
-    testWidgets('renders flat ColoredBox when glass intensity is flat', (tester) async {
+    testWidgets('keeps the quiet phone canvas when material effects are flat',
+        (tester) async {
       await AppAppearanceController.setGlassIntensityMode(GlassIntensity.flat);
 
       await tester.pumpWidget(
@@ -50,23 +53,21 @@ void main() {
         ),
       );
 
-      final coloredFinder = find.descendant(
-        of: find.byType(NexusBackground),
-        matching: find.byType(ColoredBox),
-      );
-      expect(coloredFinder, findsOneWidget);
-
       final decoratedFinder = find.descendant(
         of: find.byType(NexusBackground),
         matching: find.byType(DecoratedBox),
       );
-      expect(decoratedFinder, findsNothing);
+      expect(decoratedFinder, findsOneWidget);
+      expect(find.byType(LiquidGlass), findsNothing);
+      expect(find.text('Content'), findsOneWidget);
     });
   });
 
   group('NexusMetricTile liquid glass behavior', () {
-    testWidgets('renders LiquidGlass tile when non-flat', (tester) async {
-      await AppAppearanceController.setGlassIntensityMode(GlassIntensity.liquid);
+    testWidgets('uses a readable solid data surface in liquid mode',
+        (tester) async {
+      await AppAppearanceController.setGlassIntensityMode(
+          GlassIntensity.liquid);
 
       await tester.pumpWidget(
         const MaterialApp(
@@ -79,7 +80,7 @@ void main() {
         ),
       );
 
-      expect(find.byType(LiquidGlass), findsOneWidget);
+      expect(find.byType(LiquidGlass), findsNothing);
       expect(find.text('Today Tokens'), findsOneWidget);
       expect(find.text('12.5k'), findsOneWidget);
     });
@@ -105,7 +106,8 @@ void main() {
 
   group('NexusSheet liquid glass integration', () {
     testWidgets('opens sheet with LiquidGlass in liquid mode', (tester) async {
-      await AppAppearanceController.setGlassIntensityMode(GlassIntensity.liquid);
+      await AppAppearanceController.setGlassIntensityMode(
+          GlassIntensity.liquid);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -144,7 +146,8 @@ void main() {
 
   group('ChatCatalogDrawer liquid glass integration', () {
     testWidgets('renders LiquidGlass in liquid mode', (tester) async {
-      await AppAppearanceController.setGlassIntensityMode(GlassIntensity.liquid);
+      await AppAppearanceController.setGlassIntensityMode(
+          GlassIntensity.liquid);
 
       await tester.pumpWidget(
         MaterialApp(
@@ -214,7 +217,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.byType(ChatCatalogDrawer), findsOneWidget);
-      expect(find.descendant(of: find.byType(ChatCatalogDrawer), matching: find.byType(LiquidGlass)), findsNothing);
+      expect(
+          find.descendant(
+              of: find.byType(ChatCatalogDrawer),
+              matching: find.byType(LiquidGlass)),
+          findsNothing);
     });
   });
 }

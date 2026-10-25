@@ -6,8 +6,11 @@ import 'package:mobile_agent/application/agent_executor.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/domain/tool_result.dart';
 import 'package:mobile_agent/infrastructure/providers/llm_provider.dart';
+import 'package:mobile_agent/infrastructure/terminal/linux_runtime.dart'
+    show DetachedCommandHandle, DetachedLinuxRuntimeAdapter;
 import 'package:mobile_agent/infrastructure/tools/command_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/tool_registry.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   // Windows 下刚退出的子进程可能仍短暂持有工作目录句柄，直接删会抛
@@ -84,6 +87,46 @@ void main() {
     expect(result.output, isNotEmpty);
   }, timeout: const Timeout(Duration(minutes: 6)));
 
+  test('restricted terminal blocks explicit external path arguments', () async {
+    final workspace =
+        await Directory.systemTemp.createTemp('nexus-terminal-path-');
+    final outside = File(p.join(workspace.parent.path,
+        'nexus-terminal-outside-${DateTime.now().microsecondsSinceEpoch}.txt'));
+    final inside = File(p.join(workspace.path, 'inside.txt'));
+    await outside.writeAsString('outside sentinel');
+    await inside.writeAsString('inside sentinel');
+    addTearDown(() async {
+      if (await outside.exists()) await outside.delete();
+      await deleteTempDir(workspace);
+    });
+
+    final runtime = _RestrictedDetachedRuntime();
+    final service =
+        TerminalCommandService(workspacePath: workspace.path, runtime: runtime);
+    final outsideRelative = p.relative(outside.path, from: workspace.path);
+    for (final command in [
+      'cat "$outsideRelative"',
+      'git -C .. status',
+      'cat "${outside.path}"',
+    ]) {
+      final result = await service.run(command);
+      expect(result.exitCode, 126, reason: command);
+      expect(result.notExecuted, isTrue, reason: command);
+      expect(result.output, contains('工作区外路径'), reason: command);
+    }
+
+    final allowed = await service.run('cat "${inside.path}"');
+    expect(allowed.exitCode, 0);
+    expect(runtime.commands, ['cat "${inside.path}"']);
+
+    // Detached execution must use the same guard; otherwise it could bypass
+    // the synchronous run() validation on desktop runtimes.
+    await service.startJob(command: 'cat "$outsideRelative"');
+    await Future<void>.delayed(Duration.zero);
+    expect(runtime.detachedCommands, isEmpty);
+    expect(runtime.commands, ['cat "${inside.path}"']);
+  });
+
   test('terminal tool requires confirmation', () {
     final tool = TerminalCommandTool(
       service: TerminalCommandService(workspacePath: Directory.current.path),
@@ -107,6 +150,14 @@ void main() {
 
     final nodeEval = await service.run('node --eval process.exit(0)');
     expect(nodeEval.exitCode, 126);
+
+    final shell = await service.run('sh -c pwd');
+    expect(shell.exitCode, 126);
+    expect(shell.output, contains('内联求值'));
+
+    final bundledShell = await service.run('sh -o pipefail -ec pwd');
+    expect(bundledShell.exitCode, 126);
+    expect(bundledShell.output, contains('内联求值'));
 
     // 无内联求值参数的命令不应被该规则拦截（后续可能因解释器不存在而
     // 启动失败，但拒绝原因绝不能是内联求值）。
@@ -178,6 +229,66 @@ class _CaptureRuntime implements LinuxRuntimeAdapter {
     commands.add(request.commandLine);
     return const CommandResult(output: 'ok', exitCode: 0);
   }
+
+  @override
+  void stop() {}
+}
+
+class _RestrictedDetachedRuntime
+    implements LinuxRuntimeAdapter, DetachedLinuxRuntimeAdapter {
+  final commands = <String>[];
+  final detachedCommands = <String>[];
+
+  @override
+  bool get supportsShellSyntax => false;
+
+  @override
+  bool get supportsInterpreterEvaluation => false;
+
+  @override
+  bool get isRunning => false;
+
+  @override
+  LinuxRuntimeKind get kind => LinuxRuntimeKind.hostProcess;
+
+  @override
+  Future<LinuxRuntimeInfo> inspect() async => const LinuxRuntimeInfo(
+        kind: LinuxRuntimeKind.hostProcess,
+        label: 'restricted fake',
+        available: true,
+        detail: '',
+      );
+
+  @override
+  Future<CommandResult> run(
+    LinuxCommandRequest request, {
+    required String workingDirectory,
+    required Duration timeout,
+  }) async {
+    commands.add(request.commandLine);
+    return const CommandResult(output: 'ok', exitCode: 0);
+  }
+
+  @override
+  Future<DetachedCommandHandle?> startDetached(
+    LinuxCommandRequest request, {
+    required String workingDirectory,
+    required Duration timeout,
+    required String ownerToken,
+    required String logPath,
+  }) async {
+    detachedCommands.add(request.commandLine);
+    return DetachedCommandHandle(
+      pid: 1,
+      completion: Future.value(const CommandResult(output: 'ok', exitCode: 0)),
+    );
+  }
+
+  @override
+  Future<bool> verifyDetached(int pid, String ownerToken) async => true;
+
+  @override
+  Future<bool> stopDetached(int pid, String ownerToken) async => true;
 
   @override
   void stop() {}

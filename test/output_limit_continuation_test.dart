@@ -81,8 +81,8 @@ void main() {
       expect(first!.keepAssistantText, isTrue);
       expect(handler.onTurnStopping(ctx(StopReason.outputLimit, 'more')),
           isNotNull);
-      expect(handler.onTurnStopping(ctx(StopReason.outputLimit, 'more')),
-          isNull);
+      expect(
+          handler.onTurnStopping(ctx(StopReason.outputLimit, 'more')), isNull);
     });
 
     test('empty truncated reply asks for a direct answer', () {
@@ -90,9 +90,8 @@ void main() {
       final continuation =
           handler.onTurnStopping(ctx(StopReason.outputLimit, '  '))!;
       expect(continuation.keepAssistantText, isFalse);
-      final text = continuation.messages.single.parts
-          .map((p) => p.value)
-          .join();
+      final text =
+          continuation.messages.single.parts.map((p) => p.value).join();
       expect(text, contains('精简思考'));
     });
   });
@@ -115,8 +114,8 @@ void main() {
       expect(provider.requests, hasLength(2));
       final follow = provider.requests.last.messages;
       String textOf(ChatMessage m) => m.parts.map((p) => p.value).join();
-      final nudge = follow.indexWhere((m) =>
-          m.role == MessageRole.user && textOf(m).contains('接着输出'));
+      final nudge = follow.indexWhere(
+          (m) => m.role == MessageRole.user && textOf(m).contains('接着输出'));
       expect(nudge, greaterThan(0));
       expect(follow[nudge - 1].role, MessageRole.assistant);
       expect(textOf(follow[nudge - 1]), '第一段');
@@ -135,14 +134,27 @@ void main() {
         tools: ToolRegistry(),
       ).run(history: _history(), model: 'step-5-preview')) {
         if (event is TextEvent) output.write(event.text);
-        if (event is AgentStatusEvent &&
-            event.status == RunStatus.completed) {
+        if (event is AgentStatusEvent && event.status == RunStatus.completed) {
           completed = true;
         }
       }
       expect(provider.requests, hasLength(3));
       expect(output.toString(), LoopMessages.outputLimitNotice);
       expect(completed, isTrue);
+    });
+
+    test('explicit task budget of 2048 is not expanded for reasoning models',
+        () async {
+      final provider = _ScriptedProvider([('ok', StopReason.endOfTurn)]);
+      await AgentExecutor(provider: provider, tools: ToolRegistry())
+          .run(
+              history: _history(),
+              model: 'step-5-preview',
+              maxTokens: 2048,
+              autoOutputTokens: false,
+              contextBudgetTokens: 256000)
+          .drain<void>();
+      expect(provider.requests.single.maxTokens, 2048);
     });
 
     test('legacy default output budget is raised for reasoning models',

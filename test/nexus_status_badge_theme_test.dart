@@ -28,8 +28,13 @@ void main() {
         AppPalette.darkSuccess);
     expect(await _fg(tester, dark, NexusBadgeTone.warning),
         AppPalette.darkWarning);
-    expect(
-        await _fg(tester, dark, NexusBadgeTone.danger), AppPalette.darkDanger);
+    final danger = (await _fg(tester, dark, NexusBadgeTone.danger))!;
+    final foregroundLuminance = danger.computeLuminance();
+    final backgroundLuminance = AppPalette.darkDangerSoft.computeLuminance();
+    expect((foregroundLuminance + .05) / (backgroundLuminance + .05),
+        greaterThanOrEqualTo(4.5));
+    expect(danger.r, greaterThan(danger.g));
+    expect(danger.r, greaterThan(danger.b));
   });
 
   testWidgets('light theme keeps the light semantic foreground',

@@ -36,8 +36,8 @@ void main() {
     }
   });
 
-  test('schemaVersion is 27', () {
-    expect(db.schemaVersion, 27);
+  test('project storage uses the current schema version 32', () {
+    expect(db.schemaVersion, 32);
   });
 
   test('creates a static web project from template', () async {

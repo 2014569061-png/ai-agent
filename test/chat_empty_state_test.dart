@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/presentation/chat/widgets/chat_empty_state.dart';
 import 'package:mobile_agent/presentation/theme/app_appearance_controller.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
-import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
 
 void main() {
   testWidgets('empty state provides a model setup primary action',
@@ -37,8 +36,8 @@ void main() {
       ),
     ));
 
-    expect(find.text('选择项目'), findsOneWidget);
-    await tester.tap(find.text('选择项目'));
+    expect(find.text('分析当前项目'), findsOneWidget);
+    await tester.tap(find.text('分析当前项目'));
     expect(picked, isTrue);
   });
 
@@ -63,7 +62,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('empty state exposes the guided Agent creation entry',
+  testWidgets('empty state keeps creation out of the welcome suggestions',
       (tester) async {
     var created = false;
     await tester.pumpWidget(MaterialApp(
@@ -76,12 +75,11 @@ void main() {
       ),
     ));
 
-    expect(find.text('创建专属 Agent'), findsOneWidget);
-    await tester.tap(find.text('创建专属 Agent'));
-    expect(created, isTrue);
+    expect(find.text('创建 Agent'), findsNothing);
+    expect(created, isFalse);
   });
 
-  testWidgets('empty state action grid uses liquid glass in liquid mode',
+  testWidgets('welcome remains readable on narrow screens with large text',
       (tester) async {
     AppAppearanceController.glassIntensity.value = 0.85;
 
@@ -92,6 +90,21 @@ void main() {
       ),
     ));
 
-    expect(find.byType(LiquidGlass), findsAtLeastNWidgets(4));
+    expect(find.text('N'), findsOneWidget);
+    tester.view.physicalSize = const Size(320, 720);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(2)),
+          child: child!),
+      home: const Scaffold(body: ChatEmptyState(providerConfigured: true)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('整理一份资料'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

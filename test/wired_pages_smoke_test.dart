@@ -204,13 +204,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('上下文与知识库'), findsOneWidget);
-      expect(find.text('自动化与审计'), findsOneWidget);
-      expect(find.text('备份与还原'), findsOneWidget);
-      expect(find.text(AppStrings.knowledgeSectionTitle), findsOneWidget);
-      expect(find.text(AppStrings.memorySectionTitle), findsOneWidget);
-      expect(find.text(AppStrings.scheduledTasksEntry), findsOneWidget);
-      expect(find.text(AppStrings.auditLogEntry), findsOneWidget);
+      for (final label in [
+        '上下文与知识库',
+        AppStrings.knowledgeSectionTitle,
+        AppStrings.memorySectionTitle,
+        '自动化与审计',
+        AppStrings.scheduledTasksEntry,
+        AppStrings.auditLogEntry,
+        '备份与还原',
+      ]) {
+        await tester.scrollUntilVisible(find.text(label), 150,
+            scrollable: find
+                .descendant(
+                    of: find.byType(ListView).first,
+                    matching: find.byType(Scrollable))
+                .first);
+        expect(find.text(label), findsOneWidget);
+      }
     });
   });
 }

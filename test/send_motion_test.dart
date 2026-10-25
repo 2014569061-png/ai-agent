@@ -7,6 +7,8 @@ import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.da
 import 'package:mobile_agent/presentation/motion/motion_preferences.dart';
 import 'package:mobile_agent/presentation/motion/motion_tier.dart';
 import 'package:mobile_agent/presentation/motion/nexus_motion.dart';
+import 'package:mobile_agent/presentation/motion/mobile_motion.dart';
+import 'package:mobile_agent/presentation/motion/send_flight.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_pressable.dart';
 
@@ -28,13 +30,14 @@ Widget _host(
   );
 }
 
-Widget _composer(TextEditingController controller, {bool running = false}) =>
+Widget _composer(TextEditingController controller,
+        {bool running = false, VoidCallback? onSend}) =>
     Align(
       alignment: Alignment.bottomCenter,
       child: FloatingCapsuleInput(
         controller: controller,
         isRunning: running,
-        onSend: () {},
+        onSend: onSend ?? () {},
         onStop: () {},
         onAttachmentMenu: () {},
       ),
@@ -46,36 +49,21 @@ AnimatedScale _scaleOf(WidgetTester tester, Key key) =>
       matching: find.byType(AnimatedScale),
     ));
 
-/// 光圈是前景层上唯一的描边圆；按钮本体只画填充圆。
+/// A phone primary action must not add a foreground decorative painter.
 bool _paintsRipple(WidgetTester tester) {
-  final slotPaint = find
-      .ancestor(of: find.byKey(_slotKey), matching: find.byType(CustomPaint))
-      .first;
-  var found = false;
-  expect(
-    tester.renderObject(slotPaint),
-    paints
-      ..everything((method, args) {
-        if (method == #drawCircle) {
-          final paint = args[2] as Paint;
-          if (paint.style == PaintingStyle.stroke) {
-            final radius = args[1] as double;
-            expect(radius, inInclusiveRange(0, 28));
-            expect(paint.color.a, lessThanOrEqualTo(0.35 + 1e-6));
-            found = true;
-          }
-        }
-        return true;
-      }),
-  );
-  return found;
+  return tester
+      .widgetList<CustomPaint>(find.descendant(
+        of: find.byKey(_slotKey),
+        matching: find.byType(CustomPaint),
+      ))
+      .any((paint) => paint.foregroundPainter != null);
 }
 
 Future<void> _pressAndRelease(WidgetTester tester, Key key) async {
   final gesture = await tester.startGesture(tester.getCenter(find.byKey(key)));
   await tester.pump(const Duration(milliseconds: 60));
   await tester.pump(const Duration(milliseconds: 60));
-  expect(_scaleOf(tester, key).scale, NexusMotion.sendPressedScale);
+  expect(_scaleOf(tester, key).scale, 0.97);
   await gesture.up();
   await tester.pump();
 }
@@ -84,6 +72,7 @@ ChatMessage _msg(MessageRole role, String text) =>
     ChatMessage(role: role, parts: [MessagePart.text(text)]);
 
 void main() {
+  tearDown(SendFlightBus.reset);
   test('allowOvershoot 保留弹簧过冲，默认曲线仍限制在 0..1', () {
     final lively =
         NexusSpringCurve(NexusMotion.springLively, allowOvershoot: true);
@@ -110,13 +99,13 @@ void main() {
     setUp(() => controller = TextEditingController(text: 'hi'));
     tearDown(() => controller.dispose());
 
-    testWidgets('按下缩放到 0.9，松手用轻弹弹簧回到 1.0', (tester) async {
+    testWidgets('手机发送轻按到 0.97，松手平稳恢复且不回弹', (tester) async {
       await tester.pumpWidget(_host(_composer(controller)));
       await _pressAndRelease(tester, _sendKey);
       final release = _scaleOf(tester, _sendKey);
       expect(release.scale, 1.0);
-      expect(release.curve, same(NexusMotion.curveSendRelease));
-      expect(release.duration, NexusMotion.pressRelease);
+      expect(release.curve, same(MobileMotion.curve));
+      expect(release.duration, MobileMotion.control);
       await tester.pumpAndSettle();
     });
 
@@ -132,14 +121,19 @@ void main() {
       expect(pressable.releaseDuration, isNull);
     });
 
-    testWidgets('发送时画出扩散光圈，结束后不再绘制', (tester) async {
-      await tester.pumpWidget(_host(_composer(controller)));
+    testWidgets('发送立即执行一次，不启动飞行或装饰光圈', (tester) async {
+      var sends = 0;
+      await tester
+          .pumpWidget(_host(_composer(controller, onSend: () => sends++)));
       expect(_paintsRipple(tester), isFalse);
       await _pressAndRelease(tester, _sendKey);
+      expect(sends, 1);
+      expect(SendFlightBus.hasPending, isFalse);
       await tester.pump(const Duration(milliseconds: 140));
-      expect(_paintsRipple(tester), isTrue);
+      expect(_paintsRipple(tester), isFalse);
       await tester.pumpAndSettle();
       expect(_paintsRipple(tester), isFalse);
+      expect(sends, 1);
     });
 
     testWidgets('低端档保留缩放但不画光圈', (tester) async {
@@ -193,7 +187,7 @@ void main() {
       );
     }
 
-    testWidgets('用户气泡从右下角弹簧升起：16dp 位移、0.96 缩放、前半程淡入', (tester) async {
+    testWidgets('手机用户气泡仅上移 6dp，淡入但不缩放', (tester) async {
       final base = [_msg(MessageRole.assistant, 'earlier')];
       await tester.pumpWidget(list(base));
       await tester.pumpAndSettle();
@@ -211,16 +205,17 @@ void main() {
           .last);
       expect(fade.opacity.value, 0);
 
-      await tester.pump(NexusMotion.bubbleRise ~/ 2);
-      expect(fade.opacity.value, closeTo(1, 1e-6));
+      await tester.pump(MobileMotion.message ~/ 2);
+      expect(fade.opacity.value, greaterThan(0));
+      expect(fade.opacity.value, lessThan(1));
 
       await tester.pumpAndSettle();
       final end = measure(tester, 'user says hi');
-      expect(start.bottom - end.bottom, inInclusiveRange(15, 19));
-      expect(start.width / end.width, closeTo(0.96, 0.005));
+      expect(start.bottom - end.bottom, closeTo(6, 0.1));
+      expect(start.width, closeTo(end.width, 0.01));
     });
 
-    testWidgets('L3：助手气泡弹簧入场（自 0.97 放大并上移落定）', (tester) async {
+    testWidgets('手机助手正文只淡入，位置和字宽保持稳定', (tester) async {
       final base = [_msg(MessageRole.user, 'question')];
       await tester.pumpWidget(list(base));
       await tester.pumpAndSettle();
@@ -229,8 +224,8 @@ void main() {
       final start = measure(tester, 'assistant reply');
       await tester.pumpAndSettle();
       final end = measure(tester, 'assistant reply');
-      expect(start.width, closeTo(end.width * 0.97, 1));
-      expect(start.bottom, greaterThan(end.bottom));
+      expect(start.width, closeTo(end.width, 0.01));
+      expect(start.bottom, closeTo(end.bottom, 0.01));
     });
 
     testWidgets('reduced 下用户气泡直接出现', (tester) async {

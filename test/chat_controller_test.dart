@@ -1,3 +1,4 @@
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'dart:async';
@@ -5,6 +6,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import 'package:mobile_agent/application/chat_controller.dart';
 import 'package:mobile_agent/application/context_window.dart';
@@ -18,6 +20,8 @@ import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config_store.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   test('ChatController streams a demo response into state', () async {
     final db = AppDatabase(NativeDatabase.memory());
     final container = ProviderContainer(
@@ -117,9 +121,22 @@ void main() {
 
   test('surfaces an error when the provider completes without output',
       () async {
+    // Exercise the local SSE server rather than Flutter's default HTTP 400 stub.
+    final httpOverrides = HttpOverrides.current;
+    HttpOverrides.global = null;
+    addTearDown(() => HttpOverrides.global = httpOverrides);
+    final paths = PathProviderPlatform.instance;
+    final fixtureRoot = await Directory(
+            'local/temp/eta-quality-baseline-20261020/empty-response')
+        .absolute
+        .create(recursive: true);
+    PathProviderPlatform.instance = _TestPaths(fixtureRoot.path);
+    addTearDown(() => PathProviderPlatform.instance = paths);
     final server = await HttpServer.bind('127.0.0.1', 0);
+    var requests = 0;
     addTearDown(() => server.close(force: true));
     server.listen((request) async {
+      requests++;
       request.response.statusCode = HttpStatus.ok;
       request.response.headers.contentType =
           ContentType('text', 'event-stream', charset: 'utf-8');
@@ -154,6 +171,7 @@ void main() {
     final state = container.read(chatControllerProvider);
     expect(state.running, isFalse);
     expect(state.successfulRunCount, 0);
+    expect(requests, greaterThan(0));
     expect(state.messages.last.text, contains('模型未返回可显示内容'));
     expect((await db.recentRuns()).single.status, 'failed');
   });
@@ -674,15 +692,11 @@ void main() {
     await pumpEventQueue();
     db.delayNextPage = true;
 
-    final olderSwitch = controller.switchConversation(
-      (await db.findConversation('c1'))!,
-    );
+    final olderSwitch = controller.switchConversationById('c1');
     await db.firstPageStarted.future;
     expect(
         container.read(chatControllerProvider).restoringConversation, isTrue);
-    final latestSwitch = controller.switchConversation(
-      (await db.findConversation('c2'))!,
-    );
+    final latestSwitch = controller.switchConversationById('c2');
     await latestSwitch;
     expect(
         container.read(chatControllerProvider).restoringConversation, isFalse);
@@ -690,6 +704,11 @@ void main() {
     await olderSwitch;
 
     expect(container.read(chatControllerProvider).conversationId, 'c2');
+    await expectLater(controller.switchConversationById('deleted'),
+        throwsA(isA<StateError>()));
+    expect(container.read(chatControllerProvider).conversationId, 'c2');
+    expect(
+        container.read(chatControllerProvider).restoringConversation, isFalse);
   });
 
   test('history loading does not write an old conversation into the new one',
@@ -1082,7 +1101,21 @@ class _EmptyResponseConfigStore extends _FakeConfigStore {
         baseUrl: 'http://127.0.0.1:$port/v1',
         model: 'test-model',
         apiKey: 'test-key',
+        inputPricePerMillionCents: 100,
+        outputPricePerMillionCents: 100,
+        cachedPricePerMillionCents: 0,
       );
+}
+
+class _TestPaths extends PathProviderPlatform {
+  _TestPaths(this.root);
+  final String root;
+  @override
+  Future<String?> getApplicationDocumentsPath() async => root;
+  @override
+  Future<String?> getApplicationSupportPath() async => root;
+  @override
+  Future<String?> getTemporaryPath() async => root;
 }
 
 class _DelayedMessagesPageDatabase extends AppDatabase {

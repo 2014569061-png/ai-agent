@@ -4,6 +4,11 @@ import 'package:mobile_agent/domain/tool_result.dart';
 import 'package:mobile_agent/presentation/chat/widgets/message_bubble.dart';
 
 void main() {
+  test('legacy error strings remain readable without exposing JSON', () {
+    expect(toolResultSummary('{"ok":false,"error":"读取失败"}'), '失败：读取失败');
+    expect(toolResultSummary('{"ok":false,"error":{"code":1}}'),
+        '{"ok":false,"error":{"code":1}}');
+  });
   test('成功的结构化结果显示 message', () {
     final raw = ToolResult.success(message: '已读取 lib/main.dart').encode();
     expect(toolResultSummary(raw), '已读取 lib/main.dart');

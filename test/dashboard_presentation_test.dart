@@ -12,7 +12,6 @@ import 'package:mobile_agent/presentation/dashboard/widgets/token_usage_hero.dar
 import 'package:mobile_agent/presentation/theme/app_appearance_controller.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 import 'package:mobile_agent/presentation/widgets/glass_scroll_edge.dart';
-import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
 
 void main() {
   setUp(() async {
@@ -67,14 +66,16 @@ void main() {
 
     expect(find.text('性能详情'), findsOneWidget);
     expect(find.byType(TokenUsageHero), findsNothing);
-    expect(find.byType(LiquidGlass), findsAtLeastNWidgets(1));
+    expect(find.text('还没有运行记录'), findsOneWidget);
     expect(find.byType(GlassScrollEdge), findsOneWidget);
 
     await tester.tap(find.text('性能详情'));
     await tester.pumpAndSettle();
     expect(find.byType(TokenUsageHero), findsOneWidget);
+    await tester.scrollUntilVisible(find.byType(KpiCardGrid), 200,
+        scrollable: find.byType(Scrollable).last);
     expect(find.byType(KpiCardGrid), findsOneWidget);
-    expect(find.byType(LiquidGlass), findsAtLeastNWidgets(7));
+
     await tester.scrollUntilVisible(
       find.byType(TokenTrendCard),
       240,

@@ -87,6 +87,10 @@ void main() {
     await _pumpChatPage(tester);
     await tester.longPress(find.byType(MessageBubble).last);
     await tester.pumpAndSettle();
+    // Additional message actions may put selection below the sheet viewport.
+    // Exercise the real scroll path instead of assuming every row is built.
+    await tester.scrollUntilVisible(find.text(AppStrings.selectText), 120,
+        scrollable: find.byType(Scrollable).last);
     await tester.tap(find.text(AppStrings.selectText));
     await tester.pumpAndSettle();
 

@@ -1,10 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile_agent/domain/models.dart';
-import 'package:mobile_agent/infrastructure/tools/tool_humanizer.dart';
+import 'package:mobile_agent/presentation/chat/tool_humanizer.dart';
 
 void main() {
   const humanizer = ToolHumanizer();
+
+  test('browser approval shows the reviewed page, target and input', () {
+    const call = ToolCall(id: 'browser-call', name: 'browser', arguments: {
+      'action': 'type',
+      'text': 'find this',
+      'snapshotId': 'internal-snapshot',
+      '_approvalDetails': {
+        'url': 'https://example.invalid',
+        'targetLabel': 'Search box'
+      },
+    });
+    expect(humanizer.summaryOf(call), '在网页中输入文字');
+    final lines = humanizer.paramLines(call);
+    expect(lines, contains(('网页', 'https://example.invalid')));
+    expect(lines, contains(('目标', 'Search box')));
+    expect(lines, contains(('输入文字', 'find this')));
+    expect(lines.toString(), isNot(contains('internal-snapshot')));
+  });
 
   ToolCall call(String name, Map<String, dynamic> arguments) => ToolCall(
         id: name,

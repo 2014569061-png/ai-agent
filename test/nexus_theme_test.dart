@@ -83,4 +83,38 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+
+  testWidgets('list tile stacks complex actions under large mobile text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.light(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: const TextScaler.linear(2)),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: NexusListTile(
+          title: '很长的任务名称需要保留完整内容',
+          subtitle: '任务状态和回退操作不能挤压标题',
+          icon: Icons.task_alt_outlined,
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Chip(label: Text('执行中')),
+              IconButton(onPressed: () {}, icon: const Icon(Icons.undo)),
+            ],
+          ),
+        ),
+      ),
+    ));
+
+    expect(tester.getTopLeft(find.text('执行中')).dy,
+        greaterThan(tester.getTopLeft(find.text('很长的任务名称需要保留完整内容')).dy));
+    expect(tester.takeException(), isNull);
+  });
 }

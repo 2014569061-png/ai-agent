@@ -95,5 +95,26 @@ void main() {
     expect(find.text('Alpine · 可用'), findsOneWidget);
     expect(find.text('Termux · 可用'), findsOneWidget);
     expect(find.text('无'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(8),
+            child: EnvironmentStatusView(
+              snapshot: snapshot,
+              compact: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('完整 Shell · 可用'), findsOneWidget);
+    expect(find.text('Node.js · 缺失'), findsNothing);
+    expect(find.text('无'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }

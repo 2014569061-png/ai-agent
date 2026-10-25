@@ -4,8 +4,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/presentation/motion/motion_preferences.dart';
+import 'package:mobile_agent/presentation/motion/mobile_motion.dart';
 import 'package:mobile_agent/presentation/motion/motion_tier.dart';
 import 'package:mobile_agent/presentation/motion/tap_origin.dart';
+import 'package:mobile_agent/presentation/theme/app_appearance_controller.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_sheet.dart';
 
@@ -21,22 +23,30 @@ Widget _host(Widget child, {MotionLevel level = MotionLevel.full}) =>
 
 const _body = Key('sheet_body');
 
-Widget _sheetHost({WidgetBuilder? builder}) => _host(Builder(
-      builder: (ctx) => Center(
-        child: TextButton(
-          onPressed: () => showNexusSheet<void>(
-            context: ctx,
-            builder: builder ??
-                (_) => const SizedBox(
-                      key: _body,
-                      height: 200,
-                      child: Text('sheet body'),
-                    ),
+Widget _sheetHost({
+  WidgetBuilder? builder,
+  bool barrierDismissible = true,
+  MotionLevel level = MotionLevel.full,
+}) =>
+    _host(
+        Builder(
+          builder: (ctx) => Center(
+            child: TextButton(
+              onPressed: () => showNexusSheet<void>(
+                context: ctx,
+                barrierDismissible: barrierDismissible,
+                builder: builder ??
+                    (_) => const SizedBox(
+                          key: _body,
+                          height: 200,
+                          child: Text('sheet body'),
+                        ),
+              ),
+              child: const Text('open'),
+            ),
           ),
-          child: const Text('open'),
         ),
-      ),
-    ));
+        level: level);
 
 Future<double> _openSheet(WidgetTester tester, {WidgetBuilder? builder}) async {
   await tester.pumpWidget(_sheetHost(builder: builder));
@@ -62,6 +72,135 @@ Future<void> _move(WidgetTester tester, TestGesture g, double dy,
 
 void main() {
   tearDown(NexusTapOrigin.reset);
+
+  testWidgets('手机面板移动时复用内容绘制，不重复重绘静态列表', (tester) async {
+    var paints = 0;
+    await tester.pumpWidget(_sheetHost(
+      builder: (_) => CustomPaint(
+        painter: _PaintCounter(() => paints++),
+        child: const SizedBox(key: _body, height: 200),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 32));
+    final firstPaints = paints;
+    final top = tester.getTopLeft(find.byKey(_body)).dy;
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(firstPaints, greaterThan(0));
+    expect(tester.getTopLeft(find.byKey(_body)).dy, lessThan(top));
+    expect(paints, firstPaints);
+    await tester.pumpAndSettle();
+  });
+
+  for (final dark in [false, true]) {
+    testWidgets('手机${dark ? '深色' : '浅色'}面板不跟随全局玻璃设置创建背景滤镜', (tester) async {
+      final previous = AppAppearanceController.glassIntensity.value;
+      addTearDown(
+          () => AppAppearanceController.glassIntensity.value = previous);
+      AppAppearanceController.glassIntensity.value = .85;
+      await tester.pumpWidget(MaterialApp(
+        theme: dark ? AppTheme.dark() : AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () => showNexusSheet<void>(
+                context: context,
+                builder: (_) =>
+                    const SizedBox(key: _body, height: 200, child: Text('面板')),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      expect(find.byType(BackdropFilter), findsNothing);
+      final material = tester
+          .widgetList<Material>(
+            find.ancestor(
+                of: find.byKey(_body), matching: find.byType(Material)),
+          )
+          .firstWhere((widget) => widget.color?.a == 1);
+      final context = tester.element(find.byKey(_body));
+      expect(material.color, Theme.of(context).colorScheme.surface);
+      expect(
+          find.ancestor(
+            of: find.byKey(_body),
+            matching: find.byType(RepaintBoundary),
+          ),
+          findsWidgets);
+    });
+  }
+
+  testWidgets('弹层尚未进入完就关闭，首帧位置连续并可再次打开', (tester) async {
+    await tester.pumpWidget(_sheetHost());
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    final before = tester.getTopLeft(find.byKey(_body)).dy;
+    Navigator.of(tester.element(find.byKey(_body))).pop();
+    await tester.pump();
+    expect(tester.getTopLeft(find.byKey(_body)).dy, closeTo(before, 0.5));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(_body), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('手机减少动态效果时弹层直接出现与关闭', (tester) async {
+    await tester.pumpWidget(_sheetHost(level: MotionLevel.reduced));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    final route = ModalRoute.of(tester.element(find.byKey(_body)))!;
+    expect(route.transitionDuration, Duration.zero);
+    expect(route.reverseTransitionDuration, Duration.zero);
+    Navigator.of(tester.element(find.byKey(_body))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byKey(_body), findsNothing);
+    expect(tester.binding.transientCallbackCount, 0);
+  });
+
+  testWidgets('手机弹层进入 240ms、退出 160ms，整个过程不越过落点', (tester) async {
+    final rest = await _openSheet(tester);
+    final route = ModalRoute.of(tester.element(find.byKey(_body)))!;
+    expect(route.transitionDuration, MobileMotion.panelEnter);
+    expect(route.reverseTransitionDuration, MobileMotion.panelExit);
+    Navigator.of(tester.element(find.byKey(_body))).pop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pump();
+    for (var i = 0; i < 16; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(tester.getTopLeft(find.byKey(_body)).dy,
+          greaterThanOrEqualTo(rest - 0.5));
+    }
+    final closingRoute = ModalRoute.of(tester.element(find.byKey(_body)))!;
+    Navigator.of(tester.element(find.byKey(_body))).pop();
+    await tester.pump();
+    await tester.pump(MobileMotion.panelExit);
+    expect(closingRoute.animation!.value, closeTo(0, 0.001));
+    await tester.pumpAndSettle();
+    expect(find.byKey(_body), findsNothing);
+  });
+
+  testWidgets('要求显式确认的面板不能通过遮罩或下甩关闭', (tester) async {
+    await tester.pumpWidget(_sheetHost(barrierDismissible: false));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(20, 40));
+    await tester.pumpAndSettle();
+    expect(find.byKey(_body), findsOneWidget);
+    final top = tester.getRect(find.byKey(_body)).topCenter;
+    await tester.flingFrom(
+        top - const Offset(0, 8), const Offset(0, 180), 1600);
+    await tester.pumpAndSettle();
+    expect(find.byKey(_body), findsOneWidget);
+  });
 
   group('NexusTapOrigin', () {
     test('只采信新鲜的按下位置', () {
@@ -233,4 +372,18 @@ void main() {
       await tester.pumpAndSettle();
     });
   });
+}
+
+class _PaintCounter extends CustomPainter {
+  const _PaintCounter(this.onPaint);
+  final VoidCallback onPaint;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    onPaint();
+    canvas.drawRect(Offset.zero & size, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PaintCounter oldDelegate) => false;
 }

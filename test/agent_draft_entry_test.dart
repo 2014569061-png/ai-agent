@@ -80,21 +80,21 @@ void main() {
   }
 
   group('AgentsPage 描述生成入口', () {
-    testWidgets('空库时把描述生成作为首要动作', (tester) async {
+    testWidgets('空库只显示一个创建入口', (tester) async {
       await tester.pumpWidget(wrap(const AgentsPage()));
       await tester.pumpAndSettle();
 
       expect(find.text('还没有 Agent'), findsOneWidget);
-      expect(find.text('描述目标，让 AI 生成'), findsOneWidget);
+      expect(find.text('创建 Agent'), findsOneWidget);
     });
 
-    testWidgets('已有 Agent 时列表首项仍是描述生成入口', (tester) async {
+    testWidgets('已有 Agent 时保留统一创建入口', (tester) async {
       await seedAgent('代码审计专家');
 
       await tester.pumpWidget(wrap(const AgentsPage()));
       await tester.pumpAndSettle();
 
-      expect(find.text('用一句话描述，让 AI 生成'), findsOneWidget);
+      expect(find.text('创建 Agent'), findsOneWidget);
       expect(find.text('代码审计专家'), findsOneWidget);
     });
 
@@ -102,7 +102,10 @@ void main() {
       await tester.pumpWidget(wrap(const AgentsPage()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('描述目标，让 AI 生成'));
+      await tester.tap(find.text('创建 Agent'));
+      await tester.pumpAndSettle();
+      expect(find.text('手动配置'), findsOneWidget);
+      await tester.tap(find.text('描述目标，生成草稿'));
       await tester.pumpAndSettle();
 
       expect(find.text('用一句话描述这个智能体'), findsOneWidget);
@@ -118,7 +121,10 @@ void main() {
       await tester.pumpWidget(wrap(const AgentsPage()));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('描述目标，让 AI 生成'));
+      await tester.tap(find.text('创建 Agent'));
+      await tester.pumpAndSettle();
+      expect(find.text('手动配置'), findsOneWidget);
+      await tester.tap(find.text('描述目标，生成草稿'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('生成草稿'));
@@ -147,7 +153,8 @@ void main() {
       final nameField = tester.widget<TextField>(find.byType(TextField).first);
       expect(nameField.controller?.text, '代码审查员');
 
-      final promptField = tester.widget<TextField>(find.byType(TextField).at(1));
+      final promptField =
+          tester.widget<TextField>(find.byType(TextField).at(1));
       expect(promptField.controller?.text, contains('关注空指针与边界条件'));
 
       expect(find.text('AI 已按你的描述预填'), findsOneWidget);
@@ -178,12 +185,14 @@ void main() {
       }
     }
 
-    testWidgets('未配置模型时用本地草稿跑通生成、编辑与保存，并保持最小权限',
-        (tester) async {
+    testWidgets('未配置模型时用本地草稿跑通生成、编辑与保存，并保持最小权限', (tester) async {
       await tester.pumpWidget(wrap(const AgentsPage()));
       await settle(tester);
 
-      await tester.tap(find.text('描述目标，让 AI 生成'));
+      await tester.tap(find.text('创建 Agent'));
+      await tester.pumpAndSettle();
+      expect(find.text('手动配置'), findsOneWidget);
+      await tester.tap(find.text('描述目标，生成草稿'));
       await settle(tester);
 
       await tester.enterText(find.byType(TextField).first, '帮我审空指针');

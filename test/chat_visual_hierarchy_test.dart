@@ -12,6 +12,7 @@ import 'package:mobile_agent/presentation/chat/widgets/session_metrics_bar.dart'
 import 'package:mobile_agent/presentation/chat/widgets/session_metrics_sheet.dart';
 import 'package:mobile_agent/presentation/motion/motion_preferences.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
+import 'package:mobile_agent/presentation/theme/mobile_theme.dart';
 import 'package:mobile_agent/presentation/widgets/liquid_glass.dart';
 
 void main() {
@@ -28,7 +29,8 @@ void main() {
             final controller = TextEditingController();
             final boundary = GlobalKey();
             await tester.pumpWidget(MaterialApp(
-              theme: dark ? AppTheme.dark() : AppTheme.light(),
+              theme:
+                  MobileTheme.apply(dark ? AppTheme.dark() : AppTheme.light()),
               home: MediaQuery(
                 data: MediaQueryData(
                     size: Size(width, 900),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/domain/tool_codes.dart';
 import 'package:mobile_agent/domain/tool_result.dart';
 import 'package:mobile_agent/infrastructure/tools/workspace_tools.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   late Directory root;
@@ -41,6 +42,29 @@ void main() {
     final result =
         await ListDirectoryTool(sandbox: sandbox).execute({'path': '.'});
     expect(result.ok, isTrue);
+  });
+
+  test('write_file rejects a dangling symlink that points outside workspace',
+      () async {
+    final outside = Directory(p.join(root.parent.path,
+        'nexus-dangling-link-target-${DateTime.now().microsecondsSinceEpoch}'));
+    final Link link;
+    try {
+      link = await Link(p.join(root.path, 'outside-link')).create(outside.path);
+    } on FileSystemException {
+      // Windows may not grant symlink creation; Linux/macOS and enabled Windows
+      // hosts exercise the actual dangling-link write path below.
+      return;
+    }
+    addTearDown(link.delete);
+
+    final result = await WriteFileTool(sandbox: sandbox).execute({
+      'path': 'outside-link/created.txt',
+      'content': 'must stay inside workspace',
+    });
+    expect(result.ok, isFalse);
+    expect(result.code, ToolCodes.sandboxViolation);
+    expect(await outside.exists(), isFalse);
   });
 
   for (final pair in [('same\nsame', 'same'), ('aaa', 'aa'), ('text', '')]) {

@@ -74,7 +74,7 @@ void main() {
     expect(JobBoard.phaseForTaskStatus('waiting_approval'), JobPhase.needsApproval);
     expect(JobBoard.phaseForTaskStatus('paused'), JobPhase.paused);
     expect(JobBoard.phaseForTaskStatus('cancelled'), JobPhase.cancelled);
-    expect(JobBoard.phaseForTaskStatus('weird'), JobPhase.other);
+    expect(JobBoard.phaseForTaskStatus('weird'), JobPhase.needsVerification);
   });
 
   test('inbox holds items needing attention and skips active or cancelled ones',
@@ -96,7 +96,7 @@ void main() {
       'fail': InboxReason.failed,
       'done': InboxReason.completed,
       'ok': InboxReason.scheduledRun,
-      'timeout': InboxReason.failed,
+      'timeout': InboxReason.needsVerification,
     });
     expect(inbox.firstWhere((i) => i.job.id == 'done').job.detail,
         '已完成 3 个文件的修改');

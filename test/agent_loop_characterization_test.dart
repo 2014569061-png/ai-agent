@@ -26,6 +26,9 @@ String _trace(AgentEvent e) => switch (e) {
         'change:$kind:$category',
       AgentContextCompressionEvent() => 'compression',
       AgentStepUsageEvent(:final step) => 'stepUsage:$step',
+      // New durable-plan draft event; no legacy event expectation is weakened.
+      AgentDraftSupersededEvent(:final controlRevision) =>
+        'draftSuperseded:$controlRevision',
       TextEvent(:final text) => 'text:$text',
       ReasoningEvent(:final text) => 'reasoning:$text',
       ToolRequestedEvent(:final call) => 'toolRequested:${call.name}',
@@ -33,7 +36,8 @@ String _trace(AgentEvent e) => switch (e) {
       ToolResultEvent(:final call, :final result) =>
         'toolResult:${call.name}:${result.ok ? 'ok' : 'fail'}',
       AgentErrorEvent(:final retryable) => 'error:retryable=$retryable',
-      AgentBudgetExhaustedEvent(:final reason) => 'budgetExhausted:${reason.name}',
+      AgentBudgetExhaustedEvent(:final reason) =>
+        'budgetExhausted:${reason.name}',
       AgentBudgetExtendedEvent(:final round) => 'budgetExtended:$round',
       AgentRetryEvent(:final attempt) => 'retry:$attempt',
       AgentUsageEvent() => 'usage',
@@ -122,10 +126,8 @@ void main() {
         tools: _registry(),
       ).run(history: [_user('1+2')], model: 'm'));
 
-      final trace = events
-          .map(_trace)
-          .where((t) => !t.startsWith('change:'))
-          .toList();
+      final trace =
+          events.map(_trace).where((t) => !t.startsWith('change:')).toList();
       final step1 = trace.indexOf('snapshot:1');
       final requested = trace.indexOf('toolRequested:calculator');
       final usage1 = trace.indexOf('stepUsage:1');
@@ -244,16 +246,68 @@ void main() {
   });
 
   group('steering', () {
+    test('steering queued before start is included in the first request',
+        () async {
+      final controller = AgentRunController()..steer('also add tests');
+      final provider = _ScriptedProvider([_textStep]);
+      final events = await _collect(
+        AgentExecutor(provider: provider, tools: _registry()).run(
+          history: [_user('hi')],
+          model: 'm',
+          runController: controller,
+        ),
+      );
+      expect(provider.requests, hasLength(1));
+      expect(provider.requests.single.messages.last.text,
+          contains('用户补充指令：also add tests'));
+      expect(events.map(_trace).last, 'status:completed');
+      expect(controller.isSealed, isTrue);
+      expect(controller.steer('late'), isFalse);
+    });
+
+    test('steering during a text response continues at the turn boundary',
+        () async {
+      final controller = AgentRunController();
+      final provider = _ScriptedProvider([_textStep, _textStep]);
+      final events = <AgentEvent>[];
+      await for (final event
+          in AgentExecutor(provider: provider, tools: _registry()).run(
+        history: [_user('hi')],
+        model: 'm',
+        runController: controller,
+      )) {
+        events.add(event);
+        if (event is TextEvent && provider.requests.length == 1) {
+          expect(controller.steer('also add tests'), isTrue);
+        }
+      }
+      expect(provider.requests, hasLength(2));
+      final second = provider.requests[1].messages;
+      expect(second.last.text, contains('用户补充指令：also add tests'));
+      expect(second.where((m) => m.role == MessageRole.assistant), isEmpty);
+      expect(
+          events
+              .whereType<AgentStatusEvent>()
+              .where((e) => e.status == RunStatus.completed),
+          hasLength(1));
+      expect(controller.steer('late'), isFalse);
+    });
+
     test('steering queued at the completion boundary starts another step',
         () async {
       final controller = AgentRunController();
       final provider = _ScriptedProvider([_textStep, _textStep]);
-      controller.steer('also add tests');
       final events = await _collect(
           AgentExecutor(provider: provider, tools: _registry()).run(
         history: [_user('hi')],
         model: 'm',
         runController: controller,
+        beforeFinish: (_) async {
+          if (provider.requests.length == 1) {
+            expect(controller.steer('also add tests'), isTrue);
+          }
+          return null;
+        },
       ));
 
       expect(provider.requests, hasLength(2));
@@ -263,8 +317,7 @@ void main() {
       // 现状：被插话打断的那一步，其 assistant 文本不进入下一次请求。
       expect(second.where((m) => m.role == MessageRole.assistant), isEmpty);
       expect(events.map(_trace).last, 'status:completed');
-      expect(controller.isSealed, isTrue,
-          reason: '无新指令的完成边界会封存控制器');
+      expect(controller.isSealed, isTrue, reason: '无新指令的完成边界会封存控制器');
     });
 
     test('steering queued during a tool step follows the tool results',
@@ -291,9 +344,9 @@ void main() {
 
     test('steering after completion is rejected', () async {
       final controller = AgentRunController();
-      await _collect(
-          AgentExecutor(provider: _ScriptedProvider([_textStep]), tools: _registry())
-              .run(history: [_user('hi')], model: 'm', runController: controller));
+      await _collect(AgentExecutor(
+              provider: _ScriptedProvider([_textStep]), tools: _registry())
+          .run(history: [_user('hi')], model: 'm', runController: controller));
       expect(controller.steer('late'), isFalse);
     });
   });
@@ -369,7 +422,8 @@ void main() {
   });
 
   group('model failures', () {
-    test('a non-retryable failure stops immediately and cancels the caller token',
+    test(
+        'a non-retryable failure stops immediately and cancels the caller token',
         () async {
       final provider = _ScriptedProvider([
         [const ProviderErrorEvent('invalid api key', statusCode: 401)],

@@ -8,10 +8,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/application/chat_controller.dart';
 import 'package:mobile_agent/application/providers.dart';
 import 'package:mobile_agent/application/task_service.dart';
+import 'package:mobile_agent/application/run_recovery_safety.dart';
+import 'package:mobile_agent/infrastructure/database/run_plan_store.dart';
+import 'package:mobile_agent/infrastructure/database/runtime_maintenance_store.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 import 'package:mobile_agent/infrastructure/providers/provider_config_store.dart';
+import 'package:mobile_agent/infrastructure/providers/model_route.dart';
+import 'package:mobile_agent/infrastructure/providers/openai_compatible_provider.dart';
+import 'package:mobile_agent/infrastructure/providers/cost_budget_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 断点恢复（C2）与预算续跑的护栏测试。
@@ -49,6 +55,23 @@ void main() {
     expect(upstream.requests.single.containsKey('tools'), isFalse);
   });
 
+  test('resumeTask unknown effect preserves checkpoint and never calls provider', () async {
+    final env = await _Env.boot();
+    final task = await TaskService().create(db: env.db, conversationId: 'c1',
+        requestJson: jsonEncode({'prompt': 'DO NOT REPLAY'}));
+    final store = RunPlanStore(env.db);
+    final token = await store.bind(taskId: task.id, runId: 'interrupted');
+    await store.claim(token, 'unknown-call');
+    final before = await env.db.findTask(task.id);
+    await expectLater(env.controller.resumeTask(task.id, approveTool: _allowOnce),
+        throwsA(isA<RunRecoveryNeedsReview>()));
+    final after = await env.db.findTask(task.id);
+    expect(after!.status, before!.status);
+    expect(after.progressJson, before.progressJson);
+    expect(env.state.running, isFalse);
+    expect((await store.head(task.id))!.token.runId, 'interrupted');
+  });
+
   test('recoverableTasks 把 running 与 paused 任务都当作可恢复候选', () async {
     final env = await _Env.boot();
     final service = TaskService();
@@ -76,6 +99,29 @@ void main() {
     // 否则用户没有任何途径发现它们（resumeTask 本就接受 paused）。
     expect(tasks.map((task) => task.id), containsAll([running.id, paused.id]));
     expect(tasks.map((task) => task.id), isNot(contains(completed.id)));
+  });
+
+  test('resumeTask applied receipt alone cannot erase or replay a checkpoint', () async {
+    final env = await _Env.boot();
+    final service = TaskService();
+    final task = await service.create(db: env.db, conversationId: 'c1',
+        requestJson: jsonEncode({'prompt': 'DO NOT REPLAY'}));
+    await service.complete(env.db, task.id, status: 'paused', summary: 'paused',
+        runId: 'receipt-only', checkpoint: {
+          'version': 1, 'runId': 'receipt-only',
+          'context': encodeChatContextForPersistence([
+            ChatMessage(role: MessageRole.user,
+                parts: [const MessagePart.text('CHECKPOINT')])
+          ]),
+        });
+    await service.markRunApplied(env.db, task.id, 'receipt-only');
+    final before = await env.db.findTask(task.id);
+    await expectLater(env.controller.resumeTask(task.id, approveTool: _allowOnce),
+        throwsA(isA<AppliedCheckpointNeedsReview>()));
+    final after = await env.db.findTask(task.id);
+    expect(after!.status, 'paused');
+    expect(after.progressJson, before!.progressJson);
+    expect(env.state.running, isFalse);
   });
 
   test('resumeTask 对已应用过的 checkpoint 只清理、不重复写回会话', () async {
@@ -106,6 +152,10 @@ void main() {
         ]),
       },
     );
+    // A projection receipt alone is insufficient: persist independent terminal
+    // phase evidence for this legacy (no run-plan head) reconciliation fixture.
+    await service.updateProgress(env.db, task.id,
+        phase: 'completed', runId: 'run-applied');
     await service.markRunApplied(env.db, task.id, 'run-applied');
     final before = env.state.messages.length;
 
@@ -504,6 +554,23 @@ class _FakeUpstream {
   }
 }
 
+/// The standard route's cost ledger uses a process singleton. Use the existing
+/// route seam to isolate that ledger without disabling production cost checks.
+class _IsolatedLoopbackRoute implements ModelRoute {
+  _IsolatedLoopbackRoute(this.db);
+  final AppDatabase db;
+  @override
+  String get id => 'isolated-loopback';
+  @override
+  CostBudgetProvider? providerFor(ProviderConfig config) {
+    if (Uri.parse(config.baseUrl).host != '127.0.0.1') {
+      throw StateError('Only loopback test providers are allowed');
+    }
+    return CostBudgetProvider(OpenAiCompatibleProvider(config: config), config,
+        database: () async => db);
+  }
+}
+
 /// 让 ProviderConfigStore 指向本地假上游。
 class _UpstreamConfigStore extends ProviderConfigStore {
   _UpstreamConfigStore(this.baseUrl);
@@ -512,11 +579,14 @@ class _UpstreamConfigStore extends ProviderConfigStore {
 
   @override
   Future<ProviderConfig> load() async => ProviderConfig(
-        // baseUrl 为空表示不需要真实上游；apiKey 为空会让控制器回落到
-        // DemoProvider，从而保证不产生任何网络请求。
+        // Only a loopback fake upstream is used. Never load emulator/user config.
+        // Explicit zero rates describe this free fixture; production hard-stop
+        // policy stays enabled instead of being weakened for tests.
         baseUrl: baseUrl.isEmpty ? 'http://127.0.0.1:1/v1' : baseUrl,
         model: 'test-model',
         apiKey: baseUrl.isEmpty ? '' : 'test-key',
+        inputPricePerMillionCents: 0,
+        outputPricePerMillionCents: 0,
       );
 
   @override
@@ -533,6 +603,17 @@ class _Env {
 
   ChatState get state => container.read(chatControllerProvider);
 
+  static Future<void> _waitForIdle(AppDatabase db) async {
+    final store = RuntimeMaintenanceStore(db);
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (await store.liveRuns() != 0) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw StateError('Owned test database still has active runtime leases');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+  }
+
   static Future<_Env> boot({
     _FakeUpstream? upstream,
     int? maxSteps,
@@ -540,16 +621,21 @@ class _Env {
     final db = AppDatabase(NativeDatabase.memory());
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWith((ref) async => db),
+      // Keep the production cost gate, but bind its ledger to the owned memory
+      // database as well; Riverpod's DB override does not replace the singleton.
+      modelRouterProvider.overrideWith((ref) => ModelRouter([_IsolatedLoopbackRoute(db)])),
       providerConfigStoreProvider
           .overrideWith((ref) => _UpstreamConfigStore(upstream?.baseUrl ?? '')),
     ]);
     addTearDown(() async {
       container.dispose();
+      await _waitForIdle(db);
       await db.close();
       await upstream?.close();
     });
     final controller = container.read(chatControllerProvider.notifier);
     await pumpEventQueue();
+    await _waitForIdle(db);
     if (maxSteps != null) {
       // 交互式预算由 Agent.maxSteps 决定（_prepareRun 从 state.agentId 读取），
       // 因此要真跑「预算耗尽」必须显式选一个 maxSteps 很小的 Agent。

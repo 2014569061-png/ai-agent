@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/application/chat_controller.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/chat/widgets/capsule_top_bar.dart';
+import 'package:mobile_agent/presentation/chat/widgets/chat_mode_switcher.dart';
 import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 
@@ -106,7 +107,8 @@ void main() {
     expect(approvalTapped, isTrue);
   });
 
-  testWidgets('top bar prioritizes model and mode; workspace and context stay in tooltip',
+  testWidgets(
+      'top bar prioritizes model and mode; workspace and context stay in tooltip',
       (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1.0;
@@ -132,12 +134,79 @@ void main() {
     expect(find.text('当前会话'), findsOneWidget);
     expect(find.text('Claude Sonnet'), findsOneWidget);
     expect(find.textContaining('上下文 0 / 128k'), findsNothing);
-    expect(find.byTooltip('Claude Sonnet · mobile_agent · 上下文 0 / 128k'), findsOneWidget);
+    expect(find.byTooltip('Claude Sonnet · mobile_agent · 上下文 0 / 128k'),
+        findsOneWidget);
     expect(find.text('Agent'), findsOneWidget);
 
     await tester.tap(find.text('Agent'));
     expect(modeTapped, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ChatModeSwitcher exposes chat agent and plan as distinct modes',
+      (tester) async {
+    ChatMode current = ChatMode.agent;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => ChatModeSwitcher(
+              mode: current,
+              running: false,
+              onChanged: (next) => setState(() => current = next),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('chat-mode-chat')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-mode-agent')), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-mode-plan')), findsOneWidget);
+    expect(find.textContaining('计划模式已开启'), findsNothing);
+
+    // 点击 Plan 切换。
+    await tester.tap(find.byKey(const ValueKey('chat-mode-plan')));
+    await tester.pump();
+
+    expect(current, ChatMode.plan);
+    expect(find.textContaining('计划模式已开启'), findsOneWidget);
+
+    // 点击聊天后必须真正切换到 chat，不再与 Agent 合并。
+    await tester.tap(find.byKey(const ValueKey('chat-mode-chat')));
+    await tester.pump();
+
+    expect(current, ChatMode.chat);
+    expect(find.textContaining('计划模式已开启'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('chat-mode-agent')));
+    await tester.pump();
+
+    expect(current, ChatMode.agent);
+    expect(find.textContaining('计划模式已开启'), findsNothing);
+  });
+
+  testWidgets('ChatModeSwitcher disables taps while running', (tester) async {
+    ChatMode? changed;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          body: ChatModeSwitcher(
+            mode: ChatMode.agent,
+            running: true,
+            onChanged: (next) => changed = next,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('chat-mode-plan')));
+    await tester.pump();
+    expect(changed, isNull);
   });
 }
 

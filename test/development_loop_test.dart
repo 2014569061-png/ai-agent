@@ -7,6 +7,7 @@ import 'package:mobile_agent/application/development_loop_finalizer.dart';
 import 'package:mobile_agent/application/development_verification.dart';
 import 'package:mobile_agent/application/development_workflow.dart';
 import 'package:mobile_agent/application/network_access_policy.dart';
+import 'package:mobile_agent/application/run_event_tracker.dart';
 import 'package:mobile_agent/application/project_kind.dart';
 import 'package:mobile_agent/application/project_kind_detector.dart';
 import 'package:mobile_agent/application/task_service.dart';
@@ -52,7 +53,8 @@ class _ScriptedRuntime implements LinuxRuntimeAdapter {
   }) async {
     commands.add(request.commandLine);
     if (results.isEmpty) {
-      return const CommandResult(output: 'missing scripted result', exitCode: 1);
+      return const CommandResult(
+          output: 'missing scripted result', exitCode: 1);
     }
     return results.removeAt(0);
   }
@@ -86,8 +88,7 @@ flutter:
     expect(detection.kind, ProjectKind.flutter);
     expect(detection.packageName, 'demo');
 
-    final plan =
-        DevelopmentVerificationService().planFromDetection(detection);
+    final plan = DevelopmentVerificationService().planFromDetection(detection);
     expect(plan.steps.map((step) => step.id),
         ['analyze', 'test', 'build', 'artifact']);
     final fastPlan = DevelopmentVerificationService()
@@ -110,7 +111,8 @@ flutter:
     expect(detection.buildCommand, 'npm run build');
   });
 
-  test('artifact inspector accepts ZIP-headed APKs but keeps the package unknown',
+  test(
+      'artifact inspector accepts ZIP-headed APKs but keeps the package unknown',
       () async {
     const inspector = ArtifactInspector();
     final missing = await inspector.inspect(
@@ -119,8 +121,8 @@ flutter:
     );
     expect(missing.exists, isFalse);
 
-    final apk = File(
-        '${workspace.path}/build/app/outputs/flutter-apk/app-release.apk');
+    final apk =
+        File('${workspace.path}/build/app/outputs/flutter-apk/app-release.apk');
     await apk.create(recursive: true);
     await apk.writeAsBytes([0x50, 0x4B, 0x03, 0x04, ...List.filled(2048, 1)]);
     final found = await inspector.inspect(
@@ -133,7 +135,8 @@ flutter:
     // 只校验了 ZIP 文件头，没有解析 AndroidManifest：包名必须保持未知，
     // 期望值只能出现在 notes 里，否则下游会把一个未验证的猜测当成事实。
     expect(found.packageName, isNull);
-    expect(found.notes.any((note) => note.contains('com.example.demo')), isTrue);
+    expect(
+        found.notes.any((note) => note.contains('com.example.demo')), isTrue);
   });
 
   test('verification runner stops on failure and retries a single step',
@@ -162,10 +165,11 @@ flutter:
     expect(first.plan.steps[1].status, VerificationStepStatus.failed);
     expect(runtime.commands, ['flutter analyze', 'flutter test']);
 
-    await File('${workspace.path}/build/app/outputs/flutter-apk/app-release.apk')
+    await File(
+            '${workspace.path}/build/app/outputs/flutter-apk/app-release.apk')
         .create(recursive: true)
-        .then((file) =>
-            file.writeAsBytes([0x50, 0x4B, 0x03, 0x04, ...List.filled(2048, 1)]));
+        .then((file) => file
+            .writeAsBytes([0x50, 0x4B, 0x03, 0x04, ...List.filled(2048, 1)]));
 
     final retried = await verification.run(
       service: service,
@@ -177,7 +181,8 @@ flutter:
     expect(runtime.commands.last, 'flutter build apk --release');
   });
 
-  test('task templates support implement-and-verify instead of advice only', () {
+  test('task templates support implement-and-verify instead of advice only',
+      () {
     final service = TaskTemplateService();
     final template = service.forTask(const DevelopmentTaskInput(
       taskId: 't1',
@@ -265,7 +270,25 @@ flutter:
         'flutter-verify-apk');
     for (final workflow in DevelopmentWorkflowTemplates.all) {
       expect(workflow.steps, isNotEmpty);
+      expect(workflow.steps.every((step) => step.title?.isNotEmpty == true),
+          isTrue);
     }
+  });
+
+  test('static web verification reports a readable artifact result', () async {
+    await File('${workspace.path}/index.html')
+        .writeAsString('<!doctype html><title>ok</title>');
+    final result = await DevelopmentWorkflowRunner(
+      TerminalCommandService(
+        workspacePath: workspace.path,
+        runtime: _ScriptedRuntime(const []),
+      ),
+    ).run(DevelopmentWorkflowTemplates.staticWeb, workspace.path);
+
+    expect(result.success, isTrue);
+    expect(result.plan?.steps.single.title, '检查网页入口');
+    expect(result.steps.single.message, '产物检查通过：index.html');
+    expect(result.steps.single.message, isNot(startsWith('{')));
   });
 
   test('plugin HTTP tool rejects private destinations at execution time',
@@ -303,8 +326,8 @@ flutter:
   });
 
   test('invalid APK is not treated as a signed passing artifact', () async {
-    final apk = File(
-        '${workspace.path}/build/app/outputs/flutter-apk/app-release.apk');
+    final apk =
+        File('${workspace.path}/build/app/outputs/flutter-apk/app-release.apk');
     await apk.create(recursive: true);
     await apk.writeAsString('not an apk' * 200);
     final found = await const ArtifactInspector().inspect(
@@ -327,14 +350,16 @@ flutter:
       workspacePath: workspace.path,
     );
     expect(result.success, isFalse);
-    expect(result.plan.steps.any((step) => step.status == VerificationStepStatus.passed),
+    expect(
+        result.plan.steps
+            .any((step) => step.status == VerificationStepStatus.passed),
         isFalse);
   });
 
   test('selected Python workflow is executed instead of detected Node commands',
       () async {
-    await File('${workspace.path}/package.json').writeAsString(
-        '{"name":"web","scripts":{"test":"vitest"}}');
+    await File('${workspace.path}/package.json')
+        .writeAsString('{"name":"web","scripts":{"test":"vitest"}}');
     final runtime = _ScriptedRuntime([
       const CommandResult(output: 'pytest ok', exitCode: 0),
     ]);
@@ -394,10 +419,74 @@ flutter:
       workspacePath: workspace.path,
       runVerification: false,
     );
-    expect(result.review.files.map((file) => file.path), contains('lib/main.dart'));
+    expect(result.review.files.map((file) => file.path),
+        contains('lib/main.dart'));
     final info = TaskService().describe((await db.findTask(task.id))!);
     expect(info.changeReview?.files, isNotEmpty);
     expect(info.status, 'completed');
+  });
+
+  test('unresolved patch rollback blocks automation and survives mixed audit',
+      () async {
+    await File('${workspace.path}/a.txt').writeAsString('old');
+    await File('${workspace.path}/b.txt').writeAsString('old');
+    final snapshot =
+        await const WorkspaceSnapshotService().capture(workspace.path);
+    await File('${workspace.path}/a.txt').writeAsString('external');
+    await File('${workspace.path}/b.txt').writeAsString('new');
+    final backup = 'a.txt.nexus-patch-${'a' * 32}.bak';
+    await File('${workspace.path}/$backup').writeAsString('old');
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final task = await TaskService().create(
+        db: db,
+        conversationId: 'c1',
+        type: 'development:implement_and_verify',
+        requestJson: '{"prompt":"fix"}',
+        metadata: {
+          'taskType': 'implement_and_verify',
+          'workspacePath': workspace.path
+        });
+    await TaskService().updateProgress(db, task.id,
+        phase: 'running', extra: {'workspaceSnapshot': snapshot.toJson()});
+    final tracker = RunEventTracker(database: db, runId: 'patch-run');
+    await tracker.record(type: 'file_operation', name: 'edit_file', metadata: {
+      'fileOperation': true,
+      'effect': 'applied',
+      'path': 'b.txt',
+      'operation': 'edit',
+    });
+    await tracker.record(
+        type: 'file_operation',
+        name: 'apply_patch',
+        status: 'failed',
+        metadata: {
+          'fileOperation': true,
+          'effect': 'unknown',
+          'operation': 'apply_patch',
+          'transactionStatus': 'needs_recovery',
+          'unresolvedFiles': ['a.txt'],
+          'recoveryFiles': [backup],
+          'fileChanges': <Map<String, dynamic>>[],
+        });
+    await tracker.flush();
+    final runtime = _ScriptedRuntime([]);
+    final result = await DevelopmentLoopFinalizer().finalize(
+        db: db,
+        taskId: task.id,
+        runId: 'patch-run',
+        workspacePath: workspace.path,
+        runVerification: true,
+        terminal: TerminalCommandService(
+            runtime: runtime, workspacePath: workspace.path));
+    expect(runtime.commands, isEmpty);
+    expect(result.verified, isFalse);
+    expect(result.verificationSkipReason, contains('回滚存在冲突'));
+    expect(result.review.files.map((f) => f.path),
+        unorderedEquals(['a.txt', 'b.txt']));
+    final progress = await TaskService().progress(db, task.id);
+    expect((progress['taskSummary'] as Map)['openIssues'].toString(),
+        contains('需要恢复'));
   });
 
   test('finalizer records why automated verification was skipped', () async {
@@ -448,6 +537,148 @@ flutter:
       reason: '跳过的自动验证必须在任务摘要里显式标记为未验证：$openIssues',
     );
   });
+
+  test('automatic verification runs checks only and stops before next command',
+      () async {
+    await File('${workspace.path}/pubspec.yaml')
+        .writeAsString('name: demo\nflutter:\n  uses-material-design: true\n');
+    final verification = DevelopmentVerificationService();
+    final runtime = _ScriptedRuntime([
+      const CommandResult(output: 'analyze ok', exitCode: 0),
+    ]);
+    final service =
+        TerminalCommandService(workspacePath: workspace.path, runtime: runtime);
+    final result = await verification.run(
+      service: service,
+      workspacePath: workspace.path,
+      plan: await verification.planFor(workspace.path, includeBuild: false),
+      canContinue: () => runtime.commands.isEmpty,
+    );
+    expect(runtime.commands, ['flutter analyze']);
+    expect(result.success, isFalse);
+    expect(result.plan.steps.first.error, contains('已取消'));
+    expect(result.plan.steps.last.status, VerificationStepStatus.pending);
+  });
+
+  for (final scenario in [
+    'pass',
+    'still-failing',
+    'repair-failed',
+    'cancelled',
+    'environment',
+    'permission',
+    'disabled'
+  ]) {
+    test('verification repair loop: $scenario', () async {
+      await File('${workspace.path}/pubspec.yaml').writeAsString(
+          'name: demo\nflutter:\n  uses-material-design: true\n');
+      final source = File('${workspace.path}/main.dart');
+      await source.writeAsString('baseline');
+      final snapshot =
+          await const WorkspaceSnapshotService().capture(workspace.path);
+      await source.writeAsString('broken');
+      final db = AppDatabase(NativeDatabase.memory());
+      addTearDown(db.close);
+      final tasks = TaskService();
+      final task = await tasks.create(
+          db: db,
+          conversationId: 'repair-test',
+          type: 'development:implement_and_verify',
+          requestJson: '{}',
+          metadata: {
+            'taskType': 'implement_and_verify',
+            'prompt': 'fix feature'
+          });
+      await tasks.updateProgress(db, task.id, phase: 'running', extra: {
+        'workspaceSnapshot': snapshot.toJson(),
+        'verificationPlan': {'stale': true},
+      });
+      final runtime = _ScriptedRuntime([
+        if (scenario == 'pass')
+          const CommandResult(output: 'first analyze passes', exitCode: 0),
+        CommandResult(
+            output: scenario == 'environment'
+                ? 'command not found'
+                : scenario == 'permission'
+                    ? 'EACCES permission denied'
+                    : 'Assertion failed: missing value',
+            exitCode: 1),
+        CommandResult(
+            output: 'second analyze',
+            exitCode: scenario == 'still-failing' ? 1 : 0),
+        const CommandResult(output: 'tests pass', exitCode: 0),
+      ]);
+      var repairs = 0;
+      var active = true;
+      final result = await DevelopmentLoopFinalizer().finalize(
+        db: db,
+        taskId: task.id,
+        runId: 'repair-run',
+        workspacePath: workspace.path,
+        terminal: TerminalCommandService(
+            workspacePath: workspace.path, runtime: runtime),
+        runVerification: true,
+        canContinue: () => active,
+        repair: scenario == 'disabled'
+            ? null
+            : (request) async {
+                repairs++;
+                expect(request.attempt, 1);
+                expect(request.relatedFiles, contains('main.dart'));
+                expect(request.logExcerpt, contains('Assertion failed'));
+                await source.writeAsString('repaired');
+                await File('${workspace.path}/helper.dart')
+                    .writeAsString('new helper');
+                if (scenario == 'cancelled') active = false;
+                return scenario != 'repair-failed';
+              },
+      );
+      final expectedRepair =
+          !['environment', 'permission', 'disabled'].contains(scenario);
+      expect(repairs, expectedRepair ? 1 : 0);
+      expect(result.verified, scenario == 'pass');
+      if (scenario == 'pass') {
+        expect(runtime.commands, [
+          'flutter analyze',
+          'flutter test',
+          'flutter analyze',
+          'flutter test'
+        ]);
+      }
+      if (scenario == 'still-failing') expect(runtime.commands, hasLength(2));
+      if (expectedRepair) {
+        expect(result.review.files.map((f) => f.path), contains('helper.dart'));
+      }
+      final progress = await tasks.progress(db, task.id);
+      final summary = progress['taskSummary'] as Map;
+      if (scenario == 'repair-failed' || scenario == 'cancelled') {
+        expect(progress['verificationPlan'], isNull);
+        expect(summary['passedChecks'], isEmpty);
+        expect(result.review.mark, ChangeVerificationMark.unverified);
+        expect(summary['openIssues'], isNotEmpty);
+        expect(runtime.commands, hasLength(1));
+      }
+      expect((progress['verificationRepairAttempts'] as List).length, repairs);
+      if (scenario == 'still-failing') {
+        runtime.results
+          ..clear()
+          ..add(const CommandResult(output: 'still broken', exitCode: 1));
+        await DevelopmentLoopFinalizer().finalize(
+          db: db,
+          taskId: task.id,
+          runId: 'repair-run',
+          workspacePath: workspace.path,
+          terminal: TerminalCommandService(
+              workspacePath: workspace.path, runtime: runtime),
+          runVerification: true,
+          repair: (_) async =>
+              fail('same run must not receive a new repair budget'),
+        );
+        final repeated = await tasks.progress(db, task.id);
+        expect(repeated['verificationRepairAttempts'], hasLength(1));
+      }
+    });
+  }
 
   test('task templates match development: prefixed types', () {
     expect(

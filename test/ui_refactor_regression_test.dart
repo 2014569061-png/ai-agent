@@ -306,7 +306,7 @@ void main() {
       semanticsHandle.dispose();
     });
 
-    testWidgets('模式与审批磁贴在左侧，附件与发送磁贴在右侧，且窄屏不溢出', (tester) async {
+    testWidgets('审批磁贴在左侧，附件与发送磁贴在右侧，且窄屏不溢出', (tester) async {
       final controller = TextEditingController();
       addTearDown(controller.dispose);
 
@@ -338,14 +338,11 @@ void main() {
         await tester.pumpAndSettle();
 
         final card = tester.getRect(find.byType(FloatingCapsuleInput));
-        final mode = tester.getRect(find.bySemanticsLabel('聊天模式'));
         final approval = tester.getRect(find.bySemanticsLabel('完全访问'));
         final attach = tester.getRect(find.bySemanticsLabel('添加附件或更多工具'));
         final send = tester.getRect(find.bySemanticsLabel(RegExp('发送')));
 
-        // 左组：模式 + 审批；右组：附件 + 发送。
-        expect(mode.right, lessThan(approval.right),
-            reason: '模式磁贴在审批磁贴左侧 (w=$width)');
+        // 左侧仅保留审批策略；模式在输入框上方统一切换。
         expect(attach.left, greaterThan(approval.right),
             reason: '附件磁贴必须离开左组 (w=$width)');
         expect(send.left, greaterThanOrEqualTo(attach.right),

@@ -1,5 +1,8 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mobile_agent/application/browser_agent_tool.dart';
+import 'package:mobile_agent/application/browser_session_service.dart';
+import 'package:mobile_agent/infrastructure/browser/android_browser_transport.dart';
 
 import 'package:mobile_agent/domain/sensitive_tool_policy.dart';
 import 'package:mobile_agent/domain/tool_result.dart';
@@ -9,7 +12,10 @@ import 'package:mobile_agent/infrastructure/tools/command_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/core_tools.dart';
 import 'package:mobile_agent/infrastructure/tools/image_gen_tool.dart';
 import 'package:mobile_agent/application/android_automation_tool.dart';
+import 'package:mobile_agent/application/android_accessibility_observe_tool.dart';
+import 'package:mobile_agent/application/android_accessibility_session_service.dart';
 import 'package:mobile_agent/infrastructure/tools/android_device_tool.dart';
+import 'package:mobile_agent/infrastructure/tools/android_accessibility_bridge.dart';
 import 'package:mobile_agent/infrastructure/tools/plan_tool.dart';
 import 'package:mobile_agent/infrastructure/tools/skill_tools.dart';
 import 'package:mobile_agent/infrastructure/tools/sub_agent_tool.dart';
@@ -60,6 +66,12 @@ ToolRegistry _buildFullRegistry(AppDatabase db) {
   registry.register(AndroidAppPrivateDataPreviewTool());
   registry.register(AndroidAppPrivateDataTool());
   registry.register(AndroidAutomationTool());
+  registry.register(AndroidAccessibilityObserveTool(
+    AndroidAccessibilitySessionService(const AndroidAccessibilityBridge()),
+    'policy-fixture',
+  ));
+  registry.register(BrowserAgentTool(
+      BrowserSessionService(AndroidBrowserTransport()), 'policy-fixture'));
 
   const workspace = '/tmp/nexus-sensitive-policy-test';
   final sandbox = WorkspaceSandbox(workspace);
@@ -106,6 +118,8 @@ void main() {
         'remember',
         'sub_agent',
         'generate_image',
+        'browser',
+        'android_accessibility_observe',
       ]),
     );
   });
@@ -184,6 +198,20 @@ void main() {
         'android_app_private_data',
         ToolResult.text('refresh_token=secret'),
       ).data,
+      {'redacted': true},
+    );
+    expect(
+      SensitiveToolPolicy.redactResult(
+        'android_accessibility_observe',
+        ToolResult.text('A private message'),
+      ).data,
+      {'redacted': true},
+    );
+    expect(
+      SensitiveToolPolicy.redactArguments(
+        'android_accessibility_observe',
+        const {},
+      ),
       {'redacted': true},
     );
     // 旧命名的 MCP 工具沿用远端口径，参数同样脱敏。

@@ -56,6 +56,73 @@ void main() {
     expect(file('x.txt').readAsStringSync(), before);
   });
 
+  test('nested and underscore paths keep independent snapshots after reload',
+      () async {
+    file('a/b.txt').parent.createSync(recursive: true);
+    file('a/b.txt').writeAsStringSync('nested after\n');
+    file('a_b.txt').writeAsStringSync('flat after\n');
+    final set = await capture([
+      edit('a/b.txt', 'nested before\n', 'nested after\n'),
+      edit('a_b.txt', 'flat before\n', 'flat after\n'),
+    ]);
+    expect(set.files.map((f) => f.beforeRef).toSet(), hasLength(2));
+    expect(set.files.map((f) => f.afterRef).toSet(), hasLength(2));
+    for (final entry in set.files) {
+      expect(sha256.convert(File(entry.afterRef!).readAsBytesSync()).toString(),
+          entry.afterHash);
+    }
+    final loaded = await _service.load(taskId: 't1');
+    final conflicts = await _service.rollback(
+        workspacePath: workspace.path, changeSet: loaded!);
+    expect(conflicts, isEmpty);
+    expect(file('a/b.txt').readAsStringSync(), 'nested before\n');
+    expect(file('a_b.txt').readAsStringSync(), 'flat before\n');
+  });
+
+  test('corrupted backup is rejected before overwriting the workspace',
+      () async {
+    file('x.txt').writeAsStringSync('after\n');
+    final set = await capture([edit('x.txt', 'before\n', 'after\n')]);
+    File(set.files.single.beforeRef!).writeAsStringSync('another file\n');
+    final conflicts =
+        await _service.rollback(workspacePath: workspace.path, changeSet: set);
+    expect(conflicts.single.reason, contains('备份校验失败'));
+    expect(file('x.txt').readAsStringSync(), 'after\n');
+  });
+
+  test('legacy aliased snapshots cannot restore another files content',
+      () async {
+    file('a/b.txt').parent.createSync(recursive: true);
+    file('a/b.txt').writeAsStringSync('nested after\n');
+    file('a_b.txt').writeAsStringSync('flat after\n');
+    final shared = File(p.join(root.path, 'legacy.before'))
+      ..writeAsStringSync('flat before\n');
+    final set = ChangeSet(
+        id: 'legacy',
+        taskId: 't1',
+        projectId: 'p1',
+        createdAt: DateTime.now(),
+        files: [
+          for (final path in ['a/b.txt', 'a_b.txt'])
+            ChangeSetFile(
+                relativePath: path,
+                operation: 'edit',
+                beforeHash: sha256
+                    .convert(utf8.encode(path == 'a/b.txt'
+                        ? 'nested before\n'
+                        : 'flat before\n'))
+                    .toString(),
+                afterHash:
+                    sha256.convert(file(path).readAsBytesSync()).toString(),
+                beforeRef: shared.path),
+        ]);
+    final conflicts =
+        await _service.rollback(workspacePath: workspace.path, changeSet: set);
+    expect(conflicts.single.path, 'a/b.txt');
+    expect(file('a/b.txt').readAsStringSync(), 'nested after\n');
+    expect(file('a_b.txt').readAsStringSync(), 'flat before\n');
+  });
+
   test('overwriting write restores the original instead of deleting it',
       () async {
     file('keep.txt').writeAsStringSync('new\n');
@@ -71,8 +138,8 @@ void main() {
 
   test('created file is deleted on rollback', () async {
     file('new.txt').writeAsStringSync('hello\n');
-    final set = await capture(
-        [edit('new.txt', '', 'hello\n', operation: 'create')]);
+    final set =
+        await capture([edit('new.txt', '', 'hello\n', operation: 'create')]);
 
     expect(set.files.single.operation, 'create');
     final conflicts =
@@ -143,6 +210,13 @@ void main() {
     expect(set.files.single.reversible, isFalse);
   });
 
+  test('task IDs cannot escape the change-set storage directory', () async {
+    await expectLater(_service.load(taskId: '../escape'), throwsArgumentError);
+    await expectLater(capture([], taskId: '../escape'), throwsArgumentError);
+    expect(
+        Directory(p.join(root.path, 'docs', 'escape')).existsSync(), isFalse);
+  });
+
   test('redacted secrets never produce a fake baseline', () async {
     const before = 'token=old-value\n';
     const after = 'token=new-value\n';
@@ -169,16 +243,16 @@ void main() {
     expect(loaded?.id, set.id);
     expect(loaded?.files.single.beforeRef, set.files.single.beforeRef);
 
-    final legacy = File(p.join(root.path, 'docs', 'changesets', 't2',
-        'changeset.json'))
-      ..createSync(recursive: true)
-      ..writeAsStringSync(jsonEncode({
-        'id': 'old',
-        'taskId': 't2',
-        'projectId': 'p1',
-        'files': [],
-        'createdAt': DateTime(2026).toIso8601String(),
-      }));
+    final legacy =
+        File(p.join(root.path, 'docs', 'changesets', 't2', 'changeset.json'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync(jsonEncode({
+            'id': 'old',
+            'taskId': 't2',
+            'projectId': 'p1',
+            'files': [],
+            'createdAt': DateTime(2026).toIso8601String(),
+          }));
     expect(legacy.existsSync(), isTrue);
     expect(await _service.load(taskId: 't2'), isNull);
     expect(await _service.load(taskId: 'missing'), isNull);

@@ -27,6 +27,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(bridge.rootStatusCalls, 0);
+    await tester.ensureVisible(find.text('Root 与系统安全详情'));
+    await tester.tap(find.text('Root 与系统安全详情'));
+    await tester.pumpAndSettle();
     expect(find.text('Root 授权'), findsOneWidget);
     expect(find.byTooltip('检查 Root'), findsOneWidget);
 

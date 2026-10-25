@@ -1,7 +1,8 @@
 // 阶段 7c：会话工作台页面。
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile_agent/application/chat_controller.dart' show ToolActivity;
+import 'package:mobile_agent/application/chat_controller.dart'
+    show ToolActivity;
 import 'package:mobile_agent/application/workbench/session_workbench.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/workbench/session_workbench_page.dart';
@@ -19,8 +20,11 @@ void main() {
   testWidgets('status bar, files and results tabs', (tester) async {
     final workbench = SessionWorkbench.project(
       messages: [
-        ChatMessage(role: MessageRole.user, parts: const [MessagePart.text('修一下登录')]),
-        ChatMessage(role: MessageRole.assistant, parts: const [MessagePart.text('已修复登录超时')]),
+        ChatMessage(
+            role: MessageRole.user, parts: const [MessagePart.text('修一下登录')]),
+        ChatMessage(
+            role: MessageRole.assistant,
+            parts: const [MessagePart.text('已修复登录超时')]),
       ],
       activities: [
         tool('1', 'read_file', {'path': 'README.md'}),
@@ -64,7 +68,7 @@ void main() {
       home: SessionWorkbenchView(workbench: workbench),
     ));
     await tester.pump();
-    expect(find.text('空闲'), findsOneWidget);
+    expect(find.text('空闲'), findsNothing);
     expect(find.text('本会话还没有接触文件'), findsOneWidget);
   });
 }

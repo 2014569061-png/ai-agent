@@ -6,15 +6,20 @@ import 'package:mobile_agent/presentation/motion/motion_tier.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_pressable.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_touch_light.dart';
 import 'package:mobile_agent/presentation/widgets/section_card.dart';
+import 'package:mobile_agent/presentation/theme/desktop_theme.dart';
 
 Widget _app(
   Widget child, {
   MotionLevel level = MotionLevel.full,
   MotionTier? tier,
   Brightness brightness = Brightness.light,
+  bool desktop = false,
 }) {
   return MaterialApp(
-    theme: ThemeData(brightness: brightness),
+    theme: ThemeData(
+      brightness: brightness,
+      extensions: desktop ? [DesktopTheme.light] : [],
+    ),
     builder: (context, c) {
       Widget result = NexusMotionScope(level: level, child: c!);
       if (tier != null) {
@@ -106,12 +111,14 @@ void main() {
     return null;
   }
 
-  testWidgets('NexusPressable：按下出现光斑并跟随手指，抬起后淡出', (tester) async {
-    await tester.pumpWidget(_app(NexusPressable(
-      onTap: () {},
-      child: const ColoredBox(
-          color: Colors.white, child: SizedBox(width: 120, height: 60)),
-    )));
+  testWidgets('桌面 NexusPressable 保留跟手光斑与淡出', (tester) async {
+    await tester.pumpWidget(_app(
+        NexusPressable(
+          onTap: () {},
+          child: const ColoredBox(
+              color: Colors.white, child: SizedBox(width: 120, height: 60)),
+        ),
+        desktop: true));
     final topLeft = tester.getTopLeft(find.byType(NexusPressable));
     final gesture = await tester.startGesture(topLeft + const Offset(20, 20));
     await tester.pump(const Duration(milliseconds: 120));
@@ -127,6 +134,25 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
     expect(painter.strength.value, 0);
+  });
+
+  testWidgets('手机按压反馈不启动光斑，按住时移除也能安全销毁', (tester) async {
+    await tester.pumpWidget(_app(NexusPressable(
+      onTap: () {},
+      child: const ColoredBox(
+          color: Colors.white, child: SizedBox(width: 120, height: 60)),
+    )));
+    final gesture = await tester
+        .startGesture(tester.getCenter(find.byType(NexusPressable)));
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(painterOf(tester), isNull);
+    expect(
+        tester.widget<AnimatedScale>(find.byType(AnimatedScale)).scale, 0.97);
+    await tester.pumpWidget(_app(const SizedBox()));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.binding.transientCallbackCount, 0);
   });
 
   testWidgets('NexusPressable：低端档不画光斑，缩放保留', (tester) async {

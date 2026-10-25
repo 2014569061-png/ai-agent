@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/infrastructure/update/update_service.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 /// 把下载目录指到临时目录。
 class _TempPathProvider extends PathProviderPlatform {
@@ -35,8 +37,121 @@ class _FakeDownloadAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
+class _ReleaseAdapter implements HttpClientAdapter {
+  _ReleaseAdapter(this.assets, {this.checksum});
+  final List<Map<String, dynamic>> assets;
+  final String? checksum;
+  final requests = <String>[];
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    requests.add(options.uri.toString());
+    if (options.path.endsWith('/latest')) {
+      return ResponseBody.fromString(
+          jsonEncode({
+            'tag_name': 'v0.9.1',
+            'body': 'release notes',
+            'assets': assets
+          }),
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json']
+          });
+    }
+    return ResponseBody.fromString(checksum ?? '', 200);
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('platform-specific release selection', () {
+    final digest = sha256.convert([1, 2, 3]).toString();
+    setUp(() {
+      PackageInfo.setMockInitialValues(
+          appName: 'NEXUS',
+          packageName: 'com.nexusagent.app',
+          version: '0.9.0',
+          buildNumber: '95',
+          buildSignature: '');
+    });
+    Map<String, dynamic> asset(String name, {String? checksum}) => {
+          'name': name,
+          'browser_download_url': 'https://example.invalid/$name',
+          if (checksum != null) 'digest': 'sha256:$checksum',
+        };
+    UpdateService service(TargetPlatform platform, _ReleaseAdapter adapter) =>
+        UpdateService(
+            targetPlatform: platform, dio: Dio()..httpClientAdapter = adapter);
+
+    test(
+        'Windows selects ZIP while Android selects its APK from the same release',
+        () async {
+      final adapter = _ReleaseAdapter([
+        asset('app-release.apk', checksum: digest),
+        asset('nexus-agent-0.9.1-96-windows-x64.zip', checksum: digest),
+      ]);
+      final windows =
+          await service(TargetPlatform.windows, adapter).checkUpdate();
+      expect(windows.status, UpdateCheckStatus.update);
+      expect(windows.info!.apkUrl, isNull);
+      expect(windows.info!.windowsZipUrl, endsWith('windows-x64.zip'));
+      expect(windows.info!.sha256, digest);
+      final android =
+          await service(TargetPlatform.android, adapter).checkUpdate();
+      expect(android.info!.apkUrl, endsWith('app-release.apk'));
+      expect(android.info!.windowsZipUrl, isNull);
+    });
+    test('an APK-only release is not reported as up to date on Windows',
+        () async {
+      final result = await service(
+          TargetPlatform.windows,
+          _ReleaseAdapter([
+            asset('app-release.apk', checksum: digest),
+          ])).checkUpdate();
+      expect(result.status, UpdateCheckStatus.failed);
+      expect(result.error, contains('Windows x64'));
+    });
+    test('checksum sidecar must belong to the selected package', () async {
+      final adapter = _ReleaseAdapter([
+        asset('nexus-agent-0.9.1-96-windows-x64.zip'),
+        asset('app-release.apk.sha256'),
+      ], checksum: digest);
+      final result =
+          await service(TargetPlatform.windows, adapter).checkUpdate();
+      expect(result.status, UpdateCheckStatus.failed);
+      expect(adapter.requests, hasLength(1));
+    });
+    test('matching Windows sidecar supplies the digest', () async {
+      const name = 'nexus-agent-0.9.1-96-windows-x64.zip';
+      final adapter = _ReleaseAdapter([asset(name), asset('$name.sha256')],
+          checksum: '$digest  $name');
+      final result =
+          await service(TargetPlatform.windows, adapter).checkUpdate();
+      expect(result.status, UpdateCheckStatus.update);
+      expect(result.info!.sha256, digest);
+      expect(adapter.requests.last, endsWith('$name.sha256'));
+    });
+    test('unsupported platforms do not make release requests', () async {
+      final adapter = _ReleaseAdapter([]);
+      final result = await service(TargetPlatform.linux, adapter).checkUpdate();
+      expect(result.status, UpdateCheckStatus.failed);
+      expect(adapter.requests, isEmpty);
+    });
+    test('Windows never downloads an APK or calls the Android installer',
+        () async {
+      final adapter = _ReleaseAdapter([]);
+      final result = await service(TargetPlatform.windows, adapter)
+          .downloadAndInstallDetailed('https://example.invalid/app.apk',
+              expectedSha256: digest);
+      expect(result.success, isFalse);
+      expect(result.message, contains('仅支持 Android'));
+      expect(adapter.requests, isEmpty);
+    });
+  });
 
   test('parses GitHub SHA-256 sidecar formats', () {
     const digest =
@@ -49,7 +164,7 @@ void main() {
   group('安装校验默认 fail-closed', () {
     // 这些用例都在校验守卫处就返回，不会发起任何网络请求。
     test('未提供摘要时默认拒绝安装', () async {
-      final result = await UpdateService()
+      final result = await UpdateService(targetPlatform: TargetPlatform.android)
           .downloadAndInstallDetailed('https://example.invalid/app.apk');
 
       expect(result.success, isFalse);
@@ -61,7 +176,8 @@ void main() {
     });
 
     test('摘要格式非法等同于缺失，同样拒绝', () async {
-      final result = await UpdateService().downloadAndInstallDetailed(
+      final result = await UpdateService(targetPlatform: TargetPlatform.android)
+          .downloadAndInstallDetailed(
         'https://example.invalid/app.apk',
         expectedSha256: 'not-a-real-digest',
       );
@@ -71,7 +187,8 @@ void main() {
     });
 
     test('空摘要同样拒绝', () async {
-      final result = await UpdateService().downloadAndInstallDetailed(
+      final result = await UpdateService(targetPlatform: TargetPlatform.android)
+          .downloadAndInstallDetailed(
         'https://example.invalid/app.apk',
         expectedSha256: '',
       );
@@ -123,7 +240,7 @@ void main() {
     UpdateService serviceWith(List<int> body) {
       final dio = Dio();
       dio.httpClientAdapter = _FakeDownloadAdapter(body);
-      return UpdateService(dio: dio);
+      return UpdateService(dio: dio, targetPlatform: TargetPlatform.android);
     }
 
     void mockInstaller(Future<dynamic> Function(MethodCall call) handler) {

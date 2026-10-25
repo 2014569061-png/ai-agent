@@ -6,6 +6,7 @@ import 'package:mobile_agent/presentation/history/history_page.dart';
 void main() {
   testWidgets('history page lazily builds conversations outside the viewport',
       (tester) async {
+    String? selectedId;
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -31,6 +32,7 @@ void main() {
       MaterialApp(
         home: HistoryPage(
           loadConversations: () async => conversations,
+          onConversationSelected: (id) => selectedId = id,
         ),
       ),
     );
@@ -38,6 +40,9 @@ void main() {
 
     expect(find.text('会话 0'), findsOneWidget);
     expect(find.text('会话 599'), findsNothing);
+    await tester.tap(find.text('会话 0'));
+    await tester.pumpAndSettle();
+    expect(selectedId, 'conversation-0');
   });
 
   testWidgets('history page loads the next page on demand', (tester) async {

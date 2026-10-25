@@ -28,12 +28,26 @@ void main() {
     expect(find.byType(TerminalView), findsOneWidget);
     expect(find.byType(TerminalAccessoryBar), findsOneWidget);
 
-    // Verify actions
-    expect(find.byTooltip('发送诊断给 Agent'), findsOneWidget);
-    expect(find.byTooltip('放大字体'), findsOneWidget);
-    expect(find.byTooltip('缩小字体'), findsOneWidget);
-    expect(find.byTooltip('清屏'), findsOneWidget);
+    // Keep configuration visible; less frequent actions share the phone menu.
     expect(find.byTooltip('设置与配置向导'), findsOneWidget);
+    await tester.tap(find.byTooltip('更多终端操作'));
+    await tester.pumpAndSettle();
+    expect(find.text('发送诊断给 Agent'), findsOneWidget);
+    expect(find.text('放大字体'), findsOneWidget);
+    expect(find.text('缩小字体'), findsOneWidget);
+    expect(find.text('清屏'), findsOneWidget);
+    final before = tester
+        .widget<TerminalView>(find.byType(TerminalView))
+        .textStyle
+        .fontSize;
+    await tester.tap(find.text('放大字体'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<TerminalView>(find.byType(TerminalView))
+            .textStyle
+            .fontSize,
+        greaterThan(before));
   });
 
   testWidgets('Termux SSH setup explains whoami username and separate bridge',

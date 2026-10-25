@@ -6,6 +6,7 @@ import 'package:mobile_agent/presentation/motion/motion_preferences.dart';
 import 'package:mobile_agent/presentation/motion/motion_tier.dart';
 import 'package:mobile_agent/presentation/motion/nexus_motion.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
+import 'package:mobile_agent/presentation/theme/desktop_theme.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_execution_status.dart';
 import 'package:mobile_agent/presentation/widgets/shimmer_text.dart';
 
@@ -14,9 +15,15 @@ Widget _app(
   MotionLevel level = MotionLevel.full,
   MotionTier? tier,
   bool tickerEnabled = true,
+  bool desktop = false,
 }) {
   return MaterialApp(
-    theme: AppTheme.light(),
+    theme: AppTheme.light().copyWith(
+      extensions: [
+        ...AppTheme.light().extensions.values,
+        if (desktop) DesktopTheme.light,
+      ],
+    ),
     builder: (context, c) {
       Widget result = NexusMotionScope(level: level, child: c!);
       if (tier != null) {
@@ -124,12 +131,12 @@ void main() {
   });
 
   group('ReasoningCompactBlock', () {
-    testWidgets('思考中标题带流光，思考结束后不带', (tester) async {
+    testWidgets('手机思考标题稳定，不播放扫描文字', (tester) async {
       await tester.pumpWidget(_app(
           const ReasoningCompactBlock(reasoning: '', streaming: true),
           tier: MotionTier.high));
       expect(find.byType(ShimmerText), findsOneWidget);
-      expect(_shimmering(tester), isTrue);
+      expect(_shimmering(tester), isFalse);
 
       await tester.pumpWidget(_app(
           const ReasoningCompactBlock(
@@ -142,9 +149,9 @@ void main() {
   });
 
   group('NexusExecutionStatus 外发光环', () {
-    testWidgets('运行中与呼吸同相，α ≤ 0.25', (tester) async {
-      await tester.pumpWidget(
-          _app(_status(NexusExecutionState.running), tier: MotionTier.high));
+    testWidgets('桌面运行光环与呼吸同相，α ≤ 0.25', (tester) async {
+      await tester.pumpWidget(_app(_status(NexusExecutionState.running),
+          tier: MotionTier.high, desktop: true));
       final ring = _ring(tester)!;
       expect(ring.mode, ExecutionGlowRingMode.breathing);
       await tester.pump(const Duration(milliseconds: 700));
@@ -167,11 +174,11 @@ void main() {
     });
 
     testWidgets('running → succeeded：光环 180ms 内收拢并结束', (tester) async {
-      await tester.pumpWidget(
-          _app(_status(NexusExecutionState.running), tier: MotionTier.high));
+      await tester.pumpWidget(_app(_status(NexusExecutionState.running),
+          tier: MotionTier.high, desktop: true));
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.pumpWidget(
-          _app(_status(NexusExecutionState.succeeded), tier: MotionTier.high));
+      await tester.pumpWidget(_app(_status(NexusExecutionState.succeeded),
+          tier: MotionTier.high, desktop: true));
       final ring = _ring(tester)!;
       expect(ring.mode, ExecutionGlowRingMode.collapsing);
       expect(ring.intensity, closeTo(1, 1e-9));
@@ -179,6 +186,18 @@ void main() {
       expect(ring.intensity, inExclusiveRange(0, 1));
       await tester.pumpAndSettle();
       expect(ring.intensity, closeTo(0, 1e-9));
+    });
+
+    testWidgets('手机执行状态无外发光环，完成后无循环帧', (tester) async {
+      await tester.pumpWidget(
+          _app(_status(NexusExecutionState.running), tier: MotionTier.high));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(_ring(tester), isNull);
+      await tester.pumpWidget(
+          _app(_status(NexusExecutionState.succeeded), tier: MotionTier.high));
+      await tester.pumpAndSettle();
+      expect(_ring(tester), isNull);
+      expect(tester.binding.transientCallbackCount, 0);
     });
 
     testWidgets('其他状态（等待确认 / 失败）不画光环', (tester) async {

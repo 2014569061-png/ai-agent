@@ -5,6 +5,21 @@ import 'package:mobile_agent/domain/models.dart';
 void main() {
   const policy = ApprovalPolicy();
 
+  test('terminal needs fresh approval even with full access and saved trust',
+      () {
+    for (final mode in ApprovalMode.values) {
+      for (final trusted in [true, false]) {
+        final decision = policy.decide(
+            toolName: 'terminal',
+            mode: mode,
+            risk: ToolRisk.requiresConfirmation,
+            trusted: trusted);
+        expect(decision.requiresUser, isTrue);
+        expect(decision.source, 'terminal');
+      }
+    }
+  });
+
   test('safe tools are always automatic', () {
     for (final mode in ApprovalMode.values) {
       expect(

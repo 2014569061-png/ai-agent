@@ -1,3 +1,5 @@
+import 'package:mobile_agent/presentation/navigation/mobile_shell.dart';
+import 'package:mobile_agent/presentation/chat/widgets/attachment_drawer_panel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,13 +50,19 @@ class _BusyChatController extends ChatController {
 Future<void> _pumpChatPage(
   WidgetTester tester, {
   ChatController Function() controller = _EmptyChatController.new,
+  bool nestedShell = false,
 }) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [chatControllerProvider.overrideWith(controller)],
       child: MaterialApp(
         theme: AppTheme.light(),
-        home: const ChatPage(),
+        home: nestedShell
+            ? MobileShell(pageBuilders: [
+                (_) => const ChatPage(),
+                for (var index = 1; index < 4; index++) (_) => const Scaffold(),
+              ])
+            : const ChatPage(),
       ),
     ),
   );
@@ -142,33 +150,35 @@ void main() {
     });
   });
 
-  group('聊天空态：键盘弹出时隐藏工作流入口（真机可见行为）', () {
-    testWidgets('键盘收起 → 显示工作流入口', (tester) async {
+  group('聊天首页：键盘弹出时收起欢迎建议', () {
+    testWidgets('键盘收起 → 显示快捷建议和配置入口', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpChatPage(tester);
 
-      expect(find.text('审计变更'), findsOneWidget);
+      expect(find.text('整理一份资料'), findsOneWidget);
       expect(find.text('配置模型'), findsOneWidget);
     });
 
-    testWidgets('键盘弹出 → 工作流入口与状态行一并隐藏', (tester) async {
+    testWidgets('键盘弹出 → 快捷建议与配置入口一并隐藏', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
       await _pumpChatPage(tester);
-      expect(find.text('审计变更'), findsOneWidget);
+      expect(find.text('整理一份资料'), findsOneWidget);
 
-      // 弹出键盘：TestFlutterView 的 setter 会派发 metrics 变化。
+      // Focus is required: the app deliberately ignores stale keyboard insets.
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
       tester.view.viewInsets = const FakeViewPadding(bottom: 336);
       await tester.pump();
       await tester.pump();
 
       expect(
-        find.text('审计变更'),
+        find.text('整理一份资料'),
         findsNothing,
         reason: '键盘弹出时空态建议必须隐藏，否则小屏下会与键盘挤在一起',
       );
@@ -178,48 +188,119 @@ void main() {
       tester.view.resetViewInsets();
       await tester.pump();
       await tester.pump();
-      expect(find.text('审计变更'), findsOneWidget);
+      expect(find.text('整理一份资料'), findsOneWidget);
     });
   });
 
-  group('会话指标条：键盘开合均保持单行摘要', () {
-    testWidgets('键盘收起 → 保持摘要', (tester) async {
+  for (final nestedShell in [false, true]) {
+    testWidgets(
+        'back closes the attachment panel before leaving chat nested=$nestedShell',
+        (tester) async {
+      tester.view.physicalSize = const Size(411, 891);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await _pumpChatPage(tester, nestedShell: nestedShell);
+      await tester.tap(find.byTooltip('添加附件或更多工具'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AttachmentDrawerPanel), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(AttachmentDrawerPanel), findsNothing);
+      expect(find.byType(ChatPage), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+      'shared navigation closes before the attachment panel on Android back',
+      (tester) async {
+    tester.view.physicalSize = const Size(411, 891);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpChatPage(tester, nestedShell: true);
+    await tester.tap(find.byTooltip('添加附件或更多工具'));
+    // A pending local-history load keeps the skeleton animating in this seam.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.byTooltip('打开导航菜单'));
+    // A pending local-history load keeps the skeleton animating in this seam.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('助手与工具'), findsOneWidget);
+    expect(find.text('任务'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    // A pending local-history load keeps the skeleton animating in this seam.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('助手与工具'), findsNothing);
+    expect(find.byType(AttachmentDrawerPanel), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    // A pending local-history load keeps the skeleton animating in this seam.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(AttachmentDrawerPanel), findsNothing);
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'sidebar tools panel preserves the draft and closes independently',
+      (tester) async {
+    tester.view.physicalSize = const Size(411, 891);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await _pumpChatPage(tester, nestedShell: true);
+    await tester.enterText(find.byType(TextField).first, '保留这份草稿');
+    await tester.tap(find.byTooltip('打开导航菜单'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.tap(find.text('助手与工具'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(seconds: 1));
+    // A shell/theme rebuild must not consult a disposed drawer State.
+    final reassembly = tester.binding.reassembleApplication();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await reassembly;
+    expect(find.text('MCP 与工具'), findsOneWidget);
+    expect(find.text('提示词'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('MCP 与工具'), findsNothing);
+    expect(find.text('保留这份草稿'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  group('会话指标：保持更多菜单入口，不挤占键盘上方空间', () {
+    testWidgets('键盘收起时仍可从更多菜单查看指标', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-
       await _pumpChatPage(tester, controller: _BusyChatController.new);
-
-      final bar =
-          tester.widget<SessionMetricsBar>(find.byType(SessionMetricsBar));
-      expect(bar.maxGroups, 1);
-      expect(bar.summaryLabel, isNotNull);
+      expect(find.byType(SessionMetricsBar), findsNothing);
+      expect(find.byType(SessionMetricsHud), findsNothing);
+      await tester.tap(find.byTooltip('更多输入工具'));
+      await tester.pumpAndSettle();
+      expect(find.text('用量与上下文'), findsOneWidget);
     });
 
-    testWidgets('键盘弹出 → 仍保持摘要', (tester) async {
+    testWidgets('键盘弹出时不恢复常驻指标，入口仍可用', (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-
       await _pumpChatPage(tester, controller: _BusyChatController.new);
-      expect(
-        tester
-            .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
-            .maxGroups,
-        1,
-      );
-
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
       tester.view.viewInsets = const FakeViewPadding(bottom: 336);
       await tester.pump();
-      await tester.pump();
-
-      expect(
-        tester
-            .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
-            .maxGroups,
-        1,
-        reason: '键盘开合不恢复详细指标，避免挤占键盘上方空间',
-      );
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(SessionMetricsBar), findsNothing);
+      expect(find.byType(SessionMetricsHud), findsNothing);
+      await tester.tap(find.byTooltip('更多输入工具'));
+      await tester.pumpAndSettle();
+      expect(find.text('用量与上下文'), findsOneWidget);
     });
   });
 }

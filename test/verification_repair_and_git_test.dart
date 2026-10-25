@@ -62,8 +62,16 @@ void main() {
     expect(entries.first.staged, isTrue);
   });
 
-  test('remote probe returns handshake and idempotent job status', () async {
-    const probe = RemoteExecutionProbe();
+  test('remote probe parses an explicit handshake fixture and job identifiers',
+      () async {
+    final probe = RemoteExecutionProbe(
+        handshakeClient: () async => {
+              'protocolVersion': 'nexus-remote/1',
+              'arch': 'x86_64',
+              'toolchain': ['python'],
+              'freeBytes': 1000,
+              'maxConcurrency': 1,
+            });
     final handshake = await probe.handshake();
     expect(handshake.protocolVersion, isNotEmpty);
     final status = probe.statusFor(
@@ -75,7 +83,8 @@ void main() {
     expect(status.jobId, 'job-1');
   });
 
-  test('conversation fork copies context without replaying later messages', () async {
+  test('conversation fork copies context without replaying later messages',
+      () async {
     final db = AppDatabase(NativeDatabase.memory());
     addTearDown(db.close);
     final now = DateTime.now();
@@ -145,7 +154,8 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('nexus-art');
     addTearDown(() => dir.delete(recursive: true));
     PathProviderPlatform.instance = _TempPathProvider(dir.path);
-    await File(p.join(dir.path, 'app.apk')).writeAsBytes([0x50, 0x4b, 0x03, 0x04]);
+    await File(p.join(dir.path, 'app.apk'))
+        .writeAsBytes([0x50, 0x4b, 0x03, 0x04]);
     final artifact = await const ArtifactService().record(
       db: db,
       projectId: 'p1',
@@ -248,6 +258,12 @@ class _StubTerminal extends TerminalCommandService {
   }) async {
     return const TerminalJobHandle(jobId: 'job-preview');
   }
+
+  @override
+  List<TerminalJobSnapshot> listJobs() => [
+        const TerminalJobSnapshot(
+            jobId: 'job-preview', command: '', completed: false),
+      ];
 
   @override
   Future<bool> cancelJob(String jobId) async => true;

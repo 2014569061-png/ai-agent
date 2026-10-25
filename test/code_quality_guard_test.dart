@@ -5,13 +5,20 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('presentation token escape counts do not grow', () {
     final source = _readDartFiles('lib/presentation');
+    // DesktopTheme defines the desktop semantic palette; its declarations are
+    // tokens, not inline component colors. Keep the existing usage limit.
+    final colorUsages = source
+        .where((file) => !file.path
+            .replaceAll('\\', '/')
+            .endsWith('/theme/desktop_theme.dart'))
+        .toList();
 
     _assertWithinThreshold(
-      files: source,
+      files: colorUsages,
       pattern: RegExp(r'Color\s*\(\s*0x[0-9A-Fa-f]+'),
       maxAllowed: 103,
       tokenName: 'Color(0x...) 硬编码颜色',
-      guidance: '新增颜色应收敛到语义 token (AppPalette)；有意迁移时同步调整基线。',
+      guidance: '新增颜色应收敛到语义 token (AppPalette / DesktopTheme)；有意迁移时同步调整基线。',
     );
 
     _assertWithinThreshold(
@@ -58,14 +65,17 @@ void _assertWithinThreshold({
       if (pattern.hasMatch(line)) {
         total++;
         final cleanPath = file.path.replaceAll('\\', '/');
-        fileViolations.putIfAbsent(cleanPath, () => []).add('  line ${i + 1}: ${line.trim()}');
+        fileViolations
+            .putIfAbsent(cleanPath, () => [])
+            .add('  line ${i + 1}: ${line.trim()}');
       }
     }
   }
 
   if (total > maxAllowed) {
     final buffer = StringBuffer();
-    buffer.writeln('$tokenName 超出上限：实测 $total 处，允许门槛 ≤$maxAllowed 处。$guidance\n违规明细列表：');
+    buffer.writeln(
+        '$tokenName 超出上限：实测 $total 处，允许门槛 ≤$maxAllowed 处。$guidance\n违规明细列表：');
     for (final entry in fileViolations.entries) {
       buffer.writeln('${entry.key} (${entry.value.length} 处):');
       for (final matchLine in entry.value) {

@@ -11,6 +11,7 @@ import 'package:mobile_agent/infrastructure/providers/provider_config.dart';
 import 'package:mobile_agent/infrastructure/providers/tool_trust_store.dart';
 import 'package:mobile_agent/presentation/settings/settings_page.dart';
 import 'package:mobile_agent/presentation/settings/tool_list_page.dart';
+import 'package:mobile_agent/presentation/settings/settings_components.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_switch.dart';
 
@@ -70,7 +71,7 @@ void main() {
     );
   }
 
-  testWidgets('SettingsPage renders minimalist DeepSeek layout and cards',
+  testWidgets('SettingsPage renders phone root with reachable grouped settings',
       (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -80,21 +81,27 @@ void main() {
     await tester.pumpWidget(createWidgetUnderTest(const SettingsPage()));
     await tester.pumpAndSettle();
 
-    // 1. Top bar: back button & centered title
-    expect(find.text('设置'), findsOneWidget);
-    expect(find.byTooltip('返回'), findsOneWidget);
+    // The tab root has a large title and no misleading back action.
+    expect(find.text('我的'), findsOneWidget);
+    expect(find.byTooltip('返回'), findsNothing);
 
-    // 2. Sections: 账户, 应用, 关于
-    expect(find.text('账户'), findsOneWidget);
+    // 2. Sections: 服务与数据, 应用, 关于
+    expect(find.text('服务与数据'), findsOneWidget);
     expect(find.text('应用'), findsOneWidget);
-    expect(find.text('关于'), findsOneWidget);
 
     // 3. Main card entries
-    expect(find.text('账号管理'), findsOneWidget);
+    expect(find.text('模型服务'), findsWidgets);
     expect(find.text('数据管理'), findsOneWidget);
     expect(find.text('语言'), findsOneWidget);
-    expect(find.text('外观'), findsOneWidget);
+    expect(find.text('外观'), findsWidgets);
     expect(find.text('字体大小'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('关于'), 300,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable))
+            .first);
+    expect(find.text('关于'), findsOneWidget);
     expect(find.text('检查更新'), findsOneWidget);
     expect(find.text('服务协议'), findsOneWidget);
     expect(find.text('帮助与反馈'), findsOneWidget);
@@ -147,7 +154,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('账号管理'), findsOneWidget);
+    expect(find.text('模型服务'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
@@ -177,8 +184,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('尚未配置服务商'), findsOneWidget);
-    expect(find.text('账号管理'), findsOneWidget);
+    expect(find.text('未配置'), findsOneWidget);
+    expect(find.text('模型服务'), findsWidgets);
+    await tester.scrollUntilVisible(find.text('语言'), 200,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable))
+            .first);
     expect(find.text('语言'), findsOneWidget);
   });
 
@@ -202,16 +215,42 @@ void main() {
     await tester.pumpWidget(createWidgetUnderTest(const ToolListPage()));
     await tester.pumpAndSettle();
 
-    expect(find.text('允许 Agent 读写当前工作区文件'), findsOneWidget);
-    expect(find.text('允许 Agent 执行终端命令'), findsOneWidget);
-    expect(find.byType(NexusSwitch), findsNWidgets(2));
-
-    await tester.tap(find.byType(NexusSwitch).first);
+    expect(find.text('文件读写'), findsOneWidget);
+    expect(find.text('终端执行'), findsOneWidget);
+    Finder control(String title) => find.descendant(
+        of: find.ancestor(
+            of: find.text(title), matching: find.byType(SettingsTile)),
+        matching: find.byType(NexusSwitch));
+    final workspace = control('文件读写');
+    final terminal = control('终端执行');
+    expect(tester.widget<NexusSwitch>(workspace).value, isTrue);
+    expect(tester.widget<NexusSwitch>(terminal).value, isTrue);
+    await tester.ensureVisible(workspace);
+    await tester.tap(workspace);
     await tester.pumpAndSettle();
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool('settings.tool.workspace_files'), isFalse);
-    expect(tester.widget<NexusSwitch>(find.byType(NexusSwitch).last).onChanged,
-        isNull);
+    expect(tester.widget<NexusSwitch>(terminal).onChanged, isNull);
+    expect(tester.widget<NexusSwitch>(terminal).value, isTrue);
+    await tester.ensureVisible(workspace);
+    await tester.tap(workspace);
+    await tester.pumpAndSettle();
+    expect(tester.widget<NexusSwitch>(terminal).onChanged, isNotNull);
+    await tester.ensureVisible(terminal);
+    await tester.tap(terminal);
+    await tester.pumpAndSettle();
+    expect(prefs.getBool('settings.tool.workspace_files'), isTrue);
+    expect(prefs.getBool('settings.tool.terminal'), isFalse);
+    await tester.ensureVisible(find.text('自动验证与修复'));
+    await tester.tap(find.text('自动验证与修复'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('开发任务完成后自动验证'), 150,
+        scrollable: find.byType(Scrollable).first);
+    final verification = control('开发任务完成后自动验证');
+    expect(tester.widget<NexusSwitch>(verification).onChanged, isNull);
+    await tester.scrollUntilVisible(find.text('验证失败后尝试修复'), 150,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<NexusSwitch>(control('验证失败后尝试修复')).onChanged, isNull);
   });
 
   testWidgets('ToolListPage renders filter chips and list of tools',
@@ -220,6 +259,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('受控工具清单'), findsOneWidget);
+    await tester.tap(find.textContaining('风险筛选 ·'));
+    await tester.pumpAndSettle();
     for (final (key, label) in [
       ('all', '全部'),
       ('safe', '安全 (Safe)'),
@@ -233,12 +274,22 @@ void main() {
           findsOneWidget);
     }
 
-    // Should find web search and http request
-    expect(find.text('网页搜索 (Web Search)'), findsOneWidget);
-    expect(find.text('数学计算器 (Calculator)'), findsOneWidget);
-
+    await tester.tap(find.byKey(const Key('tool-filter-all')));
+    await tester.pumpAndSettle();
+    // Lazy rows must be scrolled into view rather than assumed to fit the first screen.
+    final scrollable = find.byType(Scrollable).first;
+    for (final title in ['网页搜索 (Web Search)', '数学计算器 (Calculator)']) {
+      await tester.scrollUntilVisible(find.text(title), 200,
+          scrollable: scrollable);
+      expect(find.text(title), findsOneWidget);
+    }
     // 筛选胶囊仍可切换：高危筛选下不再出现安全工具。
-    await tester.tap(find.byKey(const Key('tool-filter-dangerous')));
+    await tester.scrollUntilVisible(find.textContaining('风险筛选 ·'), -160,
+        scrollable: scrollable);
+    await tester.tap(find.textContaining('风险筛选 ·'));
+    await tester.pumpAndSettle();
+    final dangerous = find.byKey(const Key('tool-filter-dangerous'));
+    await tester.tap(dangerous);
     await tester.pumpAndSettle();
     expect(find.text('数学计算器 (Calculator)'), findsNothing);
   });
@@ -313,11 +364,19 @@ void main() {
 
     expect(find.text('撤销全部'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('撤销全部'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('撤销全部'));
     await tester.pumpAndSettle();
 
     expect(store.sessionAllowed, isEmpty);
     expect(store.alwaysAllowed, isEmpty);
+    await tester.scrollUntilVisible(find.text('当前没有工具处于免审批状态'), -200,
+        scrollable: find
+            .descendant(
+                of: find.byType(ListView).first,
+                matching: find.byType(Scrollable))
+            .first);
     expect(find.text('当前没有工具处于免审批状态'), findsOneWidget);
   });
 
@@ -338,6 +397,12 @@ void main() {
     expect(find.text('扩展与环境'), findsOneWidget);
     expect(find.text('账号管理'), findsNothing);
     expect(find.text('语言'), findsNothing);
+
+    await tester.enterText(find.byType(TextField), '模型服务');
+    await tester.pumpAndSettle();
+
+    expect(find.text('模型服务'), findsWidgets);
+    expect(find.text('未找到相关设置'), findsNothing);
 
     // Empty result for unknown keyword
     await tester.enterText(find.byType(TextField), '不存在的条目xyz');

@@ -113,7 +113,8 @@ void main() {
     expect(find.text('未完成：执行命令 which adb'), findsOneWidget);
   });
 
-  testWidgets('composer aligns magnets with left 2 and right 3 on narrow screens',
+  testWidgets(
+      'composer keeps primary action visible and approval in named menu',
       (tester) async {
     final controller = TextEditingController();
     addTearDown(controller.dispose);
@@ -144,19 +145,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final mode = tester.getRect(find.bySemanticsLabel('聊天模式'));
-    final approval = tester.getRect(find.bySemanticsLabel('完全访问'));
     final code = tester.getRect(find.byTooltip('更多输入工具'));
     final attach = tester.getRect(find.bySemanticsLabel('添加附件或更多工具'));
-    final send = tester.getRect(find.bySemanticsLabel(RegExp('发送')));
+    final send = tester.getRect(find.bySemanticsLabel(RegExp(r'^发送（.*）$')));
 
-    // 左组：模式与审批策略紧凑靠左
-    expect(mode.right, lessThanOrEqualTo(approval.left));
-    // 右组与左组两端分开（SpaceBetween）
-    expect(code.left, greaterThan(approval.right));
-    // 右组内部紧凑靠右
-    expect(attach.left - code.right, lessThanOrEqualTo(24));
-    expect(send.left - attach.right, lessThanOrEqualTo(24));
+    expect(attach.left, greaterThan(code.left));
+    expect(send.left, greaterThan(attach.left));
+    expect(send.right, lessThanOrEqualTo(320));
+    await tester.tap(find.byTooltip('更多输入工具'));
+    await tester.pumpAndSettle();
+    expect(find.text('审批 · 完全访问'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

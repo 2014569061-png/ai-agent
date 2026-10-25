@@ -21,7 +21,7 @@ void main() {
       home: const McpServersPage(),
     ));
     await tester.pump(const Duration(milliseconds: 600));
-    await tester.tap(find.byType(FloatingActionButton));
+    await tester.tap(find.byTooltip('添加 MCP 服务器'));
     await tester.pump(const Duration(milliseconds: 600));
 
     tester.view.viewInsets = const FakeViewPadding(bottom: 320);

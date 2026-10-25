@@ -45,6 +45,20 @@ void main() {
       _service.rollback(workspacePath: workspace.path, changeSet: set);
 
   group('FileBaselineStore', () {
+    test('rejects path-like task IDs before creating snapshot directories',
+        () async {
+      for (final taskId in ['../escape', r'..\escape', 'C:escape', '']) {
+        await expectLater(
+            FileBaselineStore.directoryFor(taskId), throwsArgumentError);
+      }
+
+      final unsafe =
+          FileBaselineStore(taskId: '../escape', workspacePath: workspace.path);
+      await expectLater(unsafe.preserve(['a.txt']), throwsArgumentError);
+      expect(
+          Directory(p.join(root.path, 'docs', 'escape')).existsSync(), isFalse);
+    });
+
     test('keeps the first version of a file', () async {
       file('a.txt').writeAsStringSync('v1');
       await store.preserve(['a.txt']);
@@ -75,7 +89,10 @@ void main() {
     test('concurrent preserves do not lose entries', () async {
       file('a.txt').writeAsStringSync('a');
       file('b.txt').writeAsStringSync('b');
-      await Future.wait([store.preserve(['a.txt']), store.preserve(['b.txt'])]);
+      await Future.wait([
+        store.preserve(['a.txt']),
+        store.preserve(['b.txt'])
+      ]);
       expect((await FileBaselineStore.read('t1')).keys,
           containsAll(['a.txt', 'b.txt']));
     });
@@ -112,6 +129,25 @@ void main() {
       final entries = await FileBaselineStore.read('t1');
       expect(entries['a.txt']!.existed, isTrue);
       expect(entries['b.txt']!.existed, isFalse);
+    });
+
+    test('batch patch preserves every original before execution', () async {
+      file('a.txt').writeAsStringSync('a-original');
+      file('b.txt').writeAsStringSync('b-original');
+      await FileBaselineInterceptor(store).intercept(
+        call('apply_patch', {
+          'files': [
+            {'path': 'a.txt', 'patch': 'a'},
+            {'path': 'b.txt', 'patch': 'b'},
+          ]
+        }),
+        (_) async {
+          final entries = await FileBaselineStore.read('t1');
+          expect(File(entries['a.txt']!.ref!).readAsStringSync(), 'a-original');
+          expect(File(entries['b.txt']!.ref!).readAsStringSync(), 'b-original');
+          return ToolResult.text('ok');
+        },
+      );
     });
 
     test('ignores non-mutating tools', () async {
@@ -171,7 +207,10 @@ void main() {
 
       final set = await capture([
         const FileChangeSummary(
-            path: 'sub/b.txt', operation: 'move', linesAdded: 0, linesRemoved: 0),
+            path: 'sub/b.txt',
+            operation: 'move',
+            linesAdded: 0,
+            linesRemoved: 0),
       ]);
       expect(set.files.map((f) => f.relativePath),
           containsAll(['a.txt', 'sub/b.txt']));
@@ -202,7 +241,10 @@ void main() {
 
       final set = await capture([
         const FileChangeSummary(
-            path: 'img.bin', operation: 'binary', linesAdded: 0, linesRemoved: 0),
+            path: 'img.bin',
+            operation: 'binary',
+            linesAdded: 0,
+            linesRemoved: 0),
       ]);
       expect(await rollback(set), isEmpty);
       expect(file('img.bin').readAsBytesSync(), [0, 255, 1, 254]);
@@ -216,7 +258,10 @@ void main() {
 
       final set = await capture([
         _reviews.summarizeEdit(
-            path: 'empty.txt', before: '', after: 'filled\n', operation: 'create'),
+            path: 'empty.txt',
+            before: '',
+            after: 'filled\n',
+            operation: 'create'),
       ]);
       expect(set.files.single.operation, 'write');
       expect(await rollback(set), isEmpty);
@@ -237,11 +282,16 @@ void main() {
       await store.preserve(['a.txt']);
       file('a.txt').writeAsStringSync('a1');
       final review = ChangeReview(
-        files: [_reviews.summarizeEdit(path: 'a.txt', before: 'a0', after: 'a1')],
+        files: [
+          _reviews.summarizeEdit(path: 'a.txt', before: 'a0', after: 'a1')
+        ],
         mark: ChangeVerificationMark.passed,
       );
       Future<ChangeSet> open(ChangeReview r) => _service.loadOrCapture(
-          projectId: 'p1', taskId: 't1', workspacePath: workspace.path, review: r);
+          projectId: 'p1',
+          taskId: 't1',
+          workspacePath: workspace.path,
+          review: r);
 
       final first = await open(review);
       file('a.txt').writeAsStringSync('human');
@@ -252,7 +302,8 @@ void main() {
       final grown = ChangeReview(
         files: [
           ...review.files,
-          _reviews.summarizeEdit(path: 'b.txt', before: '', after: 'b', operation: 'create'),
+          _reviews.summarizeEdit(
+              path: 'b.txt', before: '', after: 'b', operation: 'create'),
         ],
         mark: ChangeVerificationMark.passed,
       );

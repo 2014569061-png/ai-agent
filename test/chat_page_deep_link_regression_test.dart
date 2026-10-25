@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mobile_agent/application/chat_controller.dart';
+import 'package:mobile_agent/application/app_lock_service.dart';
 import 'package:mobile_agent/application/providers.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
@@ -29,7 +30,8 @@ class _ControlledChat extends ChatController {
   void finishRestore() => state = state.copyWith(loading: false);
 
   @override
-  Future<void> newConversation() async {
+  Future<void> newConversation({bool Function()? canCommit}) async {
+    if (canCommit != null && !canCommit()) return;
     newChats++;
     state = state.copyWith(
       conversationId: 'link-chat-$newChats',
@@ -42,6 +44,11 @@ class _ControlledChat extends ChatController {
   }
 }
 
+class _UnlockedAppLock extends AppLockService {
+  @override
+  Future<bool> isEnabled() async => false;
+}
+
 Future<void> _pumpChat(WidgetTester tester, _ControlledChat controller) async {
   SharedPreferences.setMockInitialValues({});
   final db = AppDatabase(NativeDatabase.memory());
@@ -50,6 +57,7 @@ Future<void> _pumpChat(WidgetTester tester, _ControlledChat controller) async {
     overrides: [
       databaseProvider.overrideWith((ref) async => db),
       chatControllerProvider.overrideWith(() => controller),
+      appLockServiceProvider.overrideWithValue(_UnlockedAppLock()),
     ],
     child: MaterialApp(theme: AppTheme.light(), home: const ChatPage()),
   ));

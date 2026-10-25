@@ -150,38 +150,34 @@ void main() {
     expect(find.text('x'), findsOneWidget);
   });
 
-  testWidgets('胶囊：点击发送发起飞出；reduced 下不发起', (tester) async {
+  testWidgets('手机输入区在 full / reduced 下均不发起文字飞行', (tester) async {
     for (final level in [MotionLevel.full, MotionLevel.reduced]) {
       SendFlightBus.reset();
       final controller = TextEditingController(text: '你好');
       await tester.pumpWidget(_host(_composer(controller), level: level));
       await tester
           .tap(find.byKey(const ValueKey('trailing_action_send_active')));
-      expect(SendFlightBus.hasPending, level == MotionLevel.full);
+      expect(SendFlightBus.hasPending, isFalse);
       await tester.pumpAndSettle();
     }
   });
 
-  testWidgets('胶囊：聚焦时向两侧舒展 8dp，失焦收回', (tester) async {
+  testWidgets('手机输入区聚焦不改变文本行宽', (tester) async {
     final controller = TextEditingController();
     await tester.pumpWidget(_host(_composer(controller)));
     final rest = tester.getSize(find.byType(TextField)).width;
     await tester.tap(find.byType(TextField));
     await tester.pumpAndSettle();
-    expect(
-        tester.getSize(find.byType(TextField)).width, closeTo(rest + 8, 0.5));
+    expect(tester.getSize(find.byType(TextField)).width, closeTo(rest, 0.5));
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
     expect(tester.getSize(find.byType(TextField)).width, closeTo(rest, 0.5));
   });
 
-  testWidgets('胶囊：输入多行时高度弹簧增长而非跳变', (tester) async {
+  testWidgets('手机多行输入自然增高，文本与操作始终可见', (tester) async {
     final controller = TextEditingController();
     await tester.pumpWidget(_host(_composer(controller)));
-    final field = find
-        .ancestor(
-            of: find.byType(TextField), matching: find.byType(AnimatedSize))
-        .first;
+    final field = find.byType(TextField);
     final start = tester.getSize(field).height;
     controller.text = '第一行\n第二行\n第三行';
     await tester.pump();
@@ -190,14 +186,17 @@ void main() {
     await tester.pumpAndSettle();
     final end = tester.getSize(field).height;
     expect(end, greaterThan(start + 20));
-    expect(mid, greaterThan(start));
-    expect(mid, lessThan(end));
+    expect(mid, closeTo(end, 0.5));
+    expect(find.byKey(const ValueKey('composer-primary-action-slot')),
+        findsOneWidget);
   });
 
   testWidgets('胶囊销毁时作废未认领的飞行', (tester) async {
     final controller = TextEditingController(text: 'hi');
     await tester.pumpWidget(_host(_composer(controller)));
     await tester.tap(find.byKey(const ValueKey('trailing_action_send_active')));
+    expect(SendFlightBus.hasPending, isFalse);
+    SendFlightBus.launch(const Rect.fromLTWH(0, 400, 200, 40));
     expect(SendFlightBus.hasPending, isTrue);
     await tester.pumpWidget(_host(const SizedBox()));
     expect(SendFlightBus.hasPending, isFalse);
