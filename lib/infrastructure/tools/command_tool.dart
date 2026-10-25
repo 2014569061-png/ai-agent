@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../domain/session_operation_guard.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
@@ -167,6 +168,7 @@ class TerminalCommandService {
     void Function(CommandResult)? onResult,
     Duration timeout = defaultTimeout,
   }) async {
+    SessionOperationGuard.assertCanRun();
     final jobId =
         'job-${DateTime.now().microsecondsSinceEpoch}-${_jobs.length}';
     final cwd = _resolveWorkingDirectory(workingDirectory) ??
@@ -377,6 +379,7 @@ class TerminalCommandService {
     required String command,
     Duration timeout = defaultTimeout,
     bool asynchronous = false,
+    bool Function()? canContinue,
   }) async {
     final session = _sessions[sessionId];
     if (session == null) {
@@ -410,8 +413,10 @@ class TerminalCommandService {
         },
       );
     }
-    final result =
-        await run(command, workingDirectory: session.cwd, timeout: timeout);
+    final result = await run(command,
+        workingDirectory: session.cwd,
+        timeout: timeout,
+        canContinue: canContinue);
     if (parsedCd != null &&
         result.exitCode == 0 &&
         !result.timedOut &&
@@ -805,6 +810,9 @@ class TerminalCommandService {
       if (!_allowedCommands.contains(command) || _hasShellSyntax(commandLine)) {
         return null;
       }
+      if (_outsideWorkspacePathArgument(command, parsed.skip(1), cwd) != null) {
+        return null;
+      }
     }
     final request = LinuxCommandRequest(
       commandLine: commandLine,
@@ -820,7 +828,9 @@ class TerminalCommandService {
   }
 
   Future<CommandResult> run(String commandLine,
-      {String? workingDirectory, Duration timeout = defaultTimeout}) async {
+      {String? workingDirectory,
+      Duration timeout = defaultTimeout,
+      bool Function()? canContinue}) async {
     final parsed = _parse(commandLine);
     if (parsed.isEmpty) {
       return const CommandResult(
@@ -878,6 +888,13 @@ class TerminalCommandService {
             exitCode: 126,
             notExecuted: true);
       }
+      if (_outsideWorkspacePathArgument(command, parsed.skip(1), cwd) != null) {
+        return const CommandResult(
+          output: '桌面终端拒绝显式访问工作区外路径',
+          exitCode: 126,
+          notExecuted: true,
+        );
+      }
     }
 
     final runtimeTimeout =
@@ -886,8 +903,36 @@ class TerminalCommandService {
             : timeout;
     // Runtime 可能持有同一个 shell / PRoot 进程；即使上层未来出现多个
     // 调用者，也必须按提交顺序串行进入，避免 cwd 和输出互相污染。
-    return _serialize(() =>
-        _runtime.run(request, workingDirectory: cwd!, timeout: runtimeTimeout));
+    return _serialize(() async {
+      if (canContinue != null && !canContinue()) {
+        return const CommandResult(
+            output: '命令已取消，未执行', exitCode: 130, notExecuted: true);
+      }
+      var cancelled = false;
+      // This timer exists only while this exact operation owns the serial
+      // runtime slot. A queued cancellation must never stop another command.
+      final timer = canContinue == null
+          ? null
+          : Timer.periodic(const Duration(milliseconds: 100), (_) {
+              if (!canContinue()) {
+                cancelled = true;
+                _runtime.stop();
+              }
+            });
+      try {
+        final result = await _runtime.run(request,
+            workingDirectory: cwd!, timeout: runtimeTimeout);
+        if (cancelled || (canContinue != null && !canContinue())) {
+          return CommandResult(
+              output: '${result.output}\n命令已取消',
+              exitCode: 130,
+              notExecuted: result.notExecuted);
+        }
+        return result;
+      } finally {
+        timer?.cancel();
+      }
+    });
   }
 
   Future<T> _serialize<T>(Future<T> Function() operation) {
@@ -905,13 +950,18 @@ class TerminalCommandService {
       ok: ok,
       code: result.notExecuted
           ? ToolCodes.permissionRequired
+          : result.exitCode == 130
+              ? ToolCodes.cancelled
+              : result.timedOut
+                  ? ToolCodes.outcomeUnknown
+                  : ok
+                      ? ToolCodes.ok
+                      : ToolCodes.toolError,
+      message: result.exitCode == 130
+          ? '命令已取消'
           : result.timedOut
-              ? ToolCodes.outcomeUnknown
-              : ok
-                  ? ToolCodes.ok
-                  : ToolCodes.toolError,
-      message:
-          result.timedOut ? '命令超时，副作用无法确认' : '命令已结束（退出码 ${result.exitCode}）',
+              ? '命令超时，副作用无法确认'
+              : '命令已结束（退出码 ${result.exitCode}）',
       effect: result.notExecuted
           ? ToolEffect.none
           : result.timedOut
@@ -1012,6 +1062,84 @@ class TerminalCommandService {
     }
   }
 
+  /// Restricted desktop processes do not have an OS-level filesystem sandbox.
+  /// Still reject explicit path arguments that resolve outside the workspace;
+  /// this is defense in depth, not a guarantee against arbitrary script code.
+  String? _outsideWorkspacePathArgument(
+      String command, Iterable<String> arguments, String cwd) {
+    final sandbox = WorkspaceSandbox(workspacePath);
+    final root = p.normalize(workspacePath);
+    for (final argument in arguments) {
+      for (final candidate in _pathCandidates(command, argument)) {
+        if (candidate.isEmpty) continue;
+        if (candidate.toLowerCase().startsWith('file://')) return argument;
+        final isDrivePath = RegExp(r'^[A-Za-z]:[/\\]').hasMatch(candidate);
+        if (RegExp(r'^[A-Za-z][A-Za-z0-9+.-]*://').hasMatch(candidate) &&
+            !isDrivePath) {
+          continue;
+        }
+
+        final hasDrivePrefix = RegExp(r'^[A-Za-z]:').hasMatch(candidate);
+        final pathLike = p.isAbsolute(candidate) ||
+            hasDrivePrefix ||
+            candidate == '.' ||
+            candidate == '..' ||
+            candidate.startsWith('~') ||
+            candidate.contains('/') ||
+            candidate.contains('\\');
+        if (!pathLike) continue;
+        // Drive-relative paths and home expansion are platform-dependent; fail
+        // closed rather than guess which external path the child will resolve.
+        if ((hasDrivePrefix && !p.isAbsolute(candidate)) ||
+            candidate.startsWith('~')) {
+          return argument;
+        }
+
+        try {
+          final absolute = p.normalize(
+              p.isAbsolute(candidate) ? candidate : p.join(cwd, candidate));
+          final relative = p.relative(absolute, from: root);
+          if (p.isAbsolute(relative) ||
+              relative == '..' ||
+              relative.startsWith('..${p.separator}')) {
+            return argument;
+          }
+          // Also checks existing and dangling symlink components.
+          sandbox.resolvePath(relative);
+        } catch (_) {
+          return argument;
+        }
+      }
+    }
+    return null;
+  }
+
+  Iterable<String> _pathCandidates(String command, String argument) sync* {
+    var value = argument;
+    if (value.startsWith('@')) value = value.substring(1);
+    if (value.startsWith('-')) {
+      final equals = value.indexOf('=');
+      if (equals > 0) {
+        yield value.substring(equals + 1);
+        return;
+      }
+      if (command == 'git' && value.startsWith('-C') && value.length > 2) {
+        yield value.substring(2);
+        return;
+      }
+      if (value.length > 2 &&
+          (value[2] == '/' || value[2] == '\\' || value[2] == '.')) {
+        yield value.substring(2);
+        return;
+      }
+      if (value.contains(',')) {
+        yield* value.split(',');
+        return;
+      }
+    }
+    yield value;
+  }
+
   String _normalizeCommand(String value) {
     final base = value.replaceAll('\\', '/').split('/').last.toLowerCase();
     return base.endsWith('.exe') ? base.substring(0, base.length - 4) : base;
@@ -1021,6 +1149,29 @@ class TerminalCommandService {
 
   /// 命中内联求值参数时返回该参数（用于拒绝提示），否则返回 null。
   String? _inlineEvalFlag(String command, Iterable<String> args) {
+    if (command == 'sh') {
+      final arguments = args.toList();
+      for (var index = 0; index < arguments.length; index++) {
+        final argument = arguments[index];
+        if (argument == '--') break;
+        if (argument == '--command' || argument.startsWith('--command=')) {
+          return argument;
+        }
+        if (!argument.startsWith('-')) {
+          if (index > 0 &&
+              (arguments[index - 1] == '-o' || arguments[index - 1] == '-O')) {
+            continue;
+          }
+          break;
+        }
+        // POSIX sh accepts bundled options such as -ec and -xc for -c eval.
+        if (!argument.startsWith('--') &&
+            argument.toLowerCase().contains('c')) {
+          return argument;
+        }
+        if (argument == '-o' || argument == '-O') index++;
+      }
+    }
     final flags = _inlineEvalFlags[command];
     if (flags == null) return null;
     for (final argument in args) {
@@ -1267,9 +1418,9 @@ class TerminalCommandTool implements AgentTool {
       readOnly: false,
       scopes: {ToolEffectScope.process, ToolEffectScope.workspace},
     ),
-    description: '在当前工作区内运行终端命令（git/python/node 等）。默认始终需要用户确认；在“完全访问”模式下可自动执行。'
-        '禁止 shell 管道、重定向与解释器内联求值参数（如 python -c）。'
-        '注意：cwd 仅限制命令启动目录，不是完整沙箱；python/node 等解释器执行的脚本代码可能访问工作区外资源。'
+    description: '在当前工作区内运行终端命令（git/python/node 等）。所有模式下均需逐次用户确认，已保存的信任不能跳过。'
+        '禁止 shell 管道、重定向与解释器/子 shell 内联求值参数（如 python -c、sh -c）。'
+        '桌面受限进程会拒绝显式工作区外路径参数并检查符号链接；这不是操作系统级沙箱，工作区内脚本仍可能访问外部资源。'
         'Android 上优先使用内置 Alpine Linux（PRoot + ARM64 rootfs），失败时自动回退到 Termux，'
         '最后使用 Android Shell。内置 rootfs 提供 Linux shell 与基础 BusyBox 工具；Go/Git/Node/Python 等'
         '开发工具需要在 Alpine 中通过 apk 安装，或在需要完整工具链时配置 Termux。',

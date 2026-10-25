@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import '../../domain/models.dart';
@@ -9,16 +10,60 @@ import '../../domain/tool_result.dart';
 import '../observability/unified_diff.dart';
 import '../files/bounded_text_reader.dart';
 import '../files/workspace_fs.dart';
+import '../files/patch_journal.dart';
 import 'tool_registry.dart';
 
 /// 工作区沙盒辅助类：防止路径穿越超出工作区根目录
 class WorkspaceSandbox {
-  WorkspaceSandbox(this.rootPath, {WorkspaceFs? fs})
+  WorkspaceSandbox(this.rootPath,
+      {WorkspaceFs? fs, this.requireReadBeforeWrite = false})
       : fs = fs ?? const LocalWorkspaceFs();
   final String rootPath;
 
   /// 文件工具经由它访问文件（能力 seam）；路径校验仍在本类完成。
   final WorkspaceFs fs;
+
+  /// Enabled for agent tool registries; UI editors own their own baselines.
+  final bool requireReadBeforeWrite;
+  final _readHashes = <String, String>{};
+
+  void forgetReads() => _readHashes.clear();
+
+  PatchJournal get patchJournal => PatchJournal(
+      root: rootPath,
+      fs: fs,
+      resolve: (path) => resolvePath(path, allowRoot: false));
+
+  Future<ToolResult?> prepareForWrite() async {
+    final result = await patchJournal.recover();
+    if (result != null) forgetReads();
+    return result;
+  }
+
+  String _key(String path) => Platform.isWindows ? path.toLowerCase() : path;
+
+  void rememberRead(String path, String content) {
+    final key = _key(path);
+    _readHashes.remove(key);
+    _readHashes[key] = sha256.convert(utf8.encode(content)).toString();
+    if (_readHashes.length > 128) _readHashes.remove(_readHashes.keys.first);
+  }
+
+  ToolResult? checkFresh(String path, String content) {
+    if (!requireReadBeforeWrite) return null;
+    final expected = _readHashes[_key(path)];
+    if (expected == null) {
+      return ToolResult.failure(
+          code: ToolCodes.readRequired,
+          message: '修改已有文件前必须先调用 read_file 读取当前文件，再基于读取结果编辑。');
+    }
+    if (expected != sha256.convert(utf8.encode(content)).toString()) {
+      return ToolResult.failure(
+          code: ToolCodes.revisionConflict,
+          message: '文件在读取后已变化，本次未修改。请重新 read_file 并根据最新内容重新生成修改。');
+    }
+    return null;
+  }
 
   /// 真实根目录缓存（解析符号链接后的 realpath，惰性求值一次）。
   String? _realRoot;
@@ -45,18 +90,50 @@ class WorkspaceSandbox {
   /// 的 normalize。对目标（尚不存在时取其最近的已存在祖先）做 realpath 解析后
   /// 再验一次真实边界。每次调用只多 1-2 次系统调用，不值得引入缓存失效逻辑。
   void _guardSymlinkEscape(String fullPath) {
+    _realRoot ??= Directory(rootPath).existsSync()
+        ? Directory(rootPath).resolveSymbolicLinksSync()
+        : p.normalize(rootPath);
+    bool outsideRoot(String path) {
+      try {
+        final relative = p.relative(path, from: _realRoot!);
+        return p.isAbsolute(relative) ||
+            relative == '..' ||
+            relative.startsWith('..${p.separator}');
+      } catch (_) {
+        // Different Windows volumes and unresolvable paths are outside by
+        // default; never turn a failed containment check into an allow.
+        return true;
+      }
+    }
+
     var probe = fullPath;
-    while (FileSystemEntity.typeSync(probe) == FileSystemEntityType.notFound) {
+    while (true) {
+      // followLinks:false is important here: a dangling link reports notFound
+      // when followed, which used to make us skip over the link and validate
+      // only its in-workspace parent before a later write created an outside
+      // target through it.
+      if (FileSystemEntity.typeSync(probe, followLinks: false) ==
+          FileSystemEntityType.link) {
+        final String realLink;
+        try {
+          realLink = Link(probe).resolveSymbolicLinksSync();
+        } catch (_) {
+          throw ArgumentError('非法路径访问：无法安全解析符号链接');
+        }
+        if (outsideRoot(realLink)) {
+          throw ArgumentError('非法路径访问：路径经由符号链接超出工作区根目录');
+        }
+      }
+
+      if (FileSystemEntity.typeSync(probe) != FileSystemEntityType.notFound) {
+        break;
+      }
       final parent = p.dirname(probe);
       if (parent == probe) return; // 到达文件系统根仍不存在，无链接可解析
       probe = parent;
     }
-    _realRoot ??= Directory(rootPath).existsSync()
-        ? Directory(rootPath).resolveSymbolicLinksSync()
-        : p.normalize(rootPath);
     final realProbe = Directory(probe).resolveSymbolicLinksSync();
-    final realRelative = p.relative(realProbe, from: _realRoot!);
-    if (realRelative == '..' || realRelative.startsWith('..${p.separator}')) {
+    if (outsideRoot(realProbe)) {
       throw ArgumentError('非法路径访问：路径经由符号链接超出工作区根目录');
     }
   }
@@ -187,6 +264,7 @@ class ReadFileTool with _FileMetadata implements AgentTool {
 
       final content = await fs.readText(fullPath);
       recordFile(operation: 'read', path: path, after: content);
+      sandbox.rememberRead(fullPath, content);
       final lines = const LineSplitter().convert(content);
 
       final startLine = arguments['startLine'] as int?;
@@ -240,7 +318,7 @@ class WriteFileTool with _FileMetadata implements AgentTool {
   final manifest = const UnifiedTool(
     name: 'write_file',
     traits: ToolTraits.workspaceWrite,
-    description: '在工作区中创建新文件或覆写文件。会自动递归创建缺失的父级目录。',
+    description: '创建新文件或覆写文件。覆写已有文件前必须 read_file；读取后有外部变更时须重读。自动创建父目录。',
     risk: ToolRisk.requiresConfirmation,
     parametersSchema: {
       'type': 'object',
@@ -255,6 +333,11 @@ class WriteFileTool with _FileMetadata implements AgentTool {
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final recovery = await sandbox.prepareForWrite();
+    if (recovery != null) {
+      lastMetadata = {'operation': 'patch_recovery', ...?recovery.data};
+      return recovery;
+    }
     final path = arguments['path'];
     final content = arguments['content'];
     if (path is! String || path.isEmpty) {
@@ -284,15 +367,19 @@ class WriteFileTool with _FileMetadata implements AgentTool {
     // 之后抛错必须按“可能已经写进去了”上报，让模型先读再决定是否重试。
     var committed = false;
     try {
-      final before = await fs.kindOf(fullPath) == WorkspaceEntryKind.file
-          ? await fs.readText(fullPath)
-          : '';
+      final exists = await fs.kindOf(fullPath) == WorkspaceEntryKind.file;
+      final before = exists ? await fs.readText(fullPath) : '';
+      if (exists) {
+        final conflict = sandbox.checkFresh(fullPath, before);
+        if (conflict != null) return conflict;
+      }
 
       // 自动创建父目录
       await fs.writeText(fullPath, content);
       committed = true;
+      sandbox.rememberRead(fullPath, content);
       recordFile(
-          operation: before.isEmpty ? 'create' : 'write',
+          operation: exists ? 'write' : 'create',
           path: path,
           before: before,
           after: content);
@@ -301,7 +388,7 @@ class WriteFileTool with _FileMetadata implements AgentTool {
         data: {
           'path': path,
           'chars': content.length,
-          'created': before.isEmpty,
+          'created': !exists,
         },
         effect: ToolEffect.applied,
       );
@@ -331,7 +418,7 @@ class EditFileTool with _FileMetadata implements AgentTool {
   final manifest = const UnifiedTool(
     name: 'edit_file',
     traits: ToolTraits.workspaceWrite,
-    description: '局部替换文件中的某一段文本。适用于修改已存在文件的局部代码。',
+    description: '先 read_file，再精确替换唯一匹配的文本。文件在读取后有变化时拒绝编辑，须重读。',
     risk: ToolRisk.requiresConfirmation,
     parametersSchema: {
       'type': 'object',
@@ -347,6 +434,11 @@ class EditFileTool with _FileMetadata implements AgentTool {
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final recovery = await sandbox.prepareForWrite();
+    if (recovery != null) {
+      lastMetadata = {'operation': 'patch_recovery', ...?recovery.data};
+      return recovery;
+    }
     final path = arguments['path'];
     final target = arguments['targetContent'];
     final replacement = arguments['replacementContent'];
@@ -383,6 +475,8 @@ class EditFileTool with _FileMetadata implements AgentTool {
       }
 
       final content = await fs.readText(fullPath);
+      final conflict = sandbox.checkFresh(fullPath, content);
+      if (conflict != null) return conflict;
       final firstMatch = content.indexOf(target);
       if (firstMatch < 0) {
         return ToolResult.failure(
@@ -402,6 +496,7 @@ class EditFileTool with _FileMetadata implements AgentTool {
       final newContent = content.replaceFirst(target, replacement);
       await fs.writeText(fullPath, newContent);
       committed = true;
+      sandbox.rememberRead(fullPath, newContent);
       recordFile(
           operation: 'edit', path: path, before: content, after: newContent);
       return ToolResult.success(
@@ -712,6 +807,11 @@ class DeleteFileTool with _FileMetadata implements AgentTool {
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final recovery = await sandbox.prepareForWrite();
+    if (recovery != null) {
+      lastMetadata = {'operation': 'patch_recovery', ...?recovery.data};
+      return recovery;
+    }
     final path = arguments['path'];
     if (path is! String || path.isEmpty) {
       return ToolResult.failure(
@@ -807,6 +907,11 @@ class MoveFileTool with _FileMetadata implements AgentTool {
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async {
     clearMetadata();
+    final recovery = await sandbox.prepareForWrite();
+    if (recovery != null) {
+      lastMetadata = {'operation': 'patch_recovery', ...?recovery.data};
+      return recovery;
+    }
     final oldPath = arguments['path'];
     final newPath = arguments['newPath'];
     if (oldPath is! String || oldPath.isEmpty) {

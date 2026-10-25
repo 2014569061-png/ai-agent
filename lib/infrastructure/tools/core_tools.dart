@@ -243,7 +243,8 @@ class WebSearchTool implements AgentTool {
             ));
   final String apiKey;
   final Dio _dio;
-  @override  final manifest = const UnifiedTool(
+  @override
+  final manifest = const UnifiedTool(
       name: 'web_search',
       traits: ToolTraits(
         readOnly: true,
@@ -309,7 +310,8 @@ class RememberTool implements AgentTool {
       },
       'required': ['content'],
     },
-    risk: ToolRisk.safe,
+    risk: ToolRisk.requiresConfirmation,
+    sensitive: true,
   );
 
   @override
@@ -399,7 +401,8 @@ class MemoryWriteTool implements AgentTool {
       },
       'required': ['content'],
     },
-    risk: ToolRisk.safe,
+    risk: ToolRisk.requiresConfirmation,
+    sensitive: true,
   );
 
   @override

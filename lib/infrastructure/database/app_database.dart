@@ -3,8 +3,14 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'database_executor.dart';
+import 'runtime_data_guard.dart';
+import 'runtime_data_execution.dart';
+import '../observability/sentry_service.dart';
+import '../../domain/data_management_stats.dart';
 import 'database_maintenance.dart';
 import 'message_history_store.dart';
+import 'personal_context_store.dart';
+import 'result_action_store.dart';
 import '../skills/builtin_skills.dart';
 
 part 'app_database.g.dart';
@@ -41,7 +47,8 @@ part 'database_tables.dart';
   CollaborationMessages,
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase(super.e);
+  AppDatabase(QueryExecutor executor)
+      : super(executor.interceptWith(RuntimeDataGuard()));
 
   int _knowledgeGeneration = 0;
   int get knowledgeGeneration => _knowledgeGeneration;
@@ -49,7 +56,7 @@ class AppDatabase extends _$AppDatabase {
   void markKnowledgeChanged() => _knowledgeGeneration++;
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -87,6 +94,12 @@ class AppDatabase extends _$AppDatabase {
           await _ensurePendingApprovals();
           await _ensureDataMaintenanceJobs();
           await ensureSessionEventsTable();
+          await ensureMemoryForgetRules();
+          await ensureKnowledgeScopes();
+          await ensureRunPlanProtocol();
+          await ensureRunApprovalScopes();
+          await ensurePersonalContextTables(this);
+          await ensureResultActionTables(this);
         },
         onUpgrade: (m, from, to) async {
           Future<bool> hasTable(String tableName) async {
@@ -374,8 +387,123 @@ class AppDatabase extends _$AppDatabase {
             // 建表语句全部 IF NOT EXISTS，可重复执行。
             await ensureSessionEventsTable();
           }
+          if (from < 28) await ensureMemoryForgetRules();
+          if (from < 29) await ensureKnowledgeScopes();
+          if (from < 30) await ensureRunPlanProtocol();
+          if (from < 31) await ensureRunApprovalScopes();
+          if (from < 32) {
+            // 32：个人上下文实体/关系/别名/墓碑/版本 + 结果卡与动作幂等表。
+            // 建表语句全部 IF NOT EXISTS，可重复执行。
+            await ensurePersonalContextTables(this);
+            await ensureResultActionTables(this);
+          }
         },
       );
+
+  /// Schema 31: temporary approval decisions and grants are bound to a plan.
+  Future<void> ensureRunApprovalScopes() async {
+    await customStatement('CREATE TABLE IF NOT EXISTS run_approval_scopes ('
+        'request_id TEXT PRIMARY KEY NOT NULL, task_id TEXT NOT NULL, run_id TEXT NOT NULL, '
+        'plan_version INTEGER NOT NULL, call_id TEXT NOT NULL)');
+    await customStatement('CREATE TABLE IF NOT EXISTS run_plan_grants ('
+        'task_id TEXT NOT NULL, run_id TEXT NOT NULL, plan_version INTEGER NOT NULL, tool_name TEXT NOT NULL, '
+        'PRIMARY KEY(task_id,run_id,plan_version,tool_name))');
+    await customStatement(
+        'CREATE TRIGGER IF NOT EXISTS nexus_pending_scope_cleanup AFTER DELETE ON pending_approvals '
+        'BEGIN DELETE FROM run_approval_scopes WHERE request_id=OLD.request_id; END');
+    await customStatement(
+        'CREATE TRIGGER IF NOT EXISTS nexus_task_approval_cleanup AFTER DELETE ON tasks BEGIN '
+        'DELETE FROM pending_approvals WHERE request_id IN (SELECT request_id FROM run_approval_scopes WHERE task_id=OLD.id); '
+        'DELETE FROM run_approval_scopes WHERE task_id=OLD.id; DELETE FROM run_plan_grants WHERE task_id=OLD.id; END');
+  }
+
+  /// Schema 30: persisted plan versions and execution-boundary claims.
+  Future<void> ensureRunPlanProtocol() async {
+    await customStatement('CREATE TABLE IF NOT EXISTS run_plan_heads ('
+        'task_id TEXT PRIMARY KEY NOT NULL, run_id TEXT NOT NULL, version INTEGER NOT NULL CHECK(version>=0), '
+        'state TEXT NOT NULL, pending_controls INTEGER NOT NULL DEFAULT 0)');
+    await customStatement(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_run_plan_active_identity "
+        "ON run_plan_heads (run_id) WHERE run_id <> ''");
+    await customStatement('CREATE TABLE IF NOT EXISTS plan_revisions ('
+        'task_id TEXT NOT NULL, version INTEGER NOT NULL CHECK(version>0), run_id TEXT NOT NULL, '
+        'kind TEXT NOT NULL, control_id TEXT UNIQUE, payload_json TEXT NOT NULL, created_at TEXT NOT NULL, '
+        'PRIMARY KEY (task_id, version))');
+    await customStatement('CREATE TABLE IF NOT EXISTS run_dispatch_claims ('
+        'run_id TEXT NOT NULL, call_id TEXT NOT NULL, task_id TEXT NOT NULL, plan_version INTEGER NOT NULL, '
+        'state TEXT NOT NULL, effect TEXT NOT NULL, created_at TEXT NOT NULL, settled_at TEXT, '
+        'PRIMARY KEY (run_id, call_id))');
+    await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_run_dispatch_task ON run_dispatch_claims (task_id, run_id)');
+    await customStatement(
+        "CREATE TRIGGER IF NOT EXISTS nexus_plan_revision_immutable "
+        "BEFORE UPDATE ON plan_revisions BEGIN SELECT RAISE(ABORT, 'Plan revisions are immutable'); END");
+    await customStatement(
+        'CREATE TRIGGER IF NOT EXISTS nexus_task_plan_cleanup AFTER DELETE ON tasks BEGIN '
+        'DELETE FROM run_plan_heads WHERE task_id=OLD.id; '
+        'DELETE FROM plan_revisions WHERE task_id=OLD.id; '
+        'DELETE FROM run_dispatch_claims WHERE task_id=OLD.id; END');
+  }
+
+  /// Schema 29: legacy documents remain global; scope and revision are durable.
+  Future<void> ensureKnowledgeScopes() async {
+    await customStatement('CREATE TABLE IF NOT EXISTS knowledge_doc_scopes ('
+        'doc_id TEXT NOT NULL PRIMARY KEY, project_id TEXT NOT NULL)');
+    await customStatement('CREATE TABLE IF NOT EXISTS knowledge_revision ('
+        'id INTEGER PRIMARY KEY CHECK (id = 1), revision INTEGER NOT NULL DEFAULT 0)');
+    await customStatement(
+        'INSERT OR IGNORE INTO knowledge_revision (id, revision) VALUES (1, 0)');
+    for (final table in [
+      'knowledge_docs',
+      'knowledge_chunks',
+      'knowledge_doc_scopes'
+    ]) {
+      for (final operation in ['INSERT', 'UPDATE', 'DELETE']) {
+        await customStatement(
+            'CREATE TRIGGER IF NOT EXISTS nexus_knowledge_${table}_${operation.toLowerCase()} '
+            'AFTER $operation ON $table BEGIN '
+            'UPDATE knowledge_revision SET revision = revision + 1 WHERE id = 1; END');
+      }
+    }
+    await customStatement(
+        'CREATE TRIGGER IF NOT EXISTS nexus_knowledge_scope_cleanup '
+        'AFTER DELETE ON knowledge_docs BEGIN DELETE FROM knowledge_doc_scopes WHERE doc_id = OLD.id; END');
+  }
+
+  Future<int> currentKnowledgeRevision() async => (await customSelect(
+              'SELECT revision FROM knowledge_revision WHERE id = 1')
+          .getSingle())
+      .read<int>('revision');
+  Future<Map<String, String>> knowledgeDocumentScopes() async => {
+        for (final row in await customSelect(
+                'SELECT doc_id, project_id FROM knowledge_doc_scopes')
+            .get())
+          row.read<String>('doc_id'): row.read<String>('project_id')
+      };
+  Future<void> bindKnowledgeDocument(String docId, String? projectId) async {
+    if (await findKnowledgeDoc(docId) == null) {
+      throw StateError('Document no longer exists');
+    }
+    if (projectId == null || projectId.isEmpty) {
+      await customStatement(
+          'DELETE FROM knowledge_doc_scopes WHERE doc_id = ?', [docId]);
+    } else {
+      await customStatement(
+          'INSERT INTO knowledge_doc_scopes (doc_id, project_id) VALUES (?, ?) '
+          'ON CONFLICT (doc_id) DO UPDATE SET project_id = excluded.project_id',
+          [docId, projectId]);
+    }
+  }
+
+  /// Schema 28: durable privacy rules, shared by all isolates/processes.
+  Future<void> ensureMemoryForgetRules() async {
+    await customStatement('CREATE TABLE IF NOT EXISTS memory_forget_rules ('
+        'fingerprint TEXT NOT NULL, source_digest TEXT NOT NULL, '
+        'forgotten_at TEXT NOT NULL, reason TEXT NOT NULL, '
+        'PRIMARY KEY (fingerprint, source_digest))');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_memory_forget_source '
+        'ON memory_forget_rules (source_digest) WHERE source_digest <> \'\'');
+  }
 
   /// 建 session_events 表（追加式会话日志，阶段 1 与 messages 双写）。
   ///
@@ -510,11 +638,17 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> decidePendingApproval(String requestId, String decision) async {
     final affected = await customUpdate(
       'UPDATE pending_approvals SET decision = ?, decided_at = ? '
-      'WHERE request_id = ? AND decision IS NULL',
+      'WHERE request_id = ? AND decision IS NULL AND expires_at > ? '
+      'AND (NOT EXISTS (SELECT 1 FROM run_approval_scopes s WHERE s.request_id=pending_approvals.request_id) '
+      'OR EXISTS (SELECT 1 FROM run_approval_scopes s JOIN run_plan_heads h ON h.task_id=s.task_id '
+      'JOIN tasks t ON t.id=s.task_id WHERE s.request_id=pending_approvals.request_id '
+      "AND h.run_id=s.run_id AND h.version=s.plan_version AND h.pending_controls=0 AND h.state='running' "
+      "AND t.status NOT IN ('completed','failed','cancelled')))",
       variables: [
         Variable<String>(decision),
         Variable<String>(DateTime.now().toIso8601String()),
         Variable<String>(requestId),
+        Variable<String>(DateTime.now().toIso8601String()),
       ],
       updateKind: UpdateKind.update,
     );
@@ -563,8 +697,11 @@ class AppDatabase extends _$AppDatabase {
           .replaceAll('\\', '\\\\')
           .replaceAll('%', '\\%')
           .replaceAll('_', '\\_');
-      conditions.add("title LIKE ? ESCAPE '\\'");
-      variables.add(Variable<String>('%$escaped%'));
+      conditions.add("(title LIKE ? ESCAPE '\\' OR EXISTS ("
+          "SELECT 1 FROM messages m WHERE m.conversation_id=conversations.id "
+          "AND m.content LIKE ? ESCAPE '\\'))");
+      variables.addAll(
+          [Variable<String>('%$escaped%'), Variable<String>('%$escaped%')]);
     }
     switch (filter) {
       case 'all':
@@ -621,6 +758,53 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> saveMessage(Message message) =>
       into(messages).insertOnConflictUpdate(message);
+
+  /// One read statement gives a consistent SQLite snapshot of all three counts.
+  /// Only one row of integers is materialized, regardless of table size.
+  Future<DataManagementStats> dataManagementStats() async {
+    final row = await customSelect('''
+      SELECT
+        (SELECT COUNT(*) FROM memories) AS memory_count,
+        (SELECT COUNT(*) FROM knowledge_docs) AS knowledge_count,
+        (SELECT COUNT(*) FROM scheduled_tasks) AS scheduled_count
+    ''', readsFrom: {memories, knowledgeDocs, scheduledTasks}).getSingle();
+    return DataManagementStats(
+      memoryCount: row.read<int>('memory_count'),
+      knowledgeCount: row.read<int>('knowledge_count'),
+      scheduledCount: row.read<int>('scheduled_count'),
+    );
+  }
+
+  Future<int> messageCountFor(String conversationId) async {
+    final count = messages.id.count();
+    final row = await (selectOnly(messages)
+          ..addColumns([count])
+          ..where(messages.conversationId.equals(conversationId)))
+        .getSingle();
+    return row.read(count) ?? 0;
+  }
+
+  /// 批量删除指定消息（会话级 checkpoint 的“回退会话”用）。
+  /// 只清消息行；工具活动等附属数据保留在任务/变更集里，便于审计。
+  Future<int> deleteMessagesByIds(Iterable<String> ids) {
+    final unique = ids.toSet().toList(growable: false);
+    if (unique.isEmpty) return Future<int>.value(0);
+    return (delete(messages)..where((row) => row.id.isIn(unique))).go();
+  }
+
+  /// 会话内的任务（按创建时间升序）；传入 [since] 时只返回该时刻及
+  /// 之后创建的任务（会话级 checkpoint 的“回退代码”按此圈定范围）。
+  Future<List<Task>> tasksForConversation(String conversationId,
+      {DateTime? since, int? limit}) {
+    final query = select(tasks)
+      ..where((row) => row.conversationId.equals(conversationId))
+      ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]);
+    if (since != null) {
+      query.where((row) => row.createdAt.isBiggerOrEqualValue(since));
+    }
+    if (limit != null) query.limit(limit);
+    return query.get();
+  }
 
   Future<void> insertMessage(MessagesCompanion message) =>
       into(messages).insertOnConflictUpdate(message);
@@ -1064,6 +1248,19 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> saveTask(Task task) => into(tasks).insertOnConflictUpdate(task);
 
+  /// Existing-record CAS only: a late callback cannot recreate a deleted task.
+  /// Application read/modify/write operations also run inside a DB transaction.
+  Future<bool> updateTaskSnapshot(Task task) async {
+    final count = await (update(tasks)
+          ..where((row) =>
+              row.id.equals(task.id) &
+              row.stateRevision.equals(task.stateRevision)))
+        .write(task
+            .toCompanion(false)
+            .copyWith(stateRevision: Value(task.stateRevision + 1)));
+    return count == 1;
+  }
+
   Future<void> insertTask(TasksCompanion task) =>
       into(tasks).insertOnConflictUpdate(task);
 
@@ -1278,11 +1475,11 @@ class AppDatabase extends _$AppDatabase {
       into(collaborationMessages).insertOnConflictUpdate(message);
 
   Future<void> updateTaskStatus(String id, String status) async {
-    await (update(tasks)..where((row) => row.id.equals(id)))
-        .write(TasksCompanion(
-      status: Value(status),
-      updatedAt: Value(DateTime.now()),
-    ));
+    await (update(tasks)..where((row) => row.id.equals(id))).write(
+        TasksCompanion.custom(
+            status: Variable<String>(status),
+            updatedAt: Variable<DateTime>(DateTime.now()),
+            stateRevision: tasks.stateRevision + const Constant<int>(1)));
   }
 
   Future<void> deleteTask(String id) => transaction(() async {
@@ -1391,6 +1588,43 @@ class AppDatabase extends _$AppDatabase {
 
   Future<List<KnowledgeChunk>> allKnowledgeChunks() =>
       select(knowledgeChunks).get();
+
+  /// Only materialize global documents and the caller's project. Filtering in
+  /// SQLite keeps unrelated projects out of the in-memory search index build.
+  Future<
+      ({
+        List<KnowledgeDoc> documents,
+        List<KnowledgeChunk> chunks,
+        Map<String, String> scopes,
+      })> knowledgeCorpusForSearch(String? projectId) async {
+    final visible = projectId == null
+        ? 's.doc_id IS NULL'
+        : '(s.doc_id IS NULL OR s.project_id = ?)';
+    final variables = [if (projectId != null) Variable.withString(projectId)];
+    final rows = await customSelect(
+      'SELECT d.*, s.project_id AS nexus_scope FROM knowledge_docs d '
+      'LEFT JOIN knowledge_doc_scopes s ON s.doc_id = d.id '
+      'WHERE $visible ORDER BY d.updated_at DESC',
+      variables: variables,
+      readsFrom: {knowledgeDocs},
+    ).get();
+    final chunks = await customSelect(
+      'SELECT c.* FROM knowledge_chunks c '
+      'INNER JOIN knowledge_docs d ON d.id = c.doc_id '
+      'LEFT JOIN knowledge_doc_scopes s ON s.doc_id = d.id WHERE $visible',
+      variables: variables,
+      readsFrom: {knowledgeChunks, knowledgeDocs},
+    ).map((row) => knowledgeChunks.map(row.data)).get();
+    return (
+      documents: [for (final row in rows) knowledgeDocs.map(row.data)],
+      chunks: chunks,
+      scopes: {
+        for (final row in rows)
+          if (row.readNullable<String>('nexus_scope') case final String scope)
+            row.read<String>('id'): scope,
+      },
+    );
+  }
 
   // --- 定时任务（C5）---
 
@@ -1729,8 +1963,33 @@ class AppDatabase extends _$AppDatabase {
   /// 范围必须与 [buildVaultJson] 的导出清单保持一致：导出包含而此处未清的表
   /// 会在恢复时留下旧行，此处清掉而导出没有的表会在恢复时彻底丢失。
   /// 保留 syncMeta（运行态元数据），tasks 属于业务数据，同样会被清空。
-  Future<void> clearAllUserData() async {
+  Future<void> clearAllUserData(
+      {bool preservePersonalContext = false,
+      bool preserveMobileData = false}) async {
     await transaction(() async {
+      final existingTables = {
+        for (final row in await customSelect(
+                "SELECT name FROM sqlite_master WHERE type='table'")
+            .get())
+          row.read<String>('name')
+      };
+      for (final table in [
+        'nexus_knowledge_corrections',
+        if (!preserveMobileData) ...[
+          'nexus_mobile_workflow_runs',
+          'nexus_mobile_workflows',
+          'nexus_reminders',
+          'nexus_research_artifacts',
+          'nexus_cost_reconciliations',
+          'nexus_cost_request_details',
+          'nexus_cost_reservations',
+          'nexus_cost_ledger_meta',
+        ],
+      ]) {
+        if (existingTables.contains(table)) {
+          await customStatement('DELETE FROM $table');
+        }
+      }
       await delete(collaborationMessages).go();
       await delete(collaborationArtifacts).go();
       await delete(collaborationAgentRuns).go();
@@ -1744,6 +2003,14 @@ class AppDatabase extends _$AppDatabase {
       await delete(messages).go();
       await delete(conversations).go();
       await delete(memories).go();
+      await customStatement('DELETE FROM memory_forget_rules');
+      await customStatement('DELETE FROM knowledge_doc_scopes');
+      await customStatement('DELETE FROM run_plan_heads');
+      await customStatement('DELETE FROM pending_approvals');
+      await customStatement('DELETE FROM run_approval_scopes');
+      await customStatement('DELETE FROM run_plan_grants');
+      await customStatement('DELETE FROM plan_revisions');
+      await customStatement('DELETE FROM run_dispatch_claims');
       await delete(agents).go();
       await delete(promptTemplates).go();
       await delete(modelProfiles).go();
@@ -1756,6 +2023,19 @@ class AppDatabase extends _$AppDatabase {
       await delete(runEvents).go();
       await delete(runRecords).go();
       await delete(logRecords).go();
+      // Result cards contain file names and action outcomes. Clear derived cards
+      // and approvals too, so restore/clear cannot retain old delivery state.
+      await customStatement('DELETE FROM result_actions');
+      await customStatement('DELETE FROM result_cards');
+      // Personal context retains forgotten bodies/history for local audit until
+      // the user clears all data. None of those private rows may survive clear.
+      if (!preservePersonalContext) {
+        await customStatement('DELETE FROM personal_context_aliases');
+        await customStatement('DELETE FROM personal_context_relations');
+        await customStatement('DELETE FROM personal_context_entity_revisions');
+        await customStatement('DELETE FROM personal_context_forget_tombstones');
+        await customStatement('DELETE FROM personal_context_entities');
+      }
       await customStatement('DELETE FROM artifacts');
       // 一次性审批握手数据：不进备份，但清库时必须一并抹掉，否则残留记录会
       // 让清库后的下一个同名请求拿到一个早已过期的决定。
@@ -1772,17 +2052,24 @@ Future<AppDatabase> openAppDatabase() async {
   final database = AppDatabase(await createDatabaseExecutor());
   await database.customSelect('SELECT 1').getSingle();
   unawaited(
-    DatabaseMaintenanceCoordinator(
-      database: database,
-      jobs: [
-        ...defaultDatabaseMaintenanceJobs(),
-        DatabaseMaintenanceJob(
-          key: 'seed_builtin_skills',
-          targetVersion: 2,
-          run: (database) => BuiltinSkillSeeder().ensureInstalled(database),
-        ),
-      ],
-    ).runPending(),
+    const RuntimeDataExecution()
+        .run(
+            database,
+            () => DatabaseMaintenanceCoordinator(
+                  database: database,
+                  jobs: [
+                    ...defaultDatabaseMaintenanceJobs(),
+                    DatabaseMaintenanceJob(
+                      key: 'seed_builtin_skills',
+                      targetVersion: 2,
+                      run: (database) =>
+                          BuiltinSkillSeeder().ensureInstalled(database),
+                    ),
+                  ],
+                ).runPending())
+        .catchError((Object error, StackTrace stack) {
+      unawaited(SentryService.reportException(error, stack));
+    }),
   );
   return database;
 }

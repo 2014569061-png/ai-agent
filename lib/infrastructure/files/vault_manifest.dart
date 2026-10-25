@@ -1,4 +1,8 @@
 import 'dart:convert';
+import 'context_result_vault.dart';
+import 'run_plan_vault.dart';
+import 'mobile_module_vault.dart';
+import '../database/memory_forget_store.dart';
 import 'dart:isolate';
 import 'package:crypto/crypto.dart';
 
@@ -61,10 +65,12 @@ Future<void> validateVault(Map<String, dynamic> data) => Isolate.run(() {
         'conversations',
         'messages',
         'memories',
+        'memoryForgetRules',
         'agents',
         'prompts',
         'modelProfiles',
         'knowledgeDocs',
+        'knowledgeScopes',
         'knowledgeChunks',
         'scheduledTasks',
         'plugins',
@@ -72,6 +78,9 @@ Future<void> validateVault(Map<String, dynamic> data) => Isolate.run(() {
         'projects',
         'drafts',
         'runControls',
+        'runPlanHeads',
+        'planRevisions',
+        'runDispatchClaims',
         'executionLeases',
         'tasks',
         'taskFeedback',
@@ -85,7 +94,14 @@ Future<void> validateVault(Map<String, dynamic> data) => Isolate.run(() {
         'logRecords',
         'mcpServers',
         'artifacts',
-        'providerProfiles'
+        'providerProfiles',
+        'personalContextEntities',
+        'personalContextRelations',
+        'personalContextAliases',
+        'personalContextTombstones',
+        'personalContextRevisions',
+        'resultCards',
+        'resultActions',
       };
       for (final section in listSections) {
         if (data.containsKey(section) && data[section] is! List) {
@@ -112,6 +128,26 @@ Future<void> validateVault(Map<String, dynamic> data) => Isolate.run(() {
         }
       }
       if (rows > VaultLimits.maxRows) throw const FormatException('备份记录过多');
+      for (final row in (data['memoryForgetRules'] as List? ?? const [])) {
+        MemoryForgetStore.validateRow(Map<String, dynamic>.from(row as Map));
+      }
+      final knowledgeIds = {
+        for (final row in (data['knowledgeDocs'] as List? ?? const []))
+          row['id']
+      };
+      for (final row in (data['knowledgeScopes'] as List? ?? const [])) {
+        if (row['docId'] is! String ||
+            !knowledgeIds.contains(row['docId']) ||
+            (row['docId'] as String).length > 256 ||
+            row['projectId'] is! String ||
+            (row['projectId'] as String).isEmpty ||
+            (row['projectId'] as String).length > 256) {
+          throw const FormatException('知识项目范围格式错误');
+        }
+      }
+      validateRunPlanVault(data);
+      validateContextResultVault(data);
+      validateMobileModuleVault(data);
       final manifest = data['manifest'];
       if (manifest != null) {
         if (manifest is! Map ||

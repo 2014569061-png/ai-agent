@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'linux_runtime.dart';
@@ -14,6 +15,7 @@ class HostProcessRuntimeAdapter
 
   final int maxOutputBytes;
   Process? _process;
+  final _stopping = <int>{};
 
   @override
   LinuxRuntimeKind get kind => LinuxRuntimeKind.hostProcess;
@@ -56,7 +58,7 @@ class HostProcessRuntimeAdapter
       final stderr = _collect(process.stderr, output, prefix: 'stderr: ');
       final exitCode = await process.exitCode.timeout(timeout, onTimeout: () {
         timedOut = true;
-        process.kill(ProcessSignal.sigterm);
+        unawaited(_stopProcess(process));
         return 124;
       });
       await Future.wait([stdout, stderr]);
@@ -75,7 +77,26 @@ class HostProcessRuntimeAdapter
 
   @override
   void stop() {
-    _process?.kill(ProcessSignal.sigterm);
+    final process = _process;
+    if (process != null) unawaited(_stopProcess(process));
+  }
+
+  Future<void> _stopProcess(Process process) async {
+    if (!_stopping.add(process.pid)) return;
+    try {
+      if (Platform.isWindows) {
+        // flutter/gradle commonly spawn children that inherit stdout. Killing
+        // only the launcher leaves verification running and pipes unclosed.
+        final result = await Process.run(
+            'taskkill', ['/PID', process.pid.toString(), '/T', '/F']);
+        if (result.exitCode == 0) return;
+      }
+      process.kill(ProcessSignal.sigterm);
+    } catch (_) {
+      process.kill(ProcessSignal.sigterm);
+    } finally {
+      _stopping.remove(process.pid);
+    }
   }
 
   @override
@@ -126,7 +147,13 @@ class HostProcessRuntimeAdapter
       await sink.close();
       String output = '';
       try {
-        output = await log.readAsString();
+        final input = await log.open();
+        try {
+          output = utf8.decode(await input.read(maxOutputBytes),
+              allowMalformed: true);
+        } finally {
+          await input.close();
+        }
       } catch (_) {
         // 进程已经完成，exitCode/timedOut 仍然有效；日志读取失败只让 output 为空，
         // 不能让结果对象整体丢失。
@@ -188,9 +215,9 @@ class HostProcessRuntimeAdapter
     StringBuffer output, {
     String prefix = '',
   }) async {
-    await for (final chunk in stream) {
+    await for (final text
+        in stream.transform(const Utf8Decoder(allowMalformed: true))) {
       if (output.length >= maxOutputBytes) continue;
-      final text = String.fromCharCodes(chunk);
       final remaining = maxOutputBytes - output.length;
       output.write(
         '$prefix${text.length > remaining ? text.substring(0, remaining) : text}',

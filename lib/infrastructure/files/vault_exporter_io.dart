@@ -7,12 +7,19 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../database/app_database.dart';
+import '../database/memory_forget_store.dart';
+import '../database/personal_context_store.dart';
+import '../database/result_action_store.dart';
+import '../mcp/mcp_legacy_migration.dart';
 import '../../domain/models.dart';
 import '../../domain/sensitive_tool_policy.dart';
 import '../observability/sentry_service.dart';
 import '../providers/provider_config.dart';
 import '../providers/provider_config_store.dart';
+import 'context_result_vault.dart';
+import 'mobile_module_vault.dart';
 import 'local_crypto_service.dart';
+import 'run_plan_vault.dart';
 import 'vault_manifest.dart';
 import 'vault_snapshot_reader.dart';
 import 'vault_skill_staging.dart';
@@ -65,6 +72,8 @@ Future<String> importVaultBytes(
 
 Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
     {ProviderConfigStore? providerStore, bool includeSecrets = false}) async {
+  await ensurePersonalContextTables(db);
+  await ensureResultActionTables(db);
   return db.transaction(() async {
     final reader = VaultSnapshotReader(db);
     final store = providerStore ?? ProviderConfigStore();
@@ -76,10 +85,12 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
           await reader.rows(db.conversations, (row) => row.toJson()),
       'messages': await reader.rows(db.messages, (row) => row.toJson()),
       'memories': await reader.rows(db.memories, (row) => row.toJson()),
+      'memoryForgetRules': await reader.memoryForgetRules(),
       'agents': await reader.rows(db.agents, (row) => row.toJson()),
       'prompts': await reader.rows(db.promptTemplates, (row) => row.toJson()),
       'modelProfiles':
           await reader.rows(db.modelProfiles, (row) => row.toJson()),
+      'knowledgeScopes': await reader.knowledgeScopes(),
       'knowledgeDocs':
           await reader.rows(db.knowledgeDocs, (row) => row.toJson()),
       'knowledgeChunks':
@@ -91,6 +102,9 @@ Future<Map<String, dynamic>> buildVaultJson(AppDatabase db,
       'projects': await reader.rows(db.projects, (row) => row.toJson()),
       'drafts': await reader.rows(db.drafts, (row) => row.toJson()),
       'runControls': await reader.rows(db.runControls, (row) => row.toJson()),
+      ...await reader.runPlans(),
+      ...await reader.contextAndResultActions(),
+      ...await reader.mobileModules(),
       'executionLeases':
           await reader.rows(db.executionLeases, (row) => row.toJson()),
       'tasks': await reader.rows(db.tasks, (row) => row.toJson()),
@@ -296,14 +310,56 @@ Future<VaultRestoreReport> _restoreVault(
       oldKeys[key] = await store.readToolKey(key);
     }
   }
+  await ensurePersonalContextTables(db);
+  await ensureResultActionTables(db);
+  final hasPersonalContext = backupHasPersonalContextSection(json);
+  final hasResultActions = backupHasResultActionSection(json);
+  final preservePersonalContext = !hasPersonalContext;
+  var contextResultSummary = const ContextResultRestoreSummary(
+    restoredEntities: 0,
+    skippedForgottenEntities: 0,
+    restoredTombstones: 0,
+    restoredResultCards: 0,
+    restoredResultActions: 0,
+  );
   final stage = await VaultSkillStaging.prepare(json);
   var secretsStarted = false;
   var preserveStage = false;
   var committed = false;
+  var forgottenMemoriesSkipped = 0;
   try {
     await stage.publish();
     await db.transaction(() async {
-      await db.clearAllUserData();
+      // Restore must not erase newer privacy choices, including with legacy vaults.
+      final localForgetRules =
+          await VaultSnapshotReader(db).memoryForgetRules();
+      final preservedLocalTombstones = hasPersonalContext
+          ? [
+              for (final r in await db
+                  .customSelect(
+                    'SELECT normalized_key, project_id, reason, forgotten_at, entity_id '
+                    'FROM $personalContextTombstonesTable',
+                  )
+                  .get())
+                Map<String, Object?>.from(r.data),
+            ]
+          : const <Map<String, Object?>>[];
+      // Legacy vaults without F17 preserve local personal context and tombstones;
+      // full vaults restore F17 while merging local tombstones.
+      await db.clearAllUserData(
+          preservePersonalContext: preservePersonalContext,
+          preserveMobileData: true);
+      if (hasResultActions) {
+        await db.customStatement('DELETE FROM result_actions');
+        await db.customStatement('DELETE FROM result_cards');
+      }
+      final forget = MemoryForgetStore(db);
+      for (final raw in [
+        ...localForgetRules,
+        ...(json['memoryForgetRules'] as List? ?? const [])
+      ]) {
+        await forget.put(Map<String, dynamic>.from(raw as Map));
+      }
       await _restoreOptionalRows(
           json['projects'], db.saveProject, Project.fromJson);
       await _restoreOptionalRows(json['drafts'], db.saveDraft, Draft.fromJson);
@@ -324,7 +380,15 @@ Future<VaultRestoreReport> _restoreVault(
       }
       for (final m in (json['memories'] as List? ?? const [])
           .cast<Map<String, dynamic>>()) {
-        await db.saveMemory(Memory.fromJson(m));
+        final memory = Memory.fromJson(m);
+        if (await forget.blocks(memory.content,
+            sourceConversationId: memory.sourceType == 'manual'
+                ? null
+                : memory.sourceConversationId)) {
+          forgottenMemoriesSkipped++;
+        } else {
+          await db.saveMemory(memory);
+        }
       }
       for (final m in (json['agents'] as List? ?? const [])
           .cast<Map<String, dynamic>>()) {
@@ -341,6 +405,10 @@ Future<VaultRestoreReport> _restoreVault(
       for (final m in (json['knowledgeDocs'] as List? ?? const [])
           .cast<Map<String, dynamic>>()) {
         await db.saveKnowledgeDoc(KnowledgeDoc.fromJson(m));
+      }
+      for (final row in (json['knowledgeScopes'] as List? ?? const [])) {
+        await db.bindKnowledgeDocument(
+            row['docId'] as String, row['projectId'] as String);
       }
       for (final m in (json['knowledgeChunks'] as List? ?? const [])
           .cast<Map<String, dynamic>>()) {
@@ -387,17 +455,36 @@ Future<VaultRestoreReport> _restoreVault(
           json['logRecords'], db.saveLogRecordRow, LogRecord.fromJson);
       // MCP 配置的正式来源是数据库；仅当备份含该段（v2+）时覆盖。
       if (json['mcpServers'] is List) {
+        await McpLegacyMigration.markComplete(db);
         await db.clearMcpServers();
         for (final m
             in (json['mcpServers'] as List).cast<Map<String, dynamic>>()) {
           await db.saveMcpServer(McpServer.fromJson(m));
         }
       }
+      await restoreRunPlanVault(db, json);
+      await restoreMobileModuleVault(db, json);
+      contextResultSummary = await restoreContextResultVault(
+        db,
+        json,
+        preservedLocalTombstones: preservedLocalTombstones,
+      );
       secretsStarted = true;
       await _restoreProviderSecrets(db, json, store);
     });
     committed = true;
-    final warnings = <String>[];
+    final warnings = <String>[
+      if (!mobileModuleVaultTables.keys.every(json.containsKey))
+        '旧备份不含完整的提醒、工作流或研究成果；对应本机数据已保留',
+      if ((json['reminders'] as List? ?? const [])
+          .any((r) => const {'scheduled', 'snoozed'}.contains(r['status'])))
+        '恢复的提醒已暂停，请确认时间后重新启用；不会自动重放通知',
+      if (preservePersonalContext) '本备份不含个人上下文；本机原有条目与遗忘保护已保留，并非从备份恢复',
+      if (forgottenMemoriesSkipped > 0)
+        '已按遗忘规则跳过 $forgottenMemoriesSkipped 条旧记忆；历史消息及外部副本未清除',
+      if (contextResultSummary.skippedForgottenEntities > 0)
+        '已按个人上下文遗忘墓碑跳过 ${contextResultSummary.skippedForgottenEntities} 条实体'
+    ];
     try {
       await stage.dispose();
     } catch (error, stack) {
@@ -408,6 +495,16 @@ Future<VaultRestoreReport> _restoreVault(
     return VaultRestoreReport({
       for (final entry in json.entries)
         if (entry.value is List) entry.key: (entry.value as List).length,
+      'memories': (json['memories'] as List? ?? const []).length -
+          forgottenMemoriesSkipped,
+      if (hasPersonalContext) ...{
+        'personalContextEntities': contextResultSummary.restoredEntities,
+        'personalContextTombstones': contextResultSummary.restoredTombstones,
+      },
+      if (hasResultActions) ...{
+        'resultCards': contextResultSummary.restoredResultCards,
+        'resultActions': contextResultSummary.restoredResultActions,
+      },
     }, stage.fileCount, warnings: warnings);
   } catch (error, stack) {
     Object? fileRollbackError;

@@ -1,5 +1,8 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import '../../domain/reminder.dart';
 
 import '../../domain/approval_action_codec.dart';
 
@@ -32,7 +35,15 @@ class NotificationService {
     try {
       const android = AndroidInitializationSettings('@mipmap/ic_launcher');
       const darwin = DarwinInitializationSettings();
-      const settings = InitializationSettings(android: android, iOS: darwin);
+      const settings = InitializationSettings(
+        android: android,
+        iOS: darwin,
+        windows: WindowsInitializationSettings(
+          appName: 'NEXUS Agent',
+          appUserModelId: 'com.nexusagent.app',
+          guid: '0ec1a8f3-06b0-4a44-9bd9-5d1470dd9663',
+        ),
+      );
       await _plugin.initialize(
         settings: settings,
         onDidReceiveNotificationResponse: onResponse,
@@ -89,6 +100,18 @@ class NotificationService {
     }
   }
 
+  Future<NotificationResponse?> notificationLaunchResponse() async {
+    if (kIsWeb || !_initialized) return null;
+    try {
+      final details = await _plugin.getNotificationAppLaunchDetails();
+      return details?.didNotificationLaunchApp == true
+          ? details?.notificationResponse
+          : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> show({
     required int id,
     required String title,
@@ -106,28 +129,23 @@ class NotificationService {
           priority: Priority.high,
         ),
         iOS: DarwinNotificationDetails(),
+        windows: WindowsNotificationDetails(),
       );
       await _plugin.show(
-          id: id,
-          title: title,
-          body: body,
-          notificationDetails: details,
-          payload: payload,
-        );
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
     } catch (_) {
       // 弹通知失败不阻断任务。
     }
   }
 
-  /// 弹出「可在锁屏/通知栏直接裁决」的审批通知。
-  ///
-  /// `showsUserInterface: false` 是关键：动作不会拉起界面，而是交给
-  /// [handleApprovalNotificationAction]（独立 isolate）处理，因此用户不必解锁、
-  /// 也不必打开 App。代价是**不能依赖任何内存状态**，决定只能通过数据库回传。
-  ///
-  /// 诚实的边界：动作按钮在多数机型的锁屏上可点，但「锁屏是否显示通知内容」由
-  /// 用户的系统设置决定——被隐藏正文时按钮是否仍在，各厂商实现不一致。因此这条
-  /// 通道是**尽力而为的加速器**，前台弹窗仍是兜底路径。
+  /// 通知仅负责打开前台查看或拒绝，不授予执行权限。
+  /// 后台入口也拒绝旧的 approve 动作，不能只靠隐藏按钮保护。
+  /// 身份验证、计划版本与超时校验由前台审批和执行边界负责。
   Future<void> showApprovalRequest({
     required int id,
     required String title,
@@ -140,21 +158,20 @@ class NotificationService {
         android: AndroidNotificationDetails(
           approvalChannelId,
           'NEXUS 审批',
-          channelDescription: '工具审批请求：可在锁屏或通知栏直接批准或拒绝',
+          channelDescription: '工具审批请求：打开应用查看或直接拒绝',
           importance: Importance.max,
           priority: Priority.max,
-          // public：允许在锁屏上显示正文。敏感工具的通知正文已在调用方脱敏，
-          // 不依赖这一项来保护隐私。
-          visibility: NotificationVisibility.public,
+          // 即使调用方正文脱敏，也不主动在锁屏公开请求内容。
+          visibility: NotificationVisibility.private,
           category: AndroidNotificationCategory.reminder,
           // 刻意不设 ongoing：用户随时可以手动划掉，避免进程异常时留下一条
           // 无法消除的通知。正常路径由调用方在拿到结果后 cancel。
           autoCancel: true,
           actions: [
             AndroidNotificationAction(
-              encodeApprovalActionId(requestId, approve: true),
-              '批准',
-              showsUserInterface: false,
+              'review:$requestId',
+              '打开查看',
+              showsUserInterface: true,
               cancelNotification: true,
             ),
             AndroidNotificationAction(
@@ -168,12 +185,12 @@ class NotificationService {
         iOS: const DarwinNotificationDetails(),
       );
       await _plugin.show(
-          id: id,
-          title: title,
-          body: body,
-          notificationDetails: details,
-          payload: 'approval:$requestId',
-        );
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: 'approval:$requestId',
+      );
     } catch (_) {
       // 通知失败不阻断审批：前台弹窗路径仍在。
     }
@@ -187,4 +204,125 @@ class NotificationService {
       // 取消失败无害，通知会随用户操作或被系统回收。
     }
   }
+
+  static int reminderNotificationId(String id) {
+    var hash = 0x811c9dc5;
+    for (final unit in id.codeUnits) {
+      hash = ((hash ^ unit) * 0x01000193) & 0x0fffffff;
+    }
+    return 0x40000000 | hash;
+  }
+
+  /// Read-only capability snapshot; never requests permissions or reschedules.
+  Future<ExactAlarmCapability> reminderCapability() async {
+    if (kIsWeb || !_initialized) return ExactAlarmCapability.denied;
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android == null || await android.areNotificationsEnabled() != true) {
+        return ExactAlarmCapability.denied;
+      }
+      return await android.canScheduleExactNotifications() == true
+          ? ExactAlarmCapability.granted
+          : ExactAlarmCapability.degradedInexact;
+    } catch (_) {
+      return ExactAlarmCapability.denied;
+    }
+  }
+
+  Future<ExactAlarmCapability> scheduleReminder(ReminderItem reminder) async {
+    if (kIsWeb || !_initialized) return ExactAlarmCapability.denied;
+    await _plugin.cancel(id: reminderNotificationId(reminder.id));
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null || await android.areNotificationsEnabled() != true) {
+      return ExactAlarmCapability.denied;
+    }
+    final exact = await android.canScheduleExactNotifications() == true;
+    try {
+      await _plugin.zonedSchedule(
+        id: reminderNotificationId(reminder.id),
+        title: reminder.title,
+        body: reminder.notes.isEmpty ? '点击查看提醒，可稍后提醒或标记完成' : reminder.notes,
+        scheduledDate: tz.TZDateTime.from(reminder.effectiveTriggerUtc, tz.UTC),
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'nexus_reminders',
+            'NEXUS 提醒',
+            channelDescription: '用户创建的独立提醒事项',
+            importance: Importance.high,
+            priority: Priority.high,
+            category: AndroidNotificationCategory.reminder,
+            actions: [
+              AndroidNotificationAction('reminder.snooze', '稍后 10 分钟',
+                  showsUserInterface: true),
+              AndroidNotificationAction('reminder.complete', '完成',
+                  showsUserInterface: true),
+            ],
+          ),
+        ),
+        androidScheduleMode: exact
+            ? AndroidScheduleMode.exactAllowWhileIdle
+            : AndroidScheduleMode.inexactAllowWhileIdle,
+        payload: 'reminder:${reminder.id}@${reminder.version}',
+      );
+      return exact
+          ? ExactAlarmCapability.granted
+          : ExactAlarmCapability.degradedInexact;
+    } catch (_) {
+      return ExactAlarmCapability.denied;
+    }
+  }
+
+  Future<void> cancelReminder(String id) async {
+    if (kIsWeb ||
+        !_initialized ||
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    await _plugin.cancel(id: reminderNotificationId(id));
+  }
+
+  Future<bool> isReminderScheduled(String id) async {
+    if (kIsWeb ||
+        !_initialized ||
+        defaultTargetPlatform != TargetPlatform.android) {
+      return false;
+    }
+    final notificationId = reminderNotificationId(id);
+    return (await _plugin.pendingNotificationRequests()).any((r) =>
+        r.id == notificationId &&
+        (r.payload ?? '').startsWith('reminder:$id@'));
+  }
+
+  Future<void> reconcileReminderNotifications(
+      Set<String> activePayloads) async {
+    if (kIsWeb ||
+        !_initialized ||
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    for (final pending in await _plugin.pendingNotificationRequests()) {
+      if ((pending.payload ?? '').startsWith('reminder:') &&
+          !activePayloads.contains(pending.payload)) {
+        await _plugin.cancel(id: pending.id);
+      }
+    }
+    for (final active in await _plugin.getActiveNotifications()) {
+      final id = active.id;
+      if (id != null && id >= 0x40000000 && id < 0x50000000) {
+        await _plugin.cancel(id: id);
+      }
+    }
+  }
+}
+
+class NotificationReminderDelivery implements ReminderDelivery {
+  const NotificationReminderDelivery();
+  @override
+  Future<ExactAlarmCapability> schedule(ReminderItem reminder) =>
+      NotificationService.instance.scheduleReminder(reminder);
+  @override
+  Future<void> cancel(String reminderId) =>
+      NotificationService.instance.cancelReminder(reminderId);
 }

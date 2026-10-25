@@ -8,467 +8,11 @@ import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import '../../domain/unique_id.dart';
 import 'android_backup_actions.dart';
+import 'android_device_control_bridge.dart';
+
+export 'android_device_control_bridge.dart' show AndroidDeviceControlBridge;
+import 'android_system_editor_actions.dart';
 import 'tool_registry.dart';
-
-class AndroidDeviceControlBridge {
-  const AndroidDeviceControlBridge();
-
-  static const MethodChannel _channel = MethodChannel('nexus/device_control');
-
-  Future<List<Map<String, String>>> listApps() async {
-    final result = await _channel.invokeListMethod<dynamic>('listApps');
-    return [
-      for (final item in result ?? const [])
-        if (item is Map)
-          Map<String, String>.fromEntries(item.entries.map(
-            (entry) => MapEntry(entry.key.toString(), entry.value.toString()),
-          )),
-    ];
-  }
-
-  Future<void> launchApp(String packageName) =>
-      _channel.invokeMethod<void>('launchApp', {'packageName': packageName});
-
-  Future<Map<String, dynamic>> rootStatus() async =>
-      await _channel.invokeMapMethod<String, dynamic>('rootStatus') ?? const {};
-
-  Future<Map<String, dynamic>> deviceInfo() async =>
-      await _channel.invokeMapMethod<String, dynamic>('deviceInfo') ?? const {};
-
-  Future<Map<String, dynamic>> storageInfo() async =>
-      await _channel.invokeMapMethod<String, dynamic>('storageInfo') ??
-      const {};
-
-  Future<Map<String, dynamic>> networkInfo() async =>
-      await _channel.invokeMapMethod<String, dynamic>('networkInfo') ??
-      const {};
-
-  Future<Map<String, dynamic>> refreshDns() async =>
-      await _channel.invokeMapMethod<String, dynamic>('refreshDns') ?? const {};
-
-  Future<Map<String, dynamic>> openVpnSettings() async =>
-      await _channel.invokeMapMethod<String, dynamic>('openVpnSettings') ??
-      const {};
-
-  Future<Map<String, dynamic>> setFirewallPortRule({
-    required String protocol,
-    required int port,
-    required bool enabled,
-  }) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'setFirewallPortRule',
-        {'protocol': protocol, 'port': port, 'enabled': enabled},
-      ) ??
-      const {};
-
-  Future<Map<String, dynamic>> setHostsBlock({
-    required String domain,
-    required bool enabled,
-  }) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'setHostsBlock',
-        {'domain': domain, 'enabled': enabled},
-      ) ??
-      const {};
-
-  Future<Map<String, dynamic>> restartService(String serviceName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'restartService', {'serviceName': serviceName}) ??
-      const {};
-
-  Future<List<dynamic>> runningProcesses() async =>
-      await _channel.invokeListMethod<dynamic>('runningProcesses') ?? const [];
-
-  Future<List<dynamic>> foregroundApps() async =>
-      await _channel.invokeListMethod<dynamic>('foregroundApps') ?? const [];
-
-  Future<Map<String, dynamic>> logcatTail(int lines) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('logcatTail', {'lines': lines}) ??
-      const {};
-
-  Future<Map<String, dynamic>> crashLogs(String? packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'crashLogs', {if (packageName != null) 'packageName': packageName}) ??
-      const {};
-
-  Future<Map<String, dynamic>> appInfo(String packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'appInfo', {'packageName': packageName}) ??
-      const {};
-
-  Future<Map<String, dynamic>> systemStatus() async =>
-      await _channel.invokeMapMethod<String, dynamic>('systemStatus') ??
-      const {};
-
-  Future<Map<String, dynamic>> trafficInfo() async =>
-      await _channel.invokeMapMethod<String, dynamic>('trafficInfo') ??
-      const {};
-
-  Future<Map<String, dynamic>> traceroute(String host) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('traceroute', {'host': host}) ??
-      const {};
-
-  Future<Map<String, dynamic>> systemSettings() async =>
-      await _channel.invokeMapMethod<String, dynamic>('systemSettings') ??
-      const {};
-
-  Future<Map<String, dynamic>> setBrightness(double value) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setBrightness', {'value': value}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setVolume(String stream, double value) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setVolume', {'stream': stream, 'value': value}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setAutoRotate(bool enabled) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setAutoRotate', {'enabled': enabled}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setWifi(bool enabled) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('setWifi', {'enabled': enabled}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setBluetooth(bool enabled) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setBluetooth', {'enabled': enabled}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setAirplaneMode(bool enabled) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setAirplaneMode', {'enabled': enabled}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setLocationEnabled(bool enabled) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setLocationEnabled', {'enabled': enabled}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setDoNotDisturb(bool enabled) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setDoNotDisturb', {'enabled': enabled}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setRefreshRate(double value) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setRefreshRate', {'value': value}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setFontScale(double value) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('setFontScale', {'value': value}) ??
-      const {};
-
-  Future<Map<String, dynamic>> setAnimationScale(double value) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setAnimationScale', {'value': value}) ??
-      const {};
-
-  Future<Map<String, dynamic>> openDefaultAppsSettings() async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('openDefaultAppsSettings') ??
-      const {};
-
-  Future<Map<String, dynamic>> openDoNotDisturbSettings() async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('openDoNotDisturbSettings') ??
-      const {};
-
-  Future<Map<String, dynamic>> openNotificationSettings(
-          String? packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'openNotificationSettings',
-          {if (packageName != null) 'packageName': packageName}) ??
-      const {};
-
-  Future<Map<String, dynamic>> directorySize(String path) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('directorySize', {'path': path}) ??
-      const {};
-
-  Future<Map<String, dynamic>> portProbe(String host, int port) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'portProbe', {'host': host, 'port': port}) ??
-      const {};
-
-  Future<Map<String, dynamic>> restartApp(String packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'restartApp', {'packageName': packageName}) ??
-      const {};
-
-  Future<Map<String, dynamic>> appPermissions(String packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'appPermissions', {'packageName': packageName}) ??
-      const {};
-
-  Future<List<dynamic>> recentApps() async =>
-      await _channel.invokeListMethod<dynamic>('recentApps') ?? const [];
-
-  Future<Map<String, dynamic>> setAppAlias(
-          String alias, String packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'setAppAlias', {'alias': alias, 'packageName': packageName}) ??
-      const {};
-
-  Future<List<dynamic>> listAppAliases() async =>
-      await _channel.invokeListMethod<dynamic>('listAppAliases') ?? const [];
-
-  Future<Map<String, dynamic>> launchDeepLink(
-          String packageName, String uri) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'launchDeepLink', {'packageName': packageName, 'uri': uri}) ??
-      const {};
-
-  Future<Map<String, dynamic>> stopApp(String packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'stopApp', {'packageName': packageName}) ??
-      const {};
-
-  Future<Map<String, dynamic>> killProcess(int pid, String processName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'killProcess', {'pid': pid, 'processName': processName}) ??
-      const {};
-
-  Future<Map<String, dynamic>> clearAppCache(String packageName) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'clearAppCache', {'packageName': packageName}) ??
-      const {};
-
-  Future<Map<String, dynamic>> readRootFile(String path) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('readRootFile', {'path': path}) ??
-      const {};
-
-  Future<Map<String, dynamic>> inspectAppPrivateData({
-    required String operation,
-    required String packageName,
-    required String relativePath,
-  }) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'inspectAppPrivateData',
-        {
-          'operation': operation,
-          'packageName': packageName,
-          'relativePath': relativePath,
-        },
-      ) ??
-      const {};
-
-  Future<Map<String, dynamic>> listRootFiles(String path) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('listRootFiles', {'path': path}) ??
-      const {};
-
-  Future<Map<String, dynamic>> writeRootFile(
-          String path, String content) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'writeRootFile', {'path': path, 'content': content}) ??
-      const {};
-
-  Future<Map<String, dynamic>> deleteRootFile(String path) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('deleteRootFile', {'path': path}) ??
-      const {};
-
-  Future<Map<String, dynamic>> moveRootFile(
-          String source, String destination) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-          'moveRootFile', {'source': source, 'destination': destination}) ??
-      const {};
-
-  Future<Map<String, dynamic>> networkProbe(String host) async =>
-      await _channel
-          .invokeMapMethod<String, dynamic>('networkProbe', {'host': host}) ??
-      const {};
-
-  Future<Map<String, dynamic>> compressRootFiles(
-          List<String> sources, String destination) async =>
-      await _channel.invokeMapMethod<String, dynamic>('compressRootFiles',
-          {'sources': sources, 'destination': destination}) ??
-      const {};
-
-  Future<Map<String, dynamic>> extractRootArchive(
-          String archive, String destination) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'extractRootArchive',
-        {'archive': archive, 'destination': destination},
-      ) ??
-      const {};
-
-  Future<Map<String, dynamic>> searchFilesFiltered({
-    required String query,
-    String? extension,
-    int? modifiedAfterMs,
-    int? modifiedBeforeMs,
-  }) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'searchFilesFiltered',
-        {
-          'query': query,
-          if (extension != null) 'extension': extension,
-          if (modifiedAfterMs != null) 'modifiedAfterMs': modifiedAfterMs,
-          if (modifiedBeforeMs != null) 'modifiedBeforeMs': modifiedBeforeMs,
-        },
-      ) ??
-      const {};
-
-  Future<Map<String, dynamic>> fileOperation({
-    required String operation,
-    required String uri,
-    String? destinationUri,
-    String? newName,
-  }) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'fileOperation',
-        {
-          'operation': operation,
-          'uri': uri,
-          if (destinationUri != null) 'destinationUri': destinationUri,
-          if (newName != null) 'newName': newName,
-        },
-      ) ??
-      const {};
-
-  Future<Map<String, dynamic>> fileOperationBatch({
-    required String operation,
-    required List<String> uris,
-    String? destinationUri,
-  }) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'fileOperationBatch',
-        {
-          'operation': operation,
-          'uris': uris.map((uri) => uri.trim()).toList(growable: false),
-          if (destinationUri != null) 'destinationUri': destinationUri.trim(),
-        },
-      ) ??
-      const {};
-
-  Future<Map<String, dynamic>> refreshSearchIndex() async =>
-      await _channel.invokeMapMethod<String, dynamic>('refreshSearchIndex') ??
-      const {};
-
-  Future<void> shareFile(String uri) =>
-      _channel.invokeMethod<void>('shareFile', {'uri': uri});
-
-  Future<Map<String, dynamic>> launchAppByName(String query) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'launchAppByName',
-        {'query': query},
-      ) ??
-      const {};
-
-  Future<void> chooseFolder() => _channel.invokeMethod<void>('chooseFolder');
-
-  Future<Map<String, dynamic>> searchFiles(
-    String query,
-    String requestId,
-  ) async =>
-      await _channel.invokeMapMethod<String, dynamic>(
-        'searchFiles',
-        {'query': query, 'requestId': requestId},
-      ) ??
-      const {};
-
-  Future<void> openFile(String uri) =>
-      _channel.invokeMethod<void>('openFile', {'uri': uri});
-
-  Future<List<Map<String, String>>> listAuthorizedFolders() async {
-    final result =
-        await _channel.invokeListMethod<dynamic>('listAuthorizedFolders');
-    return [
-      for (final item in result ?? const [])
-        if (item is Map)
-          Map<String, String>.fromEntries(item.entries.map(
-            (entry) => MapEntry(entry.key.toString(), entry.value.toString()),
-          )),
-    ];
-  }
-
-  Future<Map<String, dynamic>> listAuthorizedFoldersResult() async => {
-        'folders': await listAuthorizedFolders(),
-      };
-
-  Future<void> removeAuthorizedFolder(String uri) =>
-      _channel.invokeMethod<void>('removeAuthorizedFolder', {'uri': uri});
-
-  Future<void> cancelSearch(String requestId) =>
-      _channel.invokeMethod<void>('cancelSearch', {'requestId': requestId});
-
-  Future<Map<String, dynamic>> _invokeMap(
-    String method, [
-    Map<String, dynamic>? arguments,
-  ]) async =>
-      await _channel.invokeMapMethod<String, dynamic>(method, arguments) ??
-      const {};
-
-  /// Root / Shizuku / 特殊权限 / 本地 VPN 的汇总状态与各类动作的实际执行通道。
-  ///
-  /// [probeRoot] 为 false 时只读取已缓存的 Root 结果，不执行 su（不会弹授权框）。
-  ///
-  /// 每次调用都会刷新执行通道快照，预览据此说明“将通过哪个通道执行”，
-  /// 预览本身不访问原生层（也就不会触发 Root 授权框）。
-  /// 最近 5 分钟内读取过的完整 privilegeStatus（供同步的审批详情使用）；没有则为 null。
-  static Map<String, dynamic>? get recentPrivilegeStatus {
-    final snapshot = _privilegeRouteSnapshot;
-    return snapshot != null && snapshot.fresh ? snapshot.status : null;
-  }
-
-  Future<Map<String, dynamic>> privilegeStatus({bool probeRoot = true}) async {
-    final status =
-        await _invokeMap('privilegeStatus', {'probeRoot': probeRoot});
-    final routes = status['routes'];
-    if (routes is Map) {
-      final root = status['root'];
-      _privilegeRouteSnapshot = _PrivilegeRouteSnapshot(
-        Map<String, dynamic>.from(routes),
-        rootProbed: root is Map && root['probed'] == true,
-        status: status,
-      );
-    }
-    return status;
-  }
-
-  Future<Map<String, dynamic>> requestShizukuPermission() =>
-      _invokeMap('requestShizukuPermission');
-
-  Future<Map<String, dynamic>> openShizuku() => _invokeMap('openShizuku');
-
-  Future<Map<String, dynamic>> grantPermissionsViaPrivilege() =>
-      _invokeMap('grantPermissionsViaPrivilege');
-
-  Future<Map<String, dynamic>> openSpecialPermission(String kind) =>
-      _invokeMap('openSpecialPermission', {'kind': kind});
-
-  Future<Map<String, dynamic>> openAppDetails(String packageName) =>
-      _invokeMap('openAppDetails', {'packageName': packageName});
-
-  Future<Map<String, dynamic>> networkFilterStatus() =>
-      _invokeMap('networkFilterStatus');
-
-  Future<Map<String, dynamic>> setNetworkFilterEnabled(bool enabled) =>
-      _invokeMap('setNetworkFilterEnabled', {'enabled': enabled});
-
-  Future<Map<String, dynamic>> setAppNetworkBlock({
-    required String packageName,
-    required bool enabled,
-  }) =>
-      _invokeMap(
-        'setAppNetworkBlock',
-        {'packageName': packageName, 'enabled': enabled},
-      );
-
-  Future<Map<String, dynamic>> setDomainBlock({
-    required String domain,
-    required bool enabled,
-  }) =>
-      _invokeMap('setDomainBlock', {'domain': domain, 'enabled': enabled});
-}
 
 /// 免 Root 通道：openSpecialPermission 支持的权限页。
 const androidSpecialPermissionKinds = <String>{
@@ -481,24 +25,8 @@ const androidSpecialPermissionKinds = <String>{
   'bluetooth',
 };
 
-/// 最近一次 privilegeStatus 返回的执行通道，供同步的预览/审批详情引用。
-_PrivilegeRouteSnapshot? _privilegeRouteSnapshot;
-
-class _PrivilegeRouteSnapshot {
-  _PrivilegeRouteSnapshot(
-    this.routes, {
-    this.rootProbed = true,
-    this.status = const {},
-  }) : fetchedAt = DateTime.now();
-  final Map<String, dynamic> routes;
-  final bool rootProbed;
-  final Map<String, dynamic> status;
-  final DateTime fetchedAt;
-  bool get fresh =>
-      DateTime.now().difference(fetchedAt) < const Duration(minutes: 5);
-}
-
 const _mutatingAndroidActions = <String>{
+  'system_editor',
   'launch_app',
   'launch_app_by_name',
   'launch_deep_link',
@@ -652,6 +180,7 @@ class AndroidDeviceTool implements AgentTool, ToolApprovalGate {
             'list_app_aliases',
             'launch_deep_link',
             'stop_app',
+            'system_editor',
             'kill_process',
             'clear_app_cache',
             'read_root_file',
@@ -791,6 +320,19 @@ class AndroidDeviceTool implements AgentTool, ToolApprovalGate {
         'backupId': {
           'type': 'string',
           'description': 'backup_list 返回的备份 ID；恢复前务必先预览文件列表与覆盖范围',
+        },
+        'connectorRequest': {
+          'type': 'object',
+          'description':
+              'system_editor 请求：connectorId=calendar/contacts，operation=prepare_event/prepare_contact，arguments 为严格字段白名单；不接受任意 Intent/URI',
+        },
+        'receiverActivity': {
+          'type': 'string',
+          'description': '系统编辑器检测返回的完整 Activity 名称'
+        },
+        'receiverVersion': {
+          'type': 'string',
+          'description': '系统编辑器检测返回的版本；变化后必须重新审批',
         },
       },
       'required': ['action'],
@@ -1025,6 +567,8 @@ class AndroidDeviceTool implements AgentTool, ToolApprovalGate {
         );
       }
       switch (action) {
+        case 'system_editor':
+          return await AndroidSystemEditorActions.execute(arguments);
         case 'list_apps':
           final apps = await _bridge.listApps();
           return ToolResult.success(
@@ -1971,6 +1515,9 @@ class AndroidDeviceTool implements AgentTool, ToolApprovalGate {
     if (AndroidBackupActions.handles(action)) {
       return AndroidBackupActions.validate(action, arguments);
     }
+    if (action == AndroidSystemEditorActions.action) {
+      return AndroidSystemEditorActions.validate(arguments);
+    }
     switch (action) {
       case 'launch_app':
       case 'stop_app':
@@ -2188,6 +1735,9 @@ class AndroidDeviceTool implements AgentTool, ToolApprovalGate {
         riskClass: _actionRisk(action, arguments).name,
       )..addAll({if (route != null) 'executionRoute': route});
     }
+    if (action == AndroidSystemEditorActions.action) {
+      return AndroidSystemEditorActions.preview(arguments);
+    }
     final impact = switch (action) {
       'directory_size' => '通过 Root 递归统计指定目录大小；不读取文件内容或修改数据',
       'read_root_file' => '通过 Root 读取指定文件，最多返回 64 KiB；文件内容可能包含敏感信息',
@@ -2344,7 +1894,7 @@ class AndroidDeviceTool implements AgentTool, ToolApprovalGate {
     final requirement = _privilegeRequirementFor(action, arguments);
     if (requirement == null) return null;
     final fallback = _privilegeFallbackFor(action);
-    final snapshot = _privilegeRouteSnapshot;
+    final snapshot = AndroidDeviceControlBridge.recentPrivilegeRouteSnapshot;
     if (snapshot == null || !snapshot.fresh) {
       return {
         'requirement': requirement,

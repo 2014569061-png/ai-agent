@@ -7,7 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Checks GitHub Releases, downloads an APK, and delegates installation to Android.
+import 'windows_package_downloader.dart';
+
+/// Checks platform-specific GitHub Release assets. Android delegates installation
+/// to the system; Windows downloads a verified portable ZIP for manual upgrade.
 class UpdateService {
   static const _repoApi =
       'https://api.github.com/repos/2014569061-png/ai-agent/releases/latest';
@@ -17,9 +20,12 @@ class UpdateService {
 
   /// [dio] 可注入是为了让「下载 → 校验 → 安装」这条安全关键路径可测：此前
   /// Dio 写死在字段里，导致该分支只能靠人工在真机上验，覆盖率长期停在 19%。
-  UpdateService({Dio? dio}) : _dio = dio ?? Dio();
+  UpdateService({Dio? dio, TargetPlatform? targetPlatform})
+      : _dio = dio ?? Dio(),
+        _targetPlatform = targetPlatform ?? defaultTargetPlatform;
 
   final Dio _dio;
+  final TargetPlatform _targetPlatform;
 
   /// Returns whether a newer GitHub release with an APK is available.
   Future<UpdateCheckResult> checkUpdate() async {
@@ -28,6 +34,11 @@ class UpdateService {
         status: UpdateCheckStatus.failed,
         error: 'Web 平台不支持应用内更新',
       );
+    }
+    if (_targetPlatform != TargetPlatform.android &&
+        _targetPlatform != TargetPlatform.windows) {
+      return const UpdateCheckResult(
+          status: UpdateCheckStatus.failed, error: '当前平台不支持应用内更新');
     }
 
     try {
@@ -50,30 +61,40 @@ class UpdateService {
         );
       }
 
-      String? apkUrl;
-      String? apkDigest;
+      final windows = _targetPlatform == TargetPlatform.windows;
+      final assets = (data['assets'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((asset) => Map<String, dynamic>.from(asset))
+          .toList();
+      final candidates = assets.where((asset) {
+        final name = (asset['name'] as String? ?? '').toLowerCase();
+        return windows
+            ? RegExp(r'^nexus-agent-.+-windows-x64\.zip$').hasMatch(name)
+            : name == 'app-release.apk';
+      }).toList();
+      if (candidates.isEmpty) {
+        return UpdateCheckResult(
+            status: UpdateCheckStatus.failed,
+            error: windows ? '新版本尚未提供 Windows x64 更新包' : '新版本尚未提供 Android 更新包');
+      }
+      final asset = candidates.first;
+      final assetName = asset['name'] as String;
+      final packageUrl = asset['browser_download_url'] as String?;
+      var packageDigest = _normalizeSha256(asset['digest'] as String?);
+      if (packageUrl == null || packageUrl.isEmpty) {
+        return const UpdateCheckResult(
+            status: UpdateCheckStatus.failed, error: '更新包下载地址缺失');
+      }
       String? checksumUrl;
-      for (final asset in (data['assets'] as List<dynamic>? ?? const [])) {
-        final map = asset as Map<String, dynamic>;
-        final name = (map['name'] as String?) ?? '';
-        if (name.toLowerCase().endsWith('.apk')) {
-          apkUrl = map['browser_download_url'] as String?;
-          final digest = map['digest'] as String?;
-          apkDigest = _normalizeSha256(digest);
-        } else if (name.toLowerCase().endsWith('.apk.sha256') ||
-            name.toLowerCase().endsWith('.apk.sha256.txt')) {
-          checksumUrl = map['browser_download_url'] as String?;
+      for (final checksum in assets) {
+        if (checksum['name'] == '$assetName.sha256' ||
+            checksum['name'] == '$assetName.sha256.txt') {
+          checksumUrl = checksum['browser_download_url'] as String?;
+          break;
         }
       }
-      if (apkUrl == null || apkUrl.isEmpty) {
-        debugPrint('UpdateService: release $tagName has no APK asset');
-        return UpdateCheckResult(
-          status: UpdateCheckStatus.upToDate,
-          currentVersion: info.version,
-        );
-      }
 
-      if (apkDigest == null && checksumUrl != null) {
+      if (packageDigest == null && checksumUrl != null) {
         try {
           final checksumResponse = await _dio.get<String>(
             checksumUrl,
@@ -82,12 +103,12 @@ class UpdateService {
               receiveTimeout: const Duration(seconds: 15),
             ),
           );
-          apkDigest = parseSha256(checksumResponse.data ?? '');
+          packageDigest = parseSha256(checksumResponse.data ?? '');
         } catch (error) {
           debugPrint('UpdateService checksum sidecar failed: $error');
         }
       }
-      if (apkDigest == null) {
+      if (packageDigest == null) {
         return const UpdateCheckResult(
           status: UpdateCheckStatus.failed,
           error: '更新包缺少可验证的 SHA-256 校验值，已停止更新',
@@ -100,8 +121,9 @@ class UpdateService {
         info: UpdateInfo(
           version: version,
           notes: (data['body'] as String?) ?? '',
-          apkUrl: apkUrl,
-          sha256: apkDigest,
+          apkUrl: windows ? null : packageUrl,
+          windowsZipUrl: windows ? packageUrl : null,
+          sha256: packageDigest,
         ),
       );
     } on DioException catch (e) {
@@ -119,6 +141,18 @@ class UpdateService {
         error: '检测更新失败，请稍后重试',
       );
     }
+  }
+
+  Future<WindowsPackageDownloadResult> downloadWindowsPackage(String url,
+      {required String? expectedSha256,
+      void Function(double progress)? onProgress}) {
+    if (kIsWeb || _targetPlatform != TargetPlatform.windows) {
+      return Future.value(const WindowsPackageDownloadResult.failure(
+          'Windows 更新包仅可在 Windows 上下载'));
+    }
+    return WindowsPackageDownloader(_dio).download(url,
+        expectedSha256: _normalizeSha256(expectedSha256),
+        onProgress: onProgress);
   }
 
   /// Downloads and starts the platform installer. The bool API is kept for
@@ -159,6 +193,9 @@ class UpdateService {
     if (kIsWeb) {
       return const UpdateInstallResult.failure('Web 平台不支持应用内更新');
     }
+    if (_targetPlatform != TargetPlatform.android) {
+      return const UpdateInstallResult.failure('APK 安装仅支持 Android，请下载当前平台的更新包');
+    }
     if (url.trim().isEmpty) {
       return const UpdateInstallResult.failure('更新地址为空');
     }
@@ -173,8 +210,7 @@ class UpdateService {
       await dir.create(recursive: true);
       final updates = Directory('${dir.path}${Platform.pathSeparator}updates');
       await updates.create(recursive: true);
-      final apkFile =
-          File('${updates.path}${Platform.pathSeparator}$_apkName');
+      final apkFile = File('${updates.path}${Platform.pathSeparator}$_apkName');
       partFile = File('${updates.path}${Platform.pathSeparator}$_partName');
 
       if (await partFile.exists()) {
@@ -383,11 +419,16 @@ class UpdateCheckResult {
 
 class UpdateInfo {
   const UpdateInfo(
-      {required this.version, required this.notes, this.apkUrl, this.sha256});
+      {required this.version,
+      required this.notes,
+      this.apkUrl,
+      this.windowsZipUrl,
+      this.sha256});
 
   final String version;
   final String notes;
   final String? apkUrl;
+  final String? windowsZipUrl;
   final String? sha256;
 }
 

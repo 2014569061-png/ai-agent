@@ -3,6 +3,15 @@ import '../../domain/tool_codes.dart';
 import '../../domain/tool_result.dart';
 import 'tool_registry.dart';
 
+class SubAgentFailure implements Exception {
+  const SubAgentFailure(this.code,
+      {this.partialText, this.inputTokens = 0, this.outputTokens = 0});
+  final String code;
+  final String? partialText;
+  final int inputTokens;
+  final int outputTokens;
+}
+
 /// 子 Agent 工具（C7）：主 Agent 可派生子 Agent（不同系统提示词）执行子任务并返回摘要。
 /// 危险工具在子 Agent 内部递归走父级审批（由 HeadlessExecutor 仅放行 safe 工具兜底，嵌套受限）。
 ///
@@ -48,7 +57,8 @@ class SubAgentTool implements AgentTool {
               'type': 'integer',
               'minimum': minBudget,
               'maximum': maxBudget,
-              'description': '受限 token 预算（可选，钳制在 $minBudget~$maxBudget）',
+              'description':
+                  '单次输出上限（$minBudget~$maxBudget），累计输入+输出预算为该值的4倍，含重试与摘要',
             },
           },
           'required': ['prompt'],
@@ -58,8 +68,15 @@ class SubAgentTool implements AgentTool {
 
   @override
   Future<ToolResult> execute(Map<String, dynamic> arguments) async {
+    if ((arguments['agentId'] != null && arguments['agentId'] is! String) ||
+        arguments['prompt'] is! String ||
+        (arguments['maxTokens'] != null && arguments['maxTokens'] is! int)) {
+      return ToolResult.failure(
+          code: ToolCodes.invalidArguments,
+          message: 'prompt/agentId 必须是字符串，maxTokens 必须是整数');
+    }
     final agentId = arguments['agentId'] as String?;
-    final prompt = (arguments['prompt'] as String? ?? '').trim();
+    final prompt = (arguments['prompt'] as String).trim();
     if (prompt.isEmpty) {
       return ToolResult.failure(
         code: ToolCodes.invalidArguments,
@@ -67,12 +84,33 @@ class SubAgentTool implements AgentTool {
       );
     }
     final budget = (arguments['maxTokens'] as num?)?.toInt();
-    final summary = await onRun(agentId, prompt, budget);
+    final String summary;
+    try {
+      summary = await onRun(agentId, prompt, clampBudget(budget));
+    } on SubAgentFailure catch (error) {
+      return ToolResult.failure(
+          code: error.code,
+          data: error.code == ToolCodes.tokenBudgetExhausted
+              ? {
+                  'partialSummary': error.partialText ?? '',
+                  'inputTokens': error.inputTokens,
+                  'outputTokens': error.outputTokens,
+                  'stopReason': 'cumulative_token_budget',
+                }
+              : null,
+          message: error.code == ToolCodes.tokenBudgetExhausted
+              ? '子任务累计 token 预算不足，已保留进度。请汇总已有结果，不要自动重派相同任务重置预算。'
+              : '子任务未成功完成，请检查任务状态后调整方案。');
+    } catch (_) {
+      return ToolResult.failure(
+          code: ToolCodes.toolError, message: '子任务执行失败，内部异常已隐藏；请检查运行日志。');
+    }
     return ToolResult.text(
       summary,
       extra: {
         if (agentId != null) 'agentId': agentId,
         'budget': clampBudget(budget),
+        'totalTokenBudget': clampBudget(budget) * 4,
       },
     );
   }

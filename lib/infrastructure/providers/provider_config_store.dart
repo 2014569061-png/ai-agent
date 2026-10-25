@@ -168,16 +168,22 @@ class ProviderConfigStore {
     final preferences = await SharedPreferences.getInstance();
     final profiles = await loadAll();
     final updated = profiles.where((p) => p.id != id).toList();
+    if (updated.length == profiles.length) return false;
     await preferences.setString(
         _profilesKey, jsonEncode(updated.map(_profileMeta).toList()));
     await _deleteKey('provider.api_key.$id');
-    if (_activeId == id) {
-      if (updated.isNotEmpty) {
-        await setActive(updated.first.id);
-      } else {
-        await preferences.remove(_activeKey);
-        _activeId = null;
-      }
+    if (updated.isEmpty) {
+      // An empty profile list is an explicit deletion, not legacy migration.
+      // Remove the compatibility copy too, including stale/missing active IDs.
+      await Future.wait([
+        _deleteKey(_apiKeyKey),
+        preferences.remove(_activeKey),
+        preferences.remove(_baseUrlKey),
+        preferences.remove(_modelKey),
+      ]);
+      _activeId = null;
+    } else if (_activeId == id) {
+      await setActive(updated.first.id);
     }
     return true;
   }

@@ -7,7 +7,8 @@ enum WorkspaceEntryKind { file, directory, notFound }
 
 /// [WorkspaceFs.list] 的结果。[isLink] 为 true 时不跟随链接。
 class WorkspaceEntry {
-  const WorkspaceEntry(this.path, {required this.isDirectory, this.isLink = false});
+  const WorkspaceEntry(this.path,
+      {required this.isDirectory, this.isLink = false});
 
   final String path;
   final bool isDirectory;
@@ -56,6 +57,12 @@ abstract interface class WorkspaceFs {
 class LocalWorkspaceFs implements WorkspaceFs {
   const LocalWorkspaceFs();
 
+  /// Used to seed a staged replacement from the original, retaining the
+  /// platform's copy semantics for file permissions before rewriting content.
+  Future<void> copyFile(String from, String to) async {
+    await File(from).copy(to);
+  }
+
   @override
   String get id => 'local';
 
@@ -77,7 +84,7 @@ class LocalWorkspaceFs implements WorkspaceFs {
     final file = File(path);
     final parent = file.parent;
     if (!await parent.exists()) await parent.create(recursive: true);
-    await file.writeAsString(content);
+    await file.writeAsString(content, flush: true);
   }
 
   @override

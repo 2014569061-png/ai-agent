@@ -19,6 +19,7 @@ enum NotificationIntentKind {
 
   /// 设备自动化触发（`automation:<fireId>`）：打开预览确认面板，用户确认后才执行。
   automation,
+  reminder,
 }
 
 /// 一条「用户点了通知」的意图。
@@ -42,11 +43,16 @@ class NotificationIntent {
       'task' => NotificationIntentKind.task,
       'approval' => NotificationIntentKind.approval,
       'automation' => NotificationIntentKind.automation,
+      'reminder' => NotificationIntentKind.reminder,
       _ => null,
     };
     if (kind == null) return null;
     final id = payload.substring(separator + 1);
-    if (id.isEmpty) return null;
+    if (id.isEmpty ||
+        id.length > 256 ||
+        RegExp(r'[\x00-\x20\x7f]').hasMatch(id)) {
+      return null;
+    }
     return NotificationIntent(kind, id);
   }
 
@@ -73,11 +79,27 @@ abstract final class NotificationIntentRouter {
   static final StreamController<NotificationIntent> _controller =
       StreamController<NotificationIntent>.broadcast();
   static final List<NotificationIntent> _pending = <NotificationIntent>[];
+  static void Function(NotificationIntent)? _entrySink;
+
+  /// Production binds before plugin initialization. Legacy observers remain
+  /// available, but only the shared entry surface is allowed to navigate.
+  static void bindEntrySink(void Function(NotificationIntent) sink) {
+    _entrySink = sink;
+    for (final intent in drainPending()) {
+      sink(intent);
+    }
+  }
 
   static Stream<NotificationIntent> get intents => _controller.stream;
 
   /// 由通知回调（可能处于启动早期）投递一条意图。
   static void dispatch(NotificationIntent intent) {
+    final sink = _entrySink;
+    if (sink != null) {
+      sink(intent);
+      if (_controller.hasListener) _controller.add(intent);
+      return;
+    }
     if (_controller.hasListener) {
       _controller.add(intent);
     } else {
@@ -95,5 +117,6 @@ abstract final class NotificationIntentRouter {
   @visibleForTesting
   static void reset() {
     _pending.clear();
+    _entrySink = null;
   }
 }
