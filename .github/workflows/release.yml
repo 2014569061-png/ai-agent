@@ -1,4 +1,4 @@
-name: Build & Release APK
+name: Build & Release Android and Windows
 
 on:
   push:
@@ -37,13 +37,63 @@ jobs:
         run: flutter analyze --no-pub
       - name: Silent catch ratchet
         run: dart run tool/count_silent_catches.dart lib 0
+      - name: Release evidence and evaluation scorer regression
+        run: |
+          python3 tool/test_release_evidence_gate.py
+          python3 tool/test_score_mobile_agent_eval.py
+          python3 tool/test_source_tokens.py
       - name: Test with coverage
         run: flutter test --coverage
       - name: Coverage gate
         run: dart run tool/check_coverage.dart coverage/lcov.info 55.0
+  windows:
+    name: Publish Windows x64 package
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+        with:
+          nuget-version: '6.x'
+      - name: Build and package Windows
+        shell: pwsh
+        run: ./tool/build-windows.ps1
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./tool/build-windows-installer.ps1
+      - name: Validate Windows package checksum
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem -LiteralPath dist/windows -Filter 'nexus-agent-*-windows-x64.zip')
+          if ($packages.Count -ne 1) { throw 'Expected exactly one Windows package' }
+          $package = $packages[0]
+          $sidecar = $package.FullName + '.sha256'
+          $expected = ((Get-Content -LiteralPath $sidecar -Raw).Trim() -split '\s+')[0]
+          $actual = (Get-FileHash -LiteralPath $package.FullName -Algorithm SHA256).Hash
+          if ($actual -ne $expected) { throw 'Windows package checksum mismatch' }
+      - name: Upload Windows package to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.tag }}
+          files: |
+            dist/windows/nexus-agent-*-windows-x64.zip
+            dist/windows/nexus-agent-*-windows-x64.zip.sha256
+            dist/windows/nexus-agent-*-windows-x64-setup.exe
+            dist/windows/nexus-agent-*-windows-x64-setup.exe.sha256
+          fail_on_unmatched_files: true
   build:
     runs-on: ubuntu-latest
     needs: quality
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -114,6 +164,13 @@ jobs:
           cd build/app/outputs/flutter-apk
           sha256sum app-release.apk > app-release.apk.sha256
           sha256sum --check app-release.apk.sha256
+      - name: Require reviewed mobile release evidence
+        shell: bash
+        run: |
+          python3 tool/release_evidence_gate.py \
+            --apk build/app/outputs/flutter-apk/app-release.apk \
+            --evidence release/mobile-evidence.json \
+            --output artifacts/project-review/mobile-release-gate.json
       - name: Upload APK to Release
         uses: softprops/action-gh-release@v2
         with:

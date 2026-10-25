@@ -6,13 +6,14 @@ name: CI
 # 分支的日常提交没有任何强制门禁，而 README/交接文档宣称的"flutter analyze 零
 # 告警 + 测试全绿"只由开发者本机习惯保证。本工作流把同一组命令搬到 CI。
 #
-# 触发条件说明：日常开发分支是 feature/*（当前为 feature/mature-agent），因此
-# 只挂 main 等于门禁形同虚设，故同时覆盖 feature/** 与所有 PR。
+# 同时覆盖 feature、refactor、codex 开发分支及所有 PR。
 on:
   push:
     branches:
       - main
       - 'feature/**'
+      - 'refactor/**'
+      - 'codex/**'
   pull_request:
   workflow_dispatch:
 
@@ -63,9 +64,7 @@ jobs:
         run: flutter test --coverage
 
       - name: Coverage gate
-        # 分母已排除生成代码（见 tool/check_coverage.dart）。作者代码实际覆盖率为
-        # 56% 左右，门槛设 55% 留约 1 个点余量，让它成为真正的回归信号，
-        # 而不是一个测试删掉一半代码都还能过的摆设。
+        # 分母排除生成代码。覆盖率统一要求 >=55%，最新实测记录见交付文档。
         run: dart run tool/check_coverage.dart coverage/lcov.info 55.0
 
   android_build:
@@ -90,3 +89,37 @@ jobs:
         run: flutter pub get
       - name: Build arm64 debug APK
         run: flutter build apk --debug --target-platform android-arm64
+
+  windows_build:
+    name: Windows release build
+    needs: quality
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.2'
+          channel: stable
+          cache: true
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+        with:
+          nuget-version: '6.x'
+      - name: Get dependencies
+        run: flutter pub get
+      - name: Windows regression tests
+        run: flutter test --no-pub test/change_set_service_test.dart test/file_baseline_test.dart test/update_service_test.dart test/windows_package_downloader_test.dart test/update_sheet_test.dart test/desktop_workbench_service_test.dart test/desktop_workspace_interaction_test.dart test/desktop_git_service_test.dart test/desktop_preview_service_test.dart test/desktop_device_service_test.dart
+      - name: Build and package Windows
+        shell: pwsh
+        run: ./tool/build-windows.ps1
+      - name: Build Windows installer
+        shell: pwsh
+        run: ./tool/build-windows-installer.ps1
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-agent-windows-x64
+          path: dist/windows/*
+          if-no-files-found: error
