@@ -40,8 +40,8 @@
 - 已人工查看1440×900浅色对话与1280×800深色对话截图，未见明显控件溢出。
 
 最终联合分析与回归结果记录于：
-- `local/desktop-compact-analysis.log`
-- `local/desktop-compact-tests.log`
+- `artifacts/logs/2026-10-16/desktop-compact-analysis.log`
+- `artifacts/logs/2026-10-16/desktop-compact-tests.log`
 
 截图：`artifacts/desktop/desktop-1440x900-light-chat.png`、`artifacts/desktop/desktop-1280x800-dark.png`；同一渲染套件也覆盖 900px 小窗口、工作区侧栏、设置与设备界面。
 

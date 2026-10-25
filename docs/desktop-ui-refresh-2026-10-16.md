@@ -50,8 +50,8 @@
 代码质量门槛未修改。中途发现的 token 数量超限与格式提示已清理，最终上述检查通过。
 
 日志：
-- local/desktop-ui-refresh-analysis.log
-- local/desktop-ui-refresh-tests.log
+- artifacts/logs/2026-10-16/desktop-ui-refresh-analysis.log
+- artifacts/logs/2026-10-16/desktop-ui-refresh-tests.log
 
 ### 渲染截图
 

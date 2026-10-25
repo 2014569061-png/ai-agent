@@ -40,11 +40,11 @@
 
 新增测试文件：`test/desktop_resources_test.dart`，覆盖搜索/筛选/排序组合、原始数据不变、读取失败和加载状态、480px/2×文字、真实数据库 Agent/知识库/记忆、取消删除、MCP 开关持久化、凭据脱敏、未保存密钥提示及模型 ID 返回。
 
-最终联合回归运行 19 个测试文件，包含上述新测试、上一轮工作台测试与现有 Agent/Provider/MCP/知识库/记忆回归：**82 项全部通过，退出码 0**。实际结果见 `local/desktop-deep-tests.log`。
+最终联合回归运行 19 个测试文件，包含上述新测试、上一轮工作台测试与现有 Agent/Provider/MCP/知识库/记忆回归：**82 项全部通过，退出码 0**。实际结果见 `artifacts/logs/2026-10-16/desktop-deep-tests.log`。
 
 日志：
-- `local/desktop-deep-analysis.log`
-- `local/desktop-deep-tests.log`
+- `artifacts/logs/2026-10-16/desktop-deep-analysis.log`
+- `artifacts/logs/2026-10-16/desktop-deep-tests.log`
 
 渲染测试使用内存数据库与安全存储模拟，输出六张深层页面截图至 `artifacts/desktop/deep-*.png`。
 已查看知识库浅色、MCP 深色和服务商编辑器深色截图，未发现明显溢出；这些是隔离夹具，不是生产项目或服务连接状态。

@@ -2,6 +2,8 @@
 
 面向移动端与 Windows 桌面端的多模型 AI Agent 工作台，当前源码版本为 **v0.9.0+95**。
 
+工程导航：[工作区目录与归档约定](docs/workspace-layout.md) · [文档分类索引](docs/README.md) · [工具分类索引](tool/README.md) · [2026-10-25 整理报告](docs/workspace-organization-2026-10-25.html)。
+
 ## 核心能力
 
 - 支持 OpenAI 兼容接口、Anthropic、Gemini 和托管代理。

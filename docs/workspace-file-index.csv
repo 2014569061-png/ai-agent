@@ -1,0 +1,1476 @@
+﻿path,category,bytes
+.github/workflows/ci.yml,持续集成,4536
+.github/workflows/release.yml,持续集成,7356
+.gitignore,项目入口与配置,4006
+.metadata,项目入口与配置,998
+AGENTS.md,项目入口与配置,4827
+CHANGELOG.md,项目入口与配置,27983
+HANDOFF.MD,项目入口与配置,15088
+README.md,项目入口与配置,19015
+THIRD_PARTY_NOTICES.md,项目入口与配置,1162
+analysis_options.yaml,项目入口与配置,2216
+android-preview.bat,项目入口与配置,126
+android/.gitignore,平台工程,406
+android/app/build.gradle.kts,平台工程,5542
+android/app/proguard-rules.pro,平台工程,337
+android/app/src/debug/AndroidManifest.xml,平台工程,847
+android/app/src/debug/kotlin/com/nexusagent/app/AssistantContextFixtureActivity.kt,平台工程,1681
+android/app/src/debug/res/xml/shortcuts.xml,平台工程,2413
+android/app/src/main/AndroidManifest.xml,平台工程,16506
+android/app/src/main/aidl/com/nexusagent/app/IPrivilegedShell.aidl,平台工程,651
+android/app/src/main/assets/browser_dom.js,平台工程,9316
+android/app/src/main/assets/browser_fixture.html,平台工程,1885
+android/app/src/main/jniLibs/arm64-v8a/libandroid-shmem.so,平台工程,14432
+android/app/src/main/jniLibs/arm64-v8a/libproot.so,平台工程,244088
+android/app/src/main/jniLibs/arm64-v8a/libproot_loader.so,平台工程,18136
+android/app/src/main/jniLibs/arm64-v8a/libtalloc.so,平台工程,31440
+android/app/src/main/jniLibs/arm64-v8a/libtalloc.so.2,平台工程,31440
+android/app/src/main/kotlin/com/nexusagent/app/ApkInstallResultReceiver.kt,平台工程,4310
+android/app/src/main/kotlin/com/nexusagent/app/AssistTextExtractor.kt,平台工程,3068
+android/app/src/main/kotlin/com/nexusagent/app/AssistantContextHandoff.kt,平台工程,2249
+android/app/src/main/kotlin/com/nexusagent/app/AssistantRoleBridge.kt,平台工程,6799
+android/app/src/main/kotlin/com/nexusagent/app/BrowserBridge.kt,平台工程,16891
+android/app/src/main/kotlin/com/nexusagent/app/BuiltinLinuxRunner.kt,平台工程,17180
+android/app/src/main/kotlin/com/nexusagent/app/DeviceAutomation.kt,平台工程,23318
+android/app/src/main/kotlin/com/nexusagent/app/DeviceBackupManager.kt,平台工程,57866
+android/app/src/main/kotlin/com/nexusagent/app/ForegroundSpeechBridge.kt,平台工程,12794
+android/app/src/main/kotlin/com/nexusagent/app/MainActivity.kt,平台工程,115866
+android/app/src/main/kotlin/com/nexusagent/app/NetworkFilterVpnService.kt,平台工程,21683
+android/app/src/main/kotlin/com/nexusagent/app/NexusAccessibilityService.kt,平台工程,7986
+android/app/src/main/kotlin/com/nexusagent/app/NexusCommandWidgetProvider.kt,平台工程,3070
+android/app/src/main/kotlin/com/nexusagent/app/NexusRecognitionService.kt,平台工程,788
+android/app/src/main/kotlin/com/nexusagent/app/NexusVoiceInteractionService.kt,平台工程,1133
+android/app/src/main/kotlin/com/nexusagent/app/NexusVoiceInteractionSessionService.kt,平台工程,9176
+android/app/src/main/kotlin/com/nexusagent/app/PrivilegeManager.kt,平台工程,28192
+android/app/src/main/kotlin/com/nexusagent/app/PrivilegedDeviceControl.kt,平台工程,62686
+android/app/src/main/kotlin/com/nexusagent/app/PrivilegedShellService.kt,平台工程,3183
+android/app/src/main/kotlin/com/nexusagent/app/SafSearchIndex.kt,平台工程,7168
+android/app/src/main/kotlin/com/nexusagent/app/SpeechCaptureLifecycle.kt,平台工程,3013
+android/app/src/main/kotlin/com/nexusagent/app/SpeechEngineSelection.kt,平台工程,1007
+android/app/src/main/kotlin/com/nexusagent/app/SystemEditorConnectors.kt,平台工程,6555
+android/app/src/main/kotlin/com/nexusagent/app/TermuxBridge.kt,平台工程,1088
+android/app/src/main/res/drawable-v21/launch_background.xml,平台工程,439
+android/app/src/main/res/drawable/ic_launcher_background.png,平台工程,15906
+android/app/src/main/res/drawable/launch_background.xml,平台工程,439
+android/app/src/main/res/drawable/nexus_widget_action_primary.xml,平台工程,301
+android/app/src/main/res/drawable/nexus_widget_action_secondary.xml,平台工程,309
+android/app/src/main/res/drawable/nexus_widget_surface.xml,平台工程,363
+android/app/src/main/res/drawable/widget_background.xml,平台工程,222
+android/app/src/main/res/layout/nexus_command_widget.xml,平台工程,2652
+android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml,平台工程,274
+android/app/src/main/res/mipmap-hdpi/ic_launcher.png,平台工程,4932
+android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png,平台工程,6263
+android/app/src/main/res/mipmap-mdpi/ic_launcher.png,平台工程,2657
+android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png,平台工程,3944
+android/app/src/main/res/mipmap-xhdpi/ic_launcher.png,平台工程,6811
+android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png,平台工程,8606
+android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png,平台工程,13932
+android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png,平台工程,15289
+android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png,平台工程,19096
+android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png,平台工程,20894
+android/app/src/main/res/values-night/styles.xml,平台工程,1430
+android/app/src/main/res/values/colors.xml,平台工程,755
+android/app/src/main/res/values/strings.xml,平台工程,1502
+android/app/src/main/res/values/styles.xml,平台工程,1429
+android/app/src/main/res/xml/backup_rules.xml,平台工程,646
+android/app/src/main/res/xml/data_extraction_rules.xml,平台工程,929
+android/app/src/main/res/xml/file_paths.xml,平台工程,400
+android/app/src/main/res/xml/network_security_config.xml,平台工程,685
+android/app/src/main/res/xml/nexus_accessibility_service.xml,平台工程,446
+android/app/src/main/res/xml/nexus_command_widget_info.xml,平台工程,699
+android/app/src/main/res/xml/nexus_voice_interaction.xml,平台工程,432
+android/app/src/main/res/xml/shortcuts.xml,平台工程,2576
+android/app/src/profile/AndroidManifest.xml,平台工程,385
+android/build.gradle.kts,平台工程,1821
+android/gradle.properties,平台工程,959
+android/gradle/wrapper/gradle-wrapper.jar,平台工程,53636
+android/gradle/wrapper/gradle-wrapper.properties,平台工程,208
+android/gradlew,平台工程,4971
+android/gradlew.bat,平台工程,2404
+android/settings.gradle.kts,平台工程,1027
+architecture/adr/0001-harness-style-session-log.md,架构决策,7102
+architecture/adr/0002-module-host-and-run-profiles.md,架构决策,2245
+architecture/adr/0003-capability-seams.md,架构决策,3918
+architecture/adr/0004-tool-spec-v2.md,架构决策,3439
+assets/branding/nexus_app_icon.png,运行资源,351247
+assets/branding/nexus_mark.png,运行资源,78615
+assets/fonts/Inter-Medium.ttf,运行资源,417300
+assets/fonts/Inter-Regular.ttf,运行资源,411640
+assets/images/bg_default.jpg,运行资源,883099
+assets/linux/alpine-minirootfs-3.22.5-aarch64.tar.gz,运行资源,3966256
+assets/linux/libtalloc.so.2,运行资源,31440
+assets/skills/android-build/SKILL.md,运行资源,1092
+assets/skills/android-build/references/build.md,运行资源,4063
+assets/skills/android-build/references/toolchain.md,运行资源,2618
+assets/skills/api-integration/SKILL.md,运行资源,954
+assets/skills/code-review/SKILL.md,运行资源,1010
+assets/skills/database-design/SKILL.md,运行资源,955
+assets/skills/debugging/SKILL.md,运行资源,921
+assets/skills/flutter-ui/SKILL.md,运行资源,931
+assets/skills/git-workflow/SKILL.md,运行资源,959
+assets/skills/mobile-dev-basics/SKILL.md,运行资源,1352
+assets/skills/technical-writing/SKILL.md,运行资源,987
+assets/skills/testing/SKILL.md,运行资源,942
+build-apk.bat,项目入口与配置,22379
+docs/README.md,工程文档 / 工程、安全与运行时,13656
+docs/agent-comparison/README.md,工程文档 / 研究与对比,21360
+docs/agent-comparison/evidence-external.md,工程文档 / 研究与对比,187198
+docs/agent-comparison/evidence-gaps.md,工程文档 / 研究与对比,47177
+docs/agent-comparison/evidence-nexus-ui.md,工程文档 / 研究与对比,41001
+docs/agent-comparison/implementation-2026-10-15.md,工程文档 / 研究与对比,5264
+docs/agent-comparison/isolated-edit-2026-10-16.md,工程文档 / 研究与对比,4613
+docs/agent-comparison/multi-file-patch-2026-10-16.md,工程文档 / 研究与对比,5988
+docs/agent-comparison/remaining-mechanisms-2026-10-16.md,工程文档 / 研究与对比,6879
+docs/agent-comparison/runtime-controls-2026-10-16.md,工程文档 / 研究与对比,8607
+docs/agent-comparison/verification-repair-2026-10-15.md,工程文档 / 研究与对比,2884
+docs/android-blue-white-implementation-2026-10-21.md,工程文档 / Android 与界面,3895
+docs/android-blue-white-redesign-2026-10-21.md,工程文档 / Android 与界面,33392
+docs/android-full-ui-2026-10-21.md,工程文档 / Android 与界面,10932
+docs/android-home-polish-2026-10-21.md,工程文档 / Android 与界面,3048
+docs/android-secondary-ui-2026-10-21.md,工程文档 / Android 与界面,4867
+docs/android-sidebar-navigation-2026-10-21.md,工程文档 / Android 与界面,2050
+docs/android-ui-details-2026-10-21.md,工程文档 / Android 与界面,2235
+docs/android-ui-gemini-followup-review.md,工程文档 / Android 与界面,7784
+docs/android-ui-gemini-implementation-2026-10-22.md,工程文档 / Android 与界面,38238
+docs/android-ui-gemini-progress.md,工程文档 / Android 与界面,19276
+docs/android-ui-refinement-2026-10-23.md,工程文档 / Android 与界面,7489
+docs/android-ui-review-2026-10-22.md,工程文档 / Android 与界面,41450
+docs/android-ui-second-pass-2026-10-23.md,工程文档 / Android 与界面,7445
+docs/android-ui-second-review-2026-10-23.md,工程文档 / Android 与界面,20913
+docs/android-ui-style.md,工程文档 / Android 与界面,14964
+docs/android_device_control_implementation.md,工程文档 / Android 与界面,4191
+docs/android_permission_review.md,工程文档 / Android 与界面,3765
+docs/code-review-handoff-2026-10-18.md,工程文档 / 工程、安全与运行时,14912
+docs/deepseek-harness-integration-research.md,工程文档 / 研究与对比,16662
+docs/design-previews/android-details-2026-10-21/home-current.png,工程文档 / 设计预览,198167
+docs/design-previews/android-details-2026-10-21/knowledge-after.png,工程文档 / 设计预览,206051
+docs/design-previews/android-details-2026-10-21/knowledge-before.png,工程文档 / 设计预览,210546
+docs/design-previews/android-details-2026-10-21/plugins-after.png,工程文档 / 设计预览,153201
+docs/design-previews/android-details-2026-10-21/plugins-before.png,工程文档 / 设计预览,158128
+docs/design-previews/android-details-2026-10-21/search-cleared.png,工程文档 / 设计预览,196408
+docs/design-previews/android-details-2026-10-21/search-editing.png,工程文档 / 设计预览,248840
+docs/design-previews/android-details-2026-10-21/settings-after.png,工程文档 / 设计预览,189421
+docs/design-previews/android-details-2026-10-21/settings-before.png,工程文档 / 设计预览,189320
+docs/design-previews/android-full-2026-10-21/appearance.png,工程文档 / 设计预览,252073
+docs/design-previews/android-full-2026-10-21/artifacts.png,工程文档 / 设计预览,278185
+docs/design-previews/android-full-2026-10-21/assistant.png,工程文档 / 设计预览,197836
+docs/design-previews/android-full-2026-10-21/device-capabilities.png,工程文档 / 设计预览,289097
+docs/design-previews/android-full-2026-10-21/file-editor.png,工程文档 / 设计预览,145769
+docs/design-previews/android-full-2026-10-21/global-search.png,工程文档 / 设计预览,300817
+docs/design-previews/android-full-2026-10-21/personal-context.png,工程文档 / 设计预览,249212
+docs/design-previews/android-full-2026-10-21/project-home.png,工程文档 / 设计预览,261852
+docs/design-previews/android-full-2026-10-21/terminal-keyboard.png,工程文档 / 设计预览,162312
+docs/design-previews/android-full-2026-10-21/terminal.png,工程文档 / 设计预览,176613
+docs/design-previews/android-gemini-review/current-device.png,工程文档 / 设计预览,295647
+docs/design-previews/android-gemini-review/current-drawer.png,工程文档 / 设计预览,116300
+docs/design-previews/android-gemini-review/current-home.png,工程文档 / 设计预览,185822
+docs/design-previews/android-gemini-review/current-providers.png,工程文档 / 设计预览,253188
+docs/design-previews/android-gemini-review/current-settings.png,工程文档 / 设计预览,171910
+docs/design-previews/android-home-2026-10-21/home-after.png,工程文档 / 设计预览,201622
+docs/design-previews/android-home-2026-10-21/home-before.png,工程文档 / 设计预览,198079
+docs/design-previews/android-home-2026-10-21/home-first-pass.png,工程文档 / 设计预览,201557
+docs/design-previews/android-home-2026-10-21/home-keyboard.png,工程文档 / 设计预览,227529
+docs/design-previews/android-home-2026-10-21/home-options.png,工程文档 / 设计预览,234150
+docs/design-previews/android-home-2026-10-21/home-tools.png,工程文档 / 设计预览,231721
+docs/design-previews/android-implemented-2026-10-21/conversation.png,工程文档 / 设计预览,234133
+docs/design-previews/android-implemented-2026-10-21/home.png,工程文档 / 设计预览,200228
+docs/design-previews/android-implemented-2026-10-21/keyboard.png,工程文档 / 设计预览,223623
+docs/design-previews/android-implemented-2026-10-21/settings.png,工程文档 / 设计预览,188027
+docs/design-previews/android-implemented-2026-10-21/tasks.png,工程文档 / 设计预览,237208
+docs/design-previews/android-implemented-2026-10-21/workspace.png,工程文档 / 设计预览,137013
+docs/design-previews/android-refined-2026-10-23/agent-advanced.png,工程文档 / 设计预览,240517
+docs/design-previews/android-refined-2026-10-23/agent-editor.png,工程文档 / 设计预览,215304
+docs/design-previews/android-refined-2026-10-23/appearance-diagnostics.png,工程文档 / 设计预览,277444
+docs/design-previews/android-refined-2026-10-23/appearance.png,工程文档 / 设计预览,295300
+docs/design-previews/android-refined-2026-10-23/backup-details.png,工程文档 / 设计预览,324910
+docs/design-previews/android-refined-2026-10-23/backup.png,工程文档 / 设计预览,255076
+docs/design-previews/android-refined-2026-10-23/default-assistant-details.png,工程文档 / 设计预览,410817
+docs/design-previews/android-refined-2026-10-23/default-assistant.png,工程文档 / 设计预览,202110
+docs/design-previews/android-refined-2026-10-23/device.png,工程文档 / 设计预览,279133
+docs/design-previews/android-refined-2026-10-23/home.png,工程文档 / 设计预览,206469
+docs/design-previews/android-refined-2026-10-23/permissions-details.png,工程文档 / 设计预览,304921
+docs/design-previews/android-refined-2026-10-23/permissions.png,工程文档 / 设计预览,297469
+docs/design-previews/android-refined-2026-10-23/project-details.png,工程文档 / 设计预览,187159
+docs/design-previews/android-refined-2026-10-23/project-tools.png,工程文档 / 设计预览,211054
+docs/design-previews/android-refined-2026-10-23/project.png,工程文档 / 设计预览,147851
+docs/design-previews/android-refined-2026-10-23/provider-add.png,工程文档 / 设计预览,198157
+docs/design-previews/android-refined-2026-10-23/providers.png,工程文档 / 设计预览,81974
+docs/design-previews/android-refined-2026-10-23/sidebar.png,工程文档 / 设计预览,102152
+docs/design-previews/android-refined-2026-10-23/test-cost.png,工程文档 / 设计预览,20443
+docs/design-previews/android-refined-2026-10-23/test-remote.png,工程文档 / 设计预览,40309
+docs/design-previews/android-refined-2026-10-23/test-run-detail.png,工程文档 / 设计预览,20324
+docs/design-previews/android-refined-2026-10-23/test-web-error.png,工程文档 / 设计预览,27479
+docs/design-previews/android-refined-2026-10-23/tools.png,工程文档 / 设计预览,212750
+docs/design-previews/android-review-2026-10-22/live-device.png,工程文档 / 设计预览,299582
+docs/design-previews/android-review-2026-10-22/live-drawer.png,工程文档 / 设计预览,111538
+docs/design-previews/android-review-2026-10-22/live-home.png,工程文档 / 设计预览,194690
+docs/design-previews/android-review-2026-10-22/live-settings.png,工程文档 / 设计预览,195785
+docs/design-previews/android-review-2026-10-22/overview-01.png,工程文档 / 设计预览,338449
+docs/design-previews/android-review-2026-10-22/overview-02.png,工程文档 / 设计预览,395655
+docs/design-previews/android-review-2026-10-22/overview-03.png,工程文档 / 设计预览,387046
+docs/design-previews/android-review-2026-10-22/overview-04.png,工程文档 / 设计预览,368889
+docs/design-previews/android-review-2026-10-22/overview-05.png,工程文档 / 设计预览,380474
+docs/design-previews/android-review-2026-10-22/overview-06.png,工程文档 / 设计预览,456866
+docs/design-previews/android-review-2026-10-22/overview-07.png,工程文档 / 设计预览,394727
+docs/design-previews/android-review-2026-10-22/overview-08.png,工程文档 / 设计预览,429774
+docs/design-previews/android-review-2026-10-22/overview-09.png,工程文档 / 设计预览,367748
+docs/design-previews/android-review-2026-10-22/overview-10.png,工程文档 / 设计预览,242840
+docs/design-previews/android-second-pass-2026-10-23/agent-create.png,工程文档 / 设计预览,119472
+docs/design-previews/android-second-pass-2026-10-23/android-motion-v1-raw.mp4,工程文档 / 设计预览,922691
+docs/design-previews/android-second-pass-2026-10-23/android-motion-v1-timestamps.mp4,工程文档 / 设计预览,308101
+docs/design-previews/android-second-pass-2026-10-23/android-motion-v1.mp4,工程文档 / 设计预览,287685
+docs/design-previews/android-second-pass-2026-10-23/android-motion-v2.mp4,工程文档 / 设计预览,301750
+docs/design-previews/android-second-pass-2026-10-23/appearance.png,工程文档 / 设计预览,246339
+docs/design-previews/android-second-pass-2026-10-23/chat-polish-body.png,工程文档 / 设计预览,391031
+docs/design-previews/android-second-pass-2026-10-23/chat-polish-current.png,工程文档 / 设计预览,389516
+docs/design-previews/android-second-pass-2026-10-23/chat-polish-home.png,工程文档 / 设计预览,97094
+docs/design-previews/android-second-pass-2026-10-23/chat-polish-keyboard.png,工程文档 / 设计预览,400113
+docs/design-previews/android-second-pass-2026-10-23/chat-polish-top.png,工程文档 / 设计预览,346070
+docs/design-previews/android-second-pass-2026-10-23/conversation-actions-oct24.png,工程文档 / 设计预览,181844
+docs/design-previews/android-second-pass-2026-10-23/conversation-long-title-oct24.png,工程文档 / 设计预览,191459
+docs/design-previews/android-second-pass-2026-10-23/deepseek-conversation.png,工程文档 / 设计预览,362933
+docs/design-previews/android-second-pass-2026-10-23/deepseek-drawer.png,工程文档 / 设计预览,172098
+docs/design-previews/android-second-pass-2026-10-23/deepseek-home.png,工程文档 / 设计预览,97609
+docs/design-previews/android-second-pass-2026-10-23/deepseek-implementation.html,工程文档 / 设计预览,2725
+docs/design-previews/android-second-pass-2026-10-23/device-capabilities.png,工程文档 / 设计预览,284775
+docs/design-previews/android-second-pass-2026-10-23/drawer-feedback-original.png,工程文档 / 设计预览,123993
+docs/design-previews/android-second-pass-2026-10-23/drawer-refined-actual.png,工程文档 / 设计预览,191370
+docs/design-previews/android-second-pass-2026-10-23/drawer-refined-large-text.png,工程文档 / 设计预览,193953
+docs/design-previews/android-second-pass-2026-10-23/drawer-refinement-implementation.html,工程文档 / 设计预览,1060
+docs/design-previews/android-second-pass-2026-10-23/drawer-refinement-proposal.html,工程文档 / 设计预览,11529
+docs/design-previews/android-second-pass-2026-10-23/drawer-refinement-proposal.png,工程文档 / 设计预览,90876
+docs/design-previews/android-second-pass-2026-10-23/drawer-search-detail.png,工程文档 / 设计预览,135019
+docs/design-previews/android-second-pass-2026-10-23/home-final-oct24.png,工程文档 / 设计预览,94893
+docs/design-previews/android-second-pass-2026-10-23/home-refinement-oct24.png,工程文档 / 设计预览,96176
+docs/design-previews/android-second-pass-2026-10-23/home.png,工程文档 / 设计预览,168759
+docs/design-previews/android-second-pass-2026-10-23/linux-environment.png,工程文档 / 设计预览,290632
+docs/design-previews/android-second-pass-2026-10-23/motion-refinement.html,工程文档 / 设计预览,23623
+docs/design-previews/android-second-pass-2026-10-23/motion-v1-drawer.png,工程文档 / 设计预览,152368
+docs/design-previews/android-second-pass-2026-10-23/motion-v1-implementation.html,工程文档 / 设计预览,5332
+docs/design-previews/android-second-pass-2026-10-23/motion-v1-sheet.png,工程文档 / 设计预览,164545
+docs/design-previews/android-second-pass-2026-10-23/motion-v2-performance.html,工程文档 / 设计预览,6660
+docs/design-previews/android-second-pass-2026-10-23/motion-v2-sheet.png,工程文档 / 设计预览,154522
+docs/design-previews/android-second-pass-2026-10-23/project.png,工程文档 / 设计预览,142419
+docs/design-previews/android-second-pass-2026-10-23/search-final-oct24.png,工程文档 / 设计预览,202181
+docs/design-previews/android-second-pass-2026-10-23/search-refinement-oct24.png,工程文档 / 设计预览,125504
+docs/design-previews/android-second-pass-2026-10-23/settings.png,工程文档 / 设计预览,159966
+docs/design-previews/android-second-pass-2026-10-23/sidebar.png,工程文档 / 设计预览,112529
+docs/design-previews/android-second-pass-2026-10-23/state-approval-oct24.png,工程文档 / 设计预览,380834
+docs/design-previews/android-second-pass-2026-10-23/state-failure-oct24.png,工程文档 / 设计预览,311260
+docs/design-previews/android-second-pass-2026-10-23/state-results-oct24.png,工程文档 / 设计预览,238388
+docs/design-previews/android-second-pass-2026-10-23/state-review-oct24.html,工程文档 / 设计预览,1158
+docs/design-previews/android-second-pass-2026-10-23/state-running-oct24.png,工程文档 / 设计预览,368184
+docs/design-previews/android-second-pass-2026-10-23/task-detail.png,工程文档 / 设计预览,166451
+docs/design-previews/android-second-pass-2026-10-23/tool-filter.png,工程文档 / 设计预览,203020
+docs/design-previews/android-second-pass-2026-10-23/ui-optimization-proposal-oct24.html,工程文档 / 设计预览,53741
+docs/design-previews/android-second-pass-2026-10-23/ui-optimization-proposal-oct24.png,工程文档 / 设计预览,1367343
+docs/design-previews/android-secondary-2026-10-21/agent-editor.png,工程文档 / 设计预览,253461
+docs/design-previews/android-secondary-2026-10-21/agents.png,工程文档 / 设计预览,163817
+docs/design-previews/android-secondary-2026-10-21/backup.png,工程文档 / 设计预览,353602
+docs/design-previews/android-secondary-2026-10-21/data-management.png,工程文档 / 设计预览,190701
+docs/design-previews/android-secondary-2026-10-21/extensions.png,工程文档 / 设计预览,192603
+docs/design-previews/android-secondary-2026-10-21/knowledge.png,工程文档 / 设计预览,210797
+docs/design-previews/android-secondary-2026-10-21/mcp-form.png,工程文档 / 设计预览,183858
+docs/design-previews/android-secondary-2026-10-21/mcp.png,工程文档 / 设计预览,163746
+docs/design-previews/android-secondary-2026-10-21/memory.png,工程文档 / 设计预览,244428
+docs/design-previews/android-secondary-2026-10-21/prompts.png,工程文档 / 设计预览,224611
+docs/design-previews/android-secondary-2026-10-21/providers.png,工程文档 / 设计预览,266854
+docs/design-previews/android-secondary-2026-10-21/scheduled.png,工程文档 / 设计预览,217284
+docs/design-previews/android-secondary-2026-10-21/skill-market-expanded.png,工程文档 / 设计预览,282790
+docs/design-previews/android-secondary-2026-10-21/skill-market.png,工程文档 / 设计预览,321657
+docs/design-previews/android-secondary-2026-10-21/skills.png,工程文档 / 设计预览,158619
+docs/design-previews/android-secondary-2026-10-21/workflows.png,工程文档 / 设计预览,236271
+docs/design-previews/android-sidebar-2026-10-21/home-sidebar.png,工程文档 / 设计预览,195105
+docs/design-previews/android-sidebar-2026-10-21/settings-sidebar.png,工程文档 / 设计预览,195857
+docs/design-previews/android-sidebar-2026-10-21/sidebar-open.png,工程文档 / 设计预览,116515
+docs/design-previews/android-sidebar-2026-10-21/sidebar-tools.png,工程文档 / 设计预览,110717
+docs/design-previews/android-sidebar-2026-10-21/tasks-sidebar.png,工程文档 / 设计预览,140646
+docs/design-previews/android-sidebar-2026-10-21/workspace-sidebar.png,工程文档 / 设计预览,122342
+docs/design-previews/android-ui-refinement/B0-baseline-screen.png,工程文档 / 设计预览,194610
+docs/design-previews/android-ui-refinement/B1-components-screen.png,工程文档 / 设计预览,194868
+docs/design-previews/android-ui-refinement/B2-collaboration-screen.png,工程文档 / 设计预览,355306
+docs/design-previews/android-ui-refinement/B3-workspace-screen.png,工程文档 / 设计预览,355118
+docs/design-previews/android-ui-refinement/B4-extensions-screen.png,工程文档 / 设计预览,355786
+docs/design-previews/android-ui-refinement/B5-device-data-screen.png,工程文档 / 设计预览,356568
+docs/design-previews/android-ui-refinement/B6-diagnostics-screen.png,工程文档 / 设计预览,355154
+docs/design-previews/android-ui-refinement/B7-final-screen.png,工程文档 / 设计预览,356498
+docs/design-previews/nexus-android-blue-white-v1-prompt.md,工程文档 / 设计预览,6923
+docs/design-previews/nexus-android-blue-white-v1.png,工程文档 / 设计预览,1353039
+docs/desktop-blue-workspace-delivery-2026-10-10.md,工程文档 / Windows 桌面,6887
+docs/desktop-compact-layout-2026-10-16.md,工程文档 / Windows 桌面,3660
+docs/desktop-continuation-verification-2026-10-15.md,工程文档 / Windows 桌面,8626
+docs/desktop-deep-pages-2026-10-16.md,工程文档 / Windows 桌面,3893
+docs/desktop-delivery-2026-10-09.md,工程文档 / Windows 桌面,4225
+docs/desktop-improvements-handoff-2026-10-15.md,工程文档 / Windows 桌面,21231
+docs/desktop-p2-performance-2026-10-15.md,工程文档 / Windows 桌面,19724
+docs/desktop-review-roadmap-2026-10-15.md,工程文档 / Windows 桌面,18982
+docs/desktop-ui-refresh-2026-10-16.md,工程文档 / Windows 桌面,3844
+docs/desktop-ui-verification-2026-10-09.md,工程文档 / Windows 桌面,2489
+docs/desktop-zcode-ui-handoff-for-gemini-2026-10-09.md,工程文档 / Windows 桌面,17582
+docs/dsh-comparison/00-借鉴清单与路线.md,工程文档 / 研究与对比,20427
+docs/dsh-comparison/01-architecture-plugins.md,工程文档 / 研究与对比,44301
+docs/dsh-comparison/02-session-runtime.md,工程文档 / 研究与对比,59230
+docs/dsh-comparison/03-client-ui.md,工程文档 / 研究与对比,54003
+docs/eta-gap-and-product-roadmap-2026-10-21.md,工程文档 / 移动端能力与验收,16993
+docs/eta-improvements-2026-10-20.md,工程文档 / 移动端能力与验收,4946
+docs/eta-improvements-phase2-2026-10-20.md,工程文档 / 移动端能力与验收,5768
+docs/eta-improvements-phase3-browser-2026-10-20.md,工程文档 / 移动端能力与验收,12447
+docs/eta-improvements-phase4-accessibility-2026-10-20.md,工程文档 / 移动端能力与验收,2757
+docs/frontend-handoff-for-gemini-2026-09-25.md,工程文档 / Android 与界面,7086
+docs/harmony_motion_research.md,工程文档 / 研究与对比,8618
+docs/harness-device-verification.md,工程文档 / 工程、安全与运行时,10922
+docs/index.html,工程文档 / 工程、安全与运行时,4502
+docs/mcp-audit-remediation-2026-09-22.md,工程文档 / 工程、安全与运行时,13969
+docs/mcp-build-apk-optimization-2026-09-22.md,工程文档 / 工程、安全与运行时,9851
+docs/mcp-chat-bugfix-implementation-2026-09-24.md,工程文档 / 工程、安全与运行时,12865
+docs/mcp-chat-bugfix-plan-2026-09-24.md,工程文档 / 工程、安全与运行时,23659
+docs/mcp-chat-ui-polish-2026-09-22.md,工程文档 / 工程、安全与运行时,5024
+docs/mcp-code-review.md,工程文档 / 工程、安全与运行时,16382
+docs/mcp-connection-readiness-2026-09-22-volunteers.md,工程文档 / 工程、安全与运行时,1997
+docs/mcp-device-control-gap-completion-2026-09-24.md,工程文档 / 工程、安全与运行时,6517
+docs/mcp-device-fixes-2026-09-22.md,工程文档 / 工程、安全与运行时,8607
+docs/mcp-device-test-2026-09-22.md,工程文档 / 工程、安全与运行时,9669
+docs/mcp-device-verification-handoff.md,工程文档 / 工程、安全与运行时,12033
+docs/mcp-mobile-agent-review.md,工程文档 / 工程、安全与运行时,13865
+docs/mcp-non-root-device-acceptance-2026-09-24.md,工程文档 / 工程、安全与运行时,13992
+docs/mcp-non-root-device-control-2026-09-24.md,工程文档 / 工程、安全与运行时,15513
+docs/mcp-non-root-device-control-handoff-2026-09-24.md,工程文档 / 工程、安全与运行时,26165
+docs/mcp-optimization-implementation-2026-09-22.md,工程文档 / 工程、安全与运行时,14103
+docs/mcp-optimization-review-2026-09-22.md,工程文档 / 工程、安全与运行时,15192
+docs/mcp-project-completeness.md,工程文档 / 工程、安全与运行时,10035
+docs/mcp-ui-appearance-audit-2026-09-26.md,工程文档 / Android 与界面,4521
+docs/mcp-ui-chat-components-audit-2026-09-26.md,工程文档 / Android 与界面,3673
+docs/mcp-ui-dashboard-audit-2026-09-26.md,工程文档 / Android 与界面,2709
+docs/mcp-ui-followup-implementation-2026-09-22.md,工程文档 / Android 与界面,2755
+docs/mcp-ui-followup-review-2026-09-22.md,工程文档 / Android 与界面,3933
+docs/mcp-ui-history-audit-2026-09-26.md,工程文档 / Android 与界面,2793
+docs/mcp-ui-message-area-audit-2026-09-26.md,工程文档 / Android 与界面,4342
+docs/mcp-ui-message-area-delivery-2026-09-26.md,工程文档 / Android 与界面,2151
+docs/mcp-ui-motion-review-2026-09-22.md,工程文档 / Android 与界面,12708
+docs/mcp-ui-providers-audit-2026-09-26.md,工程文档 / Android 与界面,4653
+docs/mcp-ui-settings-audit-2026-09-26.md,工程文档 / Android 与界面,2099
+docs/mcp-ui-task-details-audit-2026-09-26.md,工程文档 / Android 与界面,2927
+docs/mcp-ui-tasks-audit-2026-09-26.md,工程文档 / Android 与界面,3320
+docs/mcp-ui-tools-audit-2026-09-26.md,工程文档 / Android 与界面,4551
+docs/mcp-workspace-cleanup-2026-09-22.md,工程文档 / 工作区维护,26967
+docs/mcp-workspace-cleanup-executed-2026-09-22.md,工程文档 / 工作区维护,16526
+docs/mobile-acceptance-handoff-2026-10-17.md,工程文档 / 移动端能力与验收,11675
+docs/mobile-acceptance-next-steps-2026-10-17.md,工程文档 / 移动端能力与验收,12385
+docs/mobile-artifact-runtime-contract-2026-10-19.md,工程文档 / 移动端能力与验收,22559
+docs/mobile-assistant-input-contract-2026-10-19.md,工程文档 / 移动端能力与验收,4476
+docs/mobile-batch1-safety-handoff-2026-10-20.md,工程文档 / 移动端能力与验收,7302
+docs/mobile-chat-results-handoff-2026-10-19-2057.md,工程文档 / 移动端能力与验收,15289
+docs/mobile-completion-verification-2026-10-20.md,工程文档 / 移动端能力与验收,6002
+docs/mobile-cost-loop.md,工程文档 / 移动端能力与验收,6068
+docs/mobile-default-assistant-contract-2026-10-19.md,工程文档 / 移动端能力与验收,5085
+docs/mobile-full-completion-handoff-2026-10-20.md,工程文档 / 移动端能力与验收,11049
+docs/mobile-jobs-contract-2026-10-19.md,工程文档 / 移动端能力与验收,5958
+docs/mobile-memory-knowledge-contract-2026-10-19.md,工程文档 / 移动端能力与验收,15047
+docs/mobile-next-major-deepseek-handoff-2026-10-19.md,工程文档 / 移动端能力与验收,31098
+docs/mobile-next-major-handoff-2026-10-19-evening.md,工程文档 / 移动端能力与验收,24434
+docs/mobile-next-major-handoff-2026-10-19.md,工程文档 / 移动端能力与验收,25715
+docs/mobile-next-major-implementation-2026-10-18.md,工程文档 / 移动端能力与验收,61583
+docs/mobile-next-major-implementation-audit-2026-10-19.md,工程文档 / 移动端能力与验收,22764
+docs/mobile-next-major-page-coverage-2026-10-18.md,工程文档 / 移动端能力与验收,19144
+docs/mobile-next-major-progress-2026-10-18.md,工程文档 / 移动端能力与验收,47843
+docs/mobile-next-major-resume-2026-10-19.md,工程文档 / 移动端能力与验收,7759
+docs/mobile-original-loop-verification-adr-2026-10-19.md,工程文档 / 移动端能力与验收,3773
+docs/mobile-private-apk-decision-2026-10-18.md,工程文档 / 移动端能力与验收,4388
+docs/mobile-r13-handoff-2026-10-20.md,工程文档 / 移动端能力与验收,18540
+docs/mobile-review-remediation.md,工程文档 / 移动端能力与验收,11800
+docs/mobile-search-contract-2026-10-19.md,工程文档 / 移动端能力与验收,3415
+docs/mobile-speech-capture-contract-2026-10-19.md,工程文档 / 移动端能力与验收,11487
+docs/mobile-system-connectors-contract-2026-10-19.md,工程文档 / 移动端能力与验收,5932
+docs/mobile-u04-personal-context-2026-10-19.md,工程文档 / 移动端能力与验收,7157
+docs/mobile-u05-file-actions-2026-10-19.md,工程文档 / 移动端能力与验收,5685
+docs/mobile-u05-result-approval-2026-10-19.md,工程文档 / 移动端能力与验收,5304
+docs/mobile-web-development-delivery-2026-10-21.md,工程文档 / 移动端能力与验收,7055
+docs/mobile-windows-remote-executor-2026-10-18.md,工程文档 / 移动端能力与验收,5760
+docs/motion_delivery.md,工程文档 / Android 与界面,11454
+docs/motion_impl_log.md,工程文档 / Android 与界面,75947
+docs/motion_lively.md,工程文档 / Android 与界面,5205
+docs/motion_lively_plan.md,工程文档 / Android 与界面,6035
+docs/motion_plan.md,工程文档 / Android 与界面,16616
+docs/motion_scan.md,工程文档 / Android 与界面,8633
+docs/nexus-harness-final-plan.md,工程文档 / 工程、安全与运行时,16140
+docs/project-improvements-2026-10-14.md,工程文档 / 工程、安全与运行时,3858
+docs/qrcode.png,工程文档 / 工程、安全与运行时,1634
+docs/ui-all-pages-coverage-2026-10-16.md,工程文档 / Android 与界面,12980
+docs/ui-complex-states-2026-10-16.md,工程文档 / Android 与界面,4140
+docs/ui-desktop-live-2026-10-16.md,工程文档 / Android 与界面,12699
+docs/ui-improvement-handoff.md,工程文档 / Android 与界面,31059
+docs/ui-runtime-repair-2026-10-16.md,工程文档 / Android 与界面,7341
+docs/workspace-file-index.csv,工程文档 / 工作区维护,101335
+docs/workspace-layout.md,工程文档 / 工作区维护,7220
+docs/workspace-organization-2026-10-25.html,工程文档 / 工作区维护,173810
+lib/application/agent_draft_service.dart,产品源码,13616
+lib/application/agent_executor.dart,产品源码,38941
+lib/application/agent_loop/agent_loop_hooks.dart,产品源码,4333
+lib/application/agent_loop/builtin_hooks.dart,产品源码,3998
+lib/application/agent_loop/context_reporter.dart,产品源码,3631
+lib/application/agent_loop/loop_messages.dart,产品源码,3525
+lib/application/agent_loop/model_retry_policy.dart,产品源码,1916
+lib/application/agent_loop/model_step.dart,产品源码,7691
+lib/application/agent_loop/output_token_policy.dart,产品源码,2234
+lib/application/agent_loop/request_shape.dart,产品源码,1982
+lib/application/agent_loop/step_budget_policy.dart,产品源码,3952
+lib/application/agent_loop/system_prompt_merge.dart,产品源码,3090
+lib/application/agent_loop/token_budget.dart,产品源码,3721
+lib/application/agent_loop/usage_tally.dart,产品源码,2166
+lib/application/agent_tool_catalog.dart,产品源码,2823
+lib/application/android_accessibility_observe_tool.dart,产品源码,5375
+lib/application/android_accessibility_session_service.dart,产品源码,5184
+lib/application/android_automation_tool.dart,产品源码,18405
+lib/application/apk_install_bridge.dart,产品源码,1427
+lib/application/app_lock_service.dart,产品源码,3595
+lib/application/approval_bridge.dart,产品源码,6838
+lib/application/approval_decision_scope.dart,产品源码,379
+lib/application/approval_notification_text.dart,产品源码,1417
+lib/application/approval_policy.dart,产品源码,2129
+lib/application/artifact_result_actions.dart,产品源码,4396
+lib/application/artifact_service.dart,产品源码,9973
+lib/application/assistant_context_intake.dart,产品源码,3257
+lib/application/assistant_entry_delivery.dart,产品源码,3851
+lib/application/assistant_role.dart,产品源码,2786
+lib/application/attachment_policy.dart,产品源码,5401
+lib/application/audit_service.dart,产品源码,12645
+lib/application/auto_verification_policy.dart,产品源码,701
+lib/application/automatic_backup_service.dart,产品源码,3872
+lib/application/autonomous_delegation.dart,产品源码,1010
+lib/application/background_execution_gateway.dart,产品源码,6330
+lib/application/bounded_log_buffer.dart,产品源码,1149
+lib/application/branches/branch_tree.dart,产品源码,5384
+lib/application/browser_agent_tool.dart,产品源码,8473
+lib/application/browser_payload_budget.dart,产品源码,3295
+lib/application/browser_session_service.dart,产品源码,4786
+lib/application/change_review.dart,产品源码,7164
+lib/application/change_set_retention.dart,产品源码,2719
+lib/application/change_set_service.dart,产品源码,15843
+lib/application/chat_controller.dart,产品源码,122623
+lib/application/chat_plan_status.dart,产品源码,1770
+lib/application/chat_prompt_rules.dart,产品源码,5473
+lib/application/chat_run_execution.dart,产品源码,75716
+lib/application/chat_state.dart,产品源码,13222
+lib/application/chat_task_json.dart,产品源码,528
+lib/application/chat_tool_registry_builder.dart,产品源码,5160
+lib/application/collaboration_agent_runner.dart,产品源码,3437
+lib/application/collaboration_budget.dart,产品源码,900
+lib/application/collaboration_synthesizer.dart,产品源码,5145
+lib/application/compaction_recovery.dart,产品源码,3137
+lib/application/context_compression_applier.dart,产品源码,3865
+lib/application/context_compression_planner.dart,产品源码,6769
+lib/application/context_insights_history.dart,产品源码,7012
+lib/application/context_snapshot_builder.dart,产品源码,5886
+lib/application/context_window.dart,产品源码,10855
+lib/application/conversation_fork_service.dart,产品源码,2494
+lib/application/conversation_history_pager.dart,产品源码,1878
+lib/application/cost_budget_service.dart,产品源码,63
+lib/application/dashboard_service.dart,产品源码,12074
+lib/application/data_maintenance_actions.dart,产品源码,4176
+lib/application/data_maintenance_service.dart,产品源码,3518
+lib/application/data_management_stats_query.dart,产品源码,622
+lib/application/dependency_lockfile.dart,产品源码,2572
+lib/application/desktop_device_service.dart,产品源码,13844
+lib/application/desktop_diff.dart,产品源码,2035
+lib/application/desktop_git_service.dart,产品源码,14455
+lib/application/desktop_host_service.dart,产品源码,2791
+lib/application/desktop_preview_service.dart,产品源码,3781
+lib/application/desktop_pty_session.dart,产品源码,5392
+lib/application/desktop_pty_terminal.dart,产品源码,484
+lib/application/desktop_run_service.dart,产品源码,5435
+lib/application/desktop_runtime_service.dart,产品源码,315
+lib/application/desktop_scheduler.dart,产品源码,2085
+lib/application/desktop_search_service.dart,产品源码,5731
+lib/application/desktop_workbench_service.dart,产品源码,11684
+lib/application/desktop_workflow_service.dart,产品源码,3405
+lib/application/desktop_worktree_service.dart,产品源码,4332
+lib/application/development_execution_service.dart,产品源码,8129
+lib/application/development_loop_finalizer.dart,产品源码,14351
+lib/application/development_run_completion.dart,产品源码,4981
+lib/application/development_target.dart,产品源码,8566
+lib/application/development_tool_installer.dart,产品源码,5664
+lib/application/development_verification.dart,产品源码,23807
+lib/application/development_workflow.dart,产品源码,9151
+lib/application/device_action_runner.dart,产品源码,8230
+lib/application/device_automation_service.dart,产品源码,23798
+lib/application/device_backup_service.dart,产品源码,705
+lib/application/draft_service.dart,产品源码,5104
+lib/application/environment_service.dart,产品源码,32522
+lib/application/error_humanizer.dart,产品源码,8022
+lib/application/execution_lease_service.dart,产品源码,6686
+lib/application/file_baseline_store.dart,产品源码,6929
+lib/application/file_citation.dart,产品源码,1909
+lib/application/foreground_approval_guard.dart,产品源码,1564
+lib/application/git_service.dart,产品源码,3742
+lib/application/global_search_service.dart,产品源码,8451
+lib/application/headless_executor.dart,产品源码,21433
+lib/application/history_compactor.dart,产品源码,3657
+lib/application/install_job_service.dart,产品源码,7902
+lib/application/isolated_edit_service.dart,产品源码,11926
+lib/application/jobs/job_board.dart,产品源码,13059
+lib/application/jobs/job_board_providers.dart,产品源码,600
+lib/application/knowledge_service.dart,产品源码,12798
+lib/application/log_service.dart,产品源码,7915
+lib/application/mcp_service.dart,产品源码,3550
+lib/application/memory_service.dart,产品源码,14020
+lib/application/mobile_workflow_service.dart,产品源码,14208
+lib/application/modules/agent_module.dart,产品源码,1405
+lib/application/modules/module_host.dart,产品源码,2647
+lib/application/modules/run_profile.dart,产品源码,2249
+lib/application/modules/session_log_module.dart,产品源码,1566
+lib/application/mojibake_repair.dart,产品源码,2055
+lib/application/network_access_policy.dart,产品源码,47
+lib/application/nexus_guard.dart,产品源码,6608
+lib/application/non_file_result_actions.dart,产品源码,24831
+lib/application/onboarding_service.dart,产品源码,533
+lib/application/operational_metrics.dart,产品源码,12363
+lib/application/orchestration_module.dart,产品源码,23498
+lib/application/persisted_run_fence.dart,产品源码,6956
+lib/application/personal_context_service.dart,产品源码,33323
+lib/application/plan_markdown.dart,产品源码,1601
+lib/application/presets/run_preset.dart,产品源码,15238
+lib/application/presets/run_preset_providers.dart,产品源码,4264
+lib/application/preview_service.dart,产品源码,11314
+lib/application/project_context_service.dart,产品源码,9049
+lib/application/project_environment_policy.dart,产品源码,6805
+lib/application/project_kind.dart,产品源码,3213
+lib/application/project_kind_detector.dart,产品源码,7352
+lib/application/project_service.dart,产品源码,18888
+lib/application/project_settings.dart,产品源码,5280
+lib/application/project_template_service.dart,产品源码,10756
+lib/application/prompt_budget.dart,产品源码,3742
+lib/application/providers.dart,产品源码,4136
+lib/application/reasoning_policy.dart,产品源码,924
+lib/application/reminder_service.dart,产品源码,10165
+lib/application/remote_execution_probe.dart,产品源码,5015
+lib/application/research_artifact_service.dart,产品源码,9324
+lib/application/result_action_approval_scope.dart,产品源码,4670
+lib/application/result_action_service.dart,产品源码,29368
+lib/application/run_approval_scope.dart,产品源码,5082
+lib/application/run_audit_report.dart,产品源码,8193
+lib/application/run_controller.dart,产品源码,9846
+lib/application/run_coordinator.dart,产品源码,4293
+lib/application/run_event_tracker.dart,产品源码,10688
+lib/application/run_recovery_safety.dart,产品源码,5814
+lib/application/run_tool_settings.dart,产品源码,1360
+lib/application/scheduled_task_runner.dart,产品源码,10996
+lib/application/scheduled_task_service.dart,产品源码,2888
+lib/application/scoped_memory_access.dart,产品源码,6427
+lib/application/session_checkpoint_service.dart,产品源码,10222
+lib/application/session_log/chat_message_codec.dart,产品源码,5957
+lib/application/session_log/legacy_import.dart,产品源码,8908
+lib/application/session_log/session_event.dart,产品源码,2078
+lib/application/session_log/session_event_store.dart,产品源码,13962
+lib/application/session_log/session_log_fork.dart,产品源码,4018
+lib/application/session_log/session_log_maintenance.dart,产品源码,3045
+lib/application/session_log/session_log_reader.dart,产品源码,2996
+lib/application/session_log/session_log_settings.dart,产品源码,535
+lib/application/session_log/session_recorder.dart,产品源码,5844
+lib/application/session_operation_guard.dart,产品源码,126
+lib/application/skill_catalog.dart,产品源码,1033
+lib/application/skill_intent_matcher.dart,产品源码,2617
+lib/application/speech_capture.dart,产品源码,10583
+lib/application/speech_submission_guard.dart,产品源码,912
+lib/application/static_web_project_service.dart,产品源码,9250
+lib/application/system_prompt_assembly.dart,产品源码,1572
+lib/application/task_feedback_service.dart,产品源码,1181
+lib/application/task_service.dart,产品源码,26238
+lib/application/task_summary.dart,产品源码,3730
+lib/application/task_template_service.dart,产品源码,7296
+lib/application/tool_pipeline/execution_interceptors.dart,产品源码,7938
+lib/application/tool_pipeline/file_baseline_interceptor.dart,产品源码,3025
+lib/application/tool_pipeline/preflight_guards.dart,产品源码,3574
+lib/application/tool_pipeline/run_event_interceptor.dart,产品源码,3882
+lib/application/tool_pipeline/tool_invocation.dart,产品源码,2806
+lib/application/tool_pipeline/tool_pipeline.dart,产品源码,1683
+lib/application/tool_pipeline/tool_run_context.dart,产品源码,3383
+lib/application/traced_model_provider.dart,产品源码,3610
+lib/application/tts_text.dart,产品源码,3688
+lib/application/usage_cost_estimator.dart,产品源码,1700
+lib/application/verification_execution_guard.dart,产品源码,1995
+lib/application/verification_repair_service.dart,产品源码,4426
+lib/application/workbench/session_workbench.dart,产品源码,9835
+lib/application/workspace_file_editor.dart,产品源码,3227
+lib/application/workspace_service.dart,产品源码,4182
+lib/application/workspace_snapshot.dart,产品源码,9026
+lib/debug/approval_scope_ui_checks.dart,产品源码,7120
+lib/debug/artifact_action_checks.dart,产品源码,18270
+lib/debug/artifact_checks.dart,产品源码,10969
+lib/debug/artifact_checks_stub.dart,产品源码,34
+lib/debug/assistant_entry_checks.dart,产品源码,17549
+lib/debug/assistant_entry_ui_checks.dart,产品源码,12700
+lib/debug/assistant_role_checks.dart,产品源码,4986
+lib/debug/browser_contract_checks.dart,产品源码,9817
+lib/debug/conversation_result_checks.dart,产品源码,31287
+lib/debug/entry_intent_checks.dart,产品源码,10340
+lib/debug/global_search_checks.dart,产品源码,11003
+lib/debug/global_search_checks_stub.dart,产品源码,38
+lib/debug/job_board_checks.dart,产品源码,10581
+lib/debug/job_board_checks_stub.dart,产品源码,34
+lib/debug/memory_knowledge_checks.dart,产品源码,26649
+lib/debug/memory_knowledge_checks_stub.dart,产品源码,41
+lib/debug/memory_scope_checks.dart,产品源码,20038
+lib/debug/memory_scope_checks_stub.dart,产品源码,37
+lib/debug/mobile_ui_acceptance.dart,产品源码,21956
+lib/debug/mobile_ui_acceptance_stub.dart,产品源码,106
+lib/debug/page_coverage_checks.dart,产品源码,34686
+lib/debug/personal_context_checks.dart,产品源码,28027
+lib/debug/personal_context_sql_checks.dart,产品源码,46436
+lib/debug/plan_protocol_checks.dart,产品源码,100578
+lib/debug/plan_protocol_checks_stub.dart,产品源码,38
+lib/debug/result_action_approval_checks.dart,产品源码,23159
+lib/debug/result_card_checks.dart,产品源码,19018
+lib/debug/speech_capture_checks.dart,产品源码,8225
+lib/debug/speech_capture_ui_checks.dart,产品源码,12752
+lib/debug/steering_guard_checks.dart,产品源码,7784
+lib/debug/steering_guard_checks_stub.dart,产品源码,39
+lib/debug/system_connector_contract_checks.dart,产品源码,5845
+lib/debug/task_runtime_checks.dart,产品源码,9965
+lib/debug/task_runtime_checks_stub.dart,产品源码,37
+lib/debug/tts_lifecycle_checks.dart,产品源码,7736
+lib/domain/agent_draft.dart,产品源码,2652
+lib/domain/approval_action_codec.dart,产品源码,2273
+lib/domain/assistant_input_decision.dart,产品源码,233
+lib/domain/assistant_page_context.dart,产品源码,3523
+lib/domain/attachment_file.dart,产品源码,2787
+lib/domain/browser_session.dart,产品源码,882
+lib/domain/collaboration_models.dart,产品源码,15808
+lib/domain/context_insights.dart,产品源码,12108
+lib/domain/data_management_stats.dart,产品源码,333
+lib/domain/device_automation.dart,产品源码,20771
+lib/domain/history_load_result.dart,产品源码,146
+lib/domain/message_display_metadata.dart,产品源码,2894
+lib/domain/mobile_workflow.dart,产品源码,3605
+lib/domain/model_failure.dart,产品源码,7371
+lib/domain/models.dart,产品源码,17975
+lib/domain/network_access_policy.dart,产品源码,5258
+lib/domain/personal_context.dart,产品源码,36179
+lib/domain/provider_config.dart,产品源码,6763
+lib/domain/provider_template.dart,产品源码,8207
+lib/domain/reminder.dart,产品源码,3775
+lib/domain/research_artifact.dart,产品源码,4816
+lib/domain/result_card.dart,产品源码,22919
+lib/domain/runtime_data_scope.dart,产品源码,1237
+lib/domain/sensitive_tool_policy.dart,产品源码,7707
+lib/domain/session_metrics.dart,产品源码,4097
+lib/domain/session_operation_guard.dart,产品源码,756
+lib/domain/system_connector_request.dart,产品源码,6771
+lib/domain/tool_codes.dart,产品源码,4131
+lib/domain/tool_result.dart,产品源码,3891
+lib/domain/tool_result_truncation.dart,产品源码,1010
+lib/domain/tool_traits.dart,产品源码,2376
+lib/domain/unique_id.dart,产品源码,430
+lib/infrastructure/background/foreground_run_lease.dart,产品源码,2112
+lib/infrastructure/background/foreground_service.dart,产品源码,4045
+lib/infrastructure/background_service.dart,产品源码,2336
+lib/infrastructure/browser/android_browser_transport.dart,产品源码,1139
+lib/infrastructure/database/app_database.dart,产品源码,84518
+lib/infrastructure/database/app_database.g.dart,产品源码,789592
+lib/infrastructure/database/conversation_result_store.dart,产品源码,6800
+lib/infrastructure/database/cost_budget_ledger.dart,产品源码,13878
+lib/infrastructure/database/database_executor.dart,产品源码,92
+lib/infrastructure/database/database_executor_io.dart,产品源码,1527
+lib/infrastructure/database/database_executor_web.dart,产品源码,682
+lib/infrastructure/database/database_maintenance.dart,产品源码,2994
+lib/infrastructure/database/database_provider.dart,产品源码,413
+lib/infrastructure/database/database_tables.dart,产品源码,20148
+lib/infrastructure/database/memory_forget_store.dart,产品源码,3073
+lib/infrastructure/database/message_history_store.dart,产品源码,3316
+lib/infrastructure/database/personal_context_store.dart,产品源码,32095
+lib/infrastructure/database/result_action_approval_store.dart,产品源码,6460
+lib/infrastructure/database/result_action_store.dart,产品源码,13474
+lib/infrastructure/database/run_plan_store.dart,产品源码,13305
+lib/infrastructure/database/runtime_data_execution.dart,产品源码,2249
+lib/infrastructure/database/runtime_data_guard.dart,产品源码,3604
+lib/infrastructure/database/runtime_maintenance_store.dart,产品源码,8101
+lib/infrastructure/database/runtime_process_identity.dart,产品源码,1059
+lib/infrastructure/database/runtime_process_probe.dart,产品源码,287
+lib/infrastructure/database/runtime_process_probe_io.dart,产品源码,4775
+lib/infrastructure/database/runtime_process_probe_stub.dart,产品源码,355
+lib/infrastructure/files/bounded_text_reader.dart,产品源码,1458
+lib/infrastructure/files/context_result_vault.dart,产品源码,18482
+lib/infrastructure/files/conversation_exporter.dart,产品源码,102
+lib/infrastructure/files/conversation_exporter_io.dart,产品源码,1254
+lib/infrastructure/files/conversation_exporter_web.dart,产品源码,1346
+lib/infrastructure/files/document_extractor.dart,产品源码,527
+lib/infrastructure/files/git_index_selection.dart,产品源码,1512
+lib/infrastructure/files/local_crypto_service.dart,产品源码,5274
+lib/infrastructure/files/mobile_module_vault.dart,产品源码,6395
+lib/infrastructure/files/patch_journal.dart,产品源码,10951
+lib/infrastructure/files/run_plan_vault.dart,产品源码,5163
+lib/infrastructure/files/vault_exporter.dart,产品源码,88
+lib/infrastructure/files/vault_exporter_io.dart,产品源码,28398
+lib/infrastructure/files/vault_exporter_web.dart,产品源码,847
+lib/infrastructure/files/vault_manifest.dart,产品源码,6400
+lib/infrastructure/files/vault_skill_staging.dart,产品源码,6492
+lib/infrastructure/files/vault_snapshot_reader.dart,产品源码,7600
+lib/infrastructure/files/workspace_fs.dart,产品源码,4194
+lib/infrastructure/mcp/mcp_legacy_migration.dart,产品源码,792
+lib/infrastructure/mcp/mcp_server_config.dart,产品源码,6297
+lib/infrastructure/mcp/mcp_tool_provider.dart,产品源码,10818
+lib/infrastructure/notifications/notification_intent.dart,产品源码,4146
+lib/infrastructure/notifications/notification_service.dart,产品源码,12495
+lib/infrastructure/observability/sentry_service.dart,产品源码,7390
+lib/infrastructure/observability/silent_failure.dart,产品源码,654
+lib/infrastructure/observability/unified_diff.dart,产品源码,10708
+lib/infrastructure/plugins/plugin_store.dart,产品源码,10943
+lib/infrastructure/providers/anthropic_provider.dart,产品源码,15121
+lib/infrastructure/providers/cost_budget_policy.dart,产品源码,7647
+lib/infrastructure/providers/cost_budget_provider.dart,产品源码,5763
+lib/infrastructure/providers/gemini_provider.dart,产品源码,13008
+lib/infrastructure/providers/http_client.dart,产品源码,4244
+lib/infrastructure/providers/llm_provider.dart,产品源码,938
+lib/infrastructure/providers/model_route.dart,产品源码,2166
+lib/infrastructure/providers/openai_compatible_provider.dart,产品源码,20027
+lib/infrastructure/providers/provider_config.dart,产品源码,45
+lib/infrastructure/providers/provider_config_store.dart,产品源码,10200
+lib/infrastructure/providers/provider_factory.dart,产品源码,1256
+lib/infrastructure/providers/proxy_provider.dart,产品源码,1293
+lib/infrastructure/providers/sse_decoder.dart,产品源码,2169
+lib/infrastructure/providers/streaming_provider_base.dart,产品源码,2565
+lib/infrastructure/providers/tool_trust_store.dart,产品源码,3219
+lib/infrastructure/remote/remote_executor_client.dart,产品源码,4311
+lib/infrastructure/share/assistant_entry.dart,产品源码,1133
+lib/infrastructure/share/deep_link_service.dart,产品源码,10966
+lib/infrastructure/share/share_batch_intake.dart,产品源码,1259
+lib/infrastructure/share/sharing_image_reader.dart,产品源码,97
+lib/infrastructure/share/sharing_image_reader_io.dart,产品源码,1965
+lib/infrastructure/share/sharing_image_reader_stub.dart,产品源码,284
+lib/infrastructure/share/sharing_service.dart,产品源码,4917
+lib/infrastructure/skills/builtin_skills.dart,产品源码,4460
+lib/infrastructure/skills/skill_change_notifier.dart,产品源码,554
+lib/infrastructure/skills/skill_installer.dart,产品源码,24858
+lib/infrastructure/skills/skill_parser.dart,产品源码,7118
+lib/infrastructure/skills/skill_store.dart,产品源码,15221
+lib/infrastructure/system/battery_optimization.dart,产品源码,1255
+lib/infrastructure/terminal/adaptive_linux_runtime_adapter.dart,产品源码,7170
+lib/infrastructure/terminal/android_shell_runtime_adapter.dart,产品源码,19395
+lib/infrastructure/terminal/builtin_proot_runtime_adapter.dart,产品源码,14911
+lib/infrastructure/terminal/daemon_persistence.dart,产品源码,5584
+lib/infrastructure/terminal/host_process_runtime_adapter.dart,产品源码,7642
+lib/infrastructure/terminal/linux_runtime.dart,产品源码,4333
+lib/infrastructure/terminal/linux_runtime_factory.dart,产品源码,984
+lib/infrastructure/terminal/ssh_host_key_store.dart,产品源码,2830
+lib/infrastructure/terminal/ssh_terminal_session.dart,产品源码,7884
+lib/infrastructure/terminal/terminal_job_log_store.dart,产品源码,2375
+lib/infrastructure/terminal/termux_runtime_adapter.dart,产品源码,18480
+lib/infrastructure/terminal/termux_ssh_credentials.dart,产品源码,2993
+lib/infrastructure/tools/android_accessibility_bridge.dart,产品源码,1108
+lib/infrastructure/tools/android_backup_actions.dart,产品源码,24340
+lib/infrastructure/tools/android_device_control_bridge.dart,产品源码,13842
+lib/infrastructure/tools/android_device_tool.dart,产品源码,125634
+lib/infrastructure/tools/android_system_editor_actions.dart,产品源码,6364
+lib/infrastructure/tools/apply_patch_tool.dart,产品源码,17084
+lib/infrastructure/tools/command_tool.dart,产品源码,59639
+lib/infrastructure/tools/core_tools.dart,产品源码,15942
+lib/infrastructure/tools/image_gen_tool.dart,产品源码,4999
+lib/infrastructure/tools/isolated_sub_agent_tool.dart,产品源码,2710
+lib/infrastructure/tools/parallel_sub_agents_tool.dart,产品源码,4626
+lib/infrastructure/tools/pinned_host_connector.dart,产品源码,1302
+lib/infrastructure/tools/plan_tool.dart,产品源码,2841
+lib/infrastructure/tools/repo_map_tool.dart,产品源码,10631
+lib/infrastructure/tools/schema_validator.dart,产品源码,8539
+lib/infrastructure/tools/skill_tools.dart,产品源码,6111
+lib/infrastructure/tools/source_symbol_index.dart,产品源码,6464
+lib/infrastructure/tools/sub_agent_tool.dart,产品源码,5000
+lib/infrastructure/tools/tool_catalog.dart,产品源码,4247
+lib/infrastructure/tools/tool_registry.dart,产品源码,7854
+lib/infrastructure/tools/workspace_tool_set.dart,产品源码,1094
+lib/infrastructure/tools/workspace_tools.dart,产品源码,35964
+lib/infrastructure/tts/tts_service.dart,产品源码,5350
+lib/infrastructure/update/update_service.dart,产品源码,17589
+lib/infrastructure/update/windows_package_downloader.dart,产品源码,3720
+lib/main.dart,产品源码,18296
+lib/presentation/agents/agent_editor_page.dart,产品源码,45147
+lib/presentation/agents/agents_page.dart,产品源码,20010
+lib/presentation/artifacts/artifact_center_page.dart,产品源码,36430
+lib/presentation/artifacts/research_artifacts_page.dart,产品源码,11289
+lib/presentation/audit/audit_log_page.dart,产品源码,16597
+lib/presentation/branches/branch_tree_sheet.dart,产品源码,7570
+lib/presentation/browser/browser_page.dart,产品源码,19285
+lib/presentation/chat/chat_layout_controller.dart,产品源码,1201
+lib/presentation/chat/chat_message_actions.dart,产品源码,10274
+lib/presentation/chat/chat_page.dart,产品源码,110869
+lib/presentation/chat/chat_page_attachments.dart,产品源码,8070
+lib/presentation/chat/chat_page_conversation.dart,产品源码,10404
+lib/presentation/chat/chat_page_intents.dart,产品源码,15597
+lib/presentation/chat/chat_page_sheets.dart,产品源码,28613
+lib/presentation/chat/chat_page_skills.dart,产品源码,8203
+lib/presentation/chat/chat_page_tool_approvals.dart,产品源码,6408
+lib/presentation/chat/chat_scroll_coordinator.dart,产品源码,5413
+lib/presentation/chat/composer_skill_slot.dart,产品源码,1687
+lib/presentation/chat/skill_suggestion_rules.dart,产品源码,2353
+lib/presentation/chat/slash_skill_query.dart,产品源码,4309
+lib/presentation/chat/tool_humanizer.dart,产品源码,9356
+lib/presentation/chat/transcript_view_policy.dart,产品源码,2872
+lib/presentation/chat/widgets/attachment_drawer_panel.dart,产品源码,9365
+lib/presentation/chat/widgets/attachment_strip.dart,产品源码,1912
+lib/presentation/chat/widgets/capsule_top_bar.dart,产品源码,12772
+lib/presentation/chat/widgets/chat_catalog_drawer.dart,产品源码,47814
+lib/presentation/chat/widgets/chat_empty_state.dart,产品源码,16902
+lib/presentation/chat/widgets/chat_execution_stage.dart,产品源码,1704
+lib/presentation/chat/widgets/chat_message_list.dart,产品源码,24102
+lib/presentation/chat/widgets/chat_mode_switcher.dart,产品源码,6019
+lib/presentation/chat/widgets/composer_skill_slot.dart,产品源码,1939
+lib/presentation/chat/widgets/context_budget_bar.dart,产品源码,4183
+lib/presentation/chat/widgets/context_budget_hint.dart,产品源码,3514
+lib/presentation/chat/widgets/conversation_restore_skeleton.dart,产品源码,1167
+lib/presentation/chat/widgets/conversation_result_timeline.dart,产品源码,8535
+lib/presentation/chat/widgets/environment_sheet.dart,产品源码,28483
+lib/presentation/chat/widgets/floating_capsule_input.dart,产品源码,44012
+lib/presentation/chat/widgets/input_tool_grid_sheet.dart,产品源码,14430
+lib/presentation/chat/widgets/mascot_avatar.dart,产品源码,938
+lib/presentation/chat/widgets/message_bubble.dart,产品源码,52993
+lib/presentation/chat/widgets/model_picker_sheet.dart,产品源码,26622
+lib/presentation/chat/widgets/nexus_back_to_latest_button.dart,产品源码,4968
+lib/presentation/chat/widgets/plan_panel.dart,产品源码,31379
+lib/presentation/chat/widgets/provider_setup_hint.dart,产品源码,4986
+lib/presentation/chat/widgets/reasoning_block.dart,产品源码,22189
+lib/presentation/chat/widgets/result_card_view.dart,产品源码,20023
+lib/presentation/chat/widgets/session_configuration_sheet.dart,产品源码,7978
+lib/presentation/chat/widgets/session_metrics_bar.dart,产品源码,16926
+lib/presentation/chat/widgets/session_metrics_sheet.dart,产品源码,60156
+lib/presentation/chat/widgets/session_metrics_summary.dart,产品源码,4954
+lib/presentation/chat/widgets/skill_suggestion_bar.dart,产品源码,9888
+lib/presentation/chat/widgets/streaming_markdown.dart,产品源码,5361
+lib/presentation/chat/widgets/tool_activity_section.dart,产品源码,26120
+lib/presentation/chat/widgets/tool_approval_sheet.dart,产品源码,36936
+lib/presentation/dashboard/cost_ledger_page.dart,产品源码,14901
+lib/presentation/dashboard/dashboard_page.dart,产品源码,19826
+lib/presentation/dashboard/dashboard_provider.dart,产品源码,966
+lib/presentation/dashboard/widgets/kpi_card_grid.dart,产品源码,4206
+lib/presentation/dashboard/widgets/run_status_list.dart,产品源码,6296
+lib/presentation/dashboard/widgets/todo_section.dart,产品源码,9009
+lib/presentation/dashboard/widgets/token_numbers.dart,产品源码,2589
+lib/presentation/dashboard/widgets/token_trend_card.dart,产品源码,8144
+lib/presentation/dashboard/widgets/token_usage_hero.dart,产品源码,28124
+lib/presentation/diagnostics/log_viewer_page.dart,产品源码,18272
+lib/presentation/diagnostics/operational_metrics_page.dart,产品源码,15334
+lib/presentation/diagnostics/run_analysis_page.dart,产品源码,41829
+lib/presentation/environment/environment_status_view.dart,产品源码,10509
+lib/presentation/feedback/feedback_page.dart,产品源码,5889
+lib/presentation/history/history_page.dart,产品源码,26212
+lib/presentation/jobs/jobs_inbox_page.dart,产品源码,18685
+lib/presentation/knowledge/knowledge_page.dart,产品源码,34238
+lib/presentation/l10n/app_locale_controller.dart,产品源码,880
+lib/presentation/l10n/app_strings.dart,产品源码,17464
+lib/presentation/markdown/code_block.dart,产品源码,17868
+lib/presentation/markdown/markdown_render_metrics.dart,产品源码,1315
+lib/presentation/markdown/markdown_render_policy.dart,产品源码,3190
+lib/presentation/markdown/math_block.dart,产品源码,3115
+lib/presentation/mcp/mcp_servers_page.dart,产品源码,48046
+lib/presentation/memory/memory_page.dart,产品源码,27260
+lib/presentation/motion/micro_interactions.dart,产品源码,6018
+lib/presentation/motion/mobile_motion.dart,产品源码,835
+lib/presentation/motion/morph_icon.dart,产品源码,3212
+lib/presentation/motion/motion_intensity.dart,产品源码,1355
+lib/presentation/motion/motion_lifecycle.dart,产品源码,1532
+lib/presentation/motion/motion_preferences.dart,产品源码,1974
+lib/presentation/motion/motion_tier.dart,产品源码,11611
+lib/presentation/motion/nexus_entrance.dart,产品源码,4555
+lib/presentation/motion/nexus_haptics.dart,产品源码,1733
+lib/presentation/motion/nexus_motion.dart,产品源码,10353
+lib/presentation/motion/nexus_page_route_factory.dart,产品源码,21137
+lib/presentation/motion/nexus_spring.dart,产品源码,9074
+lib/presentation/motion/nexus_staggered_entrance.dart,产品源码,5222
+lib/presentation/motion/press_squash.dart,产品源码,5773
+lib/presentation/motion/send_flight.dart,产品源码,8984
+lib/presentation/motion/spring_follow_height.dart,产品源码,6135
+lib/presentation/motion/tap_origin.dart,产品源码,1928
+lib/presentation/navigation/app_shell.dart,产品源码,43023
+lib/presentation/navigation/assistant_entry_surface.dart,产品源码,1265
+lib/presentation/navigation/assistant_input_review_sheet.dart,产品源码,4932
+lib/presentation/navigation/desktop_chat_bridge.dart,产品源码,600
+lib/presentation/navigation/desktop_checkpoint_timeline.dart,产品源码,15335
+lib/presentation/navigation/desktop_command_center.dart,产品源码,15156
+lib/presentation/navigation/desktop_devices_dialog.dart,产品源码,11793
+lib/presentation/navigation/desktop_jobs_strip.dart,产品源码,14078
+lib/presentation/navigation/desktop_preview_panel.dart,产品源码,16365
+lib/presentation/navigation/desktop_review_panel.dart,产品源码,24368
+lib/presentation/navigation/desktop_run_dialog.dart,产品源码,4547
+lib/presentation/navigation/desktop_task_result_dialog.dart,产品源码,4020
+lib/presentation/navigation/desktop_workbench_panels.dart,产品源码,36485
+lib/presentation/navigation/desktop_workflows_dialog.dart,产品源码,6065
+lib/presentation/navigation/desktop_workspace_chrome.dart,产品源码,30868
+lib/presentation/navigation/mobile_navigation_scope.dart,产品源码,4500
+lib/presentation/navigation/mobile_shell.dart,产品源码,9437
+lib/presentation/onboarding/onboarding_page.dart,产品源码,14695
+lib/presentation/plugins/plugins_page.dart,产品源码,18922
+lib/presentation/plugins/skill_market_page.dart,产品源码,30830
+lib/presentation/presets/run_presets_sheet.dart,产品源码,9473
+lib/presentation/projects/install_job_sheet.dart,产品源码,4155
+lib/presentation/projects/project_change_set_page.dart,产品源码,7870
+lib/presentation/projects/project_git_page.dart,产品源码,5591
+lib/presentation/projects/project_home_page.dart,产品源码,42802
+lib/presentation/projects/project_picker_page.dart,产品源码,25978
+lib/presentation/projects/remote_execution_page.dart,产品源码,8179
+lib/presentation/projects/static_web_delivery_page.dart,产品源码,11326
+lib/presentation/projects/storage_access_flow.dart,产品源码,4826
+lib/presentation/prompts/prompt_library_page.dart,产品源码,20183
+lib/presentation/scheduled/scheduled_tasks_page.dart,产品源码,35771
+lib/presentation/search/global_search_page.dart,产品源码,15632
+lib/presentation/settings/appearance_theme_page.dart,产品源码,32823
+lib/presentation/settings/data_backup_page.dart,产品源码,14553
+lib/presentation/settings/data_management_page.dart,产品源码,9550
+lib/presentation/settings/default_assistant_page.dart,产品源码,6236
+lib/presentation/settings/desktop_settings_page.dart,产品源码,10905
+lib/presentation/settings/device_action_confirm_sheet.dart,产品源码,12470
+lib/presentation/settings/device_automation_page.dart,产品源码,34026
+lib/presentation/settings/device_backups_page.dart,产品源码,20757
+lib/presentation/settings/device_capabilities_page.dart,产品源码,39070
+lib/presentation/settings/extensions_page.dart,产品源码,12226
+lib/presentation/settings/language_page.dart,产品源码,3556
+lib/presentation/settings/linux_environment_page.dart,产品源码,26784
+lib/presentation/settings/model_list_page.dart,产品源码,20056
+lib/presentation/settings/motion_diagnostics.dart,产品源码,3863
+lib/presentation/settings/personal_context_page.dart,产品源码,36669
+lib/presentation/settings/provider_detail_page.dart,产品源码,30004
+lib/presentation/settings/provider_list_page.dart,产品源码,22237
+lib/presentation/settings/provider_presets.dart,产品源码,5639
+lib/presentation/settings/provider_template_import_page.dart,产品源码,7129
+lib/presentation/settings/settings_components.dart,产品源码,16593
+lib/presentation/settings/settings_page.dart,产品源码,48538
+lib/presentation/settings/system_editors_page.dart,产品源码,8954
+lib/presentation/settings/tool_list_page.dart,产品源码,40383
+lib/presentation/settings/update_sheet.dart,产品源码,6133
+lib/presentation/settings/workspace_files_page.dart,产品源码,12766
+lib/presentation/tasks/collaboration_plan_sheet.dart,产品源码,18778
+lib/presentation/tasks/collaboration_timeline.dart,产品源码,24804
+lib/presentation/tasks/development_tasks_page.dart,产品源码,22160
+lib/presentation/tasks/task_details_page.dart,产品源码,77440
+lib/presentation/terminal/desktop_terminal_panel.dart,产品源码,5073
+lib/presentation/terminal/terminal_accessory_bar.dart,产品源码,7090
+lib/presentation/terminal/terminal_page.dart,产品源码,25790
+lib/presentation/theme/app_appearance_controller.dart,产品源码,3426
+lib/presentation/theme/app_palette.dart,产品源码,5374
+lib/presentation/theme/app_presentation_preferences.dart,产品源码,2023
+lib/presentation/theme/app_status_colors.dart,产品源码,2320
+lib/presentation/theme/app_theme.dart,产品源码,24979
+lib/presentation/theme/app_theme_controller.dart,产品源码,1035
+lib/presentation/theme/app_tokens.dart,产品源码,8743
+lib/presentation/theme/desktop_focus_ring.dart,产品源码,3246
+lib/presentation/theme/desktop_theme.dart,产品源码,15156
+lib/presentation/theme/mobile_theme.dart,产品源码,13115
+lib/presentation/utils/keyboard_avoider.dart,产品源码,5563
+lib/presentation/utils/keyboard_insets.dart,产品源码,1740
+lib/presentation/vault/vault_page.dart,产品源码,9062
+lib/presentation/voice/speech_capture_sheet.dart,产品源码,14706
+lib/presentation/widgets/ambient_glow.dart,产品源码,9991
+lib/presentation/widgets/async_state_view.dart,产品源码,1351
+lib/presentation/widgets/brand_mark.dart,产品源码,1449
+lib/presentation/widgets/confirm_action.dart,产品源码,6480
+lib/presentation/widgets/desktop_editor_layout.dart,产品源码,3543
+lib/presentation/widgets/desktop_page_summary.dart,产品源码,1886
+lib/presentation/widgets/desktop_reading_column.dart,产品源码,901
+lib/presentation/widgets/desktop_resource_view.dart,产品源码,17391
+lib/presentation/widgets/empty_state_view.dart,产品源码,6012
+lib/presentation/widgets/floating_toast.dart,产品源码,13004
+lib/presentation/widgets/glass_chip.dart,产品源码,3458
+lib/presentation/widgets/glass_scroll_edge.dart,产品源码,4086
+lib/presentation/widgets/glass_surface.dart,产品源码,11470
+lib/presentation/widgets/glass_surface_group.dart,产品源码,589
+lib/presentation/widgets/image_cache_policy.dart,产品源码,852
+lib/presentation/widgets/light_dust_field.dart,产品源码,6249
+lib/presentation/widgets/liquid_glass.dart,产品源码,15045
+lib/presentation/widgets/liquid_segmented_control.dart,产品源码,10432
+lib/presentation/widgets/nexus_action_sheet.dart,产品源码,9161
+lib/presentation/widgets/nexus_assistant_emblem.dart,产品源码,3843
+lib/presentation/widgets/nexus_async_content.dart,产品源码,11302
+lib/presentation/widgets/nexus_background.dart,产品源码,709
+lib/presentation/widgets/nexus_content_box.dart,产品源码,847
+lib/presentation/widgets/nexus_disclosure.dart,产品源码,8498
+lib/presentation/widgets/nexus_dropdown.dart,产品源码,3428
+lib/presentation/widgets/nexus_error_notice.dart,产品源码,2218
+lib/presentation/widgets/nexus_execution_status.dart,产品源码,15012
+lib/presentation/widgets/nexus_home_visuals.dart,产品源码,5108
+lib/presentation/widgets/nexus_list_tile.dart,产品源码,5167
+lib/presentation/widgets/nexus_loading_skeleton.dart,产品源码,9908
+lib/presentation/widgets/nexus_metric_tile.dart,产品源码,8142
+lib/presentation/widgets/nexus_page_header.dart,产品源码,12127
+lib/presentation/widgets/nexus_page_layout.dart,产品源码,1129
+lib/presentation/widgets/nexus_pressable.dart,产品源码,4430
+lib/presentation/widgets/nexus_search_field.dart,产品源码,2940
+lib/presentation/widgets/nexus_section.dart,产品源码,3106
+lib/presentation/widgets/nexus_segmented_button.dart,产品源码,7077
+lib/presentation/widgets/nexus_sheet.dart,产品源码,24954
+lib/presentation/widgets/nexus_status_badge.dart,产品源码,3133
+lib/presentation/widgets/nexus_status_pill.dart,产品源码,5628
+lib/presentation/widgets/nexus_surface.dart,产品源码,3572
+lib/presentation/widgets/nexus_switch.dart,产品源码,9653
+lib/presentation/widgets/nexus_touch_light.dart,产品源码,9172
+lib/presentation/widgets/nexus_undo_toast.dart,产品源码,767
+lib/presentation/widgets/section_card.dart,产品源码,4031
+lib/presentation/widgets/section_header.dart,产品源码,1040
+lib/presentation/widgets/shimmer_text.dart,产品源码,5425
+lib/presentation/widgets/speaking_wave.dart,产品源码,6885
+lib/presentation/widgets/tool_approval_helper.dart,产品源码,10478
+lib/presentation/workbench/session_workbench_page.dart,产品源码,13622
+lib/presentation/workflows/mobile_workflows_page.dart,产品源码,10597
+lib/presentation/workspace/development_workbench_page.dart,产品源码,27598
+lib/presentation/workspace/file_tree_sheet.dart,产品源码,14682
+lib/presentation/workspace/terminal_job_panel.dart,产品源码,2494
+lib/presentation/workspace/terminal_sheet.dart,产品源码,16621
+lib/presentation/workspace/workspace_editor_page.dart,产品源码,8698
+lib/presentation/workspace/workspace_sheet_frame.dart,产品源码,843
+pubspec.lock,项目入口与配置,50988
+pubspec.yaml,项目入口与配置,5058
+run_desktop_verification_and_build.bat,项目入口与配置,2096
+shaders/liquid_glass.frag,运行资源,3423
+test/a11y_compliance_test.dart,自动化测试,9193
+test/adaptive_runtime_regression_test.dart,自动化测试,4904
+test/agent_budget_policy_test.dart,自动化测试,4953
+test/agent_draft_entry_test.dart,自动化测试,9660
+test/agent_draft_service_test.dart,自动化测试,9059
+test/agent_executor_pipeline_injection_test.dart,自动化测试,3906
+test/agent_executor_test.dart,自动化测试,44796
+test/agent_loop_characterization_test.dart,自动化测试,21142
+test/agent_loop_hardening_test.dart,自动化测试,8616
+test/agent_loop_hooks_test.dart,自动化测试,7672
+test/agent_loop_policies_test.dart,自动化测试,6830
+test/agent_max_tokens_subtitle_test.dart,自动化测试,1750
+test/agent_pause_interrupt_test.dart,自动化测试,8203
+test/agent_remaining_mechanisms_test.dart,自动化测试,6997
+test/ambient_glow_test.dart,自动化测试,7742
+test/android_accessibility_observe_tool_test.dart,自动化测试,7009
+test/android_backup_actions_test.dart,自动化测试,5942
+test/android_deep_link_config_test.dart,自动化测试,833
+test/android_device_non_root_test.dart,自动化测试,10295
+test/android_device_tool_test.dart,自动化测试,47959
+test/android_ui_inventory_test.dart,自动化测试,18673
+test/app_lock_service_test.dart,自动化测试,2974
+test/approval_bridge_test.dart,自动化测试,8040
+test/approval_mode_selection_test.dart,自动化测试,3262
+test/approval_policy_test.dart,自动化测试,4646
+test/attachment_drawer_panel_test.dart,自动化测试,1038
+test/attachment_policy_test.dart,自动化测试,6901
+test/audit_device_execution_test.dart,自动化测试,3585
+test/audit_rollback_test.dart,自动化测试,2184
+test/audit_service_test.dart,自动化测试,7860
+test/automatic_backup_test.dart,自动化测试,15593
+test/automation_fallback_test.dart,自动化测试,10590
+test/background_execution_gateway_test.dart,自动化测试,6077
+test/branch_tree_sheet_test.dart,自动化测试,2477
+test/branch_tree_test.dart,自动化测试,4378
+test/browser_page_test.dart,自动化测试,5820
+test/browser_payload_budget_test.dart,自动化测试,4464
+test/browser_session_test.dart,自动化测试,11284
+test/browser_transport_test.dart,自动化测试,1775
+test/bugfix_regression_test.dart,自动化测试,17770
+test/builtin_skills_test.dart,自动化测试,4711
+test/change_set_retention_test.dart,自动化测试,2847
+test/change_set_service_test.dart,自动化测试,10375
+test/chat_activity_dock_test.dart,自动化测试,5752
+test/chat_controller_test.dart,自动化测试,42145
+test/chat_drawer_back_test.dart,自动化测试,3421
+test/chat_empty_state_test.dart,自动化测试,3576
+test/chat_execution_stage_test.dart,自动化测试,1305
+test/chat_history_selection_test.dart,自动化测试,6865
+test/chat_layout_controller_test.dart,自动化测试,1042
+test/chat_load_older_test.dart,自动化测试,5050
+test/chat_message_list_window_test.dart,自动化测试,2007
+test/chat_mode_test.dart,自动化测试,7363
+test/chat_page_attachments_test.dart,自动化测试,9017
+test/chat_page_deep_link_regression_test.dart,自动化测试,6181
+test/chat_rebuild_scope_test.dart,自动化测试,14325
+test/chat_resume_test.dart,自动化测试,27218
+test/chat_scroll_coordinator_test.dart,自动化测试,6337
+test/chat_session_skill_state_test.dart,自动化测试,1040
+test/chat_state_matrix_test.dart,自动化测试,4487
+test/chat_tool_registry_builder_test.dart,自动化测试,8232
+test/chat_visual_hierarchy_test.dart,自动化测试,8678
+test/chat_visual_regression_test.dart,自动化测试,5442
+test/code_highlight_test.dart,自动化测试,2220
+test/code_quality_guard_test.dart,自动化测试,2942
+test/collaboration_test.dart,自动化测试,10205
+test/command_tool_failure_test.dart,自动化测试,2663
+test/composer_skill_slot_test.dart,自动化测试,6619
+test/context_budget_bar_test.dart,自动化测试,1318
+test/context_compression_applier_test.dart,自动化测试,2512
+test/context_compression_planner_test.dart,自动化测试,5107
+test/context_insights_history_test.dart,自动化测试,7233
+test/context_insights_test.dart,自动化测试,2534
+test/context_snapshot_builder_test.dart,自动化测试,4404
+test/context_window_test.dart,自动化测试,12062
+test/contrast_guard_test.dart,自动化测试,5267
+test/conversation_restore_skeleton_test.dart,自动化测试,635
+test/count_silent_catches_test.dart,自动化测试,4533
+test/dashboard_presentation_test.dart,自动化测试,3114
+test/dashboard_service_test.dart,自动化测试,6967
+test/dashboard_token_hero_scale_test.dart,自动化测试,2668
+test/data_maintenance_actions_test.dart,自动化测试,5401
+test/data_maintenance_chat_test.dart,自动化测试,6034
+test/data_maintenance_isolate_test.dart,自动化测试,3245
+test/data_maintenance_recovery_test.dart,自动化测试,9549
+test/data_maintenance_recovery_ui_test.dart,自动化测试,5245
+test/data_maintenance_service_test.dart,自动化测试,7585
+test/data_management_page_test.dart,自动化测试,10426
+test/data_management_stats_query_test.dart,自动化测试,4461
+test/database_maintenance_test.dart,自动化测试,3352
+test/database_query_limit_test.dart,自动化测试,2105
+test/db_migration_v17_test.dart,自动化测试,9249
+test/declarative_tool_http_test.dart,自动化测试,3872
+test/deep_link_and_shortcuts_test.dart,自动化测试,6056
+test/deepseek_style_bubble_test.dart,自动化测试,4441
+test/desktop_a11y_motion_test.dart,自动化测试,5180
+test/desktop_checkpoint_timeline_test.dart,自动化测试,7741
+test/desktop_command_center_test.dart,自动化测试,6637
+test/desktop_compact_layout_test.dart,自动化测试,15635
+test/desktop_completion_test.dart,自动化测试,7293
+test/desktop_cpu_profile_test.dart,自动化测试,1674
+test/desktop_device_service_test.dart,自动化测试,5737
+test/desktop_git_service_test.dart,自动化测试,7919
+test/desktop_jobs_strip_test.dart,自动化测试,4396
+test/desktop_preview_panel_test.dart,自动化测试,3371
+test/desktop_preview_service_test.dart,自动化测试,3042
+test/desktop_pty_session_test.dart,自动化测试,6555
+test/desktop_resources_test.dart,自动化测试,18896
+test/desktop_runtime_regression_test.dart,自动化测试,7245
+test/desktop_search_service_test.dart,自动化测试,3002
+test/desktop_shell_test.dart,自动化测试,4744
+test/desktop_terminal_panel_test.dart,自动化测试,2548
+test/desktop_ui_readability_test.dart,自动化测试,3355
+test/desktop_ui_refresh_test.dart,自动化测试,4783
+test/desktop_workbench_service_test.dart,自动化测试,2916
+test/desktop_workspace_interaction_test.dart,自动化测试,15138
+test/desktop_worktree_service_test.dart,自动化测试,3175
+test/development_execution_service_test.dart,自动化测试,3226
+test/development_loop_test.dart,自动化测试,26366
+test/development_tool_installer_test.dart,自动化测试,3800
+test/development_workbench_mobile_test.dart,自动化测试,2687
+test/development_workflow_test.dart,自动化测试,642
+test/device_action_confirm_sheet_test.dart,自动化测试,4216
+test/device_action_safety_metadata_test.dart,自动化测试,2558
+test/device_automation_test.dart,自动化测试,17360
+test/device_capabilities_non_root_test.dart,自动化测试,6175
+test/device_capabilities_page_test.dart,自动化测试,3299
+test/draft_and_send_idempotency_test.dart,自动化测试,1726
+test/environment_service_test.dart,自动化测试,12447
+test/environment_status_contrast_test.dart,自动化测试,8619
+test/environment_status_view_test.dart,自动化测试,3602
+test/error_humanizer_test.dart,自动化测试,3231
+test/file_baseline_test.dart,自动化测试,12261
+test/file_tree_sheet_empty_test.dart,自动化测试,2884
+test/fixtures/mobile_agent_review_cases.json,自动化测试,22556
+test/fixtures/preview_http_worker.js,自动化测试,824
+test/fixtures/runtime_process_identity_worker.dart,自动化测试,596
+test/floating_toast_test.dart,自动化测试,9831
+test/foreground_approval_guard_test.dart,自动化测试,4692
+test/foreground_run_lease_test.dart,自动化测试,4192
+test/frame_timing_window_test.dart,自动化测试,3764
+test/glass_surface_test.dart,自动化测试,3856
+test/headless_executor_prefs_test.dart,自动化测试,5498
+test/headless_session_log_test.dart,自动化测试,3520
+test/history_page_performance_test.dart,自动化测试,3898
+test/http_client_test.dart,自动化测试,2829
+test/http_request_ssrf_test.dart,自动化测试,10728
+test/image_cache_policy_test.dart,自动化测试,510
+test/input_tool_grid_sheet_test.dart,自动化测试,10216
+test/install_job_service_test.dart,自动化测试,8906
+test/isolated_edit_test.dart,自动化测试,9355
+test/job_board_test.dart,自动化测试,5243
+test/jobs_inbox_page_test.dart,自动化测试,3662
+test/keyboard_avoider_test.dart,自动化测试,6148
+test/keyboard_insets_test.dart,自动化测试,12192
+test/knowledge_search_corpus_test.dart,自动化测试,2618
+test/layering_test.dart,自动化测试,2821
+test/light_dust_field_test.dart,自动化测试,5905
+test/linux_environment_page_test.dart,自动化测试,4708
+test/linux_runtime_test.dart,自动化测试,9983
+test/liquid_glass_multi_page_test.dart,自动化测试,7574
+test/liquid_glass_test.dart,自动化测试,5087
+test/liquid_segmented_control_test.dart,自动化测试,5705
+test/lively_acceptance_test.dart,自动化测试,4722
+test/markdown_render_metrics_test.dart,自动化测试,823
+test/markdown_render_policy_test.dart,自动化测试,1457
+test/mcp_network_policy_test.dart,自动化测试,7689
+test/mcp_sheet_layout_test.dart,自动化测试,1390
+test/mcp_test.dart,自动化测试,3638
+test/memory_knowledge_test.dart,自动化测试,9179
+test/message_bubble_semantics_test.dart,自动化测试,5051
+test/message_display_metadata_test.dart,自动化测试,6044
+test/message_longpress_test.dart,自动化测试,4731
+test/micro_interactions_test.dart,自动化测试,2723
+test/mobile_cost_ledger_widget_test.dart,自动化测试,8141
+test/mobile_cost_loop_test.dart,自动化测试,18019
+test/mobile_drawer_refinement_test.dart,自动化测试,3123
+test/mobile_metrics_widget_test.dart,自动化测试,5410
+test/mobile_operational_metrics_test.dart,自动化测试,10843
+test/mobile_review_regression_test.dart,自动化测试,4223
+test/mobile_shell_test.dart,自动化测试,5880
+test/mobile_trace_test.dart,自动化测试,9152
+test/mobile_ui_detail_test.dart,自动化测试,5116
+test/model_context_windows_test.dart,自动化测试,1518
+test/model_failure_test.dart,自动化测试,6670
+test/model_picker_sheet_test.dart,自动化测试,5152
+test/model_route_test.dart,自动化测试,3233
+test/models_test.dart,自动化测试,1432
+test/module_host_test.dart,自动化测试,6840
+test/mojibake_repair_test.dart,自动化测试,583
+test/motion_diagnostics_test.dart,自动化测试,1853
+test/motion_intensity_test.dart,自动化测试,7152
+test/motion_tier_test.dart,自动化测试,6869
+test/motion_ui_regression_test.dart,自动化测试,7462
+test/multi_file_patch_test.dart,自动化测试,8350
+test/nexus_all_pages_layout_test.dart,自动化测试,14189
+test/nexus_components_test.dart,自动化测试,3740
+test/nexus_entrance_test.dart,自动化测试,6890
+test/nexus_guard_test.dart,自动化测试,5436
+test/nexus_motion_and_widgets_test.dart,自动化测试,19035
+test/nexus_sheet_semantics_test.dart,自动化测试,1516
+test/nexus_spring_test.dart,自动化测试,7344
+test/nexus_staggered_entrance_test.dart,自动化测试,4896
+test/nexus_status_badge_theme_test.dart,自动化测试,1816
+test/nexus_switch_test.dart,自动化测试,2696
+test/nexus_theme_test.dart,自动化测试,5050
+test/nexus_touch_light_test.dart,自动化测试,6794
+test/notification_intent_test.dart,自动化测试,3654
+test/optimization_regression_test.dart,自动化测试,13963
+test/output_limit_continuation_test.dart,自动化测试,7371
+test/parallel_sub_agents_layering_test.dart,自动化测试,2422
+test/patch_recovery_test.dart,自动化测试,6763
+test/plan_markdown_test.dart,自动化测试,2439
+test/plan_panel_edit_test.dart,自动化测试,3569
+test/plan_status_fix_test.dart,自动化测试,7095
+test/plan_tool_test.dart,自动化测试,1291
+test/press_morph_test.dart,自动化测试,6238
+test/preview_service_test.dart,自动化测试,17761
+test/privacy_and_cleanup_test.dart,自动化测试,7417
+test/project_change_set_page_test.dart,自动化测试,4877
+test/project_context_and_budget_test.dart,自动化测试,5484
+test/project_home_mobile_compact_test.dart,自动化测试,17999
+test/project_picker_test.dart,自动化测试,6374
+test/project_service_test.dart,自动化测试,8945
+test/provider_config_deletion_test.dart,自动化测试,5034
+test/provider_detail_context_auto_test.dart,自动化测试,2028
+test/provider_settings_labels_test.dart,自动化测试,2693
+test/provider_setup_hint_test.dart,自动化测试,2897
+test/provider_stream_integrity_test.dart,自动化测试,6201
+test/provider_template_import_page_test.dart,自动化测试,2444
+test/provider_template_test.dart,自动化测试,2453
+test/providers_test.dart,自动化测试,28144
+test/reasoning_and_terminal_test.dart,自动化测试,10568
+test/reasoning_block_test.dart,自动化测试,4670
+test/reasoning_policy_test.dart,自动化测试,1080
+test/remote_executor_client_test.dart,自动化测试,5155
+test/render_desktop_test.dart,自动化测试,14876
+test/repo_map_languages_test.dart,自动化测试,4138
+test/research_source_boundary_test.dart,自动化测试,727
+test/result_card_mobile_review_test.dart,自动化测试,2135
+test/route_morph_test.dart,自动化测试,5904
+test/route_parallax_test.dart,自动化测试,8748
+test/route_transition_paint_test.dart,自动化测试,12361
+test/run_completion_controls_test.dart,自动化测试,20102
+test/run_controller_test.dart,自动化测试,2638
+test/run_coordinator_test.dart,自动化测试,4449
+test/run_event_interceptor_test.dart,自动化测试,4933
+test/run_event_tracker_test.dart,自动化测试,6055
+test/run_pause_notice_test.dart,自动化测试,4758
+test/run_preset_test.dart,自动化测试,6952
+test/run_presets_sheet_test.dart,自动化测试,2767
+test/run_recovery_safety_test.dart,自动化测试,10832
+test/run_success_haptic_test.dart,自动化测试,1360
+test/runtime_adapters_test.dart,自动化测试,33216
+test/scheduled_task_runner_result_test.dart,自动化测试,7255
+test/scheduled_task_service_test.dart,自动化测试,3964
+test/schema_validator_test.dart,自动化测试,1596
+test/scratch_api_test.dart,自动化测试,446
+test/segmented_motion_test.dart,自动化测试,2735
+test/send_flight_test.dart,自动化测试,8410
+test/send_motion_test.dart,自动化测试,9722
+test/sensitive_tool_policy_test.dart,自动化测试,10911
+test/sentry_redaction_test.dart,自动化测试,5337
+test/session_checkpoint_service_test.dart,自动化测试,5968
+test/session_log_blobs_test.dart,自动化测试,6305
+test/session_log_chat_wiring_test.dart,自动化测试,3601
+test/session_log_fork_test.dart,自动化测试,8611
+test/session_log_legacy_import_test.dart,自动化测试,6898
+test/session_log_maintenance_test.dart,自动化测试,4703
+test/session_log_test.dart,自动化测试,15654
+test/session_metrics_hud_compress_test.dart,自动化测试,4383
+test/session_metrics_sheet_test.dart,自动化测试,8318
+test/session_metrics_summary_budget_test.dart,自动化测试,2719
+test/session_metrics_test.dart,自动化测试,4675
+test/session_workbench_page_test.dart,自动化测试,2941
+test/session_workbench_test.dart,自动化测试,5643
+test/settings_icon_tint_test.dart,自动化测试,1719
+test/settings_page_test.dart,自动化测试,16612
+test/sheet_motion_test.dart,自动化测试,15382
+test/skill_installer_test.dart,自动化测试,4884
+test/skill_intent_matcher_test.dart,自动化测试,730
+test/skill_market_test.dart,自动化测试,2225
+test/skill_store_test.dart,自动化测试,3969
+test/skill_suggestion_bar_test.dart,自动化测试,2007
+test/skill_suggestion_rules_test.dart,自动化测试,3857
+test/slash_skill_query_test.dart,自动化测试,5871
+test/speaking_wave_test.dart,自动化测试,7059
+test/speech_capture_lifecycle_test.dart,自动化测试,3123
+test/spring_follow_height_test.dart,自动化测试,4505
+test/sse_stream_test.dart,自动化测试,4941
+test/ssh_host_key_store_test.dart,自动化测试,3219
+test/ssh_terminal_session_test.dart,自动化测试,2418
+test/startup_gate_test.dart,自动化测试,481
+test/static_web_delivery_page_test.dart,自动化测试,8109
+test/static_web_project_service_test.dart,自动化测试,6541
+test/stop_reason_test.dart,自动化测试,7663
+test/stream_reveal_test.dart,自动化测试,5262
+test/streaming_markdown_incremental_test.dart,自动化测试,9056
+test/sub_agent_autonomous_test.dart,自动化测试,3748
+test/system_connector_request_test.dart,自动化测试,5659
+test/system_prompt_assembly_test.dart,自动化测试,1901
+test/task_details_page_test.dart,自动化测试,6298
+test/task_feedback_service_test.dart,自动化测试,3104
+test/task_service_test.dart,自动化测试,6499
+test/terminal_accessory_bar_test.dart,自动化测试,2523
+test/terminal_daemon_test.dart,自动化测试,10838
+test/terminal_job_log_store_test.dart,自动化测试,2053
+test/terminal_job_management_test.dart,自动化测试,4969
+test/terminal_job_panel_test.dart,自动化测试,1579
+test/terminal_job_protocol_test.dart,自动化测试,2132
+test/terminal_lifecycle_regression_test.dart,自动化测试,5309
+test/terminal_page_test.dart,自动化测试,2625
+test/termux_setup_guide_test.dart,自动化测试,6279
+test/thinking_motion_test.dart,自动化测试,8522
+test/token_visualization_test.dart,自动化测试,3211
+test/tool_activity_compact_dock_test.dart,自动化测试,3677
+test/tool_activity_timeline_test.dart,自动化测试,7651
+test/tool_approval_background_test.dart,自动化测试,4878
+test/tool_catalog_test.dart,自动化测试,1992
+test/tool_execution_interceptors_test.dart,自动化测试,5713
+test/tool_humanizer_test.dart,自动化测试,2564
+test/tool_pipeline_characterization_test.dart,自动化测试,15460
+test/tool_pipeline_test.dart,自动化测试,3700
+test/tool_result_summary_test.dart,自动化测试,1311
+test/tool_result_test.dart,自动化测试,1280
+test/tool_traits_test.dart,自动化测试,7904
+test/tool_trust_store_test.dart,自动化测试,2937
+test/tts_reading_test.dart,自动化测试,5318
+test/tts_text_test.dart,自动化测试,2739
+test/ui_edge_states_test.dart,自动化测试,18821
+test/ui_followup_regression_test.dart,自动化测试,6027
+test/ui_foundation_batch2_status_test.dart,自动化测试,8991
+test/ui_foundation_batch2_switch_test.dart,自动化测试,11282
+test/ui_foundation_batch3_sheet_test.dart,自动化测试,14929
+test/ui_foundation_brand_test.dart,自动化测试,2736
+test/ui_foundation_kpi_test.dart,自动化测试,4058
+test/ui_foundation_status_test.dart,自动化测试,3966
+test/ui_foundation_touch_test.dart,自动化测试,3961
+test/ui_refactor_regression_test.dart,自动化测试,14415
+test/unified_diff_test.dart,自动化测试,1938
+test/unique_id_test.dart,自动化测试,596
+test/update_service_test.dart,自动化测试,12747
+test/update_sheet_test.dart,自动化测试,4338
+test/usage_cost_estimator_test.dart,自动化测试,1961
+test/vault_coverage_guard_test.dart,自动化测试,6764
+test/vault_roundtrip_test.dart,自动化测试,8898
+test/vault_safety_test.dart,自动化测试,9105
+test/verification_repair_and_git_test.dart,自动化测试,9396
+test/widget_test.dart,自动化测试,895
+test/windows_package_downloader_test.dart,自动化测试,4860
+test/wired_pages_smoke_test.dart,自动化测试,8642
+test/workspace_editor_mobile_test.dart,自动化测试,2738
+test/workspace_fs_test.dart,自动化测试,7628
+test/workspace_safety_regression_test.dart,自动化测试,4786
+test/workspace_sheet_frame_test.dart,自动化测试,3036
+test/workspace_snapshot_test.dart,自动化测试,2930
+test/workspace_tools_test.dart,自动化测试,8279
+tool/README.md,工程工具,6030
+tool/agent_live_acceptance.dart,工程工具,9065
+tool/android_preview.dart,工程工具,7567
+tool/benchmark_streaming_markdown.dart,工程工具,2898
+tool/browser_dom_budget_checks.html,工程工具,8050
+tool/build-apk-tools.ps1,工程工具,12688
+tool/build-windows-installer.ps1,工程工具,3651
+tool/build-windows.ps1,工程工具,4865
+tool/check_coverage.dart,工程工具,3999
+tool/count_silent_catches.dart,工程工具,9060
+tool/coverage_audit.py,工程工具,5101
+tool/desktop_acceptance.dart,工程工具,20493
+tool/desktop_blue_smoke.dart,工程工具,10381
+tool/desktop_cpu_profile.dart,工程工具,4219
+tool/desktop_frame_pump.dart,工程工具,837
+tool/diagnostics/windows_slider_ax_repro.dart,工程工具,2262
+tool/emulator_contract_support.py,工程工具,3641
+tool/emulator_driver_support.py,工程工具,9996
+tool/frame_timing_window.dart,工程工具,3457
+tool/launch_emulator_debug.py,工程工具,3384
+tool/legacy/fix-pwsh.bat,工程工具,668
+tool/mobile_ui_probe.py,工程工具,9065
+tool/mobile_vm_probe.py,工程工具,5920
+tool/release_evidence_gate.py,工程工具,6100
+tool/run-agent-live-acceptance.ps1,工程工具,2169
+tool/run-android-preview.ps1,工程工具,3596
+tool/run-desktop-acceptance.ps1,工程工具,5922
+tool/run-desktop-production-smoke.ps1,工程工具,3707
+tool/score_mobile_agent_eval.py,工程工具,3357
+tool/streaming_markdown_baseline_2026-09-22.json,工程工具,2271
+tool/test_build_apk.py,工程工具,11612
+tool/test_emulator_contract_support.py,工程工具,5744
+tool/test_release_evidence_gate.py,工程工具,3767
+tool/test_score_mobile_agent_eval.py,工程工具,1593
+tool/test_source_tokens.py,工程工具,1175
+tool/test_windows_remote_executor.py,工程工具,8169
+tool/verify-blue-workspace.ps1,工程工具,7712
+tool/verify_approval_scope_ui_emulator.py,工程工具,5482
+tool/verify_artifact_actions_emulator.py,工程工具,5083
+tool/verify_artifact_actions_ui_emulator.py,工程工具,6017
+tool/verify_artifact_emulator.py,工程工具,587
+tool/verify_artifact_ui_emulator.py,工程工具,3570
+tool/verify_assistant_context_ui_emulator.py,工程工具,6755
+tool/verify_assistant_entry_ui_emulator.py,工程工具,6342
+tool/verify_assistant_role_ui_emulator.py,工程工具,7164
+tool/verify_browser_native.py,工程工具,1752
+tool/verify_conversation_results_emulator.py,工程工具,3046
+tool/verify_conversation_results_regressions.py,工程工具,1785
+tool/verify_conversation_results_ui_emulator.py,工程工具,8949
+tool/verify_global_search_emulator.py,工程工具,593
+tool/verify_global_search_ui_emulator.py,工程工具,3959
+tool/verify_job_board_emulator.py,工程工具,583
+tool/verify_job_board_ui_emulator.py,工程工具,3663
+tool/verify_knowledge_scope_emulator.py,工程工具,606
+tool/verify_knowledge_scope_ui_emulator.py,工程工具,5007
+tool/verify_major_large_text_emulator.py,工程工具,2910
+tool/verify_memory_knowledge_emulator.py,工程工具,599
+tool/verify_memory_knowledge_ui_emulator.py,工程工具,3766
+tool/verify_memory_scope_emulator.py,工程工具,597
+tool/verify_memory_scope_ui_emulator.py,工程工具,4209
+tool/verify_mobile_handoff.dart,工程工具,9802
+tool/verify_mobile_review.py,工程工具,6638
+tool/verify_mobile_review_contracts.py,工程工具,2283
+tool/verify_page_coverage_ui_emulator.py,工程工具,4959
+tool/verify_personal_context_sql_emulator.py,工程工具,3160
+tool/verify_personal_context_sql_ui_emulator.py,工程工具,4548
+tool/verify_plan_protocol_emulator.py,工程工具,601
+tool/verify_reminder_notifications_emulator.py,工程工具,1496
+tool/verify_result_action_approval_emulator.py,工程工具,2968
+tool/verify_result_action_approval_regressions.py,工程工具,1625
+tool/verify_result_action_approval_ui_emulator.py,工程工具,6115
+tool/verify_result_approval_plan_ui_regression.py,工程工具,2904
+tool/verify_sheets_dialogs_ui_emulator.py,工程工具,4645
+tool/verify_source_tokens.dart,工程工具,1345
+tool/verify_speech_capture_ui_emulator.py,工程工具,8908
+tool/verify_static_web_delivery.py,工程工具,5034
+tool/verify_steering_guard_emulator.py,工程工具,603
+tool/verify_system_connector_emulator.py,工程工具,603
+tool/verify_task_runtime_emulator.py,工程工具,597
+tool/windows_remote_executor.py,工程工具,18129
+windows/.gitignore,平台工程,308
+windows/CMakeLists.txt,平台工程,6800
+windows/flutter/CMakeLists.txt,平台工程,3851
+windows/installer/install.ps1,平台工程,2500
+windows/installer/rollback.ps1,平台工程,1636
+windows/runner/CMakeLists.txt,平台工程,2050
+windows/runner/Runner.rc,平台工程,3170
+windows/runner/desktop_host.cpp,平台工程,17326
+windows/runner/desktop_host.h,平台工程,795
+windows/runner/flutter_window.cpp,平台工程,6704
+windows/runner/flutter_window.h,平台工程,1358
+windows/runner/main.cpp,平台工程,1307
+windows/runner/mxc/LICENSE-MXC.md,平台工程,1160
+windows/runner/mxc/mxc-windows-x64.spdx.json,平台工程,413940
+windows/runner/resource.h,平台工程,448
+windows/runner/resources/app_icon.ico,平台工程,33772
+windows/runner/runner.exe.manifest,平台工程,616
+windows/runner/utils.cpp,平台工程,2237
+windows/runner/utils.h,平台工程,691
+windows/runner/win32_window.cpp,平台工程,9417
+windows/runner/win32_window.h,平台工程,3624
