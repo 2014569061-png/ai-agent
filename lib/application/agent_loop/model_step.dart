@@ -8,6 +8,7 @@ import '../agent_executor.dart';
 import '../run_controller.dart';
 import 'model_retry_policy.dart';
 import 'usage_tally.dart';
+import 'token_budget.dart';
 
 /// 一次模型流式请求（含重试）的累积结果。
 class ModelStepResult {
@@ -22,6 +23,7 @@ class ModelStepResult {
   /// 运行已终止（取消或不可恢复的错误）；终止事件已由 [ModelStepRunner] 产出，
   /// 调用方应直接结束运行。
   var terminated = false;
+  var tokenBudgetExhausted = false;
 
   bool get hasContent =>
       text.isNotEmpty || reasoning.isNotEmpty || pendingCalls.isNotEmpty;
@@ -72,6 +74,15 @@ class ModelStepRunner {
     // （停止时一并取消）。用户点暂停时，若本轮还没产出工具调用，就立即掐断
     // 流式输出；已输出的半截文字留作上下文，恢复后让模型从中断处接着写。
     final stepCancelToken = CancelToken();
+    final cancellation = cancellationToken?.whenCancelled;
+    if (cancellation != null) {
+      unawaited(cancellation.then((_) => stepCancelToken.cancel('cancelled')));
+    }
+    final controllerCancellation = runController?.whenCancelled;
+    if (controllerCancellation != null) {
+      unawaited(controllerCancellation
+          .then((_) => stepCancelToken.cancel('cancelled')));
+    }
     final runCancelToken = cancelToken;
     if (runCancelToken != null) {
       unawaited(runCancelToken.whenCancel.then<void>((_) {
@@ -129,6 +140,10 @@ class ModelStepRunner {
       // 暂停中断时 provider 按约定会静默结束；即便个别实现仍产出错误，也按
       // 中断处理：不重试，也不当作失败。
       if (failure == null || (out.pauseInterrupted && !isCancelled())) break;
+      if (failure.failureKind == TokenBudgetProvider.exhausted) {
+        out.tokenBudgetExhausted = true;
+        return;
+      }
       final decision = retryPolicy.decide(
         failure,
         hasContent: out.hasContent,

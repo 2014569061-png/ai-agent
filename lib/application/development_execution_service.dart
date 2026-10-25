@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 
 import '../domain/unique_id.dart';
+import '../infrastructure/database/run_plan_store.dart';
 import '../infrastructure/database/app_database.dart';
 import 'execution_lease_service.dart';
 import 'project_service.dart';
@@ -86,115 +87,147 @@ class DevelopmentExecutionService {
   final TaskService _tasks;
   final ExecutionLeaseService _leases;
 
-  Future<TaskHandle> enqueue(DevelopmentTaskRequest request) async {
-    final requestId = (request.requestId == null || request.requestId!.isEmpty)
-        ? UniqueId.generate('req')
-        : request.requestId!;
-    final existing = await _tasks.findByRequestId(db, requestId);
-    if (existing != null) {
-      return TaskHandle(
-        taskId: existing.id,
-        requestId: requestId,
-        status: existing.status,
-      );
-    }
-    final task = await _tasks.create(
-      db: db,
-      conversationId: request.conversationId,
-      type: 'development:${request.taskType}',
-      requestJson: '{}',
-      metadata: {
-        'prompt': request.prompt,
-        'taskType': request.taskType,
-        'sourceType': request.sourceType,
-        'workspacePath': request.workspacePath,
-        if (request.projectId != null) 'projectId': request.projectId,
-        'requestId': requestId,
-        'attachments': request.attachments,
-      },
-    );
-    var status = task.status;
-    if (request.workspacePath != null &&
-        request.workspacePath!.trim().isNotEmpty) {
-      try {
-        await _leases.acquire(
+  Future<TaskHandle> enqueue(DevelopmentTaskRequest request) =>
+      db.transaction(() async {
+        final requestId =
+            (request.requestId == null || request.requestId!.isEmpty)
+                ? UniqueId.generate('req')
+                : request.requestId!;
+        final existing = await _tasks.findByRequestId(db, requestId);
+        if (existing != null) {
+          if (existing.conversationId != request.conversationId ||
+              existing.projectId != request.projectId) {
+            throw StateError('Request ID is already bound to another scope');
+          }
+          return TaskHandle(
+            taskId: existing.id,
+            requestId: requestId,
+            status: existing.status,
+          );
+        }
+        final task = await _tasks.create(
           db: db,
-          resourceKey: ExecutionLeaseService.workspaceKey(
-              ProjectService.canonicalizePath(request.workspacePath!)),
-          taskId: task.id,
-          runId: requestId,
+          conversationId: request.conversationId,
+          type: 'development:${request.taskType}',
+          requestJson: '{}',
+          metadata: {
+            'prompt': request.prompt,
+            'taskType': request.taskType,
+            'sourceType': request.sourceType,
+            'workspacePath': request.workspacePath,
+            if (request.projectId != null) 'projectId': request.projectId,
+            'requestId': requestId,
+            'attachments': request.attachments,
+          },
         );
-      } on ExecutionLeaseConflict {
-        await _tasks.updateStatus(db, task.id, 'queued');
-        status = 'queued';
-      }
-    }
-    return TaskHandle(
-      taskId: task.id,
-      requestId: requestId,
-      status: status,
-    );
-  }
+        var status = task.status;
+        if (request.workspacePath != null &&
+            request.workspacePath!.trim().isNotEmpty) {
+          // Enqueue does not execute or own a heartbeat. The runner acquires the
+          // authoritative lease immediately before it starts; this is a UI hint.
+          final occupied = await _leases.isOccupied(
+              db,
+              ExecutionLeaseService.workspaceKey(
+                  ProjectService.canonicalizePath(request.workspacePath!)));
+          if (occupied) {
+            await _tasks.updateStatus(db, task.id, 'queued');
+            status = 'queued';
+          }
+        }
+        return TaskHandle(
+          taskId: task.id,
+          requestId: requestId,
+          status: status,
+        );
+      });
 
-  Future<ControlReceipt> submitControl(TaskControlRequest request) async {
-    final existing = await db.findRunControlByClientId(request.clientControlId);
-    if (existing != null) {
-      return ControlReceipt(
-        id: existing.id,
-        status: existing.status,
-        duplicate: true,
-        message: '已接收，将在下一检查点生效',
-      );
-    }
-    final task = await db.findTask(request.taskId);
-    if (task == null) {
-      return const ControlReceipt(
-        id: '',
-        status: 'rejected',
-        duplicate: false,
-        message: '任务不存在',
-      );
-    }
-    final terminal = const {
-      'completed',
-      'failed',
-      'cancelled',
-    };
-    if (terminal.contains(task.status) &&
-        request.kind == TaskControlKind.followUp) {
-      return const ControlReceipt(
-        id: '',
-        status: 'rejected',
-        duplicate: false,
-        message: '任务已结束',
-      );
-    }
-    final sequence = await db.nextRunControlSequence(request.taskId);
-    final row = RunControl(
-      id: UniqueId.generate('ctrl'),
-      clientControlId: request.clientControlId,
-      taskId: request.taskId,
-      runId: request.runId,
-      kind: request.kind.name,
-      payloadJson: _encode(request.payload),
-      status: 'pending',
-      sequenceNo: sequence,
-      createdAt: DateTime.now(),
-    );
-    await db.saveRunControl(row);
-    if (request.kind == TaskControlKind.pause) {
-      await _tasks.updateStatus(db, request.taskId, 'pause_requested');
-    } else if (request.kind == TaskControlKind.cancel) {
-      await _tasks.updateStatus(db, request.taskId, 'cancel_requested');
-    }
-    return ControlReceipt(
-      id: row.id,
-      status: row.status,
-      duplicate: false,
-      message:
-          request.kind == TaskControlKind.followUp ? '已接收，将在下一检查点生效' : null,
-    );
-  }
+  Future<ControlReceipt> submitControl(TaskControlRequest request) =>
+      db.transaction(() async {
+        if (request.clientControlId.trim().isEmpty ||
+            request.clientControlId.length > 256) {
+          throw ArgumentError('Control ID must contain 1–256 characters');
+        }
+        if (_encode(request.payload).length > 16384) {
+          throw ArgumentError('Control payload too large');
+        }
+        final existing =
+            await db.findRunControlByClientId(request.clientControlId);
+        if (existing != null) {
+          if (existing.taskId != request.taskId ||
+              existing.kind != request.kind.name ||
+              existing.runId != request.runId ||
+              existing.payloadJson != _encode(request.payload)) {
+            return const ControlReceipt(
+                id: '',
+                status: 'rejected',
+                duplicate: false,
+                message: '控制标识已被不同请求使用，未执行');
+          }
+          return ControlReceipt(
+            id: existing.id,
+            status: existing.status,
+            duplicate: true,
+            message:
+                existing.status == 'pending' ? '已接收，等待检查点处理' : '此控制请求已有处理记录',
+          );
+        }
+        final task = await db.findTask(request.taskId);
+        if (task == null) {
+          return const ControlReceipt(
+            id: '',
+            status: 'rejected',
+            duplicate: false,
+            message: '任务不存在',
+          );
+        }
+        final terminal = const {
+          'completed',
+          'failed',
+          'cancelled',
+        };
+        if (terminal.contains(task.status)) {
+          return const ControlReceipt(
+            id: '',
+            status: 'rejected',
+            duplicate: false,
+            message: '任务已结束',
+          );
+        }
+        if (!await RunPlanStore(db)
+            .acceptsControl(request.taskId, request.runId)) {
+          return const ControlReceipt(
+              id: '',
+              status: 'rejected',
+              duplicate: false,
+              message: '运行或计划已变化，旧控制请求未执行，请刷新');
+        }
+        final sequence = await db.nextRunControlSequence(request.taskId);
+        final row = RunControl(
+          id: UniqueId.generate('ctrl'),
+          clientControlId: request.clientControlId,
+          taskId: request.taskId,
+          runId: request.runId,
+          kind: request.kind.name,
+          payloadJson: _encode(request.payload),
+          status: 'pending',
+          sequenceNo: sequence,
+          createdAt: DateTime.now(),
+        );
+        await db.saveRunControl(row);
+        await RunPlanStore(db).stageControl(row);
+        if (request.kind == TaskControlKind.pause) {
+          await _tasks.updateStatus(db, request.taskId, 'pause_requested');
+        } else if (request.kind == TaskControlKind.cancel) {
+          await _tasks.updateStatus(db, request.taskId, 'cancel_requested');
+        }
+        return ControlReceipt(
+          id: row.id,
+          status: row.status,
+          duplicate: false,
+          message:
+              request.kind == TaskControlKind.followUp ? '已接收，将在下一检查点生效' : null,
+        );
+      });
 
   Future<List<RunControl>> drainPending({
     required String taskId,

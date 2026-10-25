@@ -1,3 +1,5 @@
+import '../domain/tool_result.dart' show ToolEffect;
+import 'verification_execution_guard.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -440,10 +442,16 @@ class DevelopmentVerificationService {
     required String workspacePath,
     DevelopmentVerificationPlan? plan,
     String? retryStepId,
+    VerificationExecutionGuard? executionGuard,
+    bool Function()? canContinue,
   }) async {
     var current =
         plan ?? await planFor(workspacePath, includeBuild: retryStepId == null);
-    final session = await service.openSession(workingDirectory: workspacePath);
+    Future<T> guarded<T>(String phase, Future<T> Function() action,
+            {ToolEffect Function(T)? effectOf}) =>
+        executionGuard?.run(phase, action, effectOf: effectOf) ?? action();
+    final session = await guarded('open-session',
+        () => service.openSession(workingDirectory: workspacePath));
     ArtifactInspection? artifact;
     try {
       final startIndex = retryStepId == null
@@ -453,6 +461,16 @@ class DevelopmentVerificationService {
         return DevelopmentVerificationResult(plan: current, success: false);
       }
       for (var i = 0; i < current.steps.length; i++) {
+        if (canContinue != null && !canContinue()) {
+          current = _replaceStep(
+              current,
+              current.steps[i].copyWith(
+                  status: VerificationStepStatus.failed,
+                  error: '验证已停止，未执行剩余检查',
+                  finishedAt: DateTime.now()));
+          return DevelopmentVerificationResult(
+              plan: current, success: false, artifact: artifact);
+        }
         if (i < startIndex &&
             current.steps[i].status == VerificationStepStatus.passed) {
           continue;
@@ -521,11 +539,15 @@ class DevelopmentVerificationService {
           continue;
         }
 
-        final execution = await service.executeSession(
-          sessionId: session.id,
-          command: step.command,
-          timeout: step.timeout,
-        );
+        final execution = await guarded(
+            'command:${step.id}',
+            () => service.executeSession(
+                  sessionId: session.id,
+                  command: step.command,
+                  timeout: step.timeout,
+                  canContinue: canContinue,
+                ),
+            effectOf: (result) => result.effect);
         final output =
             execution.data?['output']?.toString() ?? execution.message;
         final ok = execution.ok;
@@ -563,7 +585,8 @@ class DevelopmentVerificationService {
               step.status == VerificationStepStatus.passed ||
               step.status == VerificationStepStatus.failed)
           .toList();
-      final success = requiredSteps.isNotEmpty &&
+      final success = (canContinue == null || canContinue()) &&
+          requiredSteps.isNotEmpty &&
           executed.isNotEmpty &&
           requiredSteps
               .every((step) => step.status == VerificationStepStatus.passed);

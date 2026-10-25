@@ -88,26 +88,6 @@ class ToolActivity {
   }
 }
 
-/// 「设置 → 工具」页面的全局工具开关快照，由 [_loadToolSettings] 从
-/// SharedPreferences（settings.tool.*）读取并在此处统一消费。
-/// 关闭的开关会对应地从工具注册表中剔除对应工具。
-class ToolSettings {
-  const ToolSettings({
-    this.webBrowsing = false,
-    this.workspaceFiles = true,
-    this.terminal = true,
-  });
-
-  /// 网页浏览（web_search）。默认关闭，避免普通聊天隐式携带联网工具。
-  final bool webBrowsing;
-
-  /// 工作区内的文件读取、创建和编辑工具。
-  final bool workspaceFiles;
-
-  /// 在已选择工作区内执行命令的工具。
-  final bool terminal;
-}
-
 class SessionSkillInstruction {
   const SessionSkillInstruction({
     required this.id,

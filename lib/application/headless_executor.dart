@@ -1,10 +1,9 @@
+import 'agent_loop/agent_loop_hooks.dart';
+import 'traced_model_provider.dart';
 import 'package:dio/dio.dart' show CancelToken;
 import 'package:drift/drift.dart' show Value;
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../domain/models.dart';
-import '../domain/tool_codes.dart';
-import '../domain/tool_result.dart';
 import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/providers/provider_config.dart';
@@ -12,10 +11,14 @@ import '../infrastructure/providers/model_route.dart';
 import '../infrastructure/tools/core_tools.dart';
 import '../infrastructure/tools/image_gen_tool.dart';
 import '../infrastructure/tools/tool_registry.dart';
-import '../infrastructure/tools/workspace_tools.dart';
-import '../infrastructure/tools/command_tool.dart';
 import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
+import 'run_tool_settings.dart';
+import '../infrastructure/tools/workspace_tool_set.dart';
+import 'run_controller.dart';
+import 'persisted_run_fence.dart';
+import 'run_recovery_safety.dart';
+import 'data_maintenance_service.dart';
 import 'modules/agent_module.dart';
 import 'modules/module_host.dart';
 import 'modules/run_profile.dart';
@@ -26,6 +29,7 @@ import 'run_event_tracker.dart';
 import 'tool_pipeline/run_event_interceptor.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
+import 'scoped_memory_access.dart';
 import 'project_kind_detector.dart';
 import 'system_prompt_assembly.dart';
 import 'task_template_service.dart';
@@ -47,6 +51,10 @@ class HeadlessRunResult {
     required this.cachedTokens,
     this.context,
     this.error,
+    this.runId,
+    this.planVersion,
+    this.failureKind,
+    this.pauseReason,
   });
 
   final String text;
@@ -59,6 +67,10 @@ class HeadlessRunResult {
   /// 原始 prompt 重放已经完成的工具调用。
   final List<ChatMessage>? context;
   final String? error;
+  final String? runId;
+  final int? planVersion;
+  final String? failureKind;
+  final AgentPauseReason? pauseReason;
 
   bool get succeeded => status == RunStatus.completed && error == null;
 }
@@ -85,6 +97,7 @@ class HeadlessExecutor {
     int maxSteps = 4,
     double temperature = 0.7,
     int maxTokens = 1024,
+    int? totalTokenBudget,
     double topP = 1.0,
     List<ChatMessage>? initialHistory,
     AgentCancellationToken? cancellationToken,
@@ -104,6 +117,7 @@ class HeadlessExecutor {
       maxSteps: maxSteps,
       temperature: temperature,
       maxTokens: maxTokens,
+      totalTokenBudget: totalTokenBudget,
       topP: topP,
       initialHistory: initialHistory,
       cancellationToken: cancellationToken,
@@ -126,6 +140,7 @@ class HeadlessExecutor {
     int maxSteps = 4,
     double temperature = 0.7,
     int maxTokens = 1024,
+    int? totalTokenBudget,
     double topP = 1.0,
     List<ChatMessage>? initialHistory,
     AgentCancellationToken? cancellationToken,
@@ -133,6 +148,8 @@ class HeadlessExecutor {
     ToolApprovalCallback? approveTool,
     ApprovalMode approvalMode = ApprovalMode.ask,
     String? taskId,
+    String? runId,
+    Future<TurnContinuation?> Function(TurnStoppingContext)? beforeFinish,
     RunProfile profile = RunProfile.background,
 
     /// 本次运行挂载的模块；默认 [defaultModules]（会话日志）。
@@ -141,173 +158,239 @@ class HeadlessExecutor {
     /// 模型路由；默认 [ModelRouter.standard]（直连厂商，未配置时演示）。
     ModelRouter? modelRouter,
   }) async {
-    final route = (modelRouter ?? ModelRouter.standard).resolve(config);
-    final provider = route.provider;
-    final model = route.model;
-    final assembled = await assembleTools(
-      db: db,
-      config: config,
-      taskType: taskType,
-      workspacePath: workspacePath,
-      allowedToolNames: allowedToolNames,
-    );
-    final registry = assembled.registry;
-    final mcpProvider = assembled.mcpProvider;
-    // 绑定任务的后台运行与聊天运行一样留下运行记录与工具审计（RunRecords /
-    // RunEvents），并在改文件前保存原始内容，供任务变更集回退。
-    final runStartedAt = DateTime.now();
-    final runId = UniqueId.generate('run');
-    final tracker = taskId == null
-        ? null
-        : await _startRunRecord(db,
-            runId: runId, taskId: taskId, model: model, startedAt: runStartedAt);
-    // 绑定任务的运行写入 task:<id> 会话日志：同一任务多次恢复依次追加。
-    final moduleSession = await (modules ?? defaultModules(db)).open(RunScope(
-      profile: profile,
-      runId: runId,
-      model: model,
-      sessionId: taskId == null ? null : RunScope.taskSessionId(taskId),
-      taskId: taskId,
-      workspacePath: workspacePath,
-    ));
-    final executor = AgentExecutor(
-      provider: provider,
-      tools: registry,
-      hooks: moduleSession.hooks,
-      toolPipeline: buildToolPipeline(
-        runEvents: tracker,
-        baseline: taskId != null &&
-                workspacePath != null &&
-                workspacePath.trim().isNotEmpty
-            ? FileBaselineStore(taskId: taskId, workspacePath: workspacePath)
-            : null,
-        // 保存失败不阻断工具；转交 NexusGuard 仅用于上报（若用户已授权）。
-        onBaselineError: (error, stackTrace) => NexusGuard.silently<void>(
-            'headless.fileBaseline',
-            () => Error.throwWithStackTrace(error, stackTrace)),
-      ),
-    );
-    var persona = systemPrompt ?? '你是一个有帮助的 AI Agent。';
-    if (workspacePath != null && workspacePath.trim().isNotEmpty) {
-      await NexusGuard.silentlyAsync<void>('headless.taskTemplateRules',
-          () async {
-        final project = await const ProjectKindDetector().detect(workspacePath);
-        final templateRules = TaskTemplateService().promptBlock(
-          taskType: taskType,
-          project: project,
-        );
-        if (templateRules.isNotEmpty) {
-          persona = '$persona\n\n$templateRules';
-        }
-      });
+    final activeCancellation = cancellationToken ?? AgentCancellationToken();
+    final activeHttpCancellation = cancelToken ?? CancelToken();
+    cancellationToken = activeCancellation;
+    cancelToken = activeHttpCancellation;
+    if (runId != null && (runId.trim().isEmpty || runId.length > 256)) {
+      throw ArgumentError('Invalid run identity');
     }
-    var memoryBlock = '';
-    var knowledgeBlock = '';
-    var skillBlock = '';
-    try {
-      memoryBlock = await MemoryService()
-          .buildInjectionBlock(db, contextTokens: config.effectiveContextTokens);
-      knowledgeBlock = await KnowledgeService().buildInjectionBlock(db, prompt);
-      // 只有本轮真正注册了 skills_read，才注入可按需读取的 Skill 索引。
-      // Agent 的 allow-list 可能明确关闭 Skill 工具。
-      if (registry.findExecutor('skills_read') != null) {
-        skillBlock = await SkillStore().buildInjectionBlock(db);
+    final executionRunId = runId ?? UniqueId.generate('run');
+    return const DataMaintenanceService().run(db, () async {
+      // Also protect direct callers that do not use BackgroundExecutionGateway.
+      if (taskId != null) {
+        await const RunRecoverySafety()
+            .requireSafe(db, taskId, initialHistory: initialHistory);
       }
-    } catch (_) {
-      // 注入失败不阻断执行。
-    }
-    // 与聊天路径共用同一拼装顺序（assembleAgentSystemPrompt）：稳定段在前、
-    // 按问题检索的动态内容垫底，否则后台任务每轮前缀都在变化，前缀缓存失效。
-    final system = assembleAgentSystemPrompt(
-      personaPrompt: persona,
-      skillIndexBlock: skillBlock,
-      memoryBlock: memoryBlock,
-      knowledgeBlock: knowledgeBlock,
-    );
-
-    final history = initialHistory == null || initialHistory.isEmpty
-        ? <ChatMessage>[
-            ChatMessage(
-                role: MessageRole.user, parts: [MessagePart.text(prompt)])
-          ]
-        : List<ChatMessage>.of(initialHistory);
-    final answer = StringBuffer();
-    var status = RunStatus.created;
-    var inputTokens = 0;
-    var outputTokens = 0;
-    var cachedTokens = 0;
-    String? errorMessage;
-    List<ChatMessage>? checkpoint;
-    var outcome = const RunOutcome.finished();
-    try {
-      await for (final event in executor.run(
-        history: history,
+      final route = (modelRouter ?? ModelRouter.standard).resolve(config);
+      final provider = route.provider;
+      final model = route.model;
+      final boundTask = taskId == null ? null : await db.findTask(taskId);
+      if (taskId != null && boundTask == null) {
+        throw StateError('Task no longer exists');
+      }
+      final memoryProjectId = boundTask?.projectId;
+      final assembled = await assembleTools(
+        db: db,
+        config: config,
+        taskType: taskType,
+        workspacePath: workspacePath,
+        allowedToolNames: allowedToolNames,
+        memoryProjectId: memoryProjectId,
+        memoryConversationId: boundTask?.conversationId,
+        loadExternalTools: profile != RunProfile.subagent,
+      );
+      final registry = assembled.registry;
+      final mcpProvider = assembled.mcpProvider;
+      // 绑定任务的后台运行与聊天运行一样留下运行记录与工具审计（RunRecords /
+      // RunEvents），并在改文件前保存原始内容，供任务变更集回退。
+      final runStartedAt = DateTime.now();
+      final runId = executionRunId;
+      final tracker = taskId == null
+          ? null
+          : await _startRunRecord(db,
+              runId: runId,
+              taskId: taskId,
+              model: model,
+              startedAt: runStartedAt);
+      // 绑定任务的运行写入 task:<id> 会话日志：同一任务多次恢复依次追加。
+      final moduleSession = await (modules ?? defaultModules(db)).open(RunScope(
+        profile: profile,
+        runId: runId,
         model: model,
-        systemPrompt: system,
-        capabilities: ModelCapabilities.infer(config.model),
-        maxSteps: maxSteps,
-        temperature: temperature,
-        maxTokens: maxTokens,
-        topP: topP,
-        contextBudgetTokens: config.effectiveContextTokens,
-        cancellationToken: cancellationToken,
-        cancelToken: cancelToken,
-        // 无 UI 的后台路径（子 Agent/定时任务）没有真人审批，敏感或非 safe 工具一律拒绝。
-        // 恢复开发闭环时调用方必须传入 approveTool，把写文件/终端交给用户确认。
-        approveTool: approveTool ??
-            (call, risk, sensitive) async => !sensitive && risk == ToolRisk.safe
-                ? ToolApproval.allowOnce
-                : ToolApproval.reject,
-        approvalMode: approvalMode,
-      )) {
-        moduleSession.observe(event);
-        if (event is TextEvent) answer.write(event.text);
-        if (event is AgentUsageEvent) {
-          inputTokens += event.promptTokens;
-          outputTokens += event.completionTokens;
-          cachedTokens += event.cachedTokens;
-        } else if (event is AgentStatusEvent) {
-          status = event.status;
-        } else if (event is AgentErrorEvent) {
-          status = RunStatus.failed;
-          errorMessage = event.message;
-        } else if (event is AgentBudgetExhaustedEvent) {
-          // 预算耗尽可恢复，不归类为真实失败。
-          status = RunStatus.paused;
-          errorMessage = event.message;
-          checkpoint = List<ChatMessage>.of(event.context);
-        }
+        sessionId: taskId == null ? null : RunScope.taskSessionId(taskId),
+        taskId: taskId,
+        workspacePath: workspacePath,
+      ));
+      final runController = AgentRunController(onCancel: () {
+        activeCancellation.cancel();
+        activeHttpCancellation.cancel('持久运行已取消或失去所有权');
+      });
+      PersistedRunFence? persistedFence;
+      final executor = AgentExecutor(
+        provider: withModelTrace(provider, tracker),
+        tools: registry,
+        hooks: moduleSession.hooks,
+        toolPipeline: buildToolPipeline(
+          runEvents: tracker,
+          baseline: taskId != null &&
+                  workspacePath != null &&
+                  workspacePath.trim().isNotEmpty
+              ? FileBaselineStore(taskId: taskId, workspacePath: workspacePath)
+              : null,
+          // 保存失败不阻断工具；转交 NexusGuard 仅用于上报（若用户已授权）。
+          onBaselineError: (error, stackTrace) => NexusGuard.silently<void>(
+              'headless.fileBaseline',
+              () => Error.throwWithStackTrace(error, stackTrace)),
+        ),
+      );
+      var persona = systemPrompt ?? '你是一个有帮助的 AI Agent。';
+      if (workspacePath != null && workspacePath.trim().isNotEmpty) {
+        await NexusGuard.silentlyAsync<void>('headless.taskTemplateRules',
+            () async {
+          final project =
+              await const ProjectKindDetector().detect(workspacePath);
+          final templateRules = TaskTemplateService().promptBlock(
+            taskType: taskType,
+            project: project,
+          );
+          if (templateRules.isNotEmpty) {
+            persona = '$persona\n\n$templateRules';
+          }
+        });
       }
-    } catch (error) {
-      status = RunStatus.failed;
-      errorMessage = error.toString();
-      outcome = const RunOutcome.aborted('unexpected_error');
-    }
-    await moduleSession.finish(outcome);
-    final text = answer.toString().trim();
-    await mcpProvider.dispose();
-    final finalStatus =
-        status == RunStatus.created ? RunStatus.completed : status;
-    if (tracker != null) {
-      await _finishRunRecord(
-        db,
-        tracker,
+      var memoryBlock = '';
+      var knowledgeBlock = '';
+      var skillBlock = '';
+      try {
+        memoryBlock = await MemoryService().buildInjectionBlock(db,
+            contextTokens: config.effectiveContextTokens,
+            projectId: memoryProjectId);
+        knowledgeBlock = await KnowledgeService()
+            .buildInjectionBlock(db, prompt, projectId: memoryProjectId);
+        // 只有本轮真正注册了 skills_read，才注入可按需读取的 Skill 索引。
+        // Agent 的 allow-list 可能明确关闭 Skill 工具。
+        if (registry.findExecutor('skills_read') != null) {
+          skillBlock = await SkillStore().buildInjectionBlock(db);
+        }
+      } catch (_) {
+        // 注入失败不阻断执行。
+      }
+      // 与聊天路径共用同一拼装顺序（assembleAgentSystemPrompt）：稳定段在前、
+      // 按问题检索的动态内容垫底，否则后台任务每轮前缀都在变化，前缀缓存失效。
+      final system = assembleAgentSystemPrompt(
+        personaPrompt: persona,
+        skillIndexBlock: skillBlock,
+        memoryBlock: memoryBlock,
+        knowledgeBlock: knowledgeBlock,
+      );
+
+      final history = initialHistory == null || initialHistory.isEmpty
+          ? <ChatMessage>[
+              ChatMessage(
+                  role: MessageRole.user, parts: [MessagePart.text(prompt)])
+            ]
+          : List<ChatMessage>.of(initialHistory);
+      final answer = StringBuffer();
+      var status = RunStatus.created;
+      var inputTokens = 0;
+      var outputTokens = 0;
+      var cachedTokens = 0;
+      String? errorMessage;
+      String? failureKind;
+      AgentPauseReason? pauseReason;
+      List<ChatMessage>? checkpoint;
+      var outcome = const RunOutcome.finished();
+      try {
+        if (taskId != null) {
+          persistedFence = await PersistedRunFence.open(
+              db: db, controller: runController, taskId: taskId, runId: runId);
+        }
+        await for (final event in executor.run(
+          costRunId: runId,
+          history: history,
+          model: model,
+          systemPrompt: system,
+          capabilities: ModelCapabilities.infer(config.model),
+          maxSteps: maxSteps,
+          temperature: temperature,
+          maxTokens: maxTokens,
+          autoOutputTokens: false,
+          totalTokenBudget: totalTokenBudget ??
+              (profile == RunProfile.subagent ? maxTokens * 4 : null),
+          topP: topP,
+          contextBudgetTokens: config.effectiveContextTokens,
+          cancellationToken: cancellationToken,
+          runController: runController,
+          beforeFinish: beforeFinish,
+          cancelToken: cancelToken,
+          // 无 UI 的后台路径（子 Agent/定时任务）没有真人审批，敏感或非 safe 工具一律拒绝。
+          // 恢复开发闭环时调用方必须传入 approveTool，把写文件/终端交给用户确认。
+          approveTool: approveTool ??
+              (call, risk, sensitive) async =>
+                  !sensitive && risk == ToolRisk.safe
+                      ? ToolApproval.allowOnce
+                      : ToolApproval.reject,
+          approvalMode: approvalMode,
+        )) {
+          moduleSession.observe(event);
+          if (event is AgentDraftSupersededEvent) answer.clear();
+          if (event is TextEvent) answer.write(event.text);
+          if (event is AgentUsageEvent) {
+            inputTokens = event.promptTokens;
+            outputTokens = event.completionTokens;
+            cachedTokens = event.cachedTokens;
+          } else if (event is AgentStatusEvent) {
+            status = event.status;
+          } else if (event is AgentErrorEvent) {
+            failureKind = event.failureKind;
+            status = RunStatus.failed;
+            errorMessage = event.message;
+          } else if (event is AgentBudgetExhaustedEvent) {
+            pauseReason = event.reason;
+            // 预算耗尽可恢复，不归类为真实失败。
+            status = RunStatus.paused;
+            errorMessage = event.message;
+            checkpoint = List<ChatMessage>.of(event.context);
+          }
+        }
+      } catch (error) {
+        status = RunStatus.failed;
+        failureKind ??= 'exception:${error.runtimeType}';
+        errorMessage = error.toString();
+        outcome = const RunOutcome.aborted('unexpected_error');
+      }
+      try {
+        await persistedFence?.close();
+      } catch (error) {
+        status = RunStatus.failed;
+        failureKind = 'persistent_fence_close';
+        errorMessage = '持久运行状态未确认，请核实后继续';
+      }
+      runController.seal();
+      await moduleSession.finish(outcome);
+      final text = answer.toString().trim();
+      await mcpProvider.dispose();
+      final finalStatus =
+          status == RunStatus.created ? RunStatus.completed : status;
+      if (tracker != null) {
+        await _finishRunRecord(
+          db,
+          tracker,
+          status: finalStatus,
+          startedAt: runStartedAt,
+          inputTokens: inputTokens,
+          outputTokens: outputTokens,
+          cachedTokens: cachedTokens,
+        );
+      }
+      return HeadlessRunResult(
+        runId: runId,
+        planVersion: runController.durablePlanRevision,
+        text: text.isEmpty && errorMessage != null ? errorMessage : text,
         status: finalStatus,
-        startedAt: runStartedAt,
         inputTokens: inputTokens,
         outputTokens: outputTokens,
         cachedTokens: cachedTokens,
+        context: checkpoint,
+        error: errorMessage,
+        failureKind: failureKind,
+        pauseReason: pauseReason,
       );
-    }
-    return HeadlessRunResult(
-      text: text.isEmpty && errorMessage != null ? errorMessage : text,
-      status: finalStatus,
-      inputTokens: inputTokens,
-      outputTokens: outputTokens,
-      cachedTokens: cachedTokens,
-      context: checkpoint,
-      error: errorMessage,
-    );
+    }, cancel: () {
+      activeCancellation.cancel();
+      activeHttpCancellation.cancel('数据维护');
+    });
   }
 
   /// 无 UI 运行默认挂载的第一方模块。模块失败只上报，不影响任务。
@@ -390,6 +473,9 @@ class HeadlessExecutor {
     String? taskType,
     String? workspacePath,
     Iterable<String>? allowedToolNames,
+    bool loadExternalTools = true,
+    String? memoryProjectId,
+    String? memoryConversationId,
   }) async {
     final allowList = allowedToolNames?.toSet();
     final registry = ToolRegistry();
@@ -406,100 +492,40 @@ class HeadlessExecutor {
 
     // 插件工具加载失败会让「模型看不到我的插件工具」且毫无线索，因此接入上报
     // （NexusGuard.silently 只上报、不改控制流，无需 logger）。
-    await NexusGuard.silentlyAsync<void>('headless.loadPluginTools', () async {
-      final pluginTools = await PluginStore().loadDeclarativeTools(db);
-      for (final tool in pluginTools) {
-        registerIfAllowed(tool);
-      }
-    });
-
-    final mcpProvider = McpToolProvider();
-    await NexusGuard.silentlyAsync<void>('headless.loadMcpTools', () async {
-      final servers =
-          await McpService(database: Future.value(db)).loadEnabled();
-      for (final server in servers) {
-        // 单个 MCP 服务器连不上是常见情况（未启动、网络不通），不应影响其它
-        // 服务器注册，但同样要留下痕迹。
-        await NexusGuard.silentlyAsync<void>('headless.connectMcpServer',
-            () async {
-          final tools = await mcpProvider.connectAndListTools(server);
-          for (final tool in tools) {
-            registerIfAllowed(tool);
-          }
-        });
-      }
-    });
-
-    final memoryService = MemoryService();
-    registerIfAllowed(MemoryGetTool(onGet: (query, offset, limit) async {
-      final rows = await memoryService.search(db, query,
-          offset: offset, limit: limit + 1);
-      final hasMore = rows.length > limit;
-      final visible = hasMore ? rows.take(limit).toList() : rows;
-      return ToolResult.success(
-        message: visible.isEmpty ? '没有找到匹配的记忆' : '已读取 ${visible.length} 条记忆',
-        data: {
-          'revision': await memoryService.currentRevision(db),
-          'items': visible
-              .map((item) => {
-                    'id': item.id,
-                    'content': item.content,
-                    'category': item.category,
-                    'importance': item.importance,
-                    'updatedAt': item.updatedAt.toIso8601String(),
-                  })
-              .toList(growable: false),
-          'hasMore': hasMore,
-          if (hasMore) 'nextOffset': offset + visible.length,
-        },
-      );
-    }));
-    if (allowList?.contains('memory_write') == true) {
-      registerIfAllowed(MemoryWriteTool(onWrite: ({
-        required String? id,
-        required String content,
-        required String mode,
-        required int? startLine,
-        required int? endLine,
-        required String? expectedRevision,
-      }) async {
-        try {
-          final memory = await memoryService.write(
-            database: db,
-            id: id,
-            content: content,
-            mode: mode,
-            startLine: startLine,
-            endLine: endLine,
-            expectedRevision: expectedRevision,
-          );
-          return ToolResult.success(
-            message: '记忆已写入',
-            data: {
-              'id': memory.id,
-              'revision': await memoryService.currentRevision(db),
-              'mode': mode,
-            },
-            effect: ToolEffect.applied,
-          );
-        } on MemoryConflictException catch (error) {
-          return ToolResult.failure(
-            code: ToolCodes.revisionConflict,
-            message: '记忆已被其他操作更新，请先重新调用 memory_get 获取最新 revision',
-            data: {'revision': error.currentRevision},
-          );
-        } on FormatException catch (error) {
-          return ToolResult.failure(
-            code: ToolCodes.invalidArguments,
-            message: error.message,
-          );
-        } catch (error) {
-          return ToolResult.failure(
-            code: ToolCodes.toolError,
-            message: '记忆写入失败：$error',
-          );
+    if (loadExternalTools) {
+      await NexusGuard.silentlyAsync<void>('headless.loadPluginTools',
+          () async {
+        final pluginTools = await PluginStore().loadDeclarativeTools(db);
+        for (final tool in pluginTools) {
+          registerIfAllowed(tool);
         }
-      }));
+      });
+    }
+    final mcpProvider = McpToolProvider();
+    if (loadExternalTools) {
+      await NexusGuard.silentlyAsync<void>('headless.loadMcpTools', () async {
+        final servers =
+            await McpService(database: Future.value(db)).loadEnabled();
+        for (final server in servers) {
+          // 单个 MCP 服务器连不上是常见情况（未启动、网络不通），不应影响其它
+          // 服务器注册，但同样要留下痕迹。
+          await NexusGuard.silentlyAsync<void>('headless.connectMcpServer',
+              () async {
+            final tools = await mcpProvider.connectAndListTools(server);
+            for (final tool in tools) {
+              registerIfAllowed(tool);
+            }
+          });
+        }
+      });
+    }
+    final memoryAccess = ScopedMemoryAccess(
+        database: () async => db,
+        projectId: memoryProjectId,
+        sourceConversationId: memoryConversationId);
+    registerIfAllowed(MemoryGetTool(onGet: memoryAccess.get));
+    if (allowList?.contains('memory_write') == true) {
+      registerIfAllowed(MemoryWriteTool(onWrite: memoryAccess.write));
     }
 
     await NexusGuard.silentlyAsync<void>('headless.registerSkillsTools',
@@ -507,42 +533,24 @@ class HeadlessExecutor {
       registerIfAllowed(SkillsReadTool(database: db));
       registerIfAllowed(SkillsReadResourceTool(database: db));
     });
-    bool workspaceFilesEnabled;
-    bool terminalEnabled;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final legacy = prefs.getBool('settings.tool.terminal_file') ?? true;
-      workspaceFilesEnabled =
-          prefs.getBool('settings.tool.workspace_files') ?? legacy;
-      terminalEnabled = prefs.getBool('settings.tool.terminal') ?? legacy;
-    } catch (_) {
-      workspaceFilesEnabled = true;
-      terminalEnabled = true;
-    }
+    final settings = await ToolSettings.load();
     if (workspacePath != null &&
         workspacePath.trim().isNotEmpty &&
-        workspaceFilesEnabled) {
-      final sandbox = WorkspaceSandbox(workspacePath);
-      registerIfAllowed(ReadFileTool(sandbox: sandbox));
-      registerIfAllowed(ListDirectoryTool(sandbox: sandbox));
-      registerIfAllowed(SearchFilesTool(sandbox: sandbox));
+        settings.workspaceFiles) {
       final template = TaskTemplateService().findByType(taskType);
       final allowWrites = template?.implementsChanges == true ||
           allowList == null && taskType == 'implement_and_verify' ||
           (allowList != null &&
               (allowList.contains('edit_file') ||
+                  allowList.contains('apply_patch') ||
                   allowList.contains('write_file') ||
                   allowList.contains('terminal')));
-      if (allowWrites) {
-        registerIfAllowed(WriteFileTool(sandbox: sandbox));
-        registerIfAllowed(EditFileTool(sandbox: sandbox));
-        registerIfAllowed(DeleteFileTool(sandbox: sandbox));
-        registerIfAllowed(MoveFileTool(sandbox: sandbox));
-        if (terminalEnabled) {
-          registerIfAllowed(TerminalCommandTool(
-            service: TerminalCommandService(workspacePath: workspacePath),
-          ));
-        }
+      for (final tool in workspaceToolSet(
+        workspacePath: workspacePath,
+        allowWrites: allowWrites,
+        terminalEnabled: settings.terminal,
+      )) {
+        registerIfAllowed(tool);
       }
     }
     return HeadlessToolAssembly(registry: registry, mcpProvider: mcpProvider);

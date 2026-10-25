@@ -1,3 +1,5 @@
+import 'run_approval_scope.dart';
+import 'approval_decision_scope.dart';
 import 'dart:async';
 import 'dart:ui' show DartPluginRegistrant;
 
@@ -15,11 +17,36 @@ import '../infrastructure/observability/sentry_service.dart';
 ///
 /// **要解决的问题不是"少点一下"，而是一个死锁**：应用不在前台（锁屏、切到别的
 /// 应用）时审批弹窗用户根本看不见，于是需要审批的工具会一直等下去，整个运行卡住。
-/// 这里把请求落库 + 发一条带「批准/拒绝」动作的通知，用户不解锁就能裁决。
+/// 请求落库并通知用户；通知只能拒绝，批准必须回到前台查看和验证身份。
 ///
 /// 安全上不比原来宽松：超时视为**拒绝**，未收到任何决定时调用方保守拒绝。
+abstract interface class ApprovalNotifications {
+  Future<void> show(
+      {required int id, required String body, required String requestId});
+  Future<void> cancel(int id);
+}
+
+class SystemApprovalNotifications implements ApprovalNotifications {
+  const SystemApprovalNotifications();
+  @override
+  Future<void> show(
+      {required int id,
+      required String body,
+      required String requestId}) async {
+    await NotificationService.instance.init();
+    await NotificationService.instance.showApprovalRequest(
+        id: id, title: '需要你的批准', body: body, requestId: requestId);
+  }
+
+  @override
+  Future<void> cancel(int id) => NotificationService.instance.cancel(id);
+}
+
 class ApprovalBridge {
-  const ApprovalBridge({this.pollInterval = const Duration(milliseconds: 400)});
+  const ApprovalBridge(
+      {this.pollInterval = const Duration(milliseconds: 400),
+      this.notifications = const SystemApprovalNotifications()});
+  final ApprovalNotifications notifications;
 
   /// 前台轮询间隔。跨进程没有可靠的事件通知，只能轮询；400ms 在「人点按钮」的
   /// 时间尺度上已经足够快，又不会把数据库读得太频繁。
@@ -34,44 +61,51 @@ class ApprovalBridge {
     required String risk,
     Duration timeout = const Duration(minutes: 5),
     AppDatabase? database,
+    ApprovalDecisionScope? approvalScope,
   }) async {
     final db = database ?? await DatabaseProvider.instance.database;
-    final requestId = UniqueId.generate('appr');
+    final scope = approvalScope ?? RunApprovalScope.current;
+    if (scope != null && !await scope.isCurrent()) return false;
+    final requestId = scope?.requestId ?? UniqueId.generate('appr');
     final notificationId = requestId.hashCode & 0x7fffffff;
 
-    await db.insertPendingApproval(
-      requestId: requestId,
-      toolName: toolName,
-      summary: summary,
-      risk: risk,
-      ttl: timeout + const Duration(minutes: 1),
-    );
-    await NotificationService.instance.init();
-    await NotificationService.instance.showApprovalRequest(
-      id: notificationId,
-      title: '需要你的批准',
-      body: summary,
-      requestId: requestId,
-    );
-
-    final deadline = DateTime.now().add(timeout);
+    if (scope == null) {
+      await db.insertPendingApproval(
+        requestId: requestId,
+        toolName: toolName,
+        summary: summary,
+        risk: risk,
+        ttl: timeout + const Duration(minutes: 1),
+      );
+    }
     var timedOut = false;
     try {
+      await notifications.show(
+        id: notificationId,
+        body: summary,
+        requestId: requestId,
+      );
+
+      final deadline = DateTime.now().add(timeout);
       while (DateTime.now().isBefore(deadline)) {
+        if (scope != null && !await scope.isCurrent()) return false;
         final decision = await db.findPendingApprovalDecision(requestId);
         if (decision != null) return decision == approvalApproveAction;
-        await Future<void>.delayed(pollInterval);
+        await Future.any<void>([
+          Future<void>.delayed(pollInterval),
+          if (scope != null) scope.invalidated
+        ]);
       }
       timedOut = true;
       return null;
     } finally {
       // 无论走到哪条出口都收起通知并清掉握手行：留下的通知会指向一个已经
       // 无人等待的请求，用户之后再点就毫无效果，比不显示更糟。
-      await NotificationService.instance.cancel(notificationId);
+      await notifications.cancel(notificationId);
       try {
         if (timedOut) {
           await db.decidePendingApproval(requestId, approvalExpiredAction);
-        } else {
+        } else if (scope == null) {
           await db.deletePendingApproval(requestId);
         }
       } catch (error, stackTrace) {
@@ -87,13 +121,14 @@ class ApprovalBridge {
 
 /// 通知动作的**后台入口**。
 ///
-/// 用户点「批准/拒绝」时插件会在独立 isolate 中按 callback handle 调用它，
+/// 用户点「拒绝」时插件会在独立 isolate 中按 callback handle 调用它，
 /// 因此这里必须自己注册插件、自己打开数据库，不能依赖主 isolate 的任何状态。
 /// （与 `scheduledTaskCallbackDispatcher` 是同一套约束。）
 @pragma('vm:entry-point')
 Future<void> handleApprovalNotificationAction(
     NotificationResponse response) async {
-  final request = parseApprovalActionId(response.actionId);
+  // Enforce below the notification UI, including callbacks from old APKs.
+  final request = parseBackgroundApprovalActionId(response.actionId);
   if (request == null) return;
 
   DartPluginRegistrant.ensureInitialized();
@@ -102,7 +137,7 @@ Future<void> handleApprovalNotificationAction(
     db = await openAppDatabase();
     final applied = await db.decidePendingApproval(
       request.requestId,
-      request.approve ? approvalApproveAction : approvalDenyAction,
+      approvalDenyAction,
     );
     if (!applied) {
       // 已经有决定了（前台弹窗或用户连点两次），保留第一条即可，不是错误。

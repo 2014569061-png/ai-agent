@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import '../infrastructure/files/git_index_selection.dart';
 import '../infrastructure/tools/workspace_tools.dart';
 import 'change_review.dart';
 
@@ -75,7 +76,11 @@ class WorkspaceSnapshotService {
 
   static const ignoredNames = {
     '.git',
+    '.nexus',
     '.dart_tool',
+    '.gradle',
+    '.pub-cache',
+    '.venv',
     'build',
     'node_modules',
     '.idea',
@@ -92,9 +97,8 @@ class WorkspaceSnapshotService {
     if (!await root.exists()) {
       return WorkspaceSnapshot(capturedAt: DateTime.now(), files: files);
     }
-    await for (final entity in root.list(recursive: true, followLinks: false)) {
+    await for (final entity in _sourceFiles(root, sandbox)) {
       if (files.length >= maxFiles) break;
-      if (entity is! File) continue;
       final relative = sandbox.toRelative(entity.path);
       if (_shouldIgnore(relative)) continue;
       try {
@@ -111,6 +115,56 @@ class WorkspaceSnapshotService {
       }
     }
     return WorkspaceSnapshot(capturedAt: DateTime.now(), files: files);
+  }
+
+  /// Git applies nested ignore rules, including negation, without walking SDKs
+  /// and dependency caches. Non-Git workspaces prune excluded directories before
+  /// descent rather than enumerating their contents and discarding them later.
+  Stream<File> _sourceFiles(Directory root, WorkspaceSandbox sandbox) async* {
+    // A selected folder may itself live under another repository's ignored
+    // local/ directory. Only use Git's index when it belongs to this workspace;
+    // otherwise the parent's ignore rule could produce an empty snapshot.
+    final hasOwnIndex =
+        await FileSystemEntity.type(p.join(root.path, '.git')) !=
+            FileSystemEntityType.notFound;
+    final selected =
+        hasOwnIndex ? await gitIndexSelection(root.absolute.path) : null;
+    if (selected != null) {
+      for (final path in selected.toList()..sort()) {
+        if (_shouldIgnore(path)) continue;
+        try {
+          final resolved = sandbox.resolvePath(path);
+          if (await FileSystemEntity.type(resolved, followLinks: false) ==
+              FileSystemEntityType.file) {
+            yield File(resolved);
+          }
+        } on FileSystemException {
+          // A concurrent edit may remove a file or its parent.
+          continue;
+        } on ArgumentError {
+          // Git entries are still subject to the workspace path boundary.
+          continue;
+        }
+      }
+      return;
+    }
+    final pending = <Directory>[root];
+    while (pending.isNotEmpty) {
+      final directory = pending.removeLast();
+      try {
+        await for (final entity in directory.list(followLinks: false)) {
+          if (_shouldIgnore(sandbox.toRelative(entity.path))) continue;
+          if (entity is Directory) {
+            pending.add(entity);
+          } else if (entity is File) {
+            yield entity;
+          }
+        }
+      } on FileSystemException {
+        // An unreadable directory must not hide files in sibling directories.
+        continue;
+      }
+    }
   }
 
   Future<String?> currentHash(String workspacePath, String relativePath) async {
@@ -207,6 +261,9 @@ class WorkspaceSnapshotService {
   }
 
   bool _shouldIgnore(String relative) {
+    if (RegExp(r'\.nexus-patch-[a-f0-9]{32}\.(tmp|bak)$').hasMatch(relative)) {
+      return true;
+    }
     final parts = p.posix.split(relative.replaceAll('\\', '/'));
     return parts.any(ignoredNames.contains);
   }

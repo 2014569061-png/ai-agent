@@ -4,6 +4,8 @@ import '../domain/models.dart';
 import '../infrastructure/database/app_database.dart';
 import 'task_feedback_service.dart';
 import 'task_service.dart';
+import 'cost_budget_service.dart';
+import '../infrastructure/database/cost_budget_ledger.dart';
 
 /// 本地运行统计日聚合，不依赖账户或计费服务。
 class UsageDaily {
@@ -16,6 +18,7 @@ class UsageDaily {
     required this.spendCents,
     required this.costCents,
     required this.isToday,
+    this.costKnown = true,
   });
 
   final String day;
@@ -26,6 +29,7 @@ class UsageDaily {
   final int spendCents;
   final int costCents;
   final bool isToday;
+  final bool costKnown;
 }
 
 /// 仪表盘核心 KPI 指标集
@@ -114,6 +118,7 @@ class DashboardSummary {
     required this.recentRuns,
     required this.todos,
     required this.recentConversations,
+    this.costBudget,
   });
 
   final DashboardKpis kpis;
@@ -121,6 +126,7 @@ class DashboardSummary {
   final List<DashboardRunItem> recentRuns;
   final List<DashboardTodoItem> todos;
   final List<Conversation> recentConversations;
+  final CostBudgetEvaluation? costBudget;
 }
 
 /// 仪表盘数据服务：SQLite 聚合查询（按时间过滤下沉到 SQL，避免全表拉取），
@@ -178,7 +184,7 @@ class DashboardService {
           prompt: run.inputTokens,
           completion: run.outputTokens,
           cached: run.cachedTokens,
-          costCents: run.estimatedCostCents ?? 0,
+          costCents: run.estimatedCostCents,
         );
       }
     }
@@ -298,6 +304,8 @@ class DashboardService {
       recentRuns: recentRuns,
       todos: todos,
       recentConversations: recentConversations,
+      costBudget: await CostBudgetLedger(db)
+          .snapshot(await const CostBudgetService().loadPolicy()),
     );
   }
 }
@@ -320,17 +328,22 @@ class _DailyTokenBucket {
   int completion = 0;
   int cached = 0;
   int cost = 0;
+  bool costKnown = true;
 
   void add(
       {required int prompt,
       required int completion,
       required int cached,
-      required int costCents}) {
+      required int? costCents}) {
     calls++;
     this.prompt += prompt;
     this.completion += completion;
     this.cached += cached;
-    cost += costCents;
+    if (costCents == null) {
+      costKnown = false;
+    } else {
+      cost += costCents;
+    }
   }
 
   UsageDaily toUsageDaily({bool isToday = false}) => UsageDaily(
@@ -342,6 +355,7 @@ class _DailyTokenBucket {
         cachedTokens: cached,
         spendCents: cost,
         costCents: cost,
+        costKnown: costKnown,
         isToday: isToday,
       );
 }

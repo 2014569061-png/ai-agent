@@ -9,6 +9,7 @@ import '../infrastructure/providers/model_route.dart';
 import '../infrastructure/providers/provider_config_store.dart';
 import '../infrastructure/providers/tool_trust_store.dart';
 import 'mcp_service.dart';
+import 'data_maintenance_service.dart';
 import 'nexus_guard.dart';
 import 'log_service.dart';
 import 'session_log/legacy_import.dart';
@@ -40,25 +41,30 @@ final databaseProvider = FutureProvider<AppDatabase>((ref) async {
   final store = DriftSessionEventStore(db);
   // 不能 ref.read(logServiceProvider)：它 watch 了本 provider，会形成依赖环。
   final logs = LogService(Future.value(db));
-  unawaited(SessionLogMaintenance.runOnStartup(
-    store,
-    extraSteps: [
-      if (SessionLogSettings.dualWrite) ...[
-        () => LegacySessionImporter(db, store).importPending(),
-        () async {
-          for (final mismatch
-              in await SessionLogShadowCheck.compareRecent(db, store)) {
-            await logs.warning('Session log shadow mismatch',
-                category: 'session_log', detail: mismatch.toJson());
-          }
-          return null;
-        },
-      ],
-    ],
-    onError: (error, stackTrace) => NexusGuard.silently<void>(
-        'sessionLog.startupMaintenance',
-        () => Error.throwWithStackTrace(error, stackTrace)),
-  ));
+  unawaited(NexusGuard.silentlyAsync<void>(
+      'sessionLog.startupAdmission',
+      () => const DataMaintenanceService().run(
+          db,
+          () => SessionLogMaintenance.runOnStartup(
+                store,
+                extraSteps: [
+                  if (SessionLogSettings.dualWrite) ...[
+                    () => LegacySessionImporter(db, store).importPending(),
+                    () async {
+                      for (final mismatch
+                          in await SessionLogShadowCheck.compareRecent(
+                              db, store)) {
+                        await logs.warning('Session log shadow mismatch',
+                            category: 'session_log', detail: mismatch.toJson());
+                      }
+                      return null;
+                    },
+                  ],
+                ],
+                onError: (error, stackTrace) => NexusGuard.silently<void>(
+                    'sessionLog.startupMaintenance',
+                    () => Error.throwWithStackTrace(error, stackTrace)),
+              ))));
   return db;
 });
 

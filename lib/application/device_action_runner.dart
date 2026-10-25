@@ -41,7 +41,10 @@ class PreparedDeviceAction {
       DateTime.now().difference(preparedAt) > const Duration(seconds: 110);
 
   String get riskClass => preview?['riskClass']?.toString() ?? 'unknown';
-  bool get reversible => preview?['reversible'] != false;
+
+  /// Missing or malformed metadata is not evidence of recoverability.
+  bool get recoveryKnown => preview?['reversible'] is bool;
+  bool get reversible => preview?['reversible'] == true;
 }
 
 class DeviceActionOutcome {

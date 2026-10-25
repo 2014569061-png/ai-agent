@@ -1,3 +1,6 @@
+import 'persisted_run_fence.dart';
+import 'traced_model_provider.dart';
+import 'run_recovery_safety.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math' as math;
@@ -10,8 +13,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'attachment_policy.dart';
+import 'data_maintenance_service.dart';
+import '../domain/runtime_data_scope.dart';
 import 'mojibake_repair.dart';
 import 'autonomous_delegation.dart';
+import 'plan_markdown.dart';
+import 'session_checkpoint_service.dart';
+import 'desktop_worktree_service.dart';
 
 import '../domain/attachment_file.dart';
 import '../domain/context_insights.dart';
@@ -24,21 +32,16 @@ import '../domain/unique_id.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/files/document_extractor.dart';
 import '../infrastructure/providers/provider_config.dart';
-import '../infrastructure/tools/core_tools.dart';
 import '../infrastructure/tools/android_device_tool.dart';
 import '../infrastructure/tools/tool_registry.dart';
 import '../infrastructure/tools/sub_agent_tool.dart';
-import '../infrastructure/tools/plan_tool.dart';
-import '../infrastructure/tools/image_gen_tool.dart';
-import '../infrastructure/tools/workspace_tools.dart';
 import '../infrastructure/tools/command_tool.dart';
-import '../infrastructure/tools/skill_tools.dart';
 import 'agent_executor.dart';
 import 'tool_pipeline/file_baseline_interceptor.dart';
 import 'change_set_retention.dart';
 import 'audit_service.dart';
-import 'android_automation_tool.dart';
 import 'device_automation_service.dart';
+import 'android_accessibility_session_service.dart';
 import '../domain/device_automation.dart';
 import 'run_coordinator.dart';
 import 'context_insights_history.dart';
@@ -49,6 +52,9 @@ import 'reasoning_policy.dart';
 import 'system_prompt_assembly.dart';
 import 'knowledge_service.dart';
 import 'memory_service.dart';
+// 个人上下文注入在 part 文件 chat_run_execution.dart 里使用；part 文件自身
+// 不能写 import，因此库级 import 只能加在这里。
+import 'personal_context_service.dart';
 import 'providers.dart';
 import 'log_service.dart';
 import 'nexus_guard.dart';
@@ -80,16 +86,26 @@ import 'project_template_service.dart';
 import 'prompt_budget.dart';
 import 'task_summary.dart';
 import 'background_execution_gateway.dart';
+import 'execution_lease_service.dart';
 import 'development_execution_service.dart';
-import 'development_loop_finalizer.dart';
+import 'development_run_completion.dart';
+import 'auto_verification_policy.dart';
+import 'change_review.dart';
+import 'isolated_edit_service.dart';
 import '../infrastructure/plugins/plugin_store.dart';
 import '../infrastructure/skills/skill_store.dart';
 import '../infrastructure/notifications/notification_service.dart';
 import '../infrastructure/background/foreground_service.dart';
+
+import 'chat_tool_registry_builder.dart';
+import 'browser_session_service.dart';
+import 'run_tool_settings.dart';
 import 'chat_plan_status.dart';
 import 'chat_prompt_rules.dart';
 import 'chat_task_json.dart';
 import 'usage_cost_estimator.dart';
+
+export 'run_tool_settings.dart';
 
 part 'chat_run_execution.dart';
 part 'chat_state.dart';
@@ -139,6 +155,10 @@ class ChatController extends Notifier<ChatState> {
   /// 「静默无效」升级成「未捕获异常」。
   bool get _mounted => ref.mounted;
 
+  /// 会话级 checkpoint 时间线存储（Review 2.0）。
+  static const SessionCheckpointStore _checkpointStore =
+      SessionCheckpointStore();
+
   /// 写入面向用户的运行摘要。只在真实阶段变化或服务端流量到达时触发，
   /// 不靠伪造的循环文案制造“模型正在工作”的错觉。
   void _setRunProgress({
@@ -187,12 +207,48 @@ class ChatController extends Notifier<ChatState> {
     return const ChatState();
   }
 
+  Future<void> _withDataRun(Future<void> Function() action) async {
+    final db = await ref.read(databaseProvider.future);
+    try {
+      await const DataMaintenanceService().run(db, action, cancel: () {
+        _runs.invalidateActiveRun();
+        if (_mounted) {
+          state = state.copyWith(
+              running: false,
+              paused: false,
+              clearLiveReply: true,
+              clearRunProgress: true);
+        }
+      });
+    } on RuntimeDataRevoked catch (error) {
+      if (_mounted) {
+        state = state.copyWith(
+            running: false,
+            loading: false,
+            activityLog: [...state.activityLog, error.toString()]);
+      }
+    }
+  }
+
+  Future<void> reloadAfterDataMaintenance() async {
+    _runs.invalidateActiveRun();
+    _conversationSwitchGeneration++;
+    _inflightRequestIds.clear();
+    _resumingTaskIds.clear();
+    _invalidateContextRuns(clearState: true);
+    state = const ChatState();
+    await _initialize(rethrowErrors: true);
+  }
+
   // --- 初始化 ---
 
-  Future<void> _initialize() async {
+  Future<void> _initialize({bool rethrowErrors = false}) async {
     // build() 把初始化拆到 microtask 执行，因此这里可能在容器已销毁后才开始或
     // 恢复；第一步就要确认还挂载着，否则下面的 ref.read 本身就会抛。
     if (!_mounted) return;
+    if (RuntimeDataScope.current == null) {
+      return _withDataRun(() => _initialize(rethrowErrors: rethrowErrors));
+    }
     try {
       // 四路互不依赖的读取并发执行（F-5），替代逐个串行等待。
       // Workspace is managed via state.currentWorkspacePath
@@ -298,7 +354,7 @@ class ChatController extends Notifier<ChatState> {
         contextSteps: contextSteps,
         contextSnapshot: latestSnapshot,
       );
-      unawaited(_hydrateActiveProject(database, conversation));
+      await _hydrateActiveProject(database, conversation);
     } catch (_) {
       // 初始化失败时降级为空会话，避免首屏永久显示加载状态。
       //
@@ -306,6 +362,7 @@ class ChatController extends Notifier<ChatState> {
       // 就会把一个「早退」变成未捕获异常（Riverpod 3 起不再静默容忍）。
       if (!_mounted) return;
       state = state.copyWith(loading: false);
+      if (rethrowErrors) rethrow;
     }
   }
 
@@ -588,99 +645,89 @@ class ChatController extends Notifier<ChatState> {
     ProviderConfig config,
     ToolRisk subAgentRisk,
     ToolSettings settings,
-  ) async {
-    final registry = ToolRegistry();
-    if (enabledTools.contains('calculator')) {
-      registry.register(CalculatorTool());
+  ) {
+    final workspacePath = state.currentWorkspacePath;
+    return buildChatToolRegistry(
+      enabledTools: enabledTools,
+      tavilyKey: tavilyKey,
+      config: config,
+      subAgentRisk: subAgentRisk,
+      settings: settings,
+      database: () => ref.read(databaseProvider.future),
+      projectId: state.currentProjectId,
+      conversationId: state.conversationId,
+      browser: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? ref.read(browserSessionProvider)
+          : null,
+      accessibility: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+          ? ref.read(androidAccessibilitySessionProvider)
+          : null,
+      workspacePath: workspacePath,
+      automation: () => ref.read(deviceAutomationServiceProvider),
+      onRunSubAgent: _runSubAgent,
+      onPlanUpdated: _onPlanUpdated,
+      onRunIsolated: (prompt, budget) async {
+        final cancellation = _runs.cancellationToken;
+        return IsolatedEditService().run(
+          root: workspacePath!,
+          canContinue: () => cancellation?.isCancelled != true,
+          execute: (workspace) async {
+            if (cancellation?.isCancelled == true) {
+              return {'ok': false, 'code': ToolCodes.cancelled};
     }
-    if (enabledTools.contains('get_time')) registry.register(GetTimeTool());
-    if (enabledTools.contains('json_query')) registry.register(JsonQueryTool());
-    if (enabledTools.contains('http_request')) {
-      registry.register(HttpRequestTool());
-    }
-    if (settings.webBrowsing && enabledTools.contains('web_search')) {
-      registry.register(WebSearchTool(apiKey: tavilyKey));
-    }
-    if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
-      registry.register(AndroidDevicePreviewTool());
-      registry.register(AndroidDeviceTool());
-      registry.register(AndroidAppPrivateDataPreviewTool());
-      registry.register(AndroidAppPrivateDataTool());
-      registry.register(AndroidAutomationTool(
-        service: ref.read(deviceAutomationServiceProvider),
-      ));
-    }
-    if (enabledTools.contains('generate_image')) {
-      registry.register(ImageGenTool(config: config));
-    }
-
-    // 记忆写入：回调懒加载 DB，写入"手动来源"记忆。
-    registry.register(RememberTool(
-      onRemember: _onRemember,
-      onRememberWithRevision: _onRememberWithRevision,
-    ));
-    registry.register(MemoryGetTool(onGet: _onMemoryGet));
-    registry.register(MemoryWriteTool(onWrite: _onMemoryWrite));
-    if (enabledTools.contains('skills_read') ||
-        enabledTools.contains('skills_read_resource')) {
       try {
-        final database = await ref.read(databaseProvider.future);
-        if (enabledTools.contains('skills_read')) {
-          registry.register(SkillsReadTool(database: database));
-        }
-        if (enabledTools.contains('skills_read_resource')) {
-          registry.register(SkillsReadResourceTool(database: database));
-        }
-      } catch (_) {
-        // 数据库尚未就绪时，当前回合不暴露 Skill 读取工具。
+              final text = await _runSubAgent(null, prompt, budget,
+                  workspaceOverride: workspace, isolatedEdit: true);
+              return {
+                'ok': true,
+                'summary': ContextWindow.truncateToolResult(text, 6000)
+              };
+            } on SubAgentFailure catch (error) {
+              return {
+                'ok': false,
+                'code': error.code,
+                'summary': ContextWindow.truncateToolResult(
+                    error.partialText ?? '', 6000),
+                'inputTokens': error.inputTokens,
+                'outputTokens': error.outputTokens
+              };
       }
-    }
-    // 子 Agent：走统一后台入口，safe 工具才放行。
-    // 风险由自主委派开关决定：开启 → safe（自动放行），关闭 → requiresConfirmation（走审批）。
-    registry.register(SubAgentTool(onRun: _runSubAgent, risk: subAgentRisk));
-    // 计划模式：模型首轮调用 manage_plan 后由回调更新 planState。
-    registry.register(ManagePlanTool(onPlanUpdated: _onPlanUpdated));
-
-    final wsPath = state.currentWorkspacePath;
-    if (settings.workspaceFiles && wsPath != null && wsPath.isNotEmpty) {
-      final sandbox = WorkspaceSandbox(wsPath);
-      registry.register(ReadFileTool(sandbox: sandbox));
-      registry.register(WriteFileTool(sandbox: sandbox));
-      registry.register(EditFileTool(sandbox: sandbox));
-      registry.register(ListDirectoryTool(sandbox: sandbox));
-      registry.register(SearchFilesTool(sandbox: sandbox));
-      registry.register(DeleteFileTool(sandbox: sandbox));
-      registry.register(MoveFileTool(sandbox: sandbox));
-      if (settings.terminal && !kIsWeb) {
-        registry.register(TerminalCommandTool(
-          service: TerminalCommandService(workspacePath: wsPath),
-        ));
-      }
+          },
+        );
+      },
+    );
     }
 
-    return registry;
-  }
+  Future<ToolSettings> _loadToolSettings() =>
+      ToolSettings.load(webBrowsing: state.webSearchEnabled);
 
-  /// 读取「设置 → 工具」页面上各工具开关的当前值。开关写在
-  /// SharedPreferences（settings.tool.*），由 [ToolSettings] 统一消费，
-  /// 关闭的开关会对应地从工具注册表中剔除。
-  Future<ToolSettings> _loadToolSettings() async {
-    try {
+  Future<TerminalCommandService?> _autoVerificationTerminal(
+      String workspacePath,
+      {required String status,
+      required bool cancelled,
+      required bool planMode}) async {
+    if (kIsWeb) return null;
+    final settings = await _loadToolSettings();
       final prefs = await SharedPreferences.getInstance();
-      return ToolSettings(
-        webBrowsing: state.webSearchEnabled,
-        // Keep the former combined key as a migration fallback. New installs
-        // and the settings page use separate permissions from this point on.
-        workspaceFiles: prefs.getBool('settings.tool.workspace_files') ??
-            prefs.getBool('settings.tool.terminal_file') ??
-            true,
-        terminal: prefs.getBool('settings.tool.terminal') ??
-            prefs.getBool('settings.tool.terminal_file') ??
-            true,
-      );
-    } catch (_) {
-      return ToolSettings(webBrowsing: state.webSearchEnabled);
+    if (!AutoVerificationPolicy.allows(
+      enabled: prefs.getBool(AutoVerificationPolicy.preferenceKey) ?? false,
+      workspaceFiles: settings.workspaceFiles,
+      terminal: settings.terminal,
+      status: status,
+      cancelled: cancelled,
+      planMode: planMode,
+    )) return null;
+    return TerminalCommandService(workspacePath: workspacePath);
     }
+
+  Future<bool> _automaticRepairEnabled(ProviderConfig config) async {
+    final prefs = await SharedPreferences.getInstance();
+    final settings = await _loadToolSettings();
+    return config.isConfigured &&
+        settings.workspaceFiles &&
+        settings.terminal &&
+        (prefs.getBool(AutoVerificationPolicy.preferenceKey) ?? false) &&
+        (prefs.getBool(AutoVerificationPolicy.repairPreferenceKey) ?? false);
   }
 
   /// 把已启用的 MCP 服务器工具并入 registry。
@@ -888,6 +935,15 @@ class ChatController extends Notifier<ChatState> {
     String sourceType = 'manual',
     String? clientRequestId,
   }) async {
+    if (RuntimeDataScope.current == null) {
+      return _withDataRun(() => send(
+          text: text,
+          attachments: attachments,
+          approveTool: approveTool,
+          taskType: taskType,
+          sourceType: sourceType,
+          clientRequestId: clientRequestId));
+    }
     final trimmed = text.trim();
     if ((trimmed.isEmpty && attachments.isEmpty) ||
         state.running ||
@@ -904,6 +960,23 @@ class ChatController extends Notifier<ChatState> {
     final workspacePath = state.currentWorkspacePath;
     final runGeneration = _runs.beginRun();
     _invalidateContextRuns(clearState: true);
+
+    // 会话级 checkpoint（Review 2.0）：新一轮开始前记录时间线起点。
+    // I/O 失败绝不影响对话，故 fire-and-forget + 降级日志。
+    if (conversationId != null) {
+      await NexusGuard.degradeAsync<void>(
+        'chat.sessionCheckpoint',
+        () async {
+          final db = await ref.read(databaseProvider.future);
+          await const SessionCheckpointService().recordTurn(
+              store: _checkpointStore,
+              conversationId: conversationId,
+              workspacePath: workspacePath,
+              messageCount: await db.messageCountFor(conversationId));
+        },
+        logger: _logDegrade,
+      );
+    }
 
     final parts = <MessagePart>[MessagePart.text(trimmed)];
     for (final file in attachments) {
@@ -1137,6 +1210,9 @@ class ChatController extends Notifier<ChatState> {
   }
 
   Future<void> regenerate({required ToolApprovalCallback approveTool}) async {
+    if (RuntimeDataScope.current == null) {
+      return _withDataRun(() => regenerate(approveTool: approveTool));
+    }
     if (state.running || state.loading || state.restoringConversation) return;
     if (state.messages.isEmpty ||
         state.messages.last.role != MessageRole.assistant) {
@@ -1154,6 +1230,22 @@ class ChatController extends Notifier<ChatState> {
         switchGeneration != _conversationSwitchGeneration ||
         state.conversationId != conversationId ||
         state.running) return;
+    try {
+      await const RunRecoverySafety().requireReplayFreeConversation(database,
+          conversationId: conversationId,
+          visibleEffects: state.toolActivities.map((a) =>
+              a.status == ToolActivity.statusRunning
+                  ? ToolEffect.unknown
+                  : a.effect),
+          messages: state.messages);
+    } on RunRecoveryNeedsReview catch (error) {
+      if (current()) {
+        state = state
+            .copyWith(activityLog: [...state.activityLog, error.toString()]);
+      }
+      return;
+    }
+    if (!current() || state.running) return;
     final runGeneration = _runs.beginRun();
     state = state.copyWith(running: true);
     try {
@@ -1243,6 +1335,14 @@ class ChatController extends Notifier<ChatState> {
     required String newText,
     required ToolApprovalCallback approveTool,
   }) async {
+    if (RuntimeDataScope.current == null) {
+      return _withDataRun(() => editAndResend(
+          messageIndex: messageIndex,
+          messageId: messageId,
+          expectedConversationId: expectedConversationId,
+          newText: newText,
+          approveTool: approveTool));
+    }
     if (state.running || state.loading || state.restoringConversation) return;
     final conversationId = state.conversationId;
     final switchGeneration = _conversationSwitchGeneration;
@@ -1275,6 +1375,22 @@ class ChatController extends Notifier<ChatState> {
         switchGeneration != _conversationSwitchGeneration ||
         state.conversationId != conversationId ||
         state.running) return;
+    try {
+      await const RunRecoverySafety().requireReplayFreeConversation(database,
+          conversationId: conversationId,
+          visibleEffects: state.toolActivities.map((a) =>
+              a.status == ToolActivity.statusRunning
+                  ? ToolEffect.unknown
+                  : a.effect),
+          messages: state.messages);
+    } on RunRecoveryNeedsReview catch (error) {
+      if (current()) {
+        state = state
+            .copyWith(activityLog: [...state.activityLog, error.toString()]);
+      }
+      return;
+    }
+    if (!current() || state.running) return;
     // A pending page may have prepended rows while awaiting the database.
     messageIndex =
         state.messages.indexWhere((message) => message.id == target.id);
@@ -1375,11 +1491,18 @@ class ChatController extends Notifier<ChatState> {
   /// C2 断点恢复：重新执行一个被中断的后台任务，并把结果写回会话。
   Future<void> resumeTask(String taskId,
       {required ToolApprovalCallback approveTool}) async {
+    if (RuntimeDataScope.current == null) {
+      return _withDataRun(() => resumeTask(taskId, approveTool: approveTool));
+    }
     AppDatabase? database;
+    String? recoveryRunId;
+    int? recoveryPlanVersion;
     Task? task;
     String? uiConversationId;
     var runGeneration = 0;
     AgentCancellationToken? cancellationToken;
+    WorkspaceLeaseGuard? leaseGuard;
+    DevelopmentRunCompletion? completion;
     if (!_resumingTaskIds.add(taskId)) return;
     try {
       database = await ref.read(databaseProvider.future);
@@ -1399,12 +1522,19 @@ class ChatController extends Notifier<ChatState> {
       if (savedCheckpointRunId != null &&
           savedCheckpointRunId.isNotEmpty &&
           taskService.isRunApplied(savedProgress, savedCheckpointRunId)) {
-        await taskService.clearCheckpoint(db, taskId);
-        if (taskData.status != 'completed') {
-          await taskService.updateStatus(db, taskId, 'completed');
+        final reconciled = await taskService.reconcileAppliedCheckpoint(db,
+            snapshot: taskData, runId: savedCheckpointRunId);
+        if (!reconciled) {
+          throw const AppliedCheckpointNeedsReview();
         }
         return;
       }
+      // Validate before clearing UI, changing task state or allocating a new run.
+      final recoveryContext = savedCheckpoint is Map
+          ? decodeChatContext(savedCheckpoint['context'])
+          : const <ChatMessage>[];
+      await const RunRecoverySafety()
+          .requireSafe(db, taskId, initialHistory: recoveryContext);
       _invalidateActiveRun();
       final linkedConversation = taskData.conversationId.isEmpty
           ? null
@@ -1430,8 +1560,6 @@ class ChatController extends Notifier<ChatState> {
       bool ownsRun() => _runs.ownsRunUnbound(runGeneration, uiConversationId);
       cancellationToken = AgentCancellationToken();
       _runs.cancellationToken = cancellationToken;
-      await TaskService().markResumed(db, taskId);
-      await TaskService().updateStatus(db, taskId, 'running');
 
       final request = _decodeTaskRequest(taskData.requestJson);
       final store = ref.read(providerConfigStoreProvider);
@@ -1460,15 +1588,45 @@ class ChatController extends Notifier<ChatState> {
           ? decodeChatContext(checkpoint['context'])
           : const <ChatMessage>[];
       final executionRunId = UniqueId.generate('run');
+      recoveryRunId = executionRunId;
+      if (workspacePath != null) {
+        final activeCancellation = cancellationToken;
+        leaseGuard = await WorkspaceLeaseGuard.open(
+            db: db,
+            workspacePath: workspacePath,
+            taskId: taskId,
+            runId: executionRunId,
+            onLost: () => activeCancellation.cancel());
+      }
       _runs.activeTaskId = taskId;
       _runs.activeRunId = executionRunId;
       _runs.boundConversationId = uiConversationId ?? taskData.conversationId;
+      await TaskService().markResumed(db, taskId);
+      await TaskService().updateStatus(db, taskId, 'running');
+      completion = workspacePath == null
+          ? null
+          : DevelopmentRunCompletion(
+              db: db,
+              taskId: taskId,
+              runId: executionRunId,
+              workspacePath: workspacePath,
+              terminalFactory: () => _autoVerificationTerminal(workspacePath,
+                  status: 'completed',
+                  cancelled: cancellationToken?.isCancelled ?? true,
+                  planMode: false),
+              repairEnabled: () => _automaticRepairEnabled(config),
+              canContinue: () =>
+                  !(cancellationToken?.isCancelled ?? true) && ownsRun());
       final result = await BackgroundExecutionGateway().run(
         db: db,
         config: config,
         prompt: request['prompt']?.toString() ?? '',
         taskId: taskId,
         initialHistory: checkpointContext.isEmpty ? null : checkpointContext,
+        runId: executionRunId,
+        beforeFinish: completion?.call,
+        modelRouter: ref.read(modelRouterProvider),
+        leaseGuard: leaseGuard,
         systemPrompt: systemPrompt,
         taskType: request['taskType']?.toString(),
         workspacePath: workspacePath,
@@ -1479,13 +1637,25 @@ class ChatController extends Notifier<ChatState> {
         keepAlive: true,
       );
 
-      final taskStatus = switch (result.status) {
+      recoveryPlanVersion = result.planVersion;
+      var taskStatus = switch (result.status) {
         RunStatus.cancelled => 'cancelled',
         RunStatus.failed => 'failed',
         RunStatus.paused => 'paused',
         _ => result.succeeded ? 'completed' : 'failed',
       };
-      final resultText = result.text.trim();
+      var resultText = result.text.trim();
+      final finalized = completion?.latest;
+      if (taskStatus == 'completed' &&
+          finalized != null &&
+          completion!.verificationRequested) {
+        resultText += '\n\n系统验证：${finalized.review.mark.label}'
+            '${finalized.verificationSkipReason == null ? '' : '（${finalized.verificationSkipReason}）'}';
+        if (!finalized.verified && finalized.review.files.isNotEmpty)
+          taskStatus = 'failed';
+      }
+
+      if (cancellationToken.isCancelled || !ownsRun()) taskStatus = 'cancelled';
       await taskService.complete(
         db,
         taskId,
@@ -1502,25 +1672,8 @@ class ChatController extends Notifier<ChatState> {
               }
             : null,
         runId: executionRunId,
+        planVersion: result.planVersion,
       );
-      if (workspacePath != null &&
-          workspacePath.trim().isNotEmpty &&
-          taskStatus != 'cancelled') {
-        try {
-          await DevelopmentLoopFinalizer().finalize(
-            db: db,
-            taskId: taskId,
-            runId: executionRunId,
-            workspacePath: workspacePath,
-            terminal: null,
-            runVerification: false,
-          );
-        } catch (error, stackTrace) {
-          NexusGuard.degradeCaught(
-              'chat.finalizeDevelopmentLoop', error, stackTrace,
-              logger: _logDegrade);
-        }
-      }
 
       if (ownsRun()) {
         state = state.copyWith(
@@ -1551,15 +1704,31 @@ class ChatController extends Notifier<ChatState> {
           );
         }
       }
+    } on RunRecoveryNeedsReview {
+      rethrow;
+    } on AppliedCheckpointNeedsReview {
+      rethrow;
+    } on ExecutionLeaseConflict catch (_) {
+      if (_runs.ownsRunUnbound(runGeneration, uiConversationId)) {
+        state = state.copyWith(
+            running: false,
+            paused: false,
+            clearRunProgress: true,
+            activityLog: [...state.activityLog, '工作区仍有任务执行中，本次恢复未启动']);
+      }
     } catch (error) {
       final dbForCatch = database;
-      if (dbForCatch != null) {
+      if (dbForCatch != null &&
+          recoveryRunId != null &&
+          recoveryPlanVersion != null) {
         try {
           await TaskService().complete(
             dbForCatch,
             taskId,
             status: 'failed',
             summary: error.toString(),
+            runId: recoveryRunId,
+            planVersion: recoveryPlanVersion,
           );
         } catch (error, stackTrace) {
           // 在错误处理里标记任务失败又失败：任务会停在「运行中」，必须留痕。
@@ -1577,6 +1746,10 @@ class ChatController extends Notifier<ChatState> {
         );
       }
     } finally {
+      try {
+        await completion?.drain();
+        await leaseGuard?.close();
+    } finally {
       _resumingTaskIds.remove(taskId);
       if (cancellationToken != null) {
         _runs.clearCancellationTokenIf(cancellationToken);
@@ -1586,17 +1759,48 @@ class ChatController extends Notifier<ChatState> {
       }
     }
   }
+  }
 
   /// 预算暂停后从保存的 Agent 上下文续跑，而不是重新提交原始 prompt。
   Future<void> resumeFromBudgetPause({
     required ToolApprovalCallback approveTool,
   }) async {
+    if (RuntimeDataScope.current == null) {
+      return _withDataRun(
+          () => resumeFromBudgetPause(approveTool: approveTool));
+    }
     final context = _runs.budgetPauseContext;
     if (context == null || context.isEmpty || state.running || state.loading) {
       return;
     }
-    final database = await ref.read(databaseProvider.future);
     final conversationId = state.conversationId;
+    final switchGeneration = _conversationSwitchGeneration;
+    final database = await ref.read(databaseProvider.future);
+    if (!_mounted ||
+        switchGeneration != _conversationSwitchGeneration ||
+        state.conversationId != conversationId ||
+        state.running ||
+        state.loading) return;
+    final taskId = _runs.activeTaskId;
+    try {
+      if (taskId != null) {
+        await const RunRecoverySafety()
+            .requireSafe(database, taskId, initialHistory: context);
+      } else if (state.toolActivities
+          .any((a) => a.effect == ToolEffect.unknown)) {
+        throw const RunRecoveryNeedsReview('当前上下文存在结果未知的工具操作。');
+      }
+    } on RunRecoveryNeedsReview catch (error) {
+      if (_mounted && state.conversationId == conversationId) {
+        state = state
+            .copyWith(activityLog: [...state.activityLog, error.toString()]);
+      }
+      return;
+    }
+    if (!_mounted ||
+        switchGeneration != _conversationSwitchGeneration ||
+        state.conversationId != conversationId ||
+        state.running) return;
     final runGeneration = _runs.beginRun();
     _invalidateContextRuns(clearState: true);
     // 追加一个助手占位消息承载续跑输出；实际模型输入用保存的上下文。
@@ -1674,6 +1878,30 @@ class ChatController extends Notifier<ChatState> {
       await bindDirectoryAsProject(path);
     }
     return path;
+  }
+
+  /// 「回退会话」完成后同步截断内存中的消息列表（DB 截断由调用方负责，
+  /// 见 SessionCheckpointService/Review 面板）。
+  void truncateConversationTo(int messageCount) {
+    final messages = state.messages;
+    if (messageCount < 0 || messages.length <= messageCount) return;
+    state = state.copyWith(
+        messages: messages.take(messageCount).toList(growable: false));
+  }
+
+  Future<void> refreshAfterRewind(String conversationId) async {
+    final database = await ref.read(databaseProvider.future);
+    final page = await _loadConversationPage(database, conversationId);
+    if (!_mounted || state.conversationId != conversationId) return;
+    _trackLoadedWindow(page);
+    final restored = _restoreFromMessages(page.map((row) => row.$1).toList());
+    _invalidateContextRuns(clearState: true);
+    state = state.copyWith(
+        messages: restored.$1,
+        toolActivities: restored.$2,
+        clearLiveReply: true,
+        clearContextSnapshot: true,
+        clearPlanState: true);
   }
 
   Future<void> setWorkspace(String? path) async {
@@ -1818,143 +2046,26 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  /// remember 工具回调：异步懒加载 DB 并写入一条手动来源记忆。
-  Future<void> _onRemember(String content) async {
-    try {
-      final database = await ref.read(databaseProvider.future);
-      await MemoryService().add(
-        database: database,
-        content: content,
-        sourceType: 'manual',
-        importance: 2,
-      );
-    } catch (_) {
-      // 记忆写入失败不阻断主流程。
-    }
-  }
-
-  Future<ToolResult> _onRememberWithRevision(
-      String content, String? expectedRevision) async {
-    try {
-      final database = await ref.read(databaseProvider.future);
-      final memory = await MemoryService().add(
-        database: database,
-        content: content,
-        sourceType: 'manual',
-        importance: 2,
-        expectedRevision: expectedRevision,
-      );
-      final revision = await MemoryService().currentRevision(database);
-      return ToolResult.success(
-        message: '已记住：${memory.content}',
-        data: {'revision': revision, 'id': memory.id},
-        effect: ToolEffect.applied,
-      );
-    } on MemoryConflictException catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.revisionConflict,
-        message: '记忆已被其他操作更新，请先重新调用 memory_get 获取最新 revision',
-        data: {'revision': error.currentRevision},
-      );
-    } catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.toolError,
-        message: '记忆写入失败：$error',
-      );
-    }
-  }
-
-  Future<ToolResult> _onMemoryGet(String query, int offset, int limit) async {
-    try {
-      final database = await ref.read(databaseProvider.future);
-      final service = MemoryService();
-      // 多取一条用于告诉模型是否还有下一页，避免模型因静默截断而误以为
-      // 当前结果就是完整记忆集合。
-      final matched = await service.search(database, query,
-          offset: offset, limit: limit + 1);
-      final hasMore = matched.length > limit;
-      final items = hasMore ? matched.take(limit).toList() : matched;
-      final revision = await service.currentRevision(database);
-      return ToolResult.success(
-        message: items.isEmpty ? '未找到匹配记忆' : '已读取 ${items.length} 条记忆',
-        data: {
-          'revision': revision,
-          'offset': offset,
-          'limit': limit,
-          'hasMore': hasMore,
-          'nextOffset': hasMore ? offset + items.length : null,
-          'items': items
-              .map((item) => {
-                    'id': item.id,
-                    'content': item.content,
-                    'category': item.category,
-                    'importance': item.importance,
-                    'updatedAt': item.updatedAt.toIso8601String(),
-                  })
-              .toList(growable: false),
-        },
-      );
-    } catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.toolError,
-        message: '读取记忆失败：$error',
-      );
-    }
-  }
-
-  Future<ToolResult> _onMemoryWrite({
-    required String? id,
-    required String content,
-    required String mode,
-    required int? startLine,
-    required int? endLine,
-    required String? expectedRevision,
-  }) async {
-    try {
-      final database = await ref.read(databaseProvider.future);
-      final service = MemoryService();
-      final memory = await service.write(
-        database: database,
-        id: id,
-        content: content,
-        mode: mode,
-        startLine: startLine,
-        endLine: endLine,
-        expectedRevision: expectedRevision,
-      );
-      return ToolResult.success(
-        message: '记忆已写入',
-        data: {
-          'id': memory.id,
-          'revision': await service.currentRevision(database),
-          'mode': mode,
-        },
-        effect: ToolEffect.applied,
-      );
-    } on MemoryConflictException catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.revisionConflict,
-        message: '记忆已被其他操作更新，请先重新调用 memory_get 获取最新 revision',
-        data: {'revision': error.currentRevision},
-      );
-    } on FormatException catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.invalidArguments,
-        message: error.message,
-      );
-    } catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.toolError,
-        message: '记忆写入失败：$error',
-      );
-    }
-  }
-
   /// sub_agent 工具回调：走统一后台入口执行一个子任务。
   /// [budget] 为可选的受限 token 预算，越界/缺省值会被钳制到
   /// [SubAgentTool.minBudget]~[SubAgentTool.maxBudget]。
-  Future<String> _runSubAgent(
-      String? agentId, String prompt, int? budget) async {
+  Future<String> _runSubAgent(String? agentId, String prompt, int? budget,
+      {String? workspaceOverride, bool isolatedEdit = false}) async {
+    final workspacePath = workspaceOverride ?? state.currentWorkspacePath;
+    final parentCancellation = _runs.cancellationToken;
+    final parentHttpCancellation = _runs.dioCancelToken;
+    final childCancellation = AgentCancellationToken();
+    if (parentCancellation != null) {
+      if (parentCancellation.isCancelled) childCancellation.cancel();
+      unawaited(parentCancellation.whenCancelled
+          .then((_) => childCancellation.cancel()));
+    }
+    final childHttpCancellation = CancelToken();
+    if (parentHttpCancellation != null) {
+      unawaited(parentHttpCancellation.whenCancel.then((_) {
+        childHttpCancellation.cancel('父任务已取消');
+      }));
+    }
     String? systemPrompt;
     try {
       final database = await ref.read(databaseProvider.future);
@@ -1969,21 +2080,63 @@ class ChatController extends Notifier<ChatState> {
       NexusGuard.degradeCaught('chat.loadAgentPrompt', error, stackTrace,
           logger: _logDegrade);
     }
+    final deadline = isolatedEdit
+        ? Timer(const Duration(minutes: 4), () {
+            childCancellation.cancel();
+            childHttpCancellation.cancel('隔离子任务运行超时');
+          })
+        : null;
     try {
       final database = await ref.read(databaseProvider.future);
       final store = ref.read(providerConfigStoreProvider);
       final config = await store.load();
-      return (await BackgroundExecutionGateway().run(
+      final result = await BackgroundExecutionGateway().run(
         db: database,
         config: config,
         prompt: prompt,
-        systemPrompt: systemPrompt,
+        systemPrompt: isolatedEdit
+            ? '你在独立工作区内编辑提案。先读取再编辑。只能使用提供的文件工具，不能修改 .git/.nexus，不能运行命令或再次委派。完成后说明改动及未验证事项，不能声称已合入父工作区。'
+            : systemPrompt,
+        maxSteps: isolatedEdit ? 8 : 4,
         maxTokens: SubAgentTool.clampBudget(budget),
+        workspacePath: workspacePath,
+        approveTool: isolatedEdit
+            ? (call, risk, sensitive) => IsolatedEditService.approve(
+                workspacePath!, call, risk, sensitive)
+            : null,
+        allowedToolNames: isolatedEdit
+            ? IsolatedEditService.tools
+            : const [
+                'read_file',
+                'list_directory',
+                'search_files',
+                'repo_map',
+                'calculator',
+                'get_time',
+                'json_query'
+              ],
+        cancellationToken: childCancellation,
+        cancelToken: childHttpCancellation,
         profile: RunProfile.subagent,
-      ))
-          .text;
-    } catch (error) {
-      return '子任务执行失败：$error';
+      );
+      if (!result.succeeded) {
+        if (result.pauseReason == AgentPauseReason.tokenBudget) {
+          throw SubAgentFailure(ToolCodes.tokenBudgetExhausted,
+              partialText: result.text,
+              inputTokens: result.inputTokens,
+              outputTokens: result.outputTokens);
+        }
+        throw SubAgentFailure(result.status == RunStatus.cancelled
+            ? ToolCodes.cancelled
+            : ToolCodes.toolError);
+      }
+      return result.text;
+    } catch (error, stackTrace) {
+      NexusGuard.degradeCaught('chat.subAgent', error, stackTrace,
+          logger: _logDegrade);
+      rethrow;
+    } finally {
+      deadline?.cancel();
     }
   }
 
@@ -2138,6 +2291,20 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
+  /// 确认用户编辑后的计划：替换可见步骤，然后按计划继续执行。
+  void respondToPlanWithEdits(String markdown) {
+    final steps = parsePlanStepsFromMarkdown(markdown);
+    if (steps.isNotEmpty) {
+      state =
+          state.copyWith(planState: state.planState?.copyWith(steps: steps));
+    }
+    state = state.copyWith(activityLog: [
+      ...state.activityLog,
+      '计划已修改并确认',
+    ]);
+    respondToPlan(true);
+  }
+
   Future<bool> _confirmPlan(List<ToolCall> calls, String planText) async {
     final generation = _activePlanGeneration;
     if (generation == null || generation != _runs.generation) return false;
@@ -2235,77 +2402,111 @@ class ChatController extends Notifier<ChatState> {
   /// 暂停：正在流式输出的模型回复会被立即中断；正在执行的工具先跑完当前
   /// 命令，再停在下一个检查点。这里立刻把 UI 切到暂停态（露出继续/停止），
   /// 避免以前「点了暂停没反应、再点也没用」的问题。
-  bool pause() {
+  Future<bool> pause() async {
     final controller = _runs.runController;
-    if (controller == null || !controller.pause()) return false;
-    unawaited(_persistControl(TaskControlKind.pause));
-    if (_runs.isVisible(state.conversationId)) {
+    if (controller == null || !controller.canSteer || controller.isPaused)
+      return false;
+    if (_runs.activeTaskId != null) {
+      final pending = _persistControl(TaskControlKind.pause);
+      controller.trackPersistence(pending);
+      if (!await pending) return false;
+      try {
+        await controller.synchronize();
+      } catch (_) {
+        return false;
+      }
+    }
+    if (!controller.hasDurableFence) controller.pause();
+    if (!controller.isPaused) return false;
+    if (_runs.isVisible(state.conversationId))
       state = state.copyWith(
         paused: true,
-        activityLog: [...state.activityLog, '正在暂停：当前步骤结束后停下'],
-      );
-    }
+          activityLog: [...state.activityLog, '暂停请求已保存：当前已派发步骤结束后停下']);
     return true;
   }
 
-  /// 恢复已暂停的 Agent；重复恢复保持幂等。
-  bool resume() {
+  Future<bool> resume() async {
     final controller = _runs.runController;
-    if (controller == null || !controller.resume()) return false;
-    unawaited(_persistControl(TaskControlKind.resume));
-    if (_runs.isVisible(state.conversationId)) {
-      state = state.copyWith(
-        paused: false,
-        activityLog: [...state.activityLog, '运行已恢复'],
-      );
+    if (controller == null || !controller.canSteer || !controller.isPaused)
+      return false;
+    if (_runs.activeTaskId != null) {
+      final pending = _persistControl(TaskControlKind.resume);
+      controller.trackPersistence(pending);
+      if (!await pending) return false;
+      try {
+        await controller.synchronize();
+      } catch (_) {
+        return false;
     }
+    }
+    if (!controller.hasDurableFence) controller.resume();
+    if (controller.isPaused || controller.isCancelled) return false;
+    if (_runs.isVisible(state.conversationId))
+      state = state.copyWith(
+          paused: false, activityLog: [...state.activityLog, '运行已恢复']);
     return true;
   }
 
-  /// 把补充指令排入当前 turn 边界，不打断正在执行的工具批次。
-  bool steer(String text) {
+  Future<bool> steer(String text) async {
     final controller = _runs.runController;
-    if (controller == null || !controller.steer(text)) return false;
-    unawaited(_persistControl(
-      TaskControlKind.followUp,
-      payload: {'text': text},
-    ));
-    if (_runs.isVisible(state.conversationId)) {
-      state = state.copyWith(
-        activityLog: [...state.activityLog, '已接收，将在下一检查点生效'],
-      );
+    final value = text.trim();
+    if (controller == null || !controller.canSteer || value.isEmpty)
+      return false;
+    if (_runs.activeTaskId != null) {
+      final pending =
+          _persistControl(TaskControlKind.followUp, payload: {'text': value});
+      controller.trackPersistence(pending);
+      if (!await pending) return false;
+      try {
+        await controller.synchronize();
+      } catch (_) {
+        return false;
     }
+      if (controller.isCancelled || controller.isSealed) return false;
+    } else if (!controller.steer(value)) {
+      return false;
+    }
+    if (_runs.isVisible(state.conversationId))
+      state =
+          state.copyWith(activityLog: [...state.activityLog, '已接收，将在下一检查点生效']);
     return true;
   }
 
-  Future<void> _persistControl(
+  Future<bool> _persistControl(
     TaskControlKind kind, {
     Map<String, dynamic> payload = const {},
   }) async {
     final taskId = _runs.activeTaskId;
-    if (taskId == null || taskId.isEmpty) return;
+    final runId = _runs.activeRunId;
+    if (taskId == null || taskId.isEmpty) return false;
     try {
       final db = await ref.read(databaseProvider.future);
-      await DevelopmentExecutionService(db: db).submitControl(
+      final receipt = await DevelopmentExecutionService(db: db).submitControl(
         TaskControlRequest(
           taskId: taskId,
           kind: kind,
           clientControlId: UniqueId.generate('client'),
-          runId: _runs.activeRunId,
-          payload: payload,
+          runId: runId,
+          payload: {
+            ...payload,
+          },
         ),
       );
+      return const {'pending', 'consumed'}.contains(receipt.status);
     } catch (error, stackTrace) {
       // 控制请求没入库：后台执行者收不到这条指令，属于必须留痕的降级。
       NexusGuard.degradeCaught('chat.sendControlRequest', error, stackTrace,
           logger: _logDegrade);
+      return false;
     }
   }
 
   void stop() {
     _commitLiveReply();
     _cancelRequestedAt = DateTime.now();
-    unawaited(_persistControl(TaskControlKind.cancel));
+    final pendingCancel = _persistControl(TaskControlKind.cancel);
+    _runs.runController?.trackPersistence(pendingCancel);
+    unawaited(pendingCancel);
     _invalidateActiveRun();
     // 真正中断底层 HTTP 流（Dio 层），避免连接与带宽继续被占用。
     _runs.dioCancelToken?.cancel();
@@ -2385,7 +2586,8 @@ class ChatController extends Notifier<ChatState> {
 
   // --- 浼氳瘽 / Agent / Provider 操作 ---
 
-  Future<void> newConversation() async {
+  Future<void> newConversation({bool Function()? canCommit}) async {
+    if (canCommit != null && !canCommit()) return;
     _detachVisibleRun();
     _invalidateContextRuns(clearState: true);
     final switchGeneration = ++_conversationSwitchGeneration;
@@ -2393,11 +2595,13 @@ class ChatController extends Notifier<ChatState> {
     state = state.copyWith(restoringConversation: true);
     try {
       final database = await ref.read(databaseProvider.future);
+      if (canCommit != null && !canCommit()) return;
       final conversation = await _createConversation(
         database,
         modeOverride: ChatMode.chat,
       );
-      if (newGeneration != _runs.generation) return;
+      if (newGeneration != _runs.generation ||
+          (canCommit != null && !canCommit())) return;
       state = state.copyWith(
         conversationId: conversation.id,
         conversationTitle: conversation.title,
@@ -2427,6 +2631,12 @@ class ChatController extends Notifier<ChatState> {
         state = state.copyWith(restoringConversation: false);
       }
     }
+  }
+
+  /// Session-local workspace binding; never changes the project's canonical root.
+  Future<void> bindDesktopWorkspace(String workspace) async {
+    if (state.running) throw StateError('执行中不能切换工作目录');
+    state = state.copyWith(currentWorkspacePath: workspace);
   }
 
   final _historyPager = ConversationHistoryPager();
@@ -2548,7 +2758,20 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  Future<void> switchConversation(Conversation conversation) async {
+  Future<void> switchConversation(Conversation conversation,
+          {bool Function()? canCommit}) =>
+      _switchConversation((_) async => conversation, canCommit: canCommit);
+
+  /// Navigation only needs an identifier; database rows stay in application.
+  Future<void> switchConversationById(String conversationId,
+          {bool Function()? canCommit}) =>
+      _switchConversation((db) => db.findConversation(conversationId),
+          canCommit: canCommit);
+
+  Future<void> _switchConversation(
+      Future<Conversation?> Function(AppDatabase) resolve,
+      {bool Function()? canCommit}) async {
+    if (canCommit != null && !canCommit()) return;
     _detachVisibleRun();
     _invalidateContextRuns(clearState: true);
     final switchGeneration = ++_conversationSwitchGeneration;
@@ -2556,10 +2779,16 @@ class ChatController extends Notifier<ChatState> {
     state = state.copyWith(restoringConversation: true);
     try {
       final database = await ref.read(databaseProvider.future);
+      final conversation = await resolve(database);
+      if (switchGeneration != _conversationSwitchGeneration ||
+          runGeneration != _runs.generation ||
+          (canCommit != null && !canCommit())) return;
+      if (conversation == null) throw StateError('会话已删除');
       final storedPage = await _loadConversationPage(database, conversation.id);
       final stored = storedPage.map((e) => e.$1).toList();
       if (switchGeneration != _conversationSwitchGeneration ||
-          runGeneration != _runs.generation) return;
+          runGeneration != _runs.generation ||
+          (canCommit != null && !canCommit())) return;
       _trackLoadedWindow(storedPage);
       var agentName = '通用助手';
       var systemPrompt = '你是一个有帮助的 AI Agent。';
@@ -2607,6 +2836,25 @@ class ChatController extends Notifier<ChatState> {
               logger: _logDegrade);
         }
       }
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.windows ||
+              defaultTargetPlatform == TargetPlatform.macOS ||
+              defaultTargetPlatform == TargetPlatform.linux)) {
+        try {
+          final desktopBinding = await ref
+              .read(desktopWorktreeServiceProvider)
+              .binding(conversation.id);
+          if (desktopBinding != null) workspacePath = desktopBinding.workspace;
+        } catch (error, stackTrace) {
+          NexusGuard.degradeCaught(
+              'chat.resolveDesktopWorkspace', error, stackTrace,
+              logger: _logDegrade);
+        }
+      }
+      // Resolving project/worktree bindings adds asynchronous boundaries too.
+      if (switchGeneration != _conversationSwitchGeneration ||
+          runGeneration != _runs.generation ||
+          (canCommit != null && !canCommit())) return;
       state = state.copyWith(
         conversationId: conversation.id,
         conversationTitle: conversation.title,

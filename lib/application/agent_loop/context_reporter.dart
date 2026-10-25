@@ -8,6 +8,7 @@ import '../agent_executor.dart'
         ContextSnapshotEvent;
 import '../context_snapshot_builder.dart';
 import '../context_window.dart';
+import '../history_compactor.dart';
 
 /// 每步请求前的上下文观测：快照、预算告警、与上一步相比的变化。
 ///
@@ -38,8 +39,9 @@ class ContextReporter {
         .map((message) => message.id)
         .whereType<String>()
         .firstOrNull;
-    final compressed = messages.any(
-        (message) => message.text.contains(ContextWindow.compactionNotice));
+    final compressed = messages.any((message) =>
+        message.text.contains(ContextWindow.compactionNotice) ||
+        message.text.startsWith(HistoryCompactor.summaryMark));
     final events = <AgentEvent>[
       ContextSnapshotEvent(
         step: step,

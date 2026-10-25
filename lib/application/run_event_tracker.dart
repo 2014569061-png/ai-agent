@@ -5,13 +5,47 @@ import 'package:drift/drift.dart' show Value;
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/observability/unified_diff.dart';
 import '../domain/sensitive_tool_policy.dart';
+import '../domain/unique_id.dart';
 
 /// Persists a run event as a started row and later completes it with the
 /// measured duration. Database failures are intentionally swallowed so
 /// observability never changes the user's task result.
 class RunEventTracker {
   RunEventTracker(
-      {required this.database, required this.runId, this.nextSequence = 0});
+      {required this.database,
+      required this.runId,
+      this.nextSequence = 0,
+      this.environment = runtimeEnvironment,
+      this.maxQueuedWrites = 512,
+      DateTime Function()? now})
+      : now = now ?? DateTime.now {
+    if (maxQueuedWrites < 1) throw ArgumentError.value(maxQueuedWrites);
+  }
+  static const runtimeEnvironment = bool.fromEnvironment('dart.vm.product')
+      ? 'release'
+      : bool.fromEnvironment('dart.vm.profile')
+          ? 'profile'
+          : 'debug';
+  // Process-local counters survive a failed health-row write, not a restart.
+  static final _processHealth = <String, Map<String, int>>{};
+  static Map<String, int> processHealthFor(String environment) =>
+      Map.unmodifiable(_processHealth[environment] ??
+          const {'writeFailures': 0, 'droppedWrites': 0, 'metadataDrops': 0});
+  void _noteProcessLoss(String kind) {
+    final counters = _processHealth.putIfAbsent(environment, () => {});
+    counters[kind] = (counters[kind] ?? 0) + 1;
+  }
+
+  final String environment;
+  final int maxQueuedWrites;
+  final DateTime Function() now;
+  String? currentModelSpanId, currentRequestId;
+  int writeFailures = 0, droppedWrites = 0, metadataDrops = 0;
+  int _queued = 0,
+      _reportedFailures = 0,
+      _reportedDrops = 0,
+      _reportedMetadataDrops = 0;
+  int get pendingWrites => _queued;
 
   final AppDatabase database;
   final String runId;
@@ -22,16 +56,79 @@ class RunEventTracker {
   /// Callers can await [flush] at the end of a run when a durable snapshot is
   /// required (for example before uploading events).
   void _enqueue(Future<void> Function() operation) {
+    if (_queued >= maxQueuedWrites) {
+      droppedWrites++;
+      _noteProcessLoss('droppedWrites');
+      return;
+    }
+    _queued++;
     _pending = _pending.then((_) async {
       try {
         await operation();
       } catch (_) {
-        // Observability is best effort and must never fail the run.
+        writeFailures++;
+        _noteProcessLoss('writeFailures');
+      } finally {
+        _queued--;
       }
     });
   }
 
-  Future<void> flush() => _pending;
+  Future<void> flush() async {
+    await _pending;
+    if (writeFailures == _reportedFailures &&
+        droppedWrites == _reportedDrops &&
+        metadataDrops == _reportedMetadataDrops) {
+      return;
+    }
+    final counts = {
+      'writeFailures': writeFailures,
+      'droppedWrites': droppedWrites,
+      'metadataDrops': metadataDrops,
+      'traceSchema': 1,
+      'traceId': runId,
+      'environment': environment
+    };
+    try {
+      final at = now();
+      await database.insertRunEvent(RunEventsCompanion.insert(
+          eventId: UniqueId.generate('trace-health'),
+          runId: runId,
+          sequenceNo: ++nextSequence,
+          type: 'telemetry_health',
+          status: 'failed',
+          name: 'recording_degraded',
+          startedAt: at,
+          endedAt: Value(at),
+          durationMs: const Value(0),
+          metadataJson: Value(jsonEncode(counts))));
+      _reportedFailures = counts['writeFailures'] as int;
+      _reportedDrops = counts['droppedWrites'] as int;
+      _reportedMetadataDrops = counts['metadataDrops'] as int;
+    } catch (_) {
+      writeFailures++;
+      _noteProcessLoss('writeFailures');
+    }
+  }
+
+  Map<String, dynamic> _freezeMetadata(Map<String, dynamic> data,
+      Map<String, dynamic> identity, bool sensitive) {
+    try {
+      final snapshot = Map<String, dynamic>.from(jsonDecode(
+              _encodeMetadata({...data, ...identity}, sensitive: sensitive))
+          as Map);
+      if (snapshot['truncated'] == true) {
+        metadataDrops++;
+        _noteProcessLoss('metadataDrops');
+        return Map.unmodifiable({...identity, 'truncated': true});
+      }
+      return Map.unmodifiable(snapshot);
+    } catch (_) {
+      metadataDrops++;
+      _noteProcessLoss('metadataDrops');
+      return Map.unmodifiable({...identity, 'metadataEncodingFailed': true});
+    }
+  }
 
   Future<RunEventHandle?> start({
     required String type,
@@ -39,11 +136,28 @@ class RunEventTracker {
     String? inputSummary,
     Map<String, dynamic>? metadata,
   }) async {
-    final startedAt = DateTime.now();
+    final startedAt = now();
+    final eventId = UniqueId.generate('event');
+    final linked = type == 'tool_call' || type == 'file_operation';
+    final snapshot = _freezeMetadata(
+        metadata ?? const {},
+        {
+          'traceSchema': 1,
+          'traceId': runId,
+          'spanId': eventId,
+          'parentSpanId': linked ? currentModelSpanId : null,
+          'logicalRequestId': linked || type == 'model_attempt'
+              ? currentRequestId
+              : metadata?['logicalRequestId'],
+          'environment': environment,
+        },
+        SensitiveToolPolicy.isSensitive(name));
     final handle = RunEventHandle(
-      eventId: 'event-${startedAt.microsecondsSinceEpoch}-${nextSequence + 1}',
+      eventId: eventId,
       sequenceNo: ++nextSequence,
       startedAt: startedAt,
+      elapsedClock: Stopwatch()..start(),
+      metadata: snapshot,
       sensitive: SensitiveToolPolicy.isSensitive(name),
     );
     _enqueue(() => database.insertRunEvent(RunEventsCompanion.insert(
@@ -55,8 +169,7 @@ class RunEventTracker {
           name: name,
           startedAt: startedAt,
           inputSummary: Value(_summary(inputSummary, handle.sensitive)),
-          metadataJson:
-              Value(_encodeMetadata(metadata, sensitive: handle.sensitive)),
+          metadataJson: Value(jsonEncode(snapshot)),
         )));
     return handle;
   }
@@ -68,8 +181,24 @@ class RunEventTracker {
     Map<String, dynamic>? metadata,
   }) async {
     if (handle == null) return;
-    final endedAt = DateTime.now();
-    final duration = endedAt.difference(handle.startedAt).inMilliseconds;
+    final endedAt = now();
+    handle.elapsedClock?.stop();
+    final duration = handle.elapsedClock?.elapsedMilliseconds ??
+        endedAt.difference(handle.startedAt).inMilliseconds;
+    final snapshot = _freezeMetadata({
+      ...handle.metadata,
+      ...?metadata
+    }, {
+      'traceSchema': 1,
+      'traceId': runId,
+      'spanId': handle.eventId,
+      'parentSpanId': handle.metadata['parentSpanId'],
+      'logicalRequestId': handle.metadata['logicalRequestId'],
+      'environment': environment,
+      'timingSource':
+          handle.elapsedClock == null ? 'wall_clock_legacy' : 'stopwatch',
+      'clockMovedBackwards': endedAt.isBefore(handle.startedAt),
+    }, handle.sensitive);
     _enqueue(() => database.updateRunEvent(
           handle.eventId,
           RunEventsCompanion(
@@ -77,9 +206,7 @@ class RunEventTracker {
             endedAt: Value(endedAt),
             durationMs: Value(duration < 0 ? 0 : duration),
             outputSummary: Value(_summary(outputSummary, handle.sensitive)),
-            metadataJson: metadata == null
-                ? const Value.absent()
-                : Value(_encodeMetadata(metadata, sensitive: handle.sensitive)),
+            metadataJson: Value(jsonEncode(snapshot)),
           ),
         ));
   }
@@ -182,10 +309,14 @@ class RunEventHandle {
     required this.sequenceNo,
     required this.startedAt,
     this.sensitive = false,
+    this.metadata = const {},
+    this.elapsedClock,
   });
 
   final String eventId;
   final int sequenceNo;
   final DateTime startedAt;
   final bool sensitive;
+  final Map<String, dynamic> metadata;
+  final Stopwatch? elapsedClock;
 }

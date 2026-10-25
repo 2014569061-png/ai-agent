@@ -29,6 +29,82 @@ extension ChatRunExecution on ChatController {
     List<ChatMessage>? resumeContext,
   }) async {
     if (!_runs.ownsRun(runGeneration, runConversationId)) return;
+    final cancellation = AgentCancellationToken();
+    final httpCancellation = CancelToken();
+    _runs.cancellationToken = cancellation;
+    _runs.dioCancelToken = httpCancellation;
+    final workspace = _currentState.currentWorkspacePath;
+    final runId = UniqueId.generate('run');
+    WorkspaceLeaseGuard? leaseGuard;
+    try {
+      if (workspace != null && workspace.trim().isNotEmpty) {
+        leaseGuard = await WorkspaceLeaseGuard.open(
+            db: await _ref.read(databaseProvider.future),
+            workspacePath: workspace,
+            taskId: taskId ?? 'chat:$runGeneration:$runConversationId',
+            runId: runId,
+            onLost: () {
+              cancellation.cancel();
+              httpCancellation.cancel('工作区租约失效');
+            });
+      }
+      if (cancellation.isCancelled ||
+          !_runs.ownsRun(runGeneration, runConversationId)) {
+        return;
+      }
+      await _runAgentOwned(
+          assistantIndex,
+          model,
+          config,
+          registry,
+          maxSteps,
+          temperature,
+          maxTokens,
+          topP,
+          reasoningEffort,
+          approveTool,
+          taskId,
+          runGeneration,
+          runConversationId,
+          resumeContext: resumeContext,
+          runId: runId,
+          cancellationToken: cancellation,
+          dioCancelToken: httpCancellation,
+          leaseGuard: leaseGuard,
+          workspacePath: workspace);
+    } finally {
+      try {
+        await leaseGuard?.close();
+      } finally {
+        _runs.clearCancellationTokenIf(cancellation);
+        _runs.clearDioCancelTokenIf(httpCancellation);
+      }
+    }
+  }
+
+  Future<void> _runAgentOwned(
+    int assistantIndex,
+    String model,
+    ProviderConfig config,
+    ToolRegistry registry,
+    int maxSteps,
+    double temperature,
+    int maxTokens,
+    double topP,
+    ReasoningEffort reasoningEffort,
+    ToolApprovalCallback approveTool,
+    String? taskId,
+    int runGeneration,
+    String? runConversationId, {
+    /// 预算暂停后从断点续跑时传入的 Agent 内部上下文；为空则沿用会话消息。
+    List<ChatMessage>? resumeContext,
+    required String runId,
+    required String? workspacePath,
+    required AgentCancellationToken cancellationToken,
+    required CancelToken dioCancelToken,
+    WorkspaceLeaseGuard? leaseGuard,
+  }) async {
+    if (!_runs.ownsRun(runGeneration, runConversationId)) return;
     // 旧默认 2048 视为未设置：推理模型的输出上限同时约束思考与正文，
     // 2048 在长对话中会被思考耗尽（见 OutputTokenPolicy）。
     final effectiveMaxTokens = OutputTokenPolicy.resolve(
@@ -49,12 +125,12 @@ extension ChatRunExecution on ChatController {
     var runHistory = resumeContext ??
         List<ChatMessage>.of(_currentState.messages.take(assistantIndex));
     final runPlanMode = _currentState.planMode;
+    final runWorkspacePath = workspacePath;
     final runApprovalMode = _currentState.approvalMode;
     final runSystemPrompt = _currentState.systemPrompt;
     final sessionSkillInstructions = _currentState.sessionSkillInstructions;
     bool ownsRun() => _runs.ownsRun(runGeneration, runConversationId);
     bool visible() => _runs.isVisible(runConversationId);
-    final runId = UniqueId.generate('run');
     _runs.activeRunId = runId;
     _runs.boundConversationId ??= runConversationId;
     if (visible()) {
@@ -109,7 +185,7 @@ extension ChatRunExecution on ChatController {
         model: model,
         sessionId: runConversationId,
         taskId: taskId,
-        workspacePath: _currentState.currentWorkspacePath,
+        workspacePath: workspacePath,
       ));
     } catch (_) {
       unawaited(logService.warning(
@@ -171,7 +247,8 @@ extension ChatRunExecution on ChatController {
     }
     await logService.info('Agent 开始执行',
         runId: runId, category: 'system', detail: {'model': model});
-    final provider = _ref.read(modelRouterProvider).resolve(config).provider;
+    final provider = withModelTrace(
+        _ref.read(modelRouterProvider).resolve(config).provider, tracker);
     final executor = AgentExecutor(
       provider: provider,
       tools: registry,
@@ -179,21 +256,21 @@ extension ChatRunExecution on ChatController {
       // 写/改/删/移文件前按任务保存原始内容，供任务变更集精确回退。
       toolPipeline: fileBaselinePipeline(
         taskId: taskId,
-        workspacePath: _currentState.currentWorkspacePath,
+        workspacePath: workspacePath,
         onError: (error, stackTrace) => NexusGuard.degradeCaught(
             'chat.fileBaseline', error, stackTrace,
             logger: _logDegrade),
       ),
     );
     final retrySettings = _ref.read(agentRetrySettingsProvider);
-    final cancellationToken = AgentCancellationToken();
-    final dioCancelToken = CancelToken();
     final runController = AgentRunController(
       onCancel: () => dioCancelToken.cancel(),
     );
     _runs.cancellationToken = cancellationToken;
     _runs.dioCancelToken = dioCancelToken;
     _runs.runController = runController;
+    PersistedRunFence? persistedFence;
+    DevelopmentRunCompletion? completion;
     final answer = StringBuffer();
     final reasoning = StringBuffer();
     var usage = const Usage();
@@ -364,7 +441,12 @@ extension ChatRunExecution on ChatController {
     final sessionSkillTexts = <String>[];
     var memoryBlock = '';
     var knowledgeBlock = '';
+    // 关联个人上下文（人物/项目/文件/临时事项的实体消歧结果）。单独声明并在
+    // 下面独立 try/catch：它比记忆/知识库更容易受脏数据影响，失败时必须只
+    // 丢这一段，不能连带丢掉记忆与知识库。
+    var personalContextBlock = '';
     try {
+      final contextProjectId = _currentState.currentProjectId;
       final database = await _ref.read(databaseProvider.future);
       // 普通聊天模式不装配工具；Agent 权限也可能明确关闭 Skill 工具。
       // 只有存在匹配的读取工具时才注入索引，避免提示词与能力不一致。
@@ -379,10 +461,30 @@ extension ChatRunExecution on ChatController {
       memoryBlock = await MemoryService().buildInjectionBlock(
         database,
         contextTokens: config.effectiveContextTokens,
-        projectId: _currentState.currentProjectId,
+        projectId: contextProjectId,
       );
-      knowledgeBlock = await KnowledgeService()
-          .buildInjectionBlock(database, _lastUserText(assistantIndex));
+      knowledgeBlock = await KnowledgeService().buildInjectionBlock(
+          database, _lastUserText(assistantIndex),
+          projectId: contextProjectId);
+      // 关联个人上下文：只注入 confirmed + active + 未过期 + 已授权，且项目
+      // 可见性匹配的实体。它依赖用户手写的实体数据，遇到脏记录的概率比
+      // 记忆/知识库更高，因此再包一层 try/catch：本段失败只丢这一段。
+      try {
+        personalContextBlock =
+            await PersonalContextService.forDatabase(database)
+                .buildInjectionBlock(
+          contextTokens: config.effectiveContextTokens,
+          projectId: contextProjectId,
+          query: _lastUserText(assistantIndex),
+        );
+      } catch (error) {
+        unawaited(logService.warning(
+          'Personal context injection unavailable',
+          runId: runId,
+          category: 'run_context',
+          detail: {'errorType': error.runtimeType.toString()},
+        ));
+      }
     } catch (error) {
       unawaited(logService.warning(
         'Run context injection partially failed',
@@ -410,7 +512,7 @@ extension ChatRunExecution on ChatController {
     // 工作区与工具可用性：注册表是按工作区绑定动态装配的，模型必须知道自己
     // 有没有文件/终端能力；缺失时引导用户开启，而不是声称设备无法完成。
     final workspaceRules = ChatController.workspaceToolRules(
-      workspacePath: _currentState.currentWorkspacePath,
+      workspacePath: workspacePath,
       fileToolsAvailable: registry.findRegistration('write_file') != null,
       terminalAvailable: registry.findRegistration('terminal') != null,
       mode: _currentState.mode,
@@ -435,7 +537,6 @@ extension ChatRunExecution on ChatController {
               }
             }();
       ProjectKindDetection? project;
-      final workspacePath = _currentState.currentWorkspacePath;
       if (workspacePath != null && workspacePath.trim().isNotEmpty) {
         project = await const ProjectKindDetector().detect(workspacePath);
       }
@@ -484,6 +585,7 @@ extension ChatRunExecution on ChatController {
             workspaceRules,
             memoryBlock,
             knowledgeBlock,
+            personalContextBlock,
           ].join('\n\n'),
           tools: registry.manifests,
           history: _currentState.messages.take(assistantIndex).toList(),
@@ -514,23 +616,58 @@ extension ChatRunExecution on ChatController {
       stage: ChatRunStage.analyzing,
       label: '正在分析需求',
     );
-    final baseSystemPrompt = assembleAgentSystemPrompt(
-      personaPrompt: [
-        runSystemPrompt,
-        if (taskTemplateRules.isNotEmpty) taskTemplateRules,
-      ].where((section) => section.trim().isNotEmpty).join('\n\n'),
-      skillIndexBlock: skillIndexBlock,
-      sessionSkillBlocks: sessionSkillTexts,
-      delegationRules: delegationRules,
-      workspaceRules: workspaceRules,
-      projectContextBlock: projectContextBlock,
-      memoryBlock: memoryBlock,
-      knowledgeBlock: knowledgeBlock,
-    );
+    // assembleAgentSystemPrompt 的拼接顺序被多处复用，不为此改签名；个人
+    // 上下文是最动态的检索结果，追加在 knowledgeBlock 之后仍保持"稳定前缀
+    // 在前"的布局，不破坏 Provider 的前缀缓存。
+    final baseSystemPrompt = <String>[
+      assembleAgentSystemPrompt(
+        personaPrompt: [
+          runSystemPrompt,
+          if (taskTemplateRules.isNotEmpty) taskTemplateRules,
+        ].where((section) => section.trim().isNotEmpty).join('\n\n'),
+        skillIndexBlock: skillIndexBlock,
+        sessionSkillBlocks: sessionSkillTexts,
+        delegationRules: delegationRules,
+        workspaceRules: workspaceRules,
+        projectContextBlock: projectContextBlock,
+        memoryBlock: memoryBlock,
+        knowledgeBlock: knowledgeBlock,
+      ),
+      if (personalContextBlock.trim().isNotEmpty) personalContextBlock,
+    ].where((section) => section.trim().isNotEmpty).join('\n\n');
 
     try {
+      if (taskId != null) {
+        persistedFence = await PersistedRunFence.open(
+            db: await _ref.read(databaseProvider.future),
+            controller: runController,
+            taskId: taskId,
+            runId: runId);
+      }
+      if (taskId != null &&
+          runWorkspacePath != null &&
+          runWorkspacePath.trim().isNotEmpty) {
+        completion = DevelopmentRunCompletion(
+            db: await _ref.read(databaseProvider.future),
+            taskId: taskId,
+            runId: runId,
+            workspacePath: runWorkspacePath,
+            terminalFactory: () => _autoVerificationTerminal(runWorkspacePath,
+                status: 'completed',
+                cancelled: cancellationToken.isCancelled,
+                planMode: runPlanMode),
+            repairEnabled: () => _automaticRepairEnabled(config),
+            canContinue: () => !cancellationToken.isCancelled && ownsRun(),
+            onVerifying: () => _setRunProgress(
+                runGeneration: runGeneration,
+                conversationId: runConversationId,
+                stage: ChatRunStage.executingTool,
+                label: '正在原运行内验证修改，失败时按设置尝试有限修复'));
+      }
       final trustStore = await _ref.read(toolTrustStoreProvider.future);
       await for (final event in executor.run(
+        costRunId: runId,
+        beforeFinish: completion?.call,
         history: runHistory,
         model: model,
         confirmPlan: runPlanMode ? _confirmPlan : null,
@@ -547,6 +684,15 @@ extension ChatRunExecution on ChatController {
         topP: topP,
         reasoningEffort: reasoningEffort,
         contextBudgetTokens: config.effectiveContextTokens,
+        currentPlan: () => visible() && _currentState.planState != null
+            ? jsonEncode({
+                'status': _currentState.planState!.status,
+                'steps': [
+                  for (final step in _currentState.planState!.steps)
+                    {'description': step.description, 'status': step.status}
+                ]
+              })
+            : '',
         maxRetries: retrySettings.maxRetries,
         retryBackoff: retrySettings.retryBackoff,
         cancellationToken: cancellationToken,
@@ -690,6 +836,28 @@ extension ChatRunExecution on ChatController {
             _currentState = _currentState.copyWith(
                 totalSteps: _currentState.totalSteps + 1);
           }
+        } else if (event is AgentDraftSupersededEvent) {
+          answer.clear();
+          reasoning.clear();
+          lastProgressCharacters = 0;
+          requestFlush(force: true);
+          if (ownsRun() && visible()) {
+            _currentState = _currentState.copyWith(activityLog: [
+              ..._currentState.activityLog,
+              event.reason == 'completion'
+                  ? '继续验证或修复：旧草稿不作为最终结果，执行记录保留'
+                  : '计划已更新：旧草稿不作为新计划结果，已执行记录保留'
+            ]);
+          }
+          await recordRunEvent(
+              type: 'plan_revised',
+              name: '纠正已纳入当前计划',
+              status: 'recorded',
+              metadata: {
+                'controlRevision': event.controlRevision,
+                'reason': event.reason,
+                'planVersion': event.planVersion
+              });
         } else if (event is TextEvent) {
           if (ownsRun() && visible()) {
             _currentState = _currentState.copyWith(
@@ -1025,8 +1193,8 @@ extension ChatRunExecution on ChatController {
           );
           if (taskId != null) {
             final taskDb = await _ref.read(databaseProvider.future);
-            await TaskService()
-                .updateStatus(taskDb, taskId, 'waiting_approval');
+            await TaskService().updateStatus(taskDb, taskId, 'waiting_approval',
+                runId: runId, planVersion: runController.durablePlanRevision);
           }
           // 这里刻意不再发通知：
           // * 应用在前台时，用户直接看得到审批弹窗，弹通知纯属噪音；
@@ -1037,6 +1205,9 @@ extension ChatRunExecution on ChatController {
         } else if (event is ToolResultEvent) {
           if (!ownsRun()) continue;
           final toolFailed = !event.result.ok;
+          final resultPlanVersion = event.metadata['planVersion'] as int?;
+          final adoptPlanResult = !runController.hasDurableFence ||
+              await runController.verifyDurableRevision(resultPlanVersion);
           if (event.call.name == 'android_device' ||
               event.call.name == 'android_device_preview' ||
               event.call.name == 'android_app_private_data' ||
@@ -1123,10 +1294,12 @@ extension ChatRunExecution on ChatController {
           }
           if (taskId != null) {
             final taskDb = await _ref.read(databaseProvider.future);
-            await TaskService().updateStatus(taskDb, taskId, 'running');
+            await TaskService().updateStatus(taskDb, taskId, 'running',
+                runId: runId, planVersion: resultPlanVersion);
           }
           final auditMetadata = <String, dynamic>{
             ...event.metadata,
+            'planAdopted': adoptPlanResult,
             'tool': event.call.name,
             'effect': event.result.effect.name,
             'toolCode': event.result.code,
@@ -1167,7 +1340,7 @@ extension ChatRunExecution on ChatController {
             'tool': event.call.name,
             'success': !toolFailed,
           });
-          if (event.call.name != 'manage_plan') {
+          if (adoptPlanResult && event.call.name != 'manage_plan') {
             _updatePlanStepStatus(toolFailed ? 'failed' : 'completed');
           }
           if (ownsRun()) {
@@ -1185,7 +1358,11 @@ extension ChatRunExecution on ChatController {
             toolActivities: _updateToolActivity(
               _currentState.toolActivities,
               event.call.id,
-              status: toolFailed ? '执行失败' : '已完成',
+              status: !adoptPlanResult
+                  ? '旧计划结果（未推进新计划）'
+                  : toolFailed
+                      ? '执行失败'
+                      : '已完成',
               result: event.result.display,
               ok: event.result.ok,
               code: event.result.code,
@@ -1418,9 +1595,79 @@ extension ChatRunExecution on ChatController {
         // 到此为止用户回答已生成完毕。指标缺失只影响统计面板的完整度。
       }
     }
+    await completion?.drain();
+    try {
+      await persistedFence?.close();
+    } catch (error, stackTrace) {
+      runStatus = 'failed';
+      NexusGuard.degradeCaught('chat.persistedFence.close', error, stackTrace,
+          logger: _logDegrade);
+    }
     // 运行事件已完成落库；让下一次打开指标面板重新读取历史，避免在运行中
     // 预加载过一次之后继续展示缺少本轮结果的旧缓存。
     _invalidateContextRuns();
+    var runCancelled =
+        _runs.wasCancelled(runGeneration) || runStatus == 'cancelled';
+    if (taskId != null) {
+      try {
+        final taskDb = await _ref.read(databaseProvider.future);
+        final taskService = TaskService();
+        var status = runCancelled
+            ? 'cancelled'
+            : runStatus == 'success'
+                ? 'completed'
+                : runStatus == 'paused'
+                    ? 'paused'
+                    : 'failed';
+        final finalized = completion?.latest;
+        if (status == 'completed' &&
+            finalized != null &&
+            completion!.verificationRequested) {
+          answer.write('\n\n系统验证：${finalized.review.mark.label}'
+              '${finalized.verificationSkipReason == null ? '' : '（${finalized.verificationSkipReason}）'}');
+          if (!finalized.verified && finalized.review.files.isNotEmpty) {
+            status = 'failed';
+            runStatus = 'failed';
+          }
+        }
+        if (cancellationToken.isCancelled || !ownsRun()) {
+          status = 'cancelled';
+          runStatus = 'cancelled';
+        }
+        await taskService.complete(
+          taskDb,
+          taskId,
+          status: status,
+          summary: answer.toString(),
+          runId: runId,
+          planVersion: runController.durablePlanRevision,
+          checkpoint: status == 'paused' ? runCheckpoint : null,
+        );
+        await taskDb.updateRunRecord(
+            runId,
+            RunRecordsCompanion(
+              status: Value(runStatus),
+              endedAt: Value(DateTime.now()),
+              totalDurationMs:
+                  Value(DateTime.now().difference(runStartedAt).inMilliseconds),
+            ));
+        await NotificationService.instance.init();
+        await NotificationService.instance.show(
+          id: taskId.hashCode & 0x7fffffff,
+          title: status == 'completed'
+              ? '开发任务已完成'
+              : (status == 'paused' ? '开发任务已暂停' : '开发任务未完成'),
+          body: _notificationPreview(answer.toString(), status),
+          payload: 'task:$taskId',
+        );
+      } catch (_) {
+        // 可忽略（有意降级）：任务通知是「锦上添花」通道，通知权限被拒或
+        // 初始化失败不应影响已经在 UI 上呈现的运行结果。
+      }
+    }
+    runCancelled = runCancelled ||
+        cancellationToken.isCancelled ||
+        runStatus == 'cancelled';
     final finalAnswerText = answer.toString();
     final finalReasoningText = reasoning.isEmpty ? '' : reasoning.toString();
     final assistantMessage = ChatMessage(
@@ -1433,8 +1680,6 @@ extension ChatRunExecution on ChatController {
       elapsed: stopwatch.elapsed,
       ttft: ttft,
     );
-    final runCancelled =
-        _runs.wasCancelled(runGeneration) || runStatus == 'cancelled';
     // 计划收敛不依赖 ownsRun()：即使运行代次已失效（会话切换 / 中断 / 取消），
     // 也要对当前会话 planState 执行一次终态收敛与步骤归一化，
     // 避免 plan.status 残留 executing 导致“计划一直显示正在运行”。
@@ -1481,57 +1726,6 @@ extension ChatRunExecution on ChatController {
               successfulRunCount:
                   runSucceeded ? _currentState.successfulRunCount + 1 : null);
         }
-      }
-    }
-    if (taskId != null) {
-      try {
-        final taskDb = await _ref.read(databaseProvider.future);
-        final taskService = TaskService();
-        final status = runCancelled
-            ? 'cancelled'
-            : runStatus == 'success'
-                ? 'completed'
-                : runStatus == 'paused'
-                    ? 'paused'
-                    : 'failed';
-        await taskService.complete(
-          taskDb,
-          taskId,
-          status: status,
-          summary: answer.toString(),
-          runId: runId,
-          checkpoint: status == 'paused' ? runCheckpoint : null,
-        );
-        final workspacePath = _currentState.currentWorkspacePath;
-        if (workspacePath != null &&
-            workspacePath.trim().isNotEmpty &&
-            status != 'cancelled') {
-          try {
-            await DevelopmentLoopFinalizer().finalize(
-              db: taskDb,
-              taskId: taskId,
-              runId: runId,
-              workspacePath: workspacePath,
-              terminal: null,
-              runVerification: false,
-            );
-          } catch (_) {
-            // 可忽略（有意降级）：开发任务收尾失败不影响本轮对话结果；
-            // 任务状态会在下次执行或用户手动刷新时重新收敛。
-          }
-        }
-        await NotificationService.instance.init();
-        await NotificationService.instance.show(
-          id: taskId.hashCode & 0x7fffffff,
-          title: status == 'completed'
-              ? '开发任务已完成'
-              : (status == 'paused' ? '开发任务已暂停' : '开发任务未完成'),
-          body: _notificationPreview(answer.toString(), status),
-          payload: 'task:$taskId',
-        );
-      } catch (_) {
-        // 可忽略（有意降级）：任务通知是「锦上添花」通道，通知权限被拒或
-        // 初始化失败不应影响已经在 UI 上呈现的运行结果。
       }
     }
     if (foregroundStarted) {

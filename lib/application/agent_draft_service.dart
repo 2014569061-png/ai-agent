@@ -166,6 +166,7 @@ class AgentDraftService {
       final stream = client.stream(
         UnifiedRequest(
           model: config.model,
+          costPurpose: 'draft',
           messages: [
             ChatMessage(
               role: MessageRole.user,

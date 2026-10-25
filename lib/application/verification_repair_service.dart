@@ -13,6 +13,7 @@ class VerificationRepairRequest {
     this.attempt = 1,
     this.maxAttempts = 2,
     this.reason = 'test_failed',
+    this.goal = '',
   });
 
   final String command;
@@ -25,6 +26,7 @@ class VerificationRepairRequest {
   final int attempt;
   final int maxAttempts;
   final String reason;
+  final String goal;
 }
 
 class VerificationRepairService {
@@ -54,16 +56,23 @@ class VerificationRepairService {
       acceptance: summary?.acceptance ?? const [],
       attempt: attempt,
       reason: _reasonFor(step),
+      goal: summary?.goal ?? '',
     );
   }
 
   bool canAutoRetry(VerificationRepairRequest request) {
-    if (request.attempt >= request.maxAttempts) return false;
+    // maxAttempts counts the initial verification plus subsequent repairs.
+    if (request.attempt < 1 ||
+        request.attempt >= maxAutoAttempts ||
+        request.attempt >= request.maxAttempts) {
+      return false;
+    }
     return request.reason == 'test_failed';
   }
 
   String promptFor(VerificationRepairRequest request) {
     final buffer = StringBuffer('根据这次错误继续修复。\n');
+    if (request.goal.isNotEmpty) buffer.writeln('原始目标：${request.goal}');
     buffer.writeln('命令：${request.command}');
     buffer.writeln('工作目录：${request.cwd}');
     buffer.writeln('退出码：${request.exitCode}');
@@ -84,7 +93,7 @@ class VerificationRepairService {
     if (request.reason == 'environment_missing') {
       buffer.writeln('不要反复安装同一缺失项；说明缺少的工具并停止自动重试。');
     }
-    if (!canAutoRetry(request)) {
+    if (request.attempt >= request.maxAttempts) {
       buffer.writeln('自动修复已达 ${request.maxAttempts} 次上限，请给出下一步建议而不是继续重跑。');
     }
     return buffer.toString().trim();
@@ -97,10 +106,12 @@ class VerificationRepairService {
         haystack.contains('denied')) {
       return 'permission_denied';
     }
-    if (haystack.contains('not found') ||
-        haystack.contains('no such file') ||
+    if (step.exitCode == 127 ||
         haystack.contains('command not found') ||
-        haystack.contains('missing')) {
+        haystack.contains('is not recognized as') ||
+        haystack.contains('不是内部或外部命令') ||
+        haystack.contains('no module named') ||
+        haystack.contains('no such file or directory')) {
       return 'environment_missing';
     }
     return 'test_failed';

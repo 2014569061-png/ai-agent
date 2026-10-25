@@ -7,6 +7,7 @@ import 'package:drift/drift.dart';
 import '../infrastructure/database/app_database.dart';
 import '../infrastructure/database/database_provider.dart';
 import '../infrastructure/mcp/mcp_server_config.dart';
+import '../infrastructure/mcp/mcp_legacy_migration.dart';
 
 /// MCP 配置的唯一持久化入口。
 ///
@@ -58,13 +59,17 @@ class McpService {
   Future<AppDatabase> _readyDatabase() async {
     final database = await _database;
     if (_legacyMigrated) return database;
+    await database.transaction(() async {
+      if (await McpLegacyMigration.isComplete(database)) return;
+      if ((await database.allMcpServers()).isEmpty) {
+        final legacy = await McpServerStore().loadAll();
+        for (final config in legacy) {
+          await database.insertMcpServer(_toCompanion(config));
+        }
+      }
+      await McpLegacyMigration.markComplete(database);
+    });
     _legacyMigrated = true;
-    if ((await database.allMcpServers()).isNotEmpty) return database;
-
-    final legacy = await McpServerStore().loadAll();
-    for (final config in legacy) {
-      await database.insertMcpServer(_toCompanion(config));
-    }
     return database;
   }
 

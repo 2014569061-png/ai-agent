@@ -6,9 +6,10 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../domain/unique_id.dart';
+import '../domain/result_card.dart';
 import '../infrastructure/database/app_database.dart';
+import '../infrastructure/database/result_action_store.dart';
 import 'development_verification.dart';
-import 'nexus_guard.dart';
 
 class ProjectArtifact {
   const ProjectArtifact({
@@ -79,9 +80,16 @@ class ProjectArtifact {
 }
 
 class ArtifactService {
-  const ArtifactService();
+  const ArtifactService({this.rootDirectory});
+
+  final Future<Directory> Function()? rootDirectory;
 
   Future<Directory> _root() async {
+    if (rootDirectory != null) {
+      final dir = await rootDirectory!();
+      await dir.create(recursive: true);
+      return dir;
+    }
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory(p.join(docs.path, 'artifacts'));
     await dir.create(recursive: true);
@@ -103,44 +111,161 @@ class ArtifactService {
     ];
   }
 
+  /// Only publish a record after its private payload has been copied and hashed.
+  /// Empty projectId is the backwards-compatible non-project scope, not a project.
   Future<ProjectArtifact> record({
     required AppDatabase db,
-    required String projectId,
+    String projectId = '',
     required String taskId,
     required String runId,
     required String workspacePath,
     required ArtifactInspection inspection,
   }) async {
-    final kind = inspection.relativePath.toLowerCase().endsWith('.apk')
-        ? 'apk'
-        : inspection.relativePath.toLowerCase().endsWith('.html')
-            ? 'web'
-            : 'file';
-    final artifact = ProjectArtifact(
-      id: UniqueId.generate('art'),
-      projectId: projectId,
-      taskId: taskId,
-      runId: runId,
-      kind: kind,
-      relativePath: inspection.relativePath,
-      hash: inspection.sha256 ?? '',
-      bytes: inspection.bytes ?? 0,
-      createdAt: DateTime.now(),
-      inspectionJson: inspection.toJson(),
-    );
-    await db.saveArtifactRecord(artifact.toJson());
-    // 记录已经入库，所以这里一旦失败就会留下「有记录、没内容」的制品，而调用方
-    // 拿到的返回值看不出任何区别 —— 这种不一致最难排查，因此接入上报而不是静默。
-    await NexusGuard.silentlyAsync<void>('artifact.copyPayload', () async {
-      final source = File(p.join(workspacePath, inspection.relativePath));
-      if (await source.exists()) {
-        final destDir = Directory(p.join((await _root()).path, artifact.id));
-        await destDir.create(recursive: true);
-        await source.copy(p.join(destDir.path, p.basename(source.path)));
+    _validateRelativePath(inspection.relativePath);
+    if (!inspection.exists) {
+      throw StateError('Inspection reports missing payload');
+    }
+    final workspace = await Directory(workspacePath).resolveSymbolicLinks();
+    final resolved = await File(p.join(workspace, inspection.relativePath))
+        .resolveSymbolicLinks();
+    if (!p.isWithin(workspace, resolved)) {
+      throw ArgumentError('Artifact escapes workspace');
+    }
+    final source = File(resolved);
+    final id = UniqueId.generate('art');
+    final destination = Directory(p.join((await _root()).path, id));
+    if (await destination.exists()) throw StateError('Artifact ID collision');
+    await destination.create();
+    try {
+      final copied = await source
+          .copy(p.join(destination.path, p.basename(inspection.relativePath)));
+      final length = await copied.length();
+      final digest = (await sha256.bind(copied.openRead()).first).toString();
+      if ((inspection.bytes != null && inspection.bytes != length) ||
+          (inspection.sha256 != null &&
+              inspection.sha256!.isNotEmpty &&
+              inspection.sha256!.toLowerCase() != digest)) {
+        throw StateError('Payload changed since inspection');
       }
-    });
-    return artifact;
+      final extension = p.extension(inspection.relativePath).toLowerCase();
+      final artifact = ProjectArtifact(
+        id: id,
+        projectId: projectId,
+        taskId: taskId,
+        runId: runId,
+        kind: extension == '.apk'
+            ? 'apk'
+            : extension == '.html'
+                ? 'web'
+                : const ['.png', '.jpg', '.jpeg', '.gif', '.webp']
+                        .contains(extension)
+                    ? 'image'
+                    : const ['.txt', '.md', '.json', '.csv'].contains(extension)
+                        ? 'text'
+                        : 'file',
+        relativePath: inspection.relativePath,
+        hash: digest,
+        bytes: length,
+        createdAt: DateTime.now().toUtc(),
+        inspectionJson: {
+          ...inspection.toJson(),
+          'payload': {
+            'state': 'verified_copy',
+            'sha256': digest,
+            'bytes': length,
+            'note':
+                'Copy integrity only; not task, format, signature or safety verification',
+          }
+        },
+      );
+      // A published file also gets a real result card, not only debug seed data.
+      // Both records commit together; failure removes only this new private copy.
+      await db.transaction(() async {
+        await db.saveArtifactRecord(artifact.toJson());
+        await SqlResultActionRepository(db).saveCard(ResultCard(
+          id: 'artifact-${artifact.id}',
+          kind: ResultCardKind.file,
+          resourceType: 'artifact',
+          resourceId: artifact.id,
+          resourceVersion: 1,
+          title: p.basename(artifact.relativePath),
+          summary: '已保存文件副本 · ${artifact.bytes} 字节；不代表任务验证通过',
+          taskId: artifact.taskId,
+          turnId: artifact.runId,
+          createdAt: artifact.createdAt,
+          updatedAt: artifact.createdAt,
+        ));
+      });
+      return artifact;
+    } catch (_) {
+      // Only this operation's unique directory can be removed. Never remove the
+      // workspace source, an earlier version, or a shared artifact directory.
+      if (await destination.exists()) await destination.delete(recursive: true);
+      rethrow;
+    }
+  }
+
+  static void _validateRelativePath(String value) {
+    if (value.isEmpty ||
+        p.isAbsolute(value) ||
+        value.contains('\\') ||
+        value.contains(':') ||
+        value.split('/').any((s) => s.isEmpty || s == '.' || s == '..')) {
+      throw ArgumentError.value(
+          value, 'relativePath', 'Portable relative file path required');
+    }
+  }
+
+  Future<ArtifactPayload> inspectPayload(ProjectArtifact artifact) async {
+    if (!RegExp(r'^[A-Za-z0-9_-]{1,160}$').hasMatch(artifact.id)) {
+      return const ArtifactPayload(ArtifactPayloadState.invalid);
+    }
+    try {
+      _validateRelativePath(artifact.relativePath);
+    } on ArgumentError {
+      return const ArtifactPayload(ArtifactPayloadState.invalid);
+    }
+    final root = await _root();
+    final file =
+        File(p.join(root.path, artifact.id, p.basename(artifact.relativePath)));
+    if (!await file.exists()) {
+      return const ArtifactPayload(ArtifactPayloadState.missing);
+    }
+    final resolvedRoot = await root.resolveSymbolicLinks();
+    final resolvedFile = await file.resolveSymbolicLinks();
+    if (!p.isWithin(resolvedRoot, resolvedFile)) {
+      return const ArtifactPayload(ArtifactPayloadState.invalid);
+    }
+    if (!RegExp(r'^[a-fA-F0-9]{64}$').hasMatch(artifact.hash)) {
+      return const ArtifactPayload(ArtifactPayloadState.unverified);
+    }
+    final before = await file.stat();
+    final digest = (await sha256.bind(file.openRead()).first).toString();
+    final after = await file.stat();
+    if (before.size != after.size ||
+        before.modified != after.modified ||
+        after.size != artifact.bytes ||
+        digest != artifact.hash.toLowerCase()) {
+      return const ArtifactPayload(ArtifactPayloadState.changed);
+    }
+    return ArtifactPayload(ArtifactPayloadState.intact, file: file);
+  }
+
+  Future<File> verifiedPayload(ProjectArtifact artifact) async {
+    final payload = await inspectPayload(artifact);
+    if (payload.state != ArtifactPayloadState.intact || payload.file == null) {
+      throw StateError('Artifact payload unavailable: ${payload.state.name}');
+    }
+    return payload.file!;
   }
 
   static String hashBytes(List<int> bytes) => sha256.convert(bytes).toString();
+}
+
+enum ArtifactPayloadState { intact, missing, changed, unverified, invalid }
+
+class ArtifactPayload {
+  const ArtifactPayload(this.state, {this.file});
+  final ArtifactPayloadState state;
+  final File? file;
 }

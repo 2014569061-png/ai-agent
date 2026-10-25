@@ -45,10 +45,13 @@ class DevelopmentWorkflowTemplates {
     name: 'Flutter 分析 / 测试 / 构建',
     projectKind: ProjectKind.flutter,
     steps: [
-      DevelopmentWorkflowStep(id: 'analyze', command: 'flutter analyze'),
-      DevelopmentWorkflowStep(id: 'test', command: 'flutter test'),
+      DevelopmentWorkflowStep(
+          id: 'analyze', title: '分析 Flutter 代码', command: 'flutter analyze'),
+      DevelopmentWorkflowStep(
+          id: 'test', title: '运行 Flutter 测试', command: 'flutter test'),
       DevelopmentWorkflowStep(
         id: 'build',
+        title: '构建发布 APK',
         command: 'flutter build apk --release',
         timeout: Duration(minutes: 20),
         expectedArtifactPath: 'build/app/outputs/flutter-apk/app-release.apk',
@@ -62,9 +65,11 @@ class DevelopmentWorkflowTemplates {
     name: 'Android Gradle 测试 / 构建',
     projectKind: ProjectKind.androidGradle,
     steps: [
-      DevelopmentWorkflowStep(id: 'test', command: 'gradlew test'),
+      DevelopmentWorkflowStep(
+          id: 'test', title: '运行 Gradle 测试', command: 'gradlew test'),
       DevelopmentWorkflowStep(
         id: 'build',
+        title: '构建发布 APK',
         command: 'gradlew assembleRelease',
         timeout: Duration(minutes: 20),
         expectedArtifactPath: 'app/build/outputs/apk/release/app-release.apk',
@@ -78,8 +83,10 @@ class DevelopmentWorkflowTemplates {
     name: 'Node 测试 / 构建',
     projectKind: ProjectKind.node,
     steps: [
-      DevelopmentWorkflowStep(id: 'test', command: 'npm test'),
-      DevelopmentWorkflowStep(id: 'build', command: 'npm run build'),
+      DevelopmentWorkflowStep(
+          id: 'test', title: '运行 Node 测试', command: 'npm test'),
+      DevelopmentWorkflowStep(
+          id: 'build', title: '构建 Node 项目', command: 'npm run build'),
     ],
   );
 
@@ -88,7 +95,8 @@ class DevelopmentWorkflowTemplates {
     name: 'Python 测试',
     projectKind: ProjectKind.python,
     steps: [
-      DevelopmentWorkflowStep(id: 'test', command: 'python -m pytest'),
+      DevelopmentWorkflowStep(
+          id: 'test', title: '运行 Python 测试', command: 'python -m pytest'),
     ],
   );
 
@@ -99,10 +107,12 @@ class DevelopmentWorkflowTemplates {
     steps: [
       DevelopmentWorkflowStep(
         id: 'test',
+        title: '运行 Go 测试',
         command: 'go test ./...',
       ),
       DevelopmentWorkflowStep(
         id: 'build',
+        title: '构建 ARM64 程序',
         command: 'GOOS=linux GOARCH=arm64 go build -o dist/app ./...',
         expectedArtifactPath: 'dist/app',
       ),
@@ -117,6 +127,7 @@ class DevelopmentWorkflowTemplates {
     steps: [
       DevelopmentWorkflowStep(
         id: 'artifact',
+        title: '检查网页入口',
         command: '',
         kind: 'artifact',
         expectedArtifactPath: 'index.html',
@@ -214,9 +225,13 @@ class DevelopmentWorkflowRunner {
               code: step.status == VerificationStepStatus.passed
                   ? 'ok'
                   : 'tool_error',
-              message: step.output.isNotEmpty
-                  ? step.output
-                  : (step.error ?? step.title),
+              message: step.kind == 'artifact' || step.kind == 'inspect'
+                  ? (step.status == VerificationStepStatus.passed
+                      ? '产物检查通过：${step.expectedArtifactPath ?? step.title}'
+                      : (step.error ?? '产物检查失败：${step.title}'))
+                  : step.output.isNotEmpty
+                      ? step.output
+                      : (step.error ?? step.title),
               data: {
                 'stepId': step.id,
                 'status': step.status.id,

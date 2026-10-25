@@ -1,4 +1,6 @@
+import '../infrastructure/database/run_plan_store.dart';
 import 'dart:convert';
+import 'package:drift/drift.dart' show Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/models.dart';
@@ -8,6 +10,12 @@ import '../domain/sensitive_tool_policy.dart';
 import 'change_review.dart';
 import 'development_verification.dart';
 import 'project_kind.dart';
+
+class AppliedCheckpointNeedsReview implements Exception {
+  const AppliedCheckpointNeedsReview();
+  @override
+  String toString() => '旧断点已有结果记录，当前运行或终态尚未核实；未重放、未清理断点，请先核实任务状态。';
+}
 
 /// v0.9 各类开发任务共用的结构化结果载体。
 class StructuredTaskResult {
@@ -84,14 +92,34 @@ class TaskService {
   Future<List<Task>> allTasks(AppDatabase db, {int limit = 100}) =>
       db.allTasks(limit: limit);
 
+  /// Returns page-facing snapshots, scoped to the requested project even when
+  /// a task ID is supplied by navigation or a stale deep link.
+  Future<List<DevelopmentTaskInfo>> changeSetTasks(
+    AppDatabase db, {
+    required String projectId,
+    String? taskId,
+  }) async {
+    final tasks = taskId == null
+        ? await db.tasksForProject(projectId)
+        : [await db.findTask(taskId)].whereType<Task>().toList(growable: false);
+    return tasks
+        .where((task) => task.projectId == projectId)
+        .map(describe)
+        .toList(growable: false);
+  }
+
   Future<Task?> findByRequestId(AppDatabase db, String requestId) async {
     if (requestId.trim().isEmpty) return null;
-    final tasks = await db.allTasks(limit: 400);
-    for (final task in tasks) {
-      final metadata = _decodeJsonMap(task.requestJson);
-      if (metadata['requestId']?.toString() == requestId) return task;
-    }
-    return null;
+    // Guard malformed legacy JSON, but search the entire persisted task set.
+    // LIMIT 400 was not an idempotency boundary: old request IDs could replay.
+    final rows = await db.customSelect(
+      "SELECT id FROM tasks WHERE CASE WHEN json_valid(request_json) "
+      r"THEN json_extract(request_json, '$.requestId') ELSE NULL END = ? "
+      'ORDER BY created_at ASC, id ASC LIMIT 2',
+      variables: [Variable<String>(requestId)],
+    ).get();
+    if (rows.length > 1) throw StateError('Ambiguous historical request ID');
+    return rows.isEmpty ? null : db.findTask(rows.single.read<String>('id'));
   }
 
   Future<Task> create({
@@ -124,8 +152,29 @@ class TaskService {
     return task;
   }
 
-  Future<void> updateStatus(AppDatabase db, String id, String status) =>
-      db.updateTaskStatus(id, status);
+  Future<void> updateStatus(AppDatabase db, String id, String status,
+          {String? runId, int? planVersion}) =>
+      db.transaction(() async {
+        if (!await _allowsRunWrite(db, id, runId, planVersion)) return;
+        await db.updateTaskStatus(id, status);
+      });
+
+  Future<bool> _allowsRunWrite(
+      AppDatabase db, String id, String? runId, int? planVersion,
+      {bool completed = false, bool allowInterrupted = false}) async {
+    if (runId == null) return true; // Explicit owner/admin compatibility path.
+    final head = await RunPlanStore(db).head(id);
+    if (head == null || head.token.runId.isEmpty || head.state == 'queued') {
+      return true;
+    }
+    if (head.token.runId != runId ||
+        head.pendingControls ||
+        (planVersion != null && head.token.version != planVersion)) {
+      return false;
+    }
+    if (completed && head.state != 'completed') return false;
+    return allowInterrupted || head.state != 'interrupted';
+  }
 
   Future<void> updateProgress(
     AppDatabase db,
@@ -133,30 +182,35 @@ class TaskService {
     required String phase,
     String? summary,
     String? runId,
+    int? planVersion,
     Map<String, dynamic>? extra,
     StructuredTaskResult? structuredResult,
     Map<String, dynamic>? checkpoint,
-  }) async {
-    final task = await db.findTask(id);
-    if (task == null) return;
-    final previous = _decodeJsonMap(task.progressJson);
-    final progress = <String, dynamic>{
-      ...previous,
-      'phase': phase,
-      'updatedAt': DateTime.now().toIso8601String(),
-      if (summary != null && summary.trim().isNotEmpty)
-        'summary': _truncate(summary.trim(), 4000),
-      if (runId != null && runId.trim().isNotEmpty) 'runId': runId,
-      if (structuredResult != null)
-        'structuredResult': structuredResult.toJson(),
-      if (checkpoint != null) 'checkpoint': checkpoint,
-      ...?extra,
-    };
-    await db.saveTask(task.copyWith(
-      progressJson: jsonEncode(progress),
-      updatedAt: DateTime.now(),
-    ));
-  }
+  }) =>
+      db.transaction(() async {
+        final task = await db.findTask(id);
+        if (task == null ||
+            !await _allowsRunWrite(db, id, runId, planVersion)) {
+          return;
+        }
+        final previous = _decodeJsonMap(task.progressJson);
+        final progress = <String, dynamic>{
+          ...previous,
+          'phase': phase,
+          'updatedAt': DateTime.now().toIso8601String(),
+          if (summary != null && summary.trim().isNotEmpty)
+            'summary': _truncate(summary.trim(), 4000),
+          if (runId != null && runId.trim().isNotEmpty) 'runId': runId,
+          if (structuredResult != null)
+            'structuredResult': structuredResult.toJson(),
+          if (checkpoint != null) 'checkpoint': checkpoint,
+          ...?extra,
+        };
+        await db.updateTaskSnapshot(task.copyWith(
+          progressJson: jsonEncode(progress),
+          updatedAt: DateTime.now(),
+        ));
+      });
 
   Future<void> complete(
     AppDatabase db,
@@ -164,54 +218,67 @@ class TaskService {
     required String status,
     required String summary,
     String? runId,
+    int? planVersion,
     Map<String, dynamic>? checkpoint,
-  }) async {
-    final task = await db.findTask(id);
-    if (task == null) return;
-    final previous = _decodeJsonMap(task.progressJson);
-    final appliedRunIds = _readAppliedRunIds(previous['appliedRunIds']);
-    // 终态 ACK 可能因进程重启重复到达；同一 runId 已落库时直接保持原结果，
-    // 避免后来的重复回调覆盖首个摘要或再次触发会话投影。
-    if (status != 'paused' &&
-        runId != null &&
-        appliedRunIds.contains(runId.trim())) {
-      return;
-    }
-    final progress = <String, dynamic>{
-      ...previous,
-      'phase': status,
-      'updatedAt': DateTime.now().toIso8601String(),
-      'summary': _truncate(summary.trim(), 4000),
-      if (runId != null && runId.trim().isNotEmpty) 'runId': runId,
-    };
-    // 只有可恢复暂停保留 checkpoint；完成、失败和取消必须清掉，避免
-    // 下次误把旧工具结果当成当前运行的断点再次提交。
-    if (status == 'paused' && checkpoint != null) {
-      progress['checkpoint'] = checkpoint;
-    } else if (status != 'paused') {
-      progress.remove('checkpoint');
-      if (runId != null && runId.trim().isNotEmpty) {
-        _appendRunId(appliedRunIds, runId);
-      }
-    }
-    progress['appliedRunIds'] = appliedRunIds;
-    await db.saveTask(task.copyWith(
-      status: status,
-      progressJson: jsonEncode(progress),
-      updatedAt: DateTime.now(),
-    ));
-  }
+  }) =>
+      db.transaction(() async {
+        final task = await db.findTask(id);
+        if (task == null ||
+            !await _allowsRunWrite(db, id, runId, planVersion,
+                completed: status == 'completed',
+                allowInterrupted: status != 'completed')) {
+          return;
+        }
+        final previous = _decodeJsonMap(task.progressJson);
+        final appliedRunIds = _readAppliedRunIds(previous['appliedRunIds']);
+        // 终态 ACK 可能因进程重启重复到达；同一 runId 已落库时直接保持原结果，
+        // 避免后来的重复回调覆盖首个摘要或再次触发会话投影。
+        if (status != 'paused' &&
+            runId != null &&
+            appliedRunIds.contains(runId.trim())) {
+          return;
+        }
+        final progress = <String, dynamic>{
+          ...previous,
+          'phase': status,
+          'updatedAt': DateTime.now().toIso8601String(),
+          'summary': _truncate(summary.trim(), 4000),
+          if (runId != null && runId.trim().isNotEmpty) 'runId': runId,
+          if (planVersion != null) 'planVersion': planVersion,
+        };
+        // A new receipt without a version must not inherit another run's proof.
+        if (runId != null && planVersion == null) {
+          progress.remove('planVersion');
+        }
+        // 只有可恢复暂停保留 checkpoint；完成、失败和取消必须清掉，避免
+        // 下次误把旧工具结果当成当前运行的断点再次提交。
+        if (status == 'paused' && checkpoint != null) {
+          progress['checkpoint'] = checkpoint;
+        } else if (status != 'paused') {
+          progress.remove('checkpoint');
+          if (runId != null && runId.trim().isNotEmpty) {
+            _appendRunId(appliedRunIds, runId);
+          }
+        }
+        progress['appliedRunIds'] = appliedRunIds;
+        await db.updateTaskSnapshot(task.copyWith(
+          status: status,
+          progressJson: jsonEncode(progress),
+          updatedAt: DateTime.now(),
+        ));
+      });
 
   DevelopmentTaskInfo describe(Task task) => DevelopmentTaskInfo.fromTask(task);
 
-  Future<void> markResumed(AppDatabase db, String id) async {
-    final task = await db.findTask(id);
-    if (task == null) return;
-    await db.saveTask(task.copyWith(
-      resumeCount: task.resumeCount + 1,
-      updatedAt: DateTime.now(),
-    ));
-  }
+  Future<void> markResumed(AppDatabase db, String id) =>
+      db.transaction(() async {
+        final task = await db.findTask(id);
+        if (task == null) return;
+        await db.updateTaskSnapshot(task.copyWith(
+          resumeCount: task.resumeCount + 1,
+          updatedAt: DateTime.now(),
+        ));
+      });
 
   /// 读取任务进度快照。恢复逻辑只从这里取得 checkpoint，不重新解析原始
   /// prompt 推断“哪些工具可能已经执行”。
@@ -220,15 +287,55 @@ class TaskService {
     return task == null ? const {} : _decodeJsonMap(task.progressJson);
   }
 
-  Future<void> clearCheckpoint(AppDatabase db, String id) async {
-    final task = await db.findTask(id);
-    if (task == null) return;
-    final progress = _decodeJsonMap(task.progressJson)..remove('checkpoint');
-    await db.saveTask(task.copyWith(
-      progressJson: jsonEncode(progress),
-      updatedAt: DateTime.now(),
-    ));
-  }
+  Future<void> clearCheckpoint(AppDatabase db, String id) =>
+      db.transaction(() async {
+        final task = await db.findTask(id);
+        if (task == null) return;
+        final progress = _decodeJsonMap(task.progressJson)
+          ..remove('checkpoint');
+        await db.updateTaskSnapshot(task.copyWith(
+          progressJson: jsonEncode(progress),
+          updatedAt: DateTime.now(),
+        ));
+      });
+
+  /// Reconcile a historical applied result without replaying it or using the
+  /// unversioned admin status API. A receipt alone does not prove success.
+  Future<bool> reconcileAppliedCheckpoint(AppDatabase db,
+          {required Task snapshot, required String runId}) =>
+      db.transaction(() async {
+        final task = await db.findTask(snapshot.id);
+        if (task == null ||
+            task.stateRevision != snapshot.stateRevision ||
+            task.progressJson != snapshot.progressJson ||
+            !const {'running', 'paused'}.contains(task.status)) {
+          return false;
+        }
+        final progress = _decodeJsonMap(task.progressJson);
+        final checkpoint = progress['checkpoint'];
+        final phase = progress['phase'];
+        if (runId.isEmpty ||
+            checkpoint is! Map ||
+            checkpoint['runId'] != runId ||
+            progress['runId'] != runId ||
+            !isRunApplied(progress, runId) ||
+            !const {'completed', 'failed', 'cancelled'}.contains(phase)) {
+          return false;
+        }
+        final head = await RunPlanStore(db).head(task.id);
+        if (head != null &&
+            (head.pendingControls ||
+                head.token.runId != runId ||
+                progress['planVersion'] != head.token.version ||
+                head.state != phase)) {
+          return false;
+        }
+        progress.remove('checkpoint');
+        return db.updateTaskSnapshot(task.copyWith(
+            status: phase as String,
+            progressJson: jsonEncode(progress),
+            updatedAt: DateTime.now()));
+      });
 
   /// 将一次已经写回会话/任务结果的 run 显式登记，避免进程重启或重复 ACK
   /// 时再次把同一终态结果追加到会话。列表有界，避免长期运行任务无限增长。
@@ -247,11 +354,10 @@ class TaskService {
       if (appliedRunIds.contains(normalized)) return false;
       _appendRunId(appliedRunIds, normalized);
       progress['appliedRunIds'] = appliedRunIds;
-      await db.saveTask(task.copyWith(
+      return db.updateTaskSnapshot(task.copyWith(
         progressJson: jsonEncode(progress),
         updatedAt: DateTime.now(),
       ));
-      return true;
     });
   }
 

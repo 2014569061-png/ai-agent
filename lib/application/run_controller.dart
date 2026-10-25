@@ -1,4 +1,7 @@
+import '../domain/models.dart';
+import 'run_approval_scope.dart';
 import 'dart:async';
+import '../domain/tool_result.dart';
 
 /// Agent 单次运行的生命周期控制器。
 ///
@@ -16,6 +19,119 @@ class AgentRunController {
   bool _paused = false;
   bool _cancelled = false;
   bool _sealed = false;
+  int _controlRevision = 0;
+
+  Future<RunApprovalScope?> Function(ToolCall, ToolRisk, int)? _openApproval;
+  final Set<String> _planTrustedTools = {};
+  bool isPlanToolTrusted(String tool) => _planTrustedTools.contains(tool);
+  void rememberPlanTool(int version, String tool) {
+    if (_durableVersion == version) _planTrustedTools.add(tool);
+  }
+
+  Future<RunApprovalScope?> openApproval(
+          ToolCall call, ToolRisk risk, int? version) async =>
+      version == null ? null : _openApproval?.call(call, risk, version);
+  int? _durableVersion;
+  Future<void> Function()? _synchronizeDurable;
+  Future<bool> Function(int)? _verifyDurable;
+  Future<ToolResult?> Function(int, String)? _claimDurable;
+  Future<ToolResult> Function(int, String, ToolResult)? _settleDurable;
+  Future<bool> Function()? _finishDurable;
+  final Set<Future<dynamic>> _pendingPersistence = {};
+  Completer<void> _revisionChanged = Completer<void>();
+  int? get durablePlanRevision => _durableVersion;
+  bool get hasDurableFence => _synchronizeDurable != null;
+  void attachDurableFence(
+      {required int version,
+      required Future<RunApprovalScope?> Function(ToolCall, ToolRisk, int)
+          openApproval,
+      required Future<void> Function() synchronize,
+      required Future<bool> Function(int) verify,
+      required Future<ToolResult?> Function(int, String) claim,
+      required Future<ToolResult> Function(int, String, ToolResult) settle,
+      required Future<bool> Function() finish}) {
+    _durableVersion = version;
+    _openApproval = openApproval;
+    _synchronizeDurable = synchronize;
+    _verifyDurable = verify;
+    _claimDurable = claim;
+    _settleDurable = settle;
+    _finishDurable = finish;
+  }
+
+  void _notifyRevisionChange() {
+    final old = _revisionChanged;
+    _revisionChanged = Completer<void>();
+    if (!old.isCompleted) old.complete();
+  }
+
+  void setDurableVersion(int version) {
+    if (_durableVersion != version) {
+      _durableVersion = version;
+      _planTrustedTools.clear();
+      _notifyRevisionChange();
+    }
+  }
+
+  Future<void> whenRevisionChanges(int local, int? durable) =>
+      local != controlRevision ||
+              durable != durablePlanRevision ||
+              isCancelled ||
+              isSealed
+          ? Future<void>.value()
+          : _revisionChanged.future;
+  void trackPersistence(Future<dynamic> operation) {
+    _pendingPersistence.add(operation);
+    unawaited(operation.whenComplete(() {
+      _pendingPersistence.remove(operation);
+    }).catchError((Object _) {}));
+  }
+
+  Future<void> waitForPersistence() async {
+    while (_pendingPersistence.isNotEmpty) {
+      await Future.wait(_pendingPersistence.toList());
+    }
+  }
+
+  Future<void> synchronize() async {
+    await waitForPersistence();
+    await _synchronizeDurable?.call();
+  }
+
+  Future<bool> verifyDurableRevision(int? version) async => version == null
+      ? !hasDurableFence
+      : version == _durableVersion &&
+          (await _verifyDurable?.call(version) ?? false);
+  Future<ToolResult?> claimDurableDispatch(int? version, String callId) async =>
+      version == null ? null : _claimDurable?.call(version, callId);
+  Future<ToolResult> settleDurableDispatch(
+          int? version, String callId, ToolResult result) async =>
+      version == null
+          ? result
+          : (await _settleDurable?.call(version, callId, result) ?? result);
+
+  /// Used only after other continuation hooks have declined to continue.
+  Future<List<String>> drainDurableSteeringOrSeal() async {
+    while (!_cancelled && !_sealed) {
+      await checkpoint();
+      if (_cancelled || _sealed) return const [];
+      if (_steering.isNotEmpty) return drainSteering();
+      final finished = await _finishDurable?.call() ?? true;
+      if (finished) {
+        seal();
+        return const [];
+      }
+      await synchronize();
+      if (_steering.isEmpty && !_paused && !_cancelled) {
+        // A non-current owner or an unsettled dispatch cannot claim completion.
+        throw StateError('Persistent run completion was not confirmed');
+      }
+    }
+    return const [];
+  }
+
+  /// Local turn generation; not a persisted plan-version/remote-ownership claim.
+  int get controlRevision => _controlRevision;
 
   bool get isPaused => _paused;
   bool get isCancelled => _cancelled;
@@ -32,6 +148,8 @@ class AgentRunController {
   bool steer(String text) {
     final normalized = text.trim();
     if (normalized.isEmpty || !canSteer) return false;
+    _controlRevision++;
+    _notifyRevisionChange();
     _steering.add(normalized);
     return true;
   }
@@ -75,6 +193,7 @@ class AgentRunController {
   bool cancel() {
     if (_cancelled || _sealed) return false;
     _cancelled = true;
+    _notifyRevisionChange();
     _paused = false;
     onPauseInterrupt = null;
     _steering.clear();
@@ -91,6 +210,7 @@ class AgentRunController {
   void seal() {
     if (_sealed) return;
     _sealed = true;
+    _notifyRevisionChange();
     onPauseInterrupt = null;
     _steering.clear();
     _compressionToolCallIds.clear();
@@ -102,13 +222,23 @@ class AgentRunController {
 
   /// 在模型请求、工具调用前的安全检查点等待恢复或取消。
   Future<void> checkpoint() async {
+    await synchronize();
     while (_paused && !_cancelled && !_sealed) {
       final completer = _resumeCompleter ??= Completer<void>();
-      await completer.future;
+      if (hasDurableFence) {
+        await Future.any<void>([
+          completer.future,
+          Future<void>.delayed(const Duration(milliseconds: 400))
+        ]);
+        await synchronize();
+      } else {
+        await completer.future;
+      }
     }
   }
 
-  /// 在工具批次结束时消费已经排队的 steering，不封存整个 run。
+  /// 在下一次请求前或工具批次结束时消费排队的 steering，不封存整个 run。
+  /// 开始运行前已排队的指令直接进入首个请求，不额外发起一轮模型调用。
   List<String> drainSteering() {
     if (_cancelled || _sealed || _steering.isEmpty) return const [];
     final pending = List<String>.of(_steering);

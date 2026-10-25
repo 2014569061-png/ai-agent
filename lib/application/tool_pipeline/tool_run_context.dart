@@ -1,4 +1,5 @@
 import '../../domain/models.dart';
+import '../../domain/tool_result.dart';
 import '../agent_executor.dart' show AgentEvent;
 
 /// 把事件交给执行器输出。
@@ -26,12 +27,18 @@ final class ToolRunContext {
     required ToolEventEmitter emit,
     this.approveTool,
     this.isToolTrusted,
+    this.verifyPlan,
+    this.claimDispatch,
+    this.settleDispatch,
+    this.whenSuperseded,
     bool Function()? isCancelled,
     bool Function()? isPaused,
+    bool Function()? isSuperseded,
     Future<void> Function()? waitForResume,
   })  : _emit = emit,
         _isCancelled = isCancelled ?? _never,
         _isPaused = isPaused ?? _never,
+        _isSuperseded = isSuperseded ?? _never,
         _waitForResume = waitForResume ?? _resumeImmediately;
 
   /// 不接入执行器的上下文：事件被丢弃，永不取消或暂停。用于测试与离线调用。
@@ -45,6 +52,13 @@ final class ToolRunContext {
         emit: _discard,
       );
 
+  final Future<bool> Function()? verifyPlan;
+  final Future<ToolResult?> Function(String callId)? claimDispatch;
+  final Future<ToolResult> Function(String callId, ToolResult result)?
+      settleDispatch;
+  final Future<void>? whenSuperseded;
+  Future<bool> planIsCurrent() async =>
+      !isSuperseded && (await verifyPlan?.call() ?? true);
   final ApprovalMode approvalMode;
   final ToolApprovalCallback? approveTool;
   final bool Function(String toolName, ToolRisk risk)? isToolTrusted;
@@ -52,6 +66,7 @@ final class ToolRunContext {
   final ToolEventEmitter _emit;
   final bool Function() _isCancelled;
   final bool Function() _isPaused;
+  final bool Function() _isSuperseded;
   final Future<void> Function() _waitForResume;
   var _executionStarted = false;
 
@@ -60,6 +75,8 @@ final class ToolRunContext {
   bool get isCancelled => _isCancelled();
 
   bool get isPaused => _isPaused();
+
+  bool get isSuperseded => _isSuperseded();
 
   /// 已暂停时等待恢复或取消；未暂停时立即完成。
   Future<void> waitForResume() => _waitForResume();

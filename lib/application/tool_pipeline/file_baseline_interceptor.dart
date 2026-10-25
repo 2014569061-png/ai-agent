@@ -22,6 +22,7 @@ final class FileBaselineInterceptor implements ToolInterceptor {
   static const mutatingTools = <String, List<String>>{
     'write_file': ['path'],
     'edit_file': ['path'],
+    'apply_patch': ['path'],
     'delete_file': ['path'],
     'move_file': ['path', 'newPath'],
   };
@@ -41,6 +42,12 @@ final class FileBaselineInterceptor implements ToolInterceptor {
         for (final key in keys)
           if (arguments[key] case final String path when path.trim().isNotEmpty)
             path,
+        if (invocation.call.name == 'apply_patch' && arguments['files'] is List)
+          for (final entry in (arguments['files'] as List).take(10))
+            if (entry is Map &&
+                entry['path'] is String &&
+                (entry['path'] as String).trim().isNotEmpty)
+              entry['path'] as String,
       ];
       try {
         await store.preserve(paths);

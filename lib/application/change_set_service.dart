@@ -155,8 +155,10 @@ class ChangeSetService {
     return dir;
   }
 
-  Future<File> _manifest(String taskId) async =>
-      File(p.join((await _root()).path, taskId, 'changeset.json'));
+  Future<File> _manifest(String taskId) async {
+    validateTaskStorageId(taskId);
+    return File(p.join((await _root()).path, taskId, 'changeset.json'));
+  }
 
   /// Returns the change set persisted for [taskId], or `null` when none exists
   /// or it was written by v1 (which never stored a baseline).
@@ -212,6 +214,7 @@ class ChangeSetService {
     required String workspacePath,
     required ChangeReview review,
   }) async {
+    validateTaskStorageId(taskId);
     final sandbox = WorkspaceSandbox(workspacePath);
     final files = <ChangeSetFile>[];
     final objectDir = Directory(p.join((await _root()).path, taskId));
@@ -231,7 +234,10 @@ class ChangeSetService {
     for (final entry in byPath.entries) {
       final path = entry.key;
       final changes = entry.value;
-      final stem = p.join(objectDir.path, path.replaceAll('/', '_'));
+      // Flattening paths aliases a/b.txt and a_b.txt. Hash the full normalized
+      // path so every file keeps its own snapshots, including on Windows.
+      final stem =
+          p.join(objectDir.path, sha256.convert(utf8.encode(path)).toString());
       List<int>? bytes;
       String afterHash = '';
       String? afterRef;
@@ -371,6 +377,7 @@ class ChangeSetService {
     required String workspacePath,
     required ChangeSet changeSet,
     Map<String, String>? currentHashes,
+    bool dryRun = false,
   }) async {
     final conflicts = <RollbackConflict>[];
     final sandbox = WorkspaceSandbox(workspacePath);
@@ -393,7 +400,7 @@ class ChangeSetService {
       }
       try {
         if (file.operation == 'create') {
-          if (await target.exists()) await target.delete();
+          if (!dryRun && await target.exists()) await target.delete();
           journal.add('deleted:${file.relativePath}');
           continue;
         }
@@ -405,9 +412,18 @@ class ChangeSetService {
           ));
           continue;
         }
-        await target.parent.create(recursive: true);
-        await target.writeAsBytes(await File(beforeRef).readAsBytes(),
-            flush: true);
+        final beforeBytes = await File(beforeRef).readAsBytes();
+        if (sha256.convert(beforeBytes).toString() != file.beforeHash) {
+          conflicts.add(RollbackConflict(
+            path: file.relativePath,
+            reason: '改动前备份校验失败，无法安全回退',
+          ));
+          continue;
+        }
+        if (!dryRun) {
+          await target.parent.create(recursive: true);
+          await target.writeAsBytes(beforeBytes, flush: true);
+        }
         journal.add('restored:${file.relativePath}');
       } catch (error) {
         conflicts.add(RollbackConflict(

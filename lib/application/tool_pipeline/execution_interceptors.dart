@@ -15,6 +15,7 @@ List<ToolInterceptor> defaultToolInterceptors() => [
       ...defaultToolPreflightGuards(),
       const ApprovalInterceptor(),
       const CheckpointInterceptor(),
+      const ControlRevisionInterceptor(),
       const ExecutionBoundary(),
       const AuthorizationInterceptor(),
     ];
@@ -28,12 +29,16 @@ final class ApprovalInterceptor implements ToolInterceptor {
 
   @override
   Future<ToolResult> intercept(ToolInvocation invocation, ToolNext next) async {
+    if (!await invocation.context.planIsCurrent()) {
+      return _superseded(invocation);
+    }
     final spec = invocation.resolved.spec;
     final gate = invocation.approvalGate;
     final call = invocation.call;
     final context = invocation.context;
     final risk = gate?.riskForArguments(call.arguments) ?? spec.risk;
     final decision = const ApprovalPolicy().decide(
+      toolName: spec.name,
       mode: context.approvalMode,
       risk: risk,
       sensitive: spec.sensitive,
@@ -52,6 +57,7 @@ final class ApprovalInterceptor implements ToolInterceptor {
     final userDecision =
         await context.approveTool?.call(approvalCall, risk, spec.sensitive) ??
             ToolApproval.reject;
+    if (!await context.planIsCurrent()) return _superseded(invocation);
     if (userDecision == ToolApproval.reject) {
       gate?.rejectApproval(call.arguments);
       return ToolResult.failure(
@@ -85,6 +91,30 @@ final class CheckpointInterceptor implements ToolInterceptor {
   }
 }
 
+/// Final check after approval, pause/resume and event-emitter backpressure.
+/// Never claims to undo a tool that has already crossed the execution boundary.
+final class ControlRevisionInterceptor implements ToolInterceptor {
+  const ControlRevisionInterceptor();
+  @override
+  String get id => 'control-revision';
+  @override
+  Future<ToolResult> intercept(ToolInvocation invocation, ToolNext next) async {
+    if (!await invocation.context.planIsCurrent()) {
+      return _superseded(invocation);
+    }
+    return next(invocation);
+  }
+}
+
+ToolResult _superseded(ToolInvocation invocation) {
+  invocation.approvalGate?.rejectApproval(invocation.call.arguments);
+  return ToolResult.failure(
+      code: ToolCodes.revisionConflict,
+      message: '用户已修改当前目标，本轮旧工具调用和旧审批未执行；请先读取最新指令后重新规划',
+      data: const {'reason': 'control_superseded'},
+      effect: ToolEffect.none);
+}
+
 /// 执行边界：其下游（授权 + 实际执行）抛出的异常都在这里转成结构化失败。
 ///
 /// 异常发生在工具边界内，无法证明副作用是否发生，因此按 effect=unknown
@@ -97,23 +127,40 @@ final class ExecutionBoundary implements ToolInterceptor {
 
   @override
   Future<ToolResult> intercept(ToolInvocation invocation, ToolNext next) async {
-    invocation.context.markExecutionStarted();
+    final context = invocation.context;
+    final rejected = await context.claimDispatch?.call(invocation.call.id);
+    if (rejected != null) {
+      invocation.approvalGate?.rejectApproval(invocation.call.arguments);
+      return rejected;
+    }
+    if (context.isSuperseded) {
+      final result = _superseded(invocation);
+      return await context.settleDispatch?.call(invocation.call.id, result) ??
+          result;
+    }
+    context.markExecutionStarted();
+    ToolResult result;
     try {
-      return await next(invocation);
+      result = await next(invocation);
     } on ToolRunCancelled {
+      await context.settleDispatch?.call(
+          invocation.call.id,
+          ToolResult.failure(
+              code: ToolCodes.toolError,
+              message: '执行边界后取消，副作用待核实',
+              effect: ToolEffect.unknown));
       rethrow;
     } on ToolApprovalAuthorizationException catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.invalidArguments,
-        message: error.message,
-      );
+      result = ToolResult.failure(
+          code: ToolCodes.invalidArguments, message: error.message);
     } catch (error) {
-      return ToolResult.failure(
-        code: ToolCodes.toolError,
-        message: '工具执行异常：$error；副作用无法确认，请先检查目标状态',
-        effect: ToolEffect.unknown,
-      );
+      result = ToolResult.failure(
+          code: ToolCodes.toolError,
+          message: '工具执行异常：$error；副作用无法确认，请先检查目标状态',
+          effect: ToolEffect.unknown);
     }
+    return await context.settleDispatch?.call(invocation.call.id, result) ??
+        result;
   }
 }
 

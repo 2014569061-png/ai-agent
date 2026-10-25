@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import '../infrastructure/tools/command_tool.dart';
@@ -22,21 +23,70 @@ class PreviewSession {
   final bool lanEnabled;
 }
 
+/// Only known server commands or explicit numeric placeholders may be retargeted.
+/// In particular, an arbitrary npm script must not be given guessed CLI flags.
+class PreviewLaunchCommand {
+  const PreviewLaunchCommand(this.template);
+  final String template;
+
+  bool get isPythonHttp => RegExp(
+        r'^python3? -m http\.server(?: [0-9]+)?(?: --bind (?:127\.0\.0\.1|0\.0\.0\.0|localhost))?$',
+      ).hasMatch(template.trim().replaceAll(RegExp(r'\s+'), ' '));
+
+  bool get canConfigure =>
+      isPythonHttp ||
+      (template.contains('{port}') &&
+          template.contains('{host}') &&
+          !template.contains(r'${port}') &&
+          !template.contains(r'${host}'));
+
+  String render({required int port, required String bindHost}) {
+    if (!canConfigure) {
+      throw const FormatException(
+        '不能安全配置自定义预览命令。请明确使用 {port} 和 {host} 占位符，'
+        '例如 python -m http.server {port} --bind {host}；不猜测 npm 脚本的参数。',
+      );
+    }
+    if (isPythonHttp) {
+      final executable = template.trim().split(RegExp(r'\s+')).first;
+      return '$executable -m http.server $port --bind $bindHost';
+    }
+    return template
+        .replaceAll('{port}', '$port')
+        .replaceAll('{host}', bindHost);
+  }
+}
+
 class PreviewService {
   PreviewService({
     TerminalCommandService? terminal,
     String workspacePath = '.',
     Future<bool> Function(int port)? waitForPort,
     Future<bool> Function(int port)? isPortBusy,
+    Future<bool> Function(Uri target)? probeHttp,
+    Future<String> Function()? lanHost,
+    this.readinessTimeout = const Duration(seconds: 8),
+    this.pollInterval = const Duration(milliseconds: 200),
   })  : _terminal =
             terminal ?? TerminalCommandService(workspacePath: workspacePath),
         _waitForPortOverride = waitForPort,
-        _isPortBusyOverride = isPortBusy;
+        _isPortBusyOverride = isPortBusy,
+        _probeHttpOverride = probeHttp,
+        _lanHostOverride = lanHost;
 
   final TerminalCommandService _terminal;
   final Future<bool> Function(int port)? _waitForPortOverride;
   final Future<bool> Function(int port)? _isPortBusyOverride;
+  final Future<bool> Function(Uri target)? _probeHttpOverride;
+  final Future<String> Function()? _lanHostOverride;
+  final Duration readinessTimeout;
+  final Duration pollInterval;
   PreviewSession? _active;
+  Future<PreviewSession>? _starting;
+  Future<void>? _stopping;
+  String? _startingProject;
+  String? _pendingJobId;
+  int _generation = 0;
 
   PreviewSession? get active => _active;
 
@@ -47,74 +97,216 @@ class PreviewService {
     int preferredPort = 8765,
     bool allowLan = false,
     String runtimeId = 'local',
-  }) async {
-    if (_active != null && _active!.projectId != projectId) {
-      throw StateError('已有其他项目的预览服务在运行：${_active!.projectId}');
+  }) {
+    if (_stopping != null) {
+      return Future.error(StateError('预览正在停止，请稍后重试'));
     }
-    var port = preferredPort;
-    if (await (_isPortBusyOverride ?? _isPortBusy)(port)) {
-      port = await _findFreePort(preferredPort);
+    final current = _active;
+    if (current != null) {
+      if (current.projectId == projectId) return Future.value(current);
+      return Future.error(StateError('已有其他项目的预览服务在运行：${current.projectId}'));
     }
-    final displayHost = allowLan ? await _lanHost() : '127.0.0.1';
-    final job = await _terminal.startJob(
-      command: command,
-      workingDirectory: workspacePath,
-    );
-    final ready = await (_waitForPortOverride ?? _waitForPort)(port);
-    if (!ready) {
-      final stopped = await _terminal.cancelJob(job.jobId);
-      throw StateError(stopped
-          ? '预览端口 $port 未就绪，启动作业已停止'
-          : '预览端口 $port 未就绪，作业停止状态未知（作业 ${job.jobId}）');
+    if (_starting != null) {
+      if (_startingProject == projectId) return _starting!;
+      return Future.error(StateError('已有其他项目的预览服务正在启动：$_startingProject'));
     }
-    _active = PreviewSession(
+    if (_pendingJobId != null) {
+      return Future.error(StateError('上次预览作业停止状态未知，请先停止作业：$_pendingJobId'));
+    }
+    _startingProject = projectId;
+    final generation = ++_generation;
+    late final Future<PreviewSession> operation;
+    operation = _start(
       projectId: projectId,
-      jobId: job.jobId,
+      workspacePath: workspacePath,
+      launch: PreviewLaunchCommand(command),
+      preferredPort: preferredPort,
+      allowLan: allowLan,
       runtimeId: runtimeId,
-      host: displayHost,
-      port: port,
-      url: 'http://$displayHost:$port/',
-      lanEnabled: allowLan,
-    );
-    return _active!;
+      generation: generation,
+    ).whenComplete(() {
+      if (identical(_starting, operation)) {
+        _starting = null;
+        _startingProject = null;
+      }
+    });
+    _starting = operation;
+    return operation;
   }
 
-  Future<void> stop() async {
-    final current = _active;
-    if (current == null) return;
-    if (!await _terminal.cancelJob(current.jobId)) {
-      throw StateError('无法确认预览作业已停止：${current.jobId}');
+  Future<PreviewSession> _start({
+    required String projectId,
+    required String workspacePath,
+    required PreviewLaunchCommand launch,
+    required int preferredPort,
+    required bool allowLan,
+    required String runtimeId,
+    required int generation,
+  }) async {
+    if (preferredPort < 1 || preferredPort > 65535) {
+      throw const FormatException('预览端口必须在 1–65535 之间');
     }
+    final bindHost = allowLan ? '0.0.0.0' : '127.0.0.1';
+    final displayHost =
+        allowLan ? await (_lanHostOverride ?? _lanHost)() : '127.0.0.1';
+    _checkGeneration(generation);
+    if (allowLan && displayHost == '127.0.0.1') {
+      throw StateError('未找到局域网 IPv4 地址，请关闭局域网预览后重试');
+    }
+    var port = preferredPort;
+    if (await _portBusy(port, bindHost)) {
+      if (!launch.canConfigure) {
+        throw StateError('预览端口 $port 已占用，不能安全改写自定义命令；请使用 {port} 和 {host} 占位符');
+      }
+      port = await _findFreePort(preferredPort, bindHost);
+    }
+    _checkGeneration(generation);
+    final command = launch.render(port: port, bindHost: bindHost);
+    final target = Uri.parse('http://127.0.0.1:$port/');
+    String? jobId;
+    try {
+      final job = await _terminal.startJob(
+        command: command,
+        workingDirectory: workspacePath,
+        // Preview is a server, not a short foreground command.
+        timeout: const Duration(days: 1),
+      );
+      jobId = job.jobId;
+      _pendingJobId = jobId;
+      _checkGeneration(generation);
+      await _waitForReady(target, jobId, generation);
+      _checkGeneration(generation);
+      final session = PreviewSession(
+        projectId: projectId,
+        jobId: jobId,
+        runtimeId: runtimeId,
+        host: displayHost,
+        port: port,
+        url: 'http://$displayHost:$port/',
+        lanEnabled: allowLan,
+      );
+      _active = session;
+      _pendingJobId = null;
+      return session;
+    } catch (error) {
+      if (jobId != null) {
+        if (!await _terminal.cancelJob(jobId)) {
+          // Keep the handle: failure must not enable a second untracked server.
+          throw StateError('$error；无法确认预览作业已停止：$jobId，请先重试停止');
+        }
+        if (_pendingJobId == jobId) _pendingJobId = null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> stop() {
+    if (_stopping != null) return _stopping!;
+    ++_generation;
+    late final Future<void> operation;
+    operation = _stopCurrent().whenComplete(() {
+      if (identical(_stopping, operation)) _stopping = null;
+    });
+    _stopping = operation;
+    return operation;
+  }
+
+  Future<void> _stopCurrent() async {
+    final starting = _starting;
+    if (starting != null) {
+      try {
+        await starting;
+      } catch (_) {
+        // Start owns cleanup; retry any handle whose cancellation was unconfirmed.
+      }
+    }
+    final jobId = _pendingJobId ?? _active?.jobId;
+    if (jobId == null) return;
+    if (!await _terminal.cancelJob(jobId)) {
+      throw StateError('无法确认预览作业已停止：$jobId');
+    }
+    _pendingJobId = null;
     _active = null;
   }
 
-  Future<bool> _isPortBusy(int port) async {
+  void _checkGeneration(int generation) {
+    if (_generation != generation) throw StateError('预览启动已取消');
+  }
+
+  void _checkJob(String jobId) {
+    for (final job in _terminal.listJobs()) {
+      if (job.jobId != jobId) continue;
+      if (job.completed) {
+        throw StateError('预览作业已退出（exit ${job.exitCode}）：$jobId');
+      }
+      return;
+    }
+    throw StateError('无法确认预览作业状态：$jobId');
+  }
+
+  Future<void> _waitForReady(Uri target, String jobId, int generation) async {
+    final deadline = DateTime.now().add(readinessTimeout);
+    var wasReady = false;
+    while (DateTime.now().isBefore(deadline)) {
+      _checkGeneration(generation);
+      _checkJob(jobId);
+      var ready = false;
+      try {
+        final probe = _waitForPortOverride != null
+            ? _waitForPortOverride(target.port)
+            : (_probeHttpOverride ?? _probeHttp)(target);
+        ready = await probe.timeout(deadline.difference(DateTime.now()));
+      } catch (_) {
+        // Connection refusal and malformed/non-HTTP responses are not readiness.
+      }
+      _checkGeneration(generation);
+      _checkJob(jobId);
+      // A second HTTP response after a poll interval rules out a transient
+      // listener immediately followed by job failure. TCP connectivity alone
+      // never marks a preview ready.
+      if (ready && wasReady) return;
+      wasReady = ready;
+      await Future<void>.delayed(pollInterval);
+    }
+    throw StateError(
+        '预览 HTTP 服务 $target 未在 ${readinessTimeout.inMilliseconds}ms 内就绪');
+  }
+
+  Future<bool> _probeHttp(Uri target) async {
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(milliseconds: 500);
     try {
-      final socket = await Socket.connect('127.0.0.1', port,
-          timeout: const Duration(milliseconds: 250));
-      await socket.close();
-      return true;
-    } catch (_) {
-      return false;
+      final request = await client
+          .openUrl('HEAD', target)
+          .timeout(const Duration(milliseconds: 500));
+      request.followRedirects = false;
+      final response =
+          await request.close().timeout(const Duration(milliseconds: 500));
+      return response.statusCode >= 200 && response.statusCode < 500;
+    } finally {
+      client.close(force: true);
     }
   }
 
-  Future<int> _findFreePort(int start) async {
-    for (var port = start; port < start + 20; port++) {
-      if (!await _isPortBusy(port)) return port;
+  Future<bool> _portBusy(int port, String bindHost) async {
+    if (_isPortBusyOverride != null) return _isPortBusyOverride(port);
+    try {
+      final socket = await ServerSocket.bind(InternetAddress(bindHost), port);
+      await socket.close();
+      return false;
+    } on SocketException {
+      return true;
     }
-    final socket = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+  }
+
+  Future<int> _findFreePort(int start, String bindHost) async {
+    for (var port = start + 1; port <= 65535 && port < start + 20; port++) {
+      if (!await _portBusy(port, bindHost)) return port;
+    }
+    final socket = await ServerSocket.bind(InternetAddress(bindHost), 0);
     final port = socket.port;
     await socket.close();
     return port;
-  }
-
-  Future<bool> _waitForPort(int port) async {
-    for (var i = 0; i < 20; i++) {
-      if (await _isPortBusy(port)) return true;
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    }
-    return false;
   }
 
   Future<String> _lanHost() async {
@@ -127,8 +319,7 @@ class PreviewService {
         }
       }
     } catch (_) {
-      // 网络接口枚举在 Web、模拟器或权限受限环境中可能失败；回退到 loopback，
-      // 让预览仍能在本机工作，而不是把网络探测错误扩散给页面。
+      // Failure is handled before launching; never silently expose a LAN server.
     }
     return '127.0.0.1';
   }

@@ -119,7 +119,19 @@ class ChangeReviewService {
     ChangeVerificationMark mark = ChangeVerificationMark.unverified,
   }) {
     final files = <FileChangeSummary>[];
-    for (final metadata in metadataList) {
+    final expanded = metadataList.expand((metadata) {
+      final changes = metadata['fileChanges'];
+      if (changes is List) {
+        // Uncertain rollback state must be reconstructed from the workspace,
+        // not presented as a successfully applied planned diff.
+        if (metadata['transactionStatus'] != 'committed') {
+          return const <Map<String, dynamic>>[];
+        }
+        return changes.whereType<Map<String, dynamic>>();
+      }
+      return [metadata];
+    });
+    for (final metadata in expanded) {
       final path = metadata['path']?.toString();
       if (path == null || path.isEmpty) continue;
       final operation = metadata['operation']?.toString() ?? 'edit';

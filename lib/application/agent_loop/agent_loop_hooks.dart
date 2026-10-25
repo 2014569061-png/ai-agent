@@ -28,7 +28,8 @@ class RequestTransformResult {
 /// 改写后的内容会进入 onRequest 快照，因此会被会话日志记录。
 abstract interface class RequestTransform {
   String get id;
-  RequestTransformResult apply(RequestContext context, List<ChatMessage> messages);
+  RequestTransformResult apply(
+      RequestContext context, List<ChatMessage> messages);
 }
 
 /// 请求观察者：收到发送时刻的不可变快照（会话日志即是其中之一）。
@@ -46,17 +47,22 @@ class TurnStoppingContext {
     required this.step,
     required this.finalText,
     this.stopReason = StopReason.unknown,
+    this.canContinue,
   });
   final int step;
   final String finalText;
 
   /// 本步模型给出的停因。[StopReason.outputLimit] 表示回复被单次输出上限截断。
   final StopReason stopReason;
+
+  /// Captured local cancellation/revision boundary; real actions also need DB fencing.
+  final bool Function()? canContinue;
 }
 
 /// [TurnStoppingHandler] 要求继续运行时的指令。
 class TurnContinuation {
-  const TurnContinuation(this.messages, {this.keepAssistantText = true});
+  const TurnContinuation(this.messages,
+      {this.keepAssistantText = true, this.allowedToolNames});
 
   /// 追加给模型的消息（通常是 user 角色的提示），不能为空。
   final List<ChatMessage> messages;
@@ -64,6 +70,9 @@ class TurnContinuation {
   /// 是否先把本步的 assistant 回复写入上下文。steering 为 false（现状行为：
   /// 被插话打断的那一步回复不进入下一次请求）。
   final bool keepAssistantText;
+
+  /// Trusted completion policy, enforced both on request and dispatch.
+  final Set<String>? allowedToolNames;
 }
 
 /// `turn-stopping` 阶段钩子：可以否决“本轮结束”并让运行继续

@@ -12,7 +12,13 @@ class ApprovalPolicy {
     required ToolRisk risk,
     required bool trusted,
     bool sensitive = false,
+    String? toolName,
   }) {
+    // A terminal is not an OS sandbox. Neither saved trust nor fullAccess
+    // substitutes for reviewing this invocation's command and target.
+    if (toolName == 'terminal') {
+      return ApprovalDecision.prompt('terminal', sensitive);
+    }
     // Dangerous operations always require a fresh confirmation.
     if (risk == ToolRisk.dangerous) {
       return ApprovalDecision.prompt(

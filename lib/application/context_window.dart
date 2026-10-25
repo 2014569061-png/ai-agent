@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import '../domain/models.dart';
+import '../domain/tool_result_truncation.dart';
 
 /// 上下文窗口预算：估算消息 token 占用并裁剪较早历史，防止超出模型上下文。
 ///
@@ -48,10 +49,10 @@ class ContextWindow {
 
   /// 头部历史被丢弃时插入的告示。
   static const compactionNotice = '[上下文提示：更早的 assistant/tool 记录因容量上限'
-      '已被压缩，请勿假定其中步骤未执行；需要确认时重新读取文件或重跑检查。]';
+      '已被裁剪（未生成摘要），请勿假定其中步骤未执行；需要确认时重新读取文件或重跑检查。]';
 
   /// 单条 tool 结果被截断时追加的标记。
-  static const toolResultTruncatedMark = '…[工具结果过长，已截断]';
+  static const toolResultTruncatedMark = ToolResultTruncation.marker;
   static const compressedToolResultMark = '[工具结果已压缩]';
 
   /// 单个 tool_call 参数被截断后的替身，保持 JSON 可解析。
@@ -194,12 +195,14 @@ class ContextWindow {
     return ChatMessage(
       role: message.role,
       toolCallId: message.toolCallId,
-      parts: [
-        MessagePart.text(
-            '${text.substring(0, maxToolResultChars)}\n$toolResultTruncatedMark')
-      ],
+      parts: [MessagePart.text(truncateToolResult(text, maxToolResultChars))],
     );
   }
+
+  /// Keep both the command context and the final diagnostics. The marker is
+  /// extra framing, as in the former head-only limit; budget estimation sees it.
+  static String truncateToolResult(String text, int limit) =>
+      ToolResultTruncation.truncate(text, limit);
 
   /// 超长参数替换为可解析的替身对象，保留原始长度供排查。
   List<ChatMessage> _capToolArguments(List<ChatMessage> messages) {

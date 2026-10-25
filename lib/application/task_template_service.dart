@@ -33,7 +33,7 @@ class TaskTemplateService {
   static const implementAndVerify = TaskTemplate(
     id: 'implement-and-verify',
     title: '实现并验证',
-    description: '在授权工作区实现需求，随后自动分析、测试并检查真实构建产物。',
+    description: '在授权工作区实现需求，执行可用的验证并如实报告结果。',
     taskType: 'implement_and_verify',
     riskLevel: 'writes_code',
     implementsChanges: true,
@@ -42,9 +42,9 @@ class TaskTemplateService {
 必须按这个顺序工作：
 1. 先阅读项目结构，确认项目类型（Flutter / Android / Node / Python / 静态网页）。
 2. 用 edit_file / write_file 做最小必要改动，禁止编造未执行的修改。
-3. 改完后必须用 terminal 执行项目对应的验证命令，并依据真实输出汇报。
-4. Flutter 默认执行：flutter analyze、flutter test、flutter build apk --release。
-5. Android Gradle 默认执行测试和 assembleRelease。
+3. 改完后，在 terminal 可用且已获授权时执行对应验证命令。不可用或未获授权须明确报告未验证，禁止声称系统已自动执行。
+4. Flutter 优先执行 flutter analyze、flutter test；仅在任务需要构建产物且环境支持时构建。
+5. Android Gradle 优先执行测试；任务需要发布产物时再执行 assembleRelease。
 6. Node 执行 package.json 中已有的 test/build 脚本。
 7. 构建完成后检查产物是否真实存在，禁止只报一个理论路径。
 8. 最后列出修改文件、验证状态（未验证 / 通过 / 失败）和下一步。
@@ -54,7 +54,9 @@ class TaskTemplateService {
       'read_file',
       'list_directory',
       'search_files',
+      'repo_map',
       'edit_file',
+      'apply_patch',
       'write_file',
       'move_file',
       'delete_file',
@@ -76,7 +78,7 @@ class TaskTemplateService {
       taskType: 'project_analysis',
       systemPrompt: '你负责做项目解读。先识别项目类型，再基于授权工作区给出技术栈、模块边界、启动/验证命令和风险。不要修改文件。',
       requiredInputs: ['工作区路径或项目结构'],
-      allowedTools: ['read_file', 'list_directory', 'search_files'],
+      allowedTools: ['read_file', 'list_directory', 'search_files', 'repo_map'],
       acceptanceRules: ['包含技术栈', '包含模块边界', '包含风险和下一步'],
     ),
     TaskTemplate(
@@ -94,7 +96,9 @@ class TaskTemplateService {
         'read_file',
         'list_directory',
         'search_files',
+        'repo_map',
         'edit_file',
+        'apply_patch',
         'write_file',
         'terminal',
       ],
@@ -107,7 +111,7 @@ class TaskTemplateService {
       taskType: 'code_review',
       systemPrompt: '你负责代码审查。按严重级别审查风险，不提交代码、不修改远端仓库。',
       requiredInputs: ['diff、代码片段或 PR 链接'],
-      allowedTools: ['read_file', 'list_directory', 'search_files'],
+      allowedTools: ['read_file', 'list_directory', 'search_files', 'repo_map'],
       acceptanceRules: ['问题有严重级别', '问题有证据', '建议可验证'],
     ),
     TaskTemplate(
@@ -125,6 +129,7 @@ class TaskTemplateService {
         'read_file',
         'list_directory',
         'search_files',
+        'repo_map',
         'terminal',
       ],
       acceptanceRules: ['有发布清单', '明确阻断项', '明确验证命令和真实产物'],

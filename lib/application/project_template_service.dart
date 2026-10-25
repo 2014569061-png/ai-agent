@@ -92,8 +92,6 @@ class ProjectTemplateService {
     summary: '可直接在浏览器打开的最小待办示例',
     settings: ProjectSettings(
       testCommand: '',
-      previewCommand: 'python -m http.server 8765',
-      previewPort: 8765,
     ),
     files: [
       ProjectTemplateFile(
@@ -104,13 +102,14 @@ class ProjectTemplateService {
 
 ## 运行
 
-用任意静态服务器打开当前目录，例如：
+在 NEXUS 的项目主页打开「网页预览与交付」，点击「打开网页预览」。
+本机直接提供静态网页预览，无需安装 Python、Node.js 或 Linux。
+资源请使用相对路径。修改保存后在浏览器刷新即可查看。
 
-```
-python -m http.server 8765
-```
+## 交付
 
-然后在浏览器访问预览地址。
+在「网页预览与交付」核对文件，保存成果副本后导出 ZIP。
+成果中心保留该次文件副本，后续编辑不会替换已有成果。
 ''',
       ),
       ProjectTemplateFile(
@@ -204,7 +203,7 @@ render();
     settings: ProjectSettings(
       testCommand: 'npm test',
       buildCommand: 'npm run build',
-      previewCommand: 'npm start',
+      previewCommand: 'node index.js --port {port} --host {host}',
       previewPort: 3000,
     ),
     files: [
@@ -238,13 +237,19 @@ npm start
       ProjectTemplateFile(
         relativePath: 'index.js',
         contents: '''const http = require('http');
-const port = process.env.PORT || 3000;
+const args = process.argv.slice(2);
+const option = (name, fallback) => {
+  const index = args.indexOf(name);
+  return index >= 0 ? args[index + 1] : fallback;
+};
+const port = Number(option('--port', process.env.PORT || 3000));
+const host = option('--host', '127.0.0.1');
 const server = http.createServer((_, res) => {
   res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
   res.end('NEXUS Node starter');
 });
-server.listen(port, '127.0.0.1', () => {
-  console.log('listening on http://127.0.0.1:' + port);
+server.listen(port, host, () => {
+  console.log('listening on http://' + host + ':' + port);
 });
 ''',
       ),

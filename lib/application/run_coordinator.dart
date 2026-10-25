@@ -3,6 +3,7 @@ import 'package:dio/dio.dart' show CancelToken;
 import '../domain/models.dart';
 import 'agent_executor.dart';
 import 'run_controller.dart';
+import 'session_operation_guard.dart';
 
 /// 单次 Agent 运行的「代次 / 取消 / 预算断点」状态机。
 ///
@@ -43,6 +44,7 @@ class RunCoordinator {
 
   /// 开始新一轮运行：代次自增，并解除该代次的取消标记。
   int beginRun() {
+    SessionOperationGuard.assertCanRun();
     final generation = ++_generation;
     _cancelledGenerations.remove(generation);
     return generation;

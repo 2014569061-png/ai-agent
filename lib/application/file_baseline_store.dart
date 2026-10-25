@@ -14,6 +14,16 @@ String normalizeWorkspacePath(String path) {
   return normalized.startsWith('./') ? normalized.substring(2) : normalized;
 }
 
+/// Task IDs are used as one directory component under the snapshot store.
+/// Reject path separators and other characters that could escape or alias that
+/// directory, including Windows separators when running on another platform.
+void validateTaskStorageId(String taskId) {
+  if (!RegExp(r'^[A-Za-z0-9_-]{1,160}$').hasMatch(taskId)) {
+    throw ArgumentError.value(
+        taskId, 'taskId', 'must be 1–160 ASCII letters, digits, _ or -');
+  }
+}
+
 /// What a file looked like before the task first touched it.
 class FileBaselineEntry {
   const FileBaselineEntry({
@@ -86,6 +96,7 @@ class FileBaselineStore {
   Future<void> _tail = Future.value();
 
   static Future<Directory> directoryFor(String taskId) async {
+    validateTaskStorageId(taskId);
     final docs = await getApplicationDocumentsDirectory();
     return Directory(p.join(docs.path, 'changesets', taskId, 'baseline'));
   }
