@@ -1,0 +1,33 @@
+<!doctype html><html lang="zh"><meta charset="utf-8"><title>NEXUS browser fixture</title>
+<body><h1>Browser fixture</h1>
+<label>Query <input aria-label="Fixture query" id="query"></label>
+<input type="password" value="PRIVATE_PASSWORD_SENTINEL"><input type="file">
+<button id="apply" onclick="document.getElementById('result').textContent='Applied '+document.getElementById('query').value">Apply fixture</button>
+<button onclick="document.getElementById('apply').outerHTML='<button>Replacement</button>'">Replace target</button>
+<a href="https://nexus-browser-fixture.invalid/next">Next fixture</a>
+<p id="result">Not applied</p>
+<div id="shadow-host"></div>
+<div style="height:1800px">Scroll fixture</div>
+<script>
+document.getElementById('result').textContent = localStorage.getItem('nexus_fixture')
+  ? 'Previous profile marker' : 'Fresh isolated profile';
+document.getElementById('apply').addEventListener('click', () => {
+  localStorage.setItem('nexus_fixture', 'stored');
+  document.cookie = 'nexus_fixture=stored; SameSite=Strict';
+});
+const shadow = document.getElementById('shadow-host').attachShadow({mode: 'open'});
+shadow.innerHTML = `<section><h2>Shadow fixture content</h2>
+  <label>Shadow query <input aria-label="Shadow query"></label>
+  <button id="shadow-apply">Apply shadow</button>
+  <button id="shadow-replace">Replace shadow target</button>
+  <p id="shadow-result">Shadow not applied</p></section>`;
+shadow.getElementById('shadow-apply').addEventListener('click', () => {
+  shadow.getElementById('shadow-result').textContent =
+    'Shadow applied ' + shadow.querySelector('[aria-label="Shadow query"]').value;
+});
+shadow.getElementById('shadow-replace').addEventListener('click', () => {
+  shadow.getElementById('shadow-apply').outerHTML =
+    '<button id="shadow-apply">Replacement shadow</button>';
+});
+</script>
+</body></html>

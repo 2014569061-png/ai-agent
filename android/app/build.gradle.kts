@@ -53,12 +53,6 @@ android {
         versionCode = flutter.versionCode
         // Keep the user-facing Android version aligned with the v0.9 release.
         versionName = "0.9.0"
-
-        // [体积优化] 仅打包现代 Android 设备使用的 ARM64 ABI，减少原生库体积
-        ndk {
-            abiFilters.clear()
-            abiFilters.add("arm64-v8a")
-        }
     }
 
     signingConfigs {
@@ -80,6 +74,11 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
+            // 正式包仅保留 ARM64；debug 使用 Flutter 的默认 ABI，支持 x64 模拟器。
+            ndk {
+                abiFilters.clear()
+                abiFilters.add("arm64-v8a")
+            }
             // [体积优化] 正式构建开启 R8 代码压缩与资源收缩，删除未使用的
             // 原生代码与资源；本地迭代可通过 fastBuild 暂时跳过这两个慢步骤。
             isMinifyEnabled = !fastBuild
@@ -124,6 +123,8 @@ flutter {
 }
 
 dependencies {
+    // Multi-profile WebView isolation; checked against the installed engine at runtime.
+    implementation("androidx.webkit:webkit:1.12.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // 免 Root 提权：Shizuku（ADB/Root 模式）API 与 Binder 接收 Provider。
     implementation("dev.rikka.shizuku:api:13.1.5")

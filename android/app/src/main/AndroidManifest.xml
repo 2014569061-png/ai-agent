@@ -12,6 +12,8 @@
     <!-- G1 Termux 桥：在 Termux 沙箱中执行 go/bash 等命令（普通权限，安装即授予）。 -->
     <uses-permission android:name="com.termux.permission.RUN_COMMAND"/>
 
+    <!-- 仅用户主动开始前台语音输入时请求；不开启后台麦克风服务。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <!-- 拍照直传相机。 -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <!-- 生物识别解锁。 -->
@@ -34,6 +36,7 @@
     <!-- 设备自动化：开机后重新排程触发检查；Wi-Fi 触发读取 SSID 需要定位权限，
          仅在用户创建 Wi-Fi 规则时运行时申请（后台读取 SSID 需“始终允许”）。 -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
@@ -116,6 +119,35 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts"/>
         </activity>
+        <!-- System-bound assistant services. Selection does not enable audio/context capture. -->
+        <service android:name=".NexusVoiceInteractionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true">
+            <intent-filter><action android:name="android.service.voice.VoiceInteractionService"/></intent-filter>
+            <meta-data android:name="android.voice_interaction" android:resource="@xml/nexus_voice_interaction"/>
+        </service>
+        <service android:name=".NexusVoiceInteractionSessionService"
+            android:permission="android.permission.BIND_VOICE_INTERACTION"
+            android:exported="true"/>
+        <service android:name=".NexusRecognitionService"
+            android:label="NEXUS 前台语音入口"
+            android:permission="android.permission.BIND_SPEECH_RECOGNITION_SERVICE"
+            android:exported="true">
+            <intent-filter><action android:name="android.speech.RecognitionService"/></intent-filter>
+        </service>
+        <!-- Opt-in, five-minute, read-only observation; no accessibility actions. -->
+        <service
+            android:name=".NexusAccessibilityService"
+            android:label="@string/nexus_accessibility_service_title"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/nexus_accessibility_service"/>
+        </service>
         <!-- 桌面小组件「NEXUS 指挥台」：三个 nexus:// 深链入口。
              exported=false 与官方 AppWidget 模板一致——APPWIDGET_UPDATE 由系统发出，
              系统可以投递到未导出的组件；改成 true 反而让任意应用都能触发刷新。
@@ -140,6 +172,17 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false" />
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
         <provider
@@ -189,6 +232,16 @@
 
          In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
     <queries>
+        <intent><action android:name="android.speech.RecognitionService"/></intent>
+        <!-- Narrow public-editor visibility; no calendar/contact read/write permission. -->
+        <intent>
+            <action android:name="android.intent.action.INSERT"/>
+            <data android:mimeType="vnd.android.cursor.item/event"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSERT"/>
+            <data android:mimeType="vnd.android.cursor.dir/raw_contact"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>

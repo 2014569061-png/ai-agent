@@ -32,6 +32,9 @@ import java.util.concurrent.FutureTask
 
 // 使用 FlutterFragmentActivity 以支持 local_auth 的 BiometricPrompt。
 class MainActivity : FlutterFragmentActivity() {
+    private var browserBridge: BrowserBridge? = null
+    private var accessibilityActivityResumed = false
+    private var accessibilitySessionOwner: String? = null
     // G1 Termux 桥：RUN_COMMAND 是 dangerous 权限，需运行时请求；请求期间挂起 method 调用。
     private var pendingTermux: MethodChannel.Result? = null
     private var pendingTermuxCommand: String? = null
@@ -49,6 +52,8 @@ class MainActivity : FlutterFragmentActivity() {
     private val cancelledSearches = mutableSetOf<String>()
     private val deviceBackupManager: DeviceBackupManager by lazy { DeviceBackupManager(this) }
     private var automationChannel: MethodChannel? = null
+    private var speechCaptureBridge: SpeechCaptureLifecycle? = null
+    private var assistantRoleBridge: AssistantRoleBridge? = null
     // 免 Root 降级：Root → Shizuku → 系统 API → 设置页；设备控制中的特权方法都经由它执行。
     private val privilegedControl: PrivilegedDeviceControl by lazy { PrivilegedDeviceControl(this) }
 
@@ -61,6 +66,7 @@ class MainActivity : FlutterFragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         captureAutomationFire(intent)
+        assistantRoleBridge?.notifyContextChanged()
     }
 
     /**
@@ -82,6 +88,7 @@ class MainActivity : FlutterFragmentActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (speechCaptureBridge?.permissionResult(requestCode, grantResults) == true) return
         if (deviceBackupManager.onRequestPermissionsResult(requestCode, grantResults)) return
         if (requestCode != 9001) return
         val result = pendingTermux
@@ -99,6 +106,73 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        browserBridge?.dispose()
+        browserBridge = BrowserBridge(this, flutterEngine)
+        accessibilityActivityResumed = false
+        accessibilitySessionOwner = null
+        NexusAccessibilityService.endSession()
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "nexus/accessibility"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "status" -> result.success(NexusAccessibilityService.status(this))
+                "openSettings" -> {
+                    try {
+                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        result.success(mapOf("opened" to true))
+                    } catch (_: ActivityNotFoundException) {
+                        result.error("UNAVAILABLE", "系统无障碍设置不可用", null)
+                    } catch (error: Exception) {
+                        result.error("UNAVAILABLE", error.message, null)
+                    }
+                }
+                "beginSession" -> {
+                    val owner = call.argument<String>("ownerId")
+                    if (!accessibilityActivityResumed) {
+                        result.success(mapOf("ok" to false, "code" to "APP_NOT_FOREGROUND"))
+                    } else if (owner.isNullOrBlank() || owner.length > 120) {
+                        result.success(mapOf("ok" to false, "code" to "INVALID_OWNER"))
+                    } else if (!NexusAccessibilityService.enabled(this)) {
+                        result.success(mapOf("ok" to false, "code" to "ACCESSIBILITY_DISABLED"))
+                    } else {
+                        val started = NexusAccessibilityService.beginSession(owner)
+                        if (started["ok"] == true) accessibilitySessionOwner = owner
+                        result.success(started)
+                    }
+                }
+                "observe" -> {
+                    val owner = call.argument<String>("ownerId")
+                    val sessionId = call.argument<String>("sessionId")
+                    if (!accessibilityActivityResumed ||
+                        owner == null ||
+                        owner != accessibilitySessionOwner ||
+                        sessionId == null
+                    ) {
+                        result.success(mapOf("ok" to false, "code" to "SESSION_EXPIRED"))
+                    } else {
+                        result.success(NexusAccessibilityService.observe(owner, sessionId))
+                    }
+                }
+                "endSession" -> {
+                    val owner = call.argument<String>("ownerId")
+                    if (owner != null && owner != accessibilitySessionOwner) {
+                        result.success(mapOf("ok" to false, "code" to "OWNER_MISMATCH"))
+                    } else {
+                        NexusAccessibilityService.endSession(owner)
+                        if (owner == null || owner == accessibilitySessionOwner) {
+                            accessibilitySessionOwner = null
+                        }
+                        result.success(mapOf("ok" to true))
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        speechCaptureBridge?.dispose()
+        speechCaptureBridge = SpeechCaptureBridgeFactory.create(this, flutterEngine.dartExecutor.binaryMessenger)
+        assistantRoleBridge?.dispose()
+        assistantRoleBridge = AssistantRoleBridge(this, flutterEngine.dartExecutor.binaryMessenger)
         PrivilegeManager.init(this)
         builtinLinuxRunner = BuiltinLinuxRunner(this)
         // 备份与恢复：独立通道与后台线程，Root 流式 tar，恢复前自动快照。
@@ -135,6 +209,8 @@ class MainActivity : FlutterFragmentActivity() {
                 }
                 when (call.method) {
                     "listApps" -> result.success(listLaunchableApps())
+                    "listSystemEditorHandlers", "openSystemEditor" ->
+                        SystemEditorConnectors(this).handle(call, result)
                     "deviceInfo" -> result.success(deviceInfo())
                     "storageInfo" -> result.success(storageInfo())
                     "networkInfo" -> result.success(networkInfo())
@@ -591,7 +667,31 @@ class MainActivity : FlutterFragmentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        accessibilityActivityResumed = true
+        // A new Activity/process never inherits an accessibility observation session.
+        NexusAccessibilityService.endSession()
+        accessibilitySessionOwner = null
+        speechCaptureBridge?.resume()
+        browserBridge?.resume()
+    }
+    override fun onPause() {
+        accessibilityActivityResumed = false
+        NexusAccessibilityService.endSession(accessibilitySessionOwner)
+        accessibilitySessionOwner = null
+        browserBridge?.pause()
+        speechCaptureBridge?.pause()
+        super.onPause()
+    }
+
     override fun onDestroy() {
+        accessibilityActivityResumed = false
+        NexusAccessibilityService.endSession(accessibilitySessionOwner)
+        accessibilitySessionOwner = null
+        browserBridge?.dispose(); browserBridge = null
+        assistantRoleBridge?.dispose(); assistantRoleBridge = null
+        speechCaptureBridge?.dispose(); speechCaptureBridge = null
         pendingDirectoryPicker?.error("CANCELLED", "页面已关闭", null)
         pendingDirectoryPicker = null
         pendingSearches.values.forEach {

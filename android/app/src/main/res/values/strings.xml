@@ -2,6 +2,8 @@
 <resources>
     <string name="nexus_widget_desc">NEXUS Agent 快捷入口</string>
     <string name="nexus_notification_listener_desc">NEXUS Agent 通知读取服务</string>
+    <string name="nexus_accessibility_service_title">NEXUS 当前窗口只读观察</string>
+    <string name="nexus_accessibility_service_description">仅在用户主动开始的短时会话中读取 NEXUS 当前窗口的可访问文字；不读取密码或可编辑字段，不执行点击或输入。离开应用即停止。</string>
     <!-- 长按图标的应用快捷方式（App Shortcuts）标签。
          短标签建议 ≤10 字、长标签 ≤25 字，超出会被系统截断。 -->
     <string name="shortcut_describe_agent_short">描述建 Agent</string>

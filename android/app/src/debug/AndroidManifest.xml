@@ -6,5 +6,9 @@
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- 仅 debug 构建生效：改应用名，与正式版区分（包名已有 .debug 后缀） -->
-    <application android:label="NEXUS Debug" tools:replace="android:label"/>
+    <application android:label="NEXUS Debug" tools:replace="android:label">
+        <activity android:name=".AssistantContextFixtureActivity"
+            android:exported="true" android:excludeFromRecents="true"
+            android:taskAffinity="${applicationId}.contextfixture"/>
+    </application>
 </manifest>
