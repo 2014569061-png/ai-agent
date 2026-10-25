@@ -58,7 +58,9 @@ SourceFiles0=$installerStage\
 "@
 $installerSedPath = Join-Path $installerStage 'package.sed'
 $installerSed | Set-Content -LiteralPath $installerSedPath -Encoding ascii
-$installerProcess = Start-Process -FilePath (Join-Path $env:WINDIR 'System32/iexpress.exe') -ArgumentList @('/N','/Q',('"' + $installerSedPath + '"')) -WorkingDirectory $installerStage -WindowStyle Hidden -PassThru
+# IExpress treats quotes around the SED path as part of its filename.
+# The stage is already the working directory, so pass its plain relative name.
+$installerProcess = Start-Process -FilePath (Join-Path $env:WINDIR 'System32/iexpress.exe') -ArgumentList @('/N','/Q',(Split-Path -Leaf $installerSedPath)) -WorkingDirectory $installerStage -WindowStyle Hidden -PassThru
 if (-not $installerProcess.WaitForExit(120000)) { $installerProcess.Kill(); throw 'Installer packaging timed out.' }
 if ($installerProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $installerExe)) { throw 'IExpress packaging failed.' }
 $installerHash = (Get-FileHash -LiteralPath $installerExe -Algorithm SHA256).Hash.ToLowerInvariant()
