@@ -1,4 +1,25 @@
 import 'dart:async';
+import 'debug/browser_contract_checks.dart';
+import 'application/assistant_context_intake.dart';
+import 'application/reminder_service.dart';
+import 'infrastructure/database/database_provider.dart';
+import 'debug/plan_protocol_checks_stub.dart'
+    if (dart.library.io) 'debug/plan_protocol_checks.dart';
+import 'debug/system_connector_contract_checks.dart';
+import 'debug/memory_scope_checks_stub.dart'
+    if (dart.library.io) 'debug/memory_scope_checks.dart';
+import 'debug/steering_guard_checks_stub.dart'
+    if (dart.library.io) 'debug/steering_guard_checks.dart';
+import 'debug/task_runtime_checks_stub.dart'
+    if (dart.library.io) 'debug/task_runtime_checks.dart';
+import 'debug/artifact_checks_stub.dart'
+    if (dart.library.io) 'debug/artifact_checks.dart';
+import 'debug/global_search_checks_stub.dart'
+    if (dart.library.io) 'debug/global_search_checks.dart';
+import 'debug/memory_knowledge_checks_stub.dart'
+    if (dart.library.io) 'debug/memory_knowledge_checks.dart';
+import 'debug/job_board_checks_stub.dart'
+    if (dart.library.io) 'debug/job_board_checks.dart';
 
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,6 +33,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
 
 import 'application/approval_bridge.dart';
+import 'debug/mobile_ui_acceptance_stub.dart'
+    if (dart.library.io) 'debug/mobile_ui_acceptance.dart'
+    as mobile_ui_acceptance;
 import 'application/device_automation_service.dart';
 import 'application/onboarding_service.dart';
 import 'infrastructure/background/foreground_service.dart';
@@ -24,10 +48,13 @@ import 'infrastructure/share/sharing_service.dart';
 import 'presentation/chat/chat_layout_controller.dart';
 import 'presentation/motion/motion_tier.dart';
 import 'presentation/navigation/app_shell.dart';
+import 'presentation/navigation/mobile_shell.dart';
 import 'presentation/l10n/app_locale_controller.dart';
 import 'presentation/onboarding/onboarding_page.dart';
 import 'presentation/theme/app_palette.dart';
 import 'presentation/theme/app_theme.dart';
+import 'presentation/theme/mobile_theme.dart';
+import 'presentation/theme/desktop_theme.dart';
 import 'presentation/theme/app_theme_controller.dart';
 import 'presentation/theme/app_appearance_controller.dart';
 import 'presentation/theme/app_presentation_preferences.dart';
@@ -35,13 +62,31 @@ import 'presentation/widgets/brand_mark.dart';
 import 'presentation/widgets/liquid_glass.dart';
 import 'presentation/widgets/nexus_background.dart';
 
+Widget _applicationShell() => usesMobileShell(defaultTargetPlatform)
+    ? const MobileShell()
+    : const DesktopShell();
+
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   // Keep startup/plugin failures inside a zone until Sentry's Flutter
   // integration is initialized after the first frame.
   runZonedGuarded(
     () {
+      // Binding initialization, platform calls and runApp must share this zone.
+      WidgetsFlutterBinding.ensureInitialized();
+      assert(() {
+        registerBrowserContractChecks();
+        registerSystemConnectorContractChecks();
+        registerJobBoardChecks();
+        registerMemoryKnowledgeChecks();
+        registerGlobalSearchChecks();
+        registerArtifactChecks();
+        registerTaskRuntimeChecks();
+        registerSteeringGuardChecks();
+        registerMemoryScopeChecks();
+        registerPlanProtocolChecks();
+        return true;
+      }());
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       // F-5：四处分头 load() 各自触发一次平台通道往返，合并为一次实例获取后并发载入。
       // 仍不阻塞首帧（unawaited），只是把 4 次 SharedPreferences 往返压成 1 次。
       unawaited(_loadUiPreferences());
@@ -76,9 +121,20 @@ Future<void> _loadUiPreferences() async {
 Future<void> _initializeServices() async {
   try {
     // C2 foreground service communication port.
-    ForegroundService.initCommunicationPort();
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
+      ForegroundService.initCommunicationPort();
+    }
     // Cold-start sharing is buffered; hot sharing is listened to in parallel.
-    unawaited(SharingService.instance.init());
+    final entries = DeepLinkService.instance;
+    SharingService.instance.bindEntrySink(entries.enqueueShare,
+        onFailure: entries.reportInputFailure);
+    NotificationIntentRouter.bindEntrySink(entries.enqueueNotification);
+    AssistantContextIntake.instance.init();
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(SharingService.instance.init());
+    }
     // E3 local notifications are optional for the foreground experience.
     // 同时接上两个入口：点击通知（前台/热启动）走 onResponse 做页面路由；锁屏审批
     // 动作走 onBackgroundResponse，它在独立 isolate 里按 callback handle 调用，
@@ -99,7 +155,9 @@ Future<void> _initializeServices() async {
     }
 
     // C5 periodic background task registration.
-    if (!kIsWeb) {
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS)) {
       try {
         await Workmanager()
             .initialize(scheduledTaskCallbackDispatcher)
@@ -136,7 +194,33 @@ Future<void> _initializeServices() async {
 /// 的页面（ChatPage）统一消费。
 void _handleNotificationResponse(NotificationResponse response) {
   final intent = NotificationIntent.parse(response.payload);
-  if (intent != null) NotificationIntentRouter.dispatch(intent);
+  if (intent == null) return;
+  if (intent.kind == NotificationIntentKind.reminder &&
+      (response.actionId == 'reminder.snooze' ||
+          response.actionId == 'reminder.complete')) {
+    unawaited(_applyReminderNotificationAction(intent, response.actionId!)
+        .whenComplete(() => NotificationIntentRouter.dispatch(intent)));
+  } else {
+    NotificationIntentRouter.dispatch(intent);
+  }
+}
+
+Future<void> _applyReminderNotificationAction(
+    NotificationIntent intent, String action) async {
+  try {
+    final parts = intent.id.split('@');
+    if (parts.length != 2) return;
+    final service = ReminderService(await DatabaseProvider.instance.database);
+    final current = await service.findById(parts[0]);
+    if (current == null || current.version != int.tryParse(parts[1])) return;
+    if (action == 'reminder.snooze') {
+      await service.snooze(current.id);
+    } else {
+      await service.complete(current.id);
+    }
+  } catch (error) {
+    debugPrint('Reminder notification action failed: ${error.runtimeType}');
+  }
 }
 
 /// 初始化通知插件并接上两个入口。
@@ -149,10 +233,9 @@ Future<void> _initNotifications() async {
     onResponse: _handleNotificationResponse,
     onBackgroundResponse: handleApprovalNotificationAction,
   );
-  final launchIntent = NotificationIntent.parse(
-    await NotificationService.instance.notificationLaunchPayload(),
-  );
-  if (launchIntent != null) NotificationIntentRouter.dispatch(launchIntent);
+  final launchResponse =
+      await NotificationService.instance.notificationLaunchResponse();
+  if (launchResponse != null) _handleNotificationResponse(launchResponse);
 }
 
 /// 设备自动化通知点击 → 投递 `automation:<fireId>` 意图，由 ChatPage 打开确认页。
@@ -187,61 +270,81 @@ class MobileAgentApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    assert(mobile_ui_acceptance.verifyDebugOnly());
+    final desktop = !kIsWeb &&
+        const [
+          TargetPlatform.windows,
+          TargetPlatform.macOS,
+          TargetPlatform.linux
+        ].contains(defaultTargetPlatform);
     return ValueListenableBuilder<String>(
       valueListenable: AppAppearanceController.effects,
       builder: (context, effects, _) => ValueListenableBuilder<double>(
-      valueListenable: AppAppearanceController.glassIntensity,
-      builder: (context, _, __) => ValueListenableBuilder<ThemeMode>(
-        valueListenable: AppThemeController.mode,
-        builder: (context, themeMode, _) => ValueListenableBuilder<Locale?>(
-          valueListenable: AppLocaleController.locale,
-          builder: (context, locale, _) => MaterialApp(
-            title: 'NEXUS Agent',
-            debugShowCheckedModeBanner: false,
-            locale: locale,
-            supportedLocales: const [Locale('zh'), Locale('en')],
-            localizationsDelegates: const [
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            theme: AppTheme.light(),
-            darkTheme: AppTheme.dark(),
-            themeMode: themeMode,
-            themeAnimationDuration: effects == 'off' ? Duration.zero
-                : effects == 'reduced' ? const Duration(milliseconds: 120)
-                : kThemeChangeDuration,
-            builder: (context, child) {
-              final isDark = Theme.of(context).brightness == Brightness.dark;
-              return MotionTierScope(
-                controller: MotionTierController.app,
-                // 纯扁平玻璃 = 用户选择朴素风格，装饰层按最低档处理。
-                cap: AppAppearanceController.resolvedGlassIntensity ==
-                        GlassIntensity.flat
-                    ? MotionTier.low
-                    : null,
-                child: AppPresentationPreferences(
-                child: AnnotatedRegion<SystemUiOverlayStyle>(
-                  value: SystemUiOverlayStyle(
-                    statusBarColor: Colors.transparent,
-                    systemNavigationBarColor: Colors.transparent,
-                    statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-                    systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-                    systemStatusBarContrastEnforced: false,
-                    systemNavigationBarContrastEnforced: false,
+        valueListenable: AppAppearanceController.glassIntensity,
+        builder: (context, _, __) => ValueListenableBuilder<ThemeMode>(
+          valueListenable: AppThemeController.mode,
+          builder: (context, themeMode, _) => ValueListenableBuilder<Locale?>(
+            valueListenable: AppLocaleController.locale,
+            builder: (context, locale, _) => MaterialApp(
+              title: 'NEXUS Agent',
+              debugShowCheckedModeBanner: false,
+              locale: locale,
+              supportedLocales: const [Locale('zh'), Locale('en')],
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              theme: desktop
+                  ? DesktopTheme.apply(AppTheme.light())
+                  : MobileTheme.apply(AppTheme.light()),
+              darkTheme: desktop
+                  ? DesktopTheme.apply(AppTheme.dark())
+                  : MobileTheme.apply(AppTheme.dark()),
+              themeMode: desktop && themeMode == ThemeMode.system
+                  ? ThemeMode.light
+                  : themeMode,
+              themeAnimationDuration: effects == 'off'
+                  ? Duration.zero
+                  : effects == 'reduced'
+                      ? const Duration(milliseconds: 120)
+                      : kThemeChangeDuration,
+              builder: (context, child) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return MotionTierScope(
+                  controller: MotionTierController.app,
+                  // 纯扁平玻璃 = 用户选择朴素风格，装饰层按最低档处理。
+                  cap: AppAppearanceController.resolvedGlassIntensity ==
+                          GlassIntensity.flat
+                      ? MotionTier.low
+                      : null,
+                  child: AppPresentationPreferences(
+                    child: AnnotatedRegion<SystemUiOverlayStyle>(
+                      value: SystemUiOverlayStyle(
+                        statusBarColor: Colors.transparent,
+                        systemNavigationBarColor: Colors.transparent,
+                        statusBarIconBrightness:
+                            isDark ? Brightness.light : Brightness.dark,
+                        systemNavigationBarIconBrightness:
+                            isDark ? Brightness.light : Brightness.dark,
+                        systemStatusBarContrastEnforced: false,
+                        systemNavigationBarContrastEnforced: false,
+                      ),
+                      child: NexusBackground(
+                          child: child ?? const SizedBox.shrink()),
+                    ),
                   ),
-                  child: NexusBackground(child: child ?? const SizedBox.shrink()),
-                ),
-                ),
-              );
-            },
-            home: showOnboarding == null
-                ? const StartupGate()
-                : (showOnboarding! ? const OnboardingPage() : const AppShell()),
+                );
+              },
+              home: showOnboarding == null
+                  ? const StartupGate()
+                  : (showOnboarding!
+                      ? const OnboardingPage()
+                      : _applicationShell()),
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -280,7 +383,7 @@ class _StartupGateState extends State<StartupGate> {
       future: _onboardingDone,
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const _StartupLoadingView();
-        return snapshot.data! ? const AppShell() : const OnboardingPage();
+        return snapshot.data! ? _applicationShell() : const OnboardingPage();
       },
     );
   }
