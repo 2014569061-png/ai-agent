@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NEXUS 动效优化提案</title>
+<style>
+:root{color-scheme:light;--blue:#0a59f7;--ink:#182230;--muted:#667085;--line:#e8ebf0;--fast:120ms;--base:180ms;--panel:240ms;--leave:160ms;--ease:cubic-bezier(.2,0,.2,1);--lift:6px}
+*{box-sizing:border-box}body{margin:0;background:#f7f8fa;color:var(--ink);font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif}
+main{max-width:1120px;margin:auto;padding:40px 24px 64px}h1{font-size:30px;line-height:1.35;font-weight:600;margin:12px 0}h2{font-size:21px;font-weight:600;margin:30px 0 14px}h3{font-size:15px;font-weight:600;margin:0 0 6px}
+p{margin:8px 0 16px;color:var(--muted)}.eyebrow{color:var(--blue);font-size:13px}.intro{max-width:770px}
+button,select{font:inherit}button{cursor:pointer;color:inherit}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--blue);outline-offset:3px}
+.toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:24px 0}
+.toolbar select,.reset{background:white;border:1px solid #dce1e8;border-radius:10px;padding:9px 12px;min-height:44px}
+.toolbar label{display:flex;align-items:center;gap:6px;font-size:14px}.demo-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}
+figure{margin:0;min-width:0}figcaption{font-size:14px;color:var(--muted);margin:12px 4px}.phone{height:558px;background:white;border:1px solid #dfe4eb;border-radius:25px;padding:12px 0 18px;position:relative;overflow:hidden;isolation:isolate;display:flex;flex-direction:column}
+.statusbar{height:24px;padding:0 19px;font-size:11px;display:flex;justify-content:space-between;align-items:center;font-weight:600;flex-shrink:0}.appbar{height:54px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;flex-shrink:0;font-weight:500}
+.icon{width:40px;height:44px;border:0;background:transparent;display:flex;align-items:center;justify-content:center;border-radius:10px;flex-shrink:0}.icon svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.icon:hover,.row:hover{background:#f5f6f8}.icon:active,.small:active{background:#edf0f5}
+.content{flex:1;min-height:0;overflow:auto;padding:14px 17px;scrollbar-width:thin}.conversation{font-size:14px;line-height:1.65}
+.bubble{max-width:91%;margin:0 0 20px auto;background:#f1f2f5;border-radius:16px;padding:10px 13px;width:fit-content}
+.enter{animation:enter var(--base) var(--ease) both}.answer{margin-bottom:14px;animation:reveal var(--base) var(--ease) both;white-space:pre-line}
+.runline{display:flex;align-items:center;gap:7px;min-height:24px;color:var(--muted);font-size:12px;margin:0 0 7px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--blue);flex-shrink:0}.busy .dot{animation:breathe 1.6s ease-in-out infinite}.reply-actions{font-size:17px;color:#758091;min-height:32px;display:flex;align-items:center;gap:18px;animation:reveal var(--fast) var(--ease) both}
+.composer{margin:8px 10px 0;padding:12px 12px 7px;background:#f4f5f7;border:1px solid #edf0f5;border-radius:18px;flex-shrink:0}
+.placeholder{height:29px;color:#778192;font-size:14px}.inputtools{display:flex;align-items:center;gap:5px;height:40px}.chip{padding:3px 9px;background:white;border:1px solid var(--line);border-radius:18px;font-size:10px;white-space:nowrap}
+.spacer{flex:1}.send{background:var(--blue);color:white;width:33px;height:33px;min-height:33px;border-radius:50%;transition:background-color var(--fast),transform var(--fast) var(--ease)}
+.send:active{transform:scale(.97)}.send:disabled{cursor:default;background:#e8ebf1;color:#8490a1}.send svg{width:18px;height:18px}.homebar{position:absolute;width:88px;height:4px;background:#b2b5ba;border-radius:4px;bottom:6px;left:calc(50% - 44px)}
+.idle{color:var(--muted);font-size:13px}.symbol{font-size:44px;color:var(--blue);font-weight:650;margin-top:40px;text-align:center}.welcome{text-align:center;margin:14px 0 4px;font-size:18px;font-weight:500}.subwelcome{text-align:center;font-size:13px;color:var(--muted)}
+.row{padding:11px 14px;display:flex;align-items:center;gap:10px;font-size:14px;min-height:44px;border:0;background:transparent;text-align:left;width:100%;border-radius:10px}.selected{background:#edf2fa}.group{font-size:11px;color:#8b93a1;margin:23px 14px 6px}
+.scrim{position:absolute;inset:36px 0 12px;background:#000;opacity:0;visibility:hidden;transition:opacity var(--panel) var(--ease),visibility var(--panel);z-index:3}
+.drawer{position:absolute;left:0;top:36px;bottom:12px;width:84%;background:#fff;border-radius:0 17px 17px 0;z-index:4;transform:translateX(-101%);visibility:hidden;transition:transform var(--panel) var(--ease),visibility var(--panel);padding:10px 12px;display:flex;flex-direction:column}
+.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.drawer-head strong{font-size:15px;font-weight:550}.drawer-foot{margin-top:auto;border-top:1px solid var(--line);padding-top:6px}
+.drawer-open .scrim,.sheet-open .scrim{opacity:.16;visibility:visible}.drawer-open .drawer{transform:translateX(0);visibility:visible}
+.sheet{position:absolute;left:9px;right:9px;bottom:17px;background:white;border-radius:22px;z-index:4;padding:8px 12px 18px;transform:translateY(calc(100% + 22px));visibility:hidden;transition:transform var(--panel) var(--ease),visibility var(--panel)}
+.sheet-open .sheet{transform:translateY(0);visibility:visible}.handle{width:30px;height:4px;background:#d5d9df;border-radius:5px;margin:0 auto 14px}.sheet-title{font-size:16px;font-weight:550;margin:0 10px 12px}.model-row{min-height:51px;border-radius:12px}.check{margin-left:auto;color:var(--blue)}.note{font-size:12px;color:var(--muted);margin:10px}
+.description{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin:25px 0 6px}.description p{font-size:14px}
+.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#fff;font-size:14px}th,td{text-align:left;vertical-align:top;padding:13px 16px;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--muted);font-weight:500;background:#f0f2f6}td:first-child{white-space:nowrap;font-weight:500}td:last-child{color:var(--muted)}
+.limits{background:#edf2fa;border-radius:14px;padding:16px 19px;margin-top:24px}.limits p{margin:4px 0;color:#475467;font-size:14px}a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}.source{font-size:12px;line-height:1.8}.source code{word-break:break-word}
+@keyframes enter{from{opacity:0;transform:translateY(var(--lift))}to{opacity:1;transform:translateY(0)}}@keyframes reveal{from{opacity:0}to{opacity:1}}@keyframes breathe{0%,100%{opacity:.45}50%{opacity:1}}
+body.reduced{--fast:0ms;--base:0ms;--panel:0ms;--leave:0ms;--lift:0px}body.reduced .busy .dot{animation:none}
+@media(prefers-reduced-motion:reduce){body:not(.force-motion){--fast:0ms;--base:0ms;--panel:0ms;--leave:0ms;--lift:0px}body:not(.force-motion) .busy .dot{animation:none}}
+@media(max-width:870px){.demo-grid{grid-template-columns:1fr;max-width:390px;margin:auto}.description{grid-template-columns:1fr;gap:4px}.phone{height:610px}main{padding:25px 16px 40px}h1{font-size:25px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">NEXUS · 动效优化提案 · 2026-10-23</div>
+  <h1>让操作更连贯，让内容更稳定</h1>
+  <p class="intro">建议统一重做动效节奏，沿用刚确定的简约聊天界面。把“可见的弹跳与装饰”改成“及时反馈、位置连续、状态清楚”。下面保留最初的 HTML 示意，不是 App 实录。第一版现已落地，<a href="motion-v1-implementation.html">查看实际 App 录屏与实施范围</a>。</p>
+  <div class="toolbar">
+    <select id="pace" aria-label="预览速度">
+      <option value="1">正常速度</option><option value="2.5">慢放 2.5 倍，检查衔接</option>
+    </select>
+    <label><input type="checkbox" id="reduce">减少动态效果</label>
+    <button class="reset" id="reset">重置示意</button>
+  </div>
+  <div class="demo-grid">
+    <figure>
+      <div class="phone" id="chat">
+        <div class="statusbar"><span>9:41</span><span>▰ ▰</span></div>
+        <div class="appbar"><button class="icon" aria-label="菜单示意" disabled>☰</button><span>新对话</span><button class="icon" aria-label="新对话示意" disabled>✎</button></div>
+        <div class="content conversation" id="messages">
+          <div class="symbol">N</div><div class="welcome">有什么可以帮你？</div><p class="subwelcome">点右下角发送，体验一次衔接</p>
+        </div>
+        <div class="composer"><div class="placeholder" id="draft">帮我整理一下项目进展</div><div class="inputtools"><span class="chip">当前模型⌄</span><span class="chip">执行选项</span><span class="spacer"></span><span style="padding:0 7px;color:#758091">＋</span><button class="icon send" id="send" aria-label="播放发送与回复示意"><svg viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></div></div>
+        <div class="homebar"></div>
+      </div>
+      <figcaption>① 发送与回复：点击蓝色发送按钮</figcaption>
+    </figure>
+    <figure>
+      <div class="phone" id="nav">
+        <div class="statusbar"><span>9:41</span><span>▰ ▰</span></div>
+        <div class="appbar"><button class="icon" id="open-drawer" aria-label="打开导航"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><span>新对话</span><span class="icon">✎</span></div>
+        <div class="content"><div class="symbol">N</div><div class="welcome">有什么可以帮你？</div></div>
+        <div class="composer"><div class="placeholder">给 NEXUS 发送消息</div><div class="inputtools"><span class="chip">当前模型⌄</span><span class="spacer"></span><span>＋</span></div></div>
+        <div class="scrim" id="drawer-scrim"></div>
+        <nav class="drawer" aria-label="导航示意" inert>
+          <div class="drawer-head"><strong>NEXUS</strong><button class="icon" id="close-drawer" aria-label="关闭导航">×</button></div>
+          <button class="row selected">＋　新对话</button><button class="row">任务</button><button class="row">工作区</button>
+          <div class="group">最近对话</div><button class="row">项目进展整理</button><button class="row">资料分类建议</button>
+          <div class="drawer-foot"><button class="row">助手与工具</button><button class="row">设置</button></div>
+        </nav>
+        <div class="homebar"></div>
+      </div>
+      <figcaption>② 侧栏：点击左上角菜单，再点遮罩关闭</figcaption>
+    </figure>
+    <figure>
+      <div class="phone" id="model">
+        <div class="statusbar"><span>9:41</span><span>▰ ▰</span></div>
+        <div class="appbar"><span class="icon">☰</span><span>新对话</span><span class="icon">✎</span></div>
+        <div class="content"><div class="symbol">N</div><div class="welcome">有什么可以帮你？</div></div>
+        <div class="composer"><div class="placeholder">给 NEXUS 发送消息</div><div class="inputtools"><button class="chip" id="open-sheet" style="min-height:38px">当前模型⌄</button><span class="spacer"></span><span>＋</span></div></div>
+        <div class="scrim" id="sheet-scrim"></div>
+        <section class="sheet" role="dialog" aria-modal="true" aria-label="选择模型示意" inert>
+          <div class="handle"></div><div class="sheet-title">选择模型</div>
+          <button class="row model-row" data-model="当前模型">当前配置的模型<span class="check">✓</span></button>
+          <button class="row model-row" data-model="其他模型">其他已配置模型<span class="check" hidden>✓</span></button>
+          <p class="note">这里只演示选择反馈，不读取或更改真实配置。</p>
+        </section>
+        <div class="homebar"></div>
+      </div>
+      <figcaption>③ 弹层：点击模型，选择后直接回到对话</figcaption>
+    </figure>
+  </div>
+  <div class="description">
+    <section><h3>发送：一次连续动作</h3><p>气泡在落点轻移 6dp、淡入 180ms；避免文字飞行、缩放、光圈同时出现。用户消息立即入列，动画不等待接口。</p></section>
+    <section><h3>导航：层级一眼看懂</h3><p>只移动侧栏，主页面留在原位。菜单打开约 240ms，关闭约 160ms；实际 App 的边缘手势需要跟手，不套二次播放。</p></section>
+    <section><h3>选择：反馈短，收起快</h3><p>面板上移与遮罩同步。选中项立即显示勾选，再收起面板；不逐条错开出现。重要审批须保留确认过程，不能照搬自动关闭。</p></section>
+  </div>
+  <h2>全局建议：先统一这些行为</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>场景</th><th>建议效果</th><th>建议初始参数 / 约束</th></tr></thead>
+    <tbody>
+      <tr><td>按钮与图标</td><td>触下立即改变底色；小型主按钮可轻压，松手平稳恢复。</td><td>按下 80–100ms，恢复 120ms；缩放不低于 0.97。列表行不整体缩放。</td></tr>
+      <tr><td>发送消息</td><td>气泡只在首次新增时轻移与淡入，发送按钮原位切换状态。</td><td>180ms / 6dp；历史、分页与普通重建不重播。</td></tr>
+      <tr><td>首段回复</td><td>首段轻淡入一次；后续按真实内容自然追加。</td><td>120–180ms；不逐字做透明度动画，不用人工打字延迟。</td></tr>
+      <tr><td>滚动与输入法</td><td>用户在底部才跟随；读历史时保持阅读位置。输入区跟随键盘边界。</td><td>避免键盘上移、容器高度、滚动三套独立动画重复补偿。</td></tr>
+      <tr><td>思考与工具</td><td>只让当前一个状态标记微动；正文与标题稳定。展开时箭头旋转、内容平稳展开。</td><td>标记约 1.6s；局部展开约 180–220ms，长日志不做整块弹簧缩放。</td></tr>
+      <tr><td>审批与失败</td><td>原位替换状态并清晰呈现操作，避免闪烁与抖动。</td><td>120–180ms；不自动消失，不以动画替代状态文案。</td></tr>
+      <tr><td>侧栏与页面</td><td>侧栏水平滑入；详情页按层级横向进入；主入口切换用轻淡入。</td><td>进入 220–240ms，退出 160–180ms；返回手势可中断、可反向。</td></tr>
+      <tr><td>底部面板</td><td>平稳上移；遮罩同步。关闭快于打开。</td><td>进入 240ms，退出 160ms；支持手势与安全区，不增加回弹。</td></tr>
+      <tr><td>任务 / 文件列表</td><td>列表整体稳定；只突出用户刚新增或状态改变的行。</td><td>120–180ms；重新筛选、切换页面和滚动加载不逐行演出。</td></tr>
+      <tr><td>完成 / 结果</td><td>图标与结果入口局部淡入，工具栏预留位置。</td><td>120–180ms；不放完成光环，不推挤正在阅读的内容。</td></tr>
+      <tr><td>减少动态效果</td><td>取消位移、缩放、光效及循环；状态及时直接更新。</td><td>遵守系统设置与现有 full / reduced / off 语义，保留必要文字和交互。</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <h2>是否整体大改？</h2>
+  <p class="intro">推荐做“动效规则统一”，不要再次更换页面风格。现有工程已经具备时长、弹簧、分档、生命周期与减少动态效果的基础，保留它们，在 Android 分支收敛表现即可。桌面与专用画布独立验收。</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>顺序</th><th>实施范围</th><th>完成判断</th></tr></thead>
+    <tbody>
+      <tr><td>第一步</td><td>聊天发送、助手入场、流式高度、滚动和键盘衔接。</td><td>同一动作只有一个视觉重点；快速连发不跳位；阅读历史不被拉走。</td></tr>
+      <tr><td>第二步</td><td>统一抽屉、Sheet、页面返回和手势中断。</td><td>快速打开关闭无重影；返回顺序正确；草稿、焦点和滚动位置保留。</td></tr>
+      <tr><td>第三步</td><td>收敛通用按压、状态呼吸、列表入场与工具详情。</td><td>待机与完成态无装饰循环；退出页面停止控制器；无障碍设置立即生效。</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="limits">
+    <h3>验收需要同时看“舒服”和“可靠”</h3>
+    <p>检查普通手机、320dp 窄屏、大字体、深色模式、长回复、附件、审批和暂停恢复。模拟器适合核对布局与行为；性能使用真机 profile 模式检查 UI / raster 帧、重建与长列表，不能把 debug 模式的卡顿直接当作发布性能。</p>
+    <p>循环动画只留在确实进行中的局部指示；不新增整页持续模糊、光斑、扫描文字。过渡可中断，动画不阻塞发送、授权或返回。</p>
+  </div>
+  <h2>本地检查依据</h2>
+  <p class="source">本次阅读了 <code>nexus_motion.dart</code>、<code>motion_preferences.dart</code>、<code>motion_intensity.dart</code>、<code>nexus_pressable.dart</code>、<code>nexus_execution_status.dart</code>、<code>chat_message_list.dart</code>、<code>floating_capsule_input.dart</code>、<code>spring_follow_height.dart</code> 和 <code>nexus_sheet.dart</code>。代码包含发送飞入、助手弹性缩放、按压光斑、运行光环等路径，是否显示受设置及运行状态影响；这些是需要收敛的候选项，不能据此断言当前每项都已同时显示。</p>
+  <p class="source">实现参考：<a href="https://docs.flutter.dev/perf/best-practices">Flutter 性能实践</a> · <a href="https://docs.flutter.dev/perf/rendering-performance">渲染性能验收</a> · <a href="https://api.flutter.dev/flutter/widgets/MediaQueryData/disableAnimations.html">系统减少动态效果</a></p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const timers=new Set();let generation=0;let running=false;let modelTimer;
+const wait=ms=>new Promise(resolve=>{const timer=setTimeout(()=>{timers.delete(timer);resolve()},ms);timers.add(timer)});
+function duration(ms){return ms*Number($('pace').value)}
+function reduced(){return $('reduce').checked}
+function configure(){
+  const factor=Number($('pace').value);
+  document.body.style.setProperty('--fast',120*factor+'ms');
+  document.body.style.setProperty('--base',180*factor+'ms');
+  document.body.style.setProperty('--panel',240*factor+'ms');
+  document.body.style.setProperty('--leave',160*factor+'ms');
+  document.body.classList.toggle('reduced',reduced());
+  if(reduced())for(const name of ['--fast','--base','--panel','--leave'])document.body.style.setProperty(name,'0ms');
+}
+function overlay(type,open){
+  const isDrawer=type==='drawer',phone=$(isDrawer?'nav':'model');
+  const panel=phone.querySelector(isDrawer?'.drawer':'.sheet');
+  phone.style.setProperty('--panel',duration(open?240:160)*(reduced()?0:1)+'ms');
+  phone.classList.toggle(type+'-open',open);
+  panel.inert=!open;
+  const trigger=$(isDrawer?'open-drawer':'open-sheet');
+  trigger.setAttribute('aria-expanded',String(open));
+  if(open)panel.querySelector('button').focus();else trigger.focus();
+}
+function reset(){
+  generation++;running=false;
+  clearTimeout(modelTimer);
+  $('send').disabled=false;$('send').setAttribute('aria-label','播放发送与回复示意');
+  $('draft').textContent='帮我整理一下项目进展';
+  $('messages').innerHTML='<div class="symbol">N</div><div class="welcome">有什么可以帮你？</div><p class="subwelcome">点右下角发送，体验一次衔接</p>';
+  for(const [id,cls] of [['nav','drawer'],['model','sheet']]){
+    $(id).classList.remove(cls+'-open');
+    $(id).querySelector('.'+cls).inert=true;
+  }
+  $('open-sheet').textContent='当前模型⌄';
+  document.querySelectorAll('[data-model] .check').forEach((el,i)=>el.hidden=i!==0);
+}
+async function play(){
+  if(running)return;
+  running=true;const version=++generation;
+  $('send').disabled=true;$('send').setAttribute('aria-label','正在播放示意');
+  $('draft').textContent='给 NEXUS 发送消息';
+  $('messages').innerHTML='<div class="bubble enter">帮我整理一下项目进展</div><div class="runline busy" id="run"><span class="dot"></span><span>正在整理</span></div>';
+  await wait(duration(650));if(version!==generation)return;
+  const answer=document.createElement('div');answer.className='answer';$('messages').append(answer);
+  const chunks=['可以。','先把项目进展分成三个部分：','\n\n已完成','\n记录已经交付的工作和对应成果。','\n\n进行中','\n写清当前进度、阻碍和下一步。','\n\n需要确认','\n列出需要你决策或补充的信息。'];
+  for(const text of chunks){if(version!==generation)return;answer.append(document.createTextNode(text));$('messages').scrollTop=$('messages').scrollHeight;await wait(duration(155))}
+  if(version!==generation)return;
+  $('run').classList.remove('busy');$('run').innerHTML='<span style="color:#667085">✓</span><span>已完成</span>';
+  const actions=document.createElement('div');actions.className='reply-actions';actions.textContent='⧉　 ↗　 ↻';$('messages').append(actions);
+  $('messages').scrollTop=$('messages').scrollHeight;
+  $('send').disabled=false;$('send').setAttribute('aria-label','再次播放发送与回复示意');running=false;
+}
+$('send').addEventListener('click',play);
+$('reset').addEventListener('click',reset);
+$('pace').addEventListener('change',configure);
+$('reduce').checked=matchMedia('(prefers-reduced-motion: reduce)').matches;
+$('reduce').addEventListener('change',configure);
+$('open-drawer').addEventListener('click',()=>overlay('drawer',true));
+$('close-drawer').addEventListener('click',()=>overlay('drawer',false));
+$('drawer-scrim').addEventListener('click',()=>overlay('drawer',false));
+document.querySelectorAll('.drawer .row').forEach(el=>el.addEventListener('click',()=>overlay('drawer',false)));
+$('open-sheet').addEventListener('click',()=>overlay('sheet',true));
+$('sheet-scrim').addEventListener('click',()=>overlay('sheet',false));
+document.querySelectorAll('[data-model]').forEach(el=>el.addEventListener('click',()=>{
+  document.querySelectorAll('[data-model] .check').forEach(check=>check.hidden=true);
+  el.querySelector('.check').hidden=false;$('open-sheet').textContent=el.dataset.model+'⌄';
+  clearTimeout(modelTimer);modelTimer=setTimeout(()=>overlay('sheet',false),duration(120)*(reduced()?0:1));
+}));
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){if($('model').classList.contains('sheet-open'))overlay('sheet',false);else if($('nav').classList.contains('drawer-open'))overlay('drawer',false)}
+  if(e.key==='Tab'){
+    const panel=$('model').classList.contains('sheet-open')?document.querySelector('.sheet'):$('nav').classList.contains('drawer-open')?document.querySelector('.drawer'):null;
+    if(!panel)return;
+    const buttons=[...panel.querySelectorAll('button')],first=buttons[0],last=buttons[buttons.length-1];
+    if(!panel.contains(document.activeElement)){e.preventDefault();first.focus()}
+    else if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+    else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+  }
+});
+configure();
+</script>
+</body>
+</html>

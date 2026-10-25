@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>NEXUS · 侧栏布局精修建议</title>
+  <style>
+    *{box-sizing:border-box}
+    [hidden]{display:none!important}
+    body{margin:0;background:#f6f7f9;color:#20252d;font:15px/1.7 system-ui,"Microsoft YaHei",sans-serif}
+    main{max-width:1120px;margin:32px auto;padding:0 24px 48px}
+    h1{font-size:27px;line-height:1.4;letter-spacing:-.5px;font-weight:600;margin:4px 0 10px}
+    .lead{color:#747b88;margin:0 0 28px}
+    .comparison{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
+    h2{font-size:15px;font-weight:500;margin:0 0 14px}
+    .reference{width:100%;max-width:390px;height:844px;object-fit:contain;object-position:top;background:#e9ebee;display:block;border-radius:24px}
+    .phone{position:relative;background:#fff;width:100%;max-width:390px;height:844px;border-radius:24px;overflow:hidden;border:1px solid #e3e6eb}
+    .underlay{position:absolute;inset:0;background:#fff}
+    .underlay:after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.14)}
+    .under-title{position:absolute;top:77px;right:20px;font-size:17px}
+    .under-input{position:absolute;bottom:30px;left:20px;right:16px;height:105px;background:#f3f4f6;border-radius:24px}
+    .drawer{position:relative;background:#fff;width:calc(100% - 56px);height:100%;display:flex;flex-direction:column;border-radius:0 20px 20px 0}
+    .status{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;font-size:13px;font-weight:500;flex-shrink:0}
+    .device-icons{font-size:11px;letter-spacing:1px}
+    .header{height:56px;padding:0 8px 0 20px;display:flex;align-items:center;flex-shrink:0}
+    .brand{font-size:20px;letter-spacing:.8px;font-weight:550;flex:1}
+    button{font:inherit;cursor:pointer;color:inherit;-webkit-tap-highlight-color:transparent}
+    .icon-button{border:0;background:transparent;width:48px;height:48px;display:grid;place-items:center;color:#737c8c;flex-shrink:0;border-radius:12px}
+    svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+    button:hover{background:#f4f5f7}
+    button:focus-visible,input:focus-visible{outline:2px solid #0a59f7;outline-offset:2px}
+    .top{padding:8px 12px 0;flex-shrink:0}
+    .new{height:48px;width:100%;display:flex;gap:12px;align-items:center;padding:0 14px;border:0;border-radius:12px;background:#f3f5f8;font-size:15px;font-weight:500;margin-bottom:8px}
+    .new svg{color:#0a59f7}
+    .nav-row{min-height:48px;padding:0 14px;display:flex;gap:12px;align-items:center;border:0;background:transparent;width:100%;font-size:15px;text-align:left;border-radius:10px}
+    .nav-row svg{color:#77808f}
+    .nav-row[aria-current=page]{background:#eef3fc;color:#1556d9}
+    .nav-row[aria-current=page] svg{color:inherit}
+    .history{flex:1;min-height:0;overflow:auto;padding:0 12px 12px}
+    .history-head{display:flex;align-items:center;justify-content:space-between;padding:12px 10px 0;min-height:52px}
+    .history-head span{font-size:12px;color:#9298a4}
+    .all{height:48px;border:0;padding:0 2px 0 14px;background:transparent;font-size:12px;color:#747e8e;border-radius:8px}
+    .time{font-size:12px;color:#969daa;padding:4px 14px 6px}
+    .conversation{display:flex;align-items:center;width:100%;gap:8px;min-height:48px;padding:0 14px;border:0;border-radius:10px;background:transparent;text-align:left;font-size:14px;font-weight:400}
+    .conversation span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+    .conversation.active{background:#f4f5f7}
+    .conversation svg{width:16px;height:16px;color:#8f96a4}
+    .conversation .dots{font-size:18px;color:#747e8e;flex:0;overflow:visible}
+    .footer{flex-shrink:0;padding:8px 12px 16px;background:#fff;position:relative}
+    .footer:before{content:"";display:block;height:1px;background:#f0f1f4;margin:0 14px 6px}
+    .footer .nav-row{color:#596272;font-size:14px}
+    .search{display:flex;align-items:center;gap:6px;background:#f3f5f8;border-radius:12px;margin:0 0 8px;padding-left:12px;min-height:48px}
+    .search input{min-width:0;width:100%;border:0;background:transparent;font:inherit;font-size:14px;color:#20252d;padding:12px 0;outline:none}
+    .search[hidden]{display:none}
+    .caption{max-width:390px;color:#7e8795;font-size:13px;margin:12px 0 0}
+    .notes{margin-top:32px;border-top:1px solid #e3e6eb;padding-top:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+    .notes h3{margin:0 0 6px;font-size:15px;font-weight:500}
+    .notes p{margin:0;color:#747d8a;font-size:14px}
+    @media(max-width:700px){main{padding:0 16px 32px;margin-top:22px}.comparison{grid-template-columns:1fr;gap:28px}.phone,.reference{margin:auto}.notes{grid-template-columns:1fr;gap:18px}h1{font-size:24px}}
+  </style>
+</head>
+<body>
+<svg aria-hidden="true" style="position:absolute;width:0;height:0">
+  <defs>
+    <symbol id="search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="chat" viewBox="0 0 24 24"><path d="M5 4h14a1 1 0 0 1 1 1v12H8l-4 4V5a1 1 0 0 1 1-1Z"/></symbol>
+    <symbol id="tasks" viewBox="0 0 24 24"><path d="M20.5 10a8.5 8.5 0 1 1-5-6M8 10.5l3.5 3.5L21 4.5"/></symbol>
+    <symbol id="folder" viewBox="0 0 24 24"><path d="M3 6a1 1 0 0 1 1-1h6l2 2h8a1 1 0 0 1 1 1v11H3Z"/></symbol>
+    <symbol id="settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M9 4v6M15 14v6"/></symbol>
+    <symbol id="more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="19" cy="12" r="1" fill="currentColor"/></symbol>
+  </defs>
+</svg>
+<main>
+  <h1>让侧栏更紧凑，把空间还给对话</h1>
+  <p class="lead">建议稿：保留全部入口，收起搜索框、统一行高、减轻选中背景。本页为 HTML 布局示意，尚未修改 App。</p>
+  <div class="comparison">
+    <section>
+      <h2>当前截图</h2>
+      <img class="reference" src="drawer-feedback-original.png" alt="用户提供的侧栏截图，红框标记搜索、新建对话与三个导航入口">
+      <p class="caption">搜索和导航占据较多垂直空间；图标、字号与行间距偏重，最近对话出现得太晚。</p>
+    </section>
+    <section>
+      <h2>建议布局 · 助手页选中状态</h2>
+      <div class="phone">
+        <div class="underlay" aria-hidden="true"><div class="under-title">新对话</div><div class="under-input"></div></div>
+        <aside class="drawer" aria-label="侧栏布局预览">
+          <div class="status" aria-hidden="true"><span>13:49</span><span class="device-icons">5G ▰</span></div>
+          <header class="header">
+            <span class="brand">NEXUS</span>
+            <button class="icon-button" id="searchToggle" aria-label="搜索最近对话" aria-expanded="false" aria-controls="searchPanel"><svg><use href="#search"/></svg></button>
+            <button class="icon-button" aria-label="关闭侧栏，示意图中不执行"><svg><use href="#close"/></svg></button>
+          </header>
+          <div class="top">
+            <div class="search" id="searchPanel" hidden>
+              <svg aria-hidden="true"><use href="#search"/></svg>
+              <input id="query" placeholder="搜索最近对话" aria-label="搜索示例中的最近对话">
+              <button class="icon-button" id="clear" aria-label="清空搜索"><svg><use href="#close"/></svg></button>
+            </div>
+            <button class="new"><svg aria-hidden="true"><use href="#plus"/></svg>新建对话</button>
+            <nav aria-label="主入口">
+              <button class="nav-row" aria-current="page"><svg aria-hidden="true"><use href="#chat"/></svg>助手</button>
+              <button class="nav-row"><svg aria-hidden="true"><use href="#tasks"/></svg>任务</button>
+              <button class="nav-row"><svg aria-hidden="true"><use href="#folder"/></svg>工作区</button>
+            </nav>
+          </div>
+          <section class="history" aria-label="最近对话示例">
+            <div class="history-head"><span>最近对话</span><button class="all">全部</button></div>
+            <div class="time">今天</div>
+            <button class="conversation active"><span>新会话</span><span class="dots" aria-hidden="true">⋯</span></button>
+            <button class="conversation"><span>请帮我整理资料，先问清我的目标和范围</span></button>
+            <button class="conversation"><span>分析当前项目的文件结构</span></button>
+            <button class="conversation"><span>优化 Android 聊天页的布局</span></button>
+            <div class="time" style="padding-top:16px">7 天内</div>
+            <button class="conversation"><span>检查这次修改涉及的 Git 改动</span></button>
+            <button class="conversation"><span>整理已有任务与下一步计划</span></button>
+            <button class="conversation"><span>帮我梳理知识库资料</span></button>
+          </section>
+          <footer class="footer">
+            <button class="nav-row"><svg aria-hidden="true"><use href="#more"/></svg>助手与工具</button>
+            <button class="nav-row"><svg aria-hidden="true"><use href="#settings"/></svg>设置</button>
+          </footer>
+        </aside>
+      </div>
+      <p class="caption">可点击顶栏搜索试用展开与筛选。会话标题为已有能力的排版示例；导航按钮不跳转，也不创建真实会话。</p>
+    </section>
+  </div>
+  <div class="notes">
+    <section><h3>先改变信息比例</h3><p>搜索缩为顶栏图标；新建对话与导航统一为 48dp 基础行高，适应大字体时自然增高。最近对话紧接导航，不留大块分隔空白。</p></section>
+    <section><h3>用对齐代替装饰</h3><p>图标约 20dp、导航文字 15sp、会话文字 14–15sp；同一文字起点。移除普通会话行的重复气泡图标，仅真实置顶项保留状态标记。</p></section>
+    <section><h3>状态保持克制</h3><p>蓝色仅强调当前入口，当前会话用浅中性灰。设置只在当前位于设置时选中；底部入口不常驻大面积蓝底。保留历史、长按操作和任务待处理提示。</p></section>
+  </div>
+</main>
+<script>
+const toggle=document.getElementById('searchToggle'),panel=document.getElementById('searchPanel'),query=document.getElementById('query');
+function filter(){document.querySelectorAll('.conversation').forEach(row=>row.hidden=!row.textContent.includes(query.value.trim()));}
+toggle.addEventListener('click',()=>{
+  panel.hidden=!panel.hidden;
+  toggle.setAttribute('aria-expanded',String(!panel.hidden));
+  if(!panel.hidden)query.focus();else{query.value='';filter();}
+});
+query.addEventListener('input',filter);
+document.getElementById('clear').addEventListener('click',()=>{query.value='';filter();query.focus();});
+query.addEventListener('keydown',event=>{if(event.key==='Escape'){panel.hidden=true;toggle.setAttribute('aria-expanded','false');query.value='';filter();toggle.focus();}});
+</script>
+</body>
+</html>
