@@ -1,10 +1,10 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../motion/motion_intensity.dart';
 import '../motion/motion_lifecycle.dart';
 import '../motion/motion_tier.dart';
 import '../motion/nexus_motion.dart';
-import '../theme/app_palette.dart';
 
 /// M9 文字流光：一段线性渐变高光从左到右扫过文字。
 ///
@@ -106,7 +106,7 @@ class _ShimmerTextState extends State<ShimmerText>
     final highlight = widget.highlightColor ??
         (isDark
             ? Colors.white.withValues(alpha: (0.9 * gain).clamp(0.0, 1.0))
-            : AppPalette.brand);
+            : MobileTheme.brand(context));
     final band = amplify(ShimmerText.bandWidth, gain, 0.25);
     final sweep = NexusMotion.shimmerSweep.inMicroseconds;
     final sweepFraction =

@@ -1,6 +1,8 @@
+import '../theme/mobile_theme.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -15,12 +17,13 @@ import '../../application/development_workflow.dart';
 import '../../application/project_kind.dart';
 import '../../application/verification_repair_service.dart';
 import '../../infrastructure/tools/command_tool.dart';
+import '../widgets/nexus_disclosure.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
-import '../widgets/nexus_status_pill.dart';
+import '../widgets/nexus_status_badge.dart';
 import '../widgets/section_card.dart';
 
 class DevelopmentWorkbenchPage extends ConsumerStatefulWidget {
@@ -115,7 +118,7 @@ class _DevelopmentWorkbenchPageState
         _result = result;
       });
     }
-    if (result.success && widget.projectId != null) {
+    if (result.success) {
       try {
         final db = await ref.read(databaseProvider.future);
         final taskId =
@@ -124,7 +127,7 @@ class _DevelopmentWorkbenchPageState
         if (artifact != null && artifact.isNotEmpty) {
           await const ArtifactService().record(
             db: db,
-            projectId: widget.projectId!,
+            projectId: widget.projectId ?? '',
             taskId: taskId,
             runId: taskId,
             workspacePath: widget.workspacePath,
@@ -140,8 +143,10 @@ class _DevelopmentWorkbenchPageState
           );
         }
       } catch (_) {
-        // 制品登记失败：构建本身已经成功（上面的 _result 已展示），这里只是没能
-        // 写进「项目制品库」。用户会在制品页看不到这次产物，属于可见的信息缺失。
+        if (mounted) {
+          FloatingToast.show(context, '构建已结束，但成果副本登记失败；未计入成果中心，请检查空间后重试',
+              tone: ToastTone.warning);
+        }
       }
     }
   }
@@ -163,29 +168,46 @@ class _DevelopmentWorkbenchPageState
             : DevelopmentVerificationService()
                 .planFromDetection(_project!)
                 .steps);
+    final selectedWorkflow = DevelopmentWorkflowTemplates.all.firstWhere(
+      (workflow) => workflow.id == _selected.id,
+      orElse: () => DevelopmentWorkflowTemplates.all.first,
+    );
 
     return Scaffold(
       appBar: const NexusPageHeader(
         title: '开发工作台',
         subtitle: '识别项目、执行验证并检查真实产物',
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppPalette.brandAction,
-        foregroundColor: Colors.white,
-        onPressed: _running ? null : () => _run(),
-        icon: _running
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ))
-            : const Icon(Icons.play_arrow_rounded),
-        label: Text(_running ? '构建中…' : '开始执行'),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+        child: FilledButton.icon(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(48),
+            shape: RoundedRectangleBorder(
+              borderRadius:
+                  BorderRadius.circular(MobileTheme.controlRadius(context)),
+            ),
+          ),
+          onPressed: _running ? null : () => _run(),
+          icon: _running
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.play_arrow_rounded),
+          label: Text(
+            _running
+                ? '正在执行验证…'
+                : _result == null
+                    ? '开始执行验证'
+                    : '重新执行验证',
+          ),
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
+      body: NexusPageLayout(
+          child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
         children: [
           SectionCard(
             padding: const EdgeInsets.all(16),
@@ -197,23 +219,52 @@ class _DevelopmentWorkbenchPageState
                       ? '正在识别项目类型…'
                       : '当前项目：${_project?.kind.label ?? _selected.name}',
                   style: const TextStyle(
-                      fontSize: AppTokens.fontSizeSubhead, fontWeight: FontWeight.w600),
+                      fontSize: AppTokens.fontSizeSubhead,
+                      fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  widget.workspacePath,
-                  style: const TextStyle(fontSize: AppTokens.fontSizeFootnote, fontFamily: 'monospace'),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SelectableText(
+                        widget.workspacePath,
+                        style: const TextStyle(
+                            fontSize: AppTokens.fontSizeFootnote,
+                            fontFamily: 'monospace'),
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: '复制项目路径',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () {
+                        Clipboard.setData(
+                          ClipboardData(text: widget.workspacePath),
+                        );
+                        FloatingToast.show(context, '项目路径已复制',
+                            tone: ToastTone.success);
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<DevelopmentWorkflow>(
-                  initialValue: _selected,
+                  initialValue: selectedWorkflow,
+                  isExpanded: true,
+                  itemHeight: null,
                   decoration: const InputDecoration(
                     labelText: '工作流模板',
                     isDense: true,
                   ),
                   items: DevelopmentWorkflowTemplates.all
                       .map((workflow) => DropdownMenuItem(
-                          value: workflow, child: Text(workflow.name)))
+                          value: workflow,
+                          child: Text(
+                            workflow.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          )))
                       .toList(),
                   onChanged: _running
                       ? null
@@ -228,15 +279,16 @@ class _DevelopmentWorkbenchPageState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.timeline_rounded,
-                        size: 18, color: AppPalette.brand),
-                    SizedBox(width: 8),
-                    Text(
+                        size: 18, color: MobileTheme.brand(context)),
+                    const SizedBox(width: 8),
+                    const Text(
                       '验证步骤',
-                      style:
-                          TextStyle(fontSize: AppTokens.fontSizeSubhead, fontWeight: FontWeight.w500),
+                      style: TextStyle(
+                          fontSize: AppTokens.fontSizeSubhead,
+                          fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -255,8 +307,9 @@ class _DevelopmentWorkbenchPageState
                               Expanded(
                                 child: Container(
                                   width: 1.5,
-                                  color: AppPalette.brandAction
-                                      .withValues(alpha: 0.3),
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outlineVariant,
                                 ),
                               ),
                           ],
@@ -278,29 +331,44 @@ class _DevelopmentWorkbenchPageState
                                             fontWeight: FontWeight.w500),
                                       ),
                                     ),
-                                    NexusStatusPill.fromString(step.status.id,
-                                        isCompact: true,
-                                        customLabel: step.status.label),
+                                    NexusStatusBadge(
+                                      label: step.status.label,
+                                      tone: switch (step.status) {
+                                        VerificationStepStatus.pending =>
+                                          NexusBadgeTone.neutral,
+                                        VerificationStepStatus.running =>
+                                          NexusBadgeTone.brand,
+                                        VerificationStepStatus.passed =>
+                                          NexusBadgeTone.success,
+                                        VerificationStepStatus.failed =>
+                                          NexusBadgeTone.danger,
+                                        VerificationStepStatus.skipped =>
+                                          NexusBadgeTone.warning,
+                                      },
+                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 4),
                                 if (step.command.isNotEmpty)
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppPalette.darkSurface
-                                          : AppPalette.lightSurface,
-                                      borderRadius: BorderRadius.circular(
-                                          AppTokens.radiusControl),
-                                    ),
-                                    child: Text(
-                                      '\$ ${step.command}',
-                                      style: const TextStyle(
-                                        fontFamily: 'monospace',
-                                        fontSize: AppTokens.fontSizeFootnote,
+                                  NexusDisclosure(
+                                    title: const Text('查看命令'),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? AppPalette.darkSurface
+                                            : AppPalette.lightSurface,
+                                        borderRadius: BorderRadius.circular(
+                                            MobileTheme.controlRadius(context)),
+                                      ),
+                                      child: Text(
+                                        '\$ ${step.command}',
+                                        style: const TextStyle(
+                                          fontFamily: 'monospace',
+                                          fontSize: AppTokens.fontSizeFootnote,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -371,23 +439,19 @@ class _DevelopmentWorkbenchPageState
                     ),
                   ],
                   const Text('步骤日志',
-                      style:
-                          TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
+                      style: TextStyle(
+                          fontSize: AppTokens.fontSizeCaption,
+                          fontWeight: FontWeight.w500)),
                   const SizedBox(height: 6),
-                  ..._result!.steps.map((step) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: SelectableText(
-                          step.message,
-                          style: const TextStyle(
-                              fontFamily: 'monospace', fontSize: AppTokens.fontSizeSubcaption),
-                        ),
-                      )),
+                  ..._result!.steps.indexed.map(
+                    (entry) => _stepLog(entry.$2, entry.$1),
+                  ),
                 ],
               ),
             ),
           ],
         ],
-      ),
+      )),
     );
   }
 
@@ -395,9 +459,10 @@ class _DevelopmentWorkbenchPageState
     final color = switch (status) {
       VerificationStepStatus.passed => AppPalette.success,
       VerificationStepStatus.failed => AppPalette.danger,
-      VerificationStepStatus.running => AppPalette.brand,
+      VerificationStepStatus.running => MobileTheme.brand(context),
       VerificationStepStatus.skipped => AppPalette.warning,
-      VerificationStepStatus.pending => AppPalette.brandAction,
+      VerificationStepStatus.pending =>
+        Theme.of(context).colorScheme.onSurfaceVariant,
     };
     return Container(
       width: 22,
@@ -418,6 +483,58 @@ class _DevelopmentWorkbenchPageState
     );
   }
 
+  Widget _stepLog(TerminalSessionExecution step, int index) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 6, 4, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '步骤 ${index + 1}${step.ok ? ' · 已通过' : ' · 失败'}',
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '复制此步骤日志',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: step.message));
+                      FloatingToast.show(context, '步骤日志已复制');
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 17),
+                  ),
+                ],
+              ),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 180),
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    step.message,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: AppTokens.fontSizeSubcaption,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _artifactPanel(bool isDark) {
     final path = _result!.artifactPath!;
     final exists = _result!.artifactExists;
@@ -427,7 +544,8 @@ class _DevelopmentWorkbenchPageState
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           border: Border.all(
             color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
           ),
@@ -447,13 +565,15 @@ class _DevelopmentWorkbenchPageState
                 const SizedBox(width: 6),
                 Text(exists ? '真实产物' : '产物不存在',
                     style: const TextStyle(
-                        fontSize: AppTokens.fontSizeFootnote, fontWeight: FontWeight.w500)),
+                        fontSize: AppTokens.fontSizeFootnote,
+                        fontWeight: FontWeight.w500)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     path,
-                    style:
-                        const TextStyle(fontSize: AppTokens.fontSizeFootnote, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote,
+                        fontFamily: 'monospace'),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -470,8 +590,9 @@ class _DevelopmentWorkbenchPageState
             ),
             if (_result!.sha256 != null)
               Text('SHA-256：${_result!.sha256}',
-                  style:
-                      const TextStyle(fontSize: AppTokens.fontSizeBadge, fontFamily: 'monospace')),
+                  style: const TextStyle(
+                      fontSize: AppTokens.fontSizeBadge,
+                      fontFamily: 'monospace')),
             if (_result!.packageName != null)
               Text('包名：${_result!.packageName}',
                   style: const TextStyle(fontSize: AppTokens.fontSizeFootnote)),
@@ -479,7 +600,8 @@ class _DevelopmentWorkbenchPageState
               Text('大小：${_result!.artifactBytes} 字节',
                   style: const TextStyle(fontSize: AppTokens.fontSizeFootnote)),
             for (final note in _result!.notes)
-              Text(note, style: const TextStyle(fontSize: AppTokens.fontSizeFootnote)),
+              Text(note,
+                  style: const TextStyle(fontSize: AppTokens.fontSizeFootnote)),
             if (exists) ...[
               const SizedBox(height: 8),
               Wrap(

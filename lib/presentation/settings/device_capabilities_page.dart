@@ -1,15 +1,21 @@
+import '../widgets/nexus_disclosure.dart';
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/environment_service.dart';
 import '../../infrastructure/terminal/linux_runtime.dart';
 import '../../infrastructure/tools/android_device_tool.dart';
+import '../theme/app_palette.dart';
+import '../theme/desktop_theme.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_tokens.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
@@ -184,7 +190,33 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
       backgroundColor: settingsBgColor(context),
       appBar: NexusPageHeader(
         title: '设备能力',
-        subtitle: 'Root · Shizuku · 系统权限 · 本地 VPN · SAF',
+        subtitle: DesktopTheme.maybeOf(context) != null
+            ? 'Root · Shizuku · 系统权限 · 本地 VPN · SAF'
+            : _snapshot == null
+                ? '检查可用能力与权限'
+                : '最近检测 ${_snapshot!.checkedAt.toLocal().toString().substring(11, 16)}',
+        statusPill: DesktopTheme.maybeOf(context) != null
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppPalette.success.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: AppPalette.success.withValues(alpha: 0.35),
+                    width: 0.8,
+                  ),
+                ),
+                child: const Text(
+                  '● LIVE',
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeBadge,
+                    fontFamily: AppTokens.fontFamilyMono,
+                    fontWeight: FontWeight.w700,
+                    color: AppPalette.success,
+                  ),
+                ),
+              )
+            : null,
         actions: [
           IconButton(
             tooltip: '重新检测',
@@ -193,7 +225,7 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
           ),
         ],
       ),
-      body: _buildBody(context),
+      body: NexusPageLayout(child: _buildBody(context)),
     );
   }
 
@@ -245,11 +277,30 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
         children: [
+          if (DesktopTheme.maybeOf(context) != null)
+            _capabilityMatrixCard(snapshot),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: Text('权限与通道按最近检测结果显示；未检查不代表不可用。',
+                style: Theme.of(context).textTheme.bodySmall),
+          ),
           const SettingsSectionTitle('设备信息'),
           _deviceInfoCard(snapshot),
-          const SettingsSectionTitle('Root 与安全状态'),
-          _rootCard(),
-          _selinuxCard(snapshot),
+          if (DesktopTheme.maybeOf(context) == null)
+            NexusDisclosure(
+              title: const Text('系统与执行通道详情', style: TextStyle(fontSize: 14)),
+              headerPadding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              contentPadding: EdgeInsets.zero,
+              child: _capabilityMatrixCard(snapshot),
+            ),
+          NexusDisclosure(
+            title: const Text('Root 与系统安全详情'),
+            headerPadding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            contentPadding: EdgeInsets.zero,
+            child: _rootCard(snapshot),
+          ),
           const SettingsSectionTitle('免 Root 通道'),
           _shizukuCard(),
           const SettingsSectionTitle('系统特殊权限'),
@@ -310,7 +361,142 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
     );
   }
 
-  Widget _rootCard() {
+  Widget _capabilityMatrixCard(_DeviceCapabilitySnapshot snapshot) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final hairline =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final textMuted =
+        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final info = snapshot.deviceInfo.value ?? const <String, dynamic>{};
+    final sdkInt = info['sdk']?.toString() ?? '36';
+    final release = info['androidVersion']?.toString() ?? '16';
+    final sys = snapshot.systemStatus.value ?? const <String, dynamic>{};
+    final selinux = (sys['selinux'] ?? 'Permissive').toString();
+    final rootGranted = _rootProbe?.value?['rootGranted'] == true;
+    final foldersCount = (snapshot.authorizedFolders.value ?? const []).length;
+
+    Widget cell({
+      required String label,
+      required String value,
+      required String tag,
+      required Color tagColor,
+    }) {
+      return Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: AppTokens.fontSizeBadge,
+                  fontFamily: AppTokens.fontFamilyMono,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.4,
+                  color: textMuted,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeSubhead,
+                      fontFamily: AppTokens.fontFamilyMono,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: tagColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: tagColor.withValues(alpha: 0.30),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Text(
+                      tag,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppTokens.fontSizeBadge,
+                        fontFamily: AppTokens.fontFamilyMono,
+                        fontWeight: FontWeight.w600,
+                        color: tagColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: SettingsGroupCard(
+        children: [
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                cell(
+                  label: 'ANDROID RUNTIME',
+                  value: 'API $sdkInt',
+                  tag: 'Android $release',
+                  tagColor: AppPalette.success,
+                ),
+                VerticalDivider(width: 1, thickness: 1, color: hairline),
+                cell(
+                  label: 'SELINUX MAC',
+                  value: selinux,
+                  tag: 'POLICY',
+                  tagColor: AppPalette.warning,
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, thickness: 1, color: hairline),
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                cell(
+                  label: 'PRIVILEGE CH.',
+                  value: rootGranted ? 'UID 0' : 'ADB/API',
+                  tag: rootGranted ? 'ROOT' : 'FALLBACK',
+                  tagColor: rootGranted
+                      ? AppPalette.success
+                      : MobileTheme.brand(context),
+                ),
+                VerticalDivider(width: 1, thickness: 1, color: hairline),
+                cell(
+                  label: 'SAF SANDBOX',
+                  value: '$foldersCount 项目录',
+                  tag: 'SCOPED IO',
+                  tagColor: MobileTheme.brand(context),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _rootCard(_DeviceCapabilitySnapshot snapshot) {
     final probe = _rootProbe;
     final data = probe?.value;
     final rootGranted = data?['rootGranted'] == true;
@@ -343,6 +529,7 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
           iconColor: color,
           title: 'Root 授权',
           subtitle: subtitle,
+          wrapText: DesktopTheme.maybeOf(context) == null,
           trailingWidget: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -383,11 +570,13 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
                   ? '独立显示 Magisk 或 KernelSU 检测结果'
                   : 'su 程序${suPresent ? '存在' : '未发现'}',
         ),
+        const SettingsDivider(),
+        _selinuxTile(snapshot),
       ],
     );
   }
 
-  Widget _selinuxCard(_DeviceCapabilitySnapshot snapshot) {
+  Widget _selinuxTile(_DeviceCapabilitySnapshot snapshot) {
     final probe = snapshot.systemStatus;
     final enforcing = probe.value?['selinuxEnforcing'];
     final status = probe.error != null
@@ -397,18 +586,14 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
             : enforcing == false
                 ? 'Permissive'
                 : '未知';
-    return SettingsGroupCard(
-      children: [
-        _statusTile(
-          icon: Icons.security_rounded,
-          title: 'SELinux',
-          status: status,
-          available: enforcing is bool ? enforcing : null,
-          error: probe.error,
-          subtitle:
-              probe.error == null ? '读取系统当前强制访问控制状态' : _errorText(probe.error!),
-        ),
-      ],
+    return _statusTile(
+      icon: Icons.security_rounded,
+      title: 'SELinux',
+      status: status,
+      available: enforcing is bool ? enforcing : null,
+      error: probe.error,
+      subtitle:
+          probe.error == null ? '读取系统当前强制访问控制状态' : _errorText(probe.error!),
     );
   }
 
@@ -554,9 +739,12 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
   Widget _actionButton(String label, VoidCallback onPressed) => TextButton(
         onPressed: _actionBusy ? null : onPressed,
         style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
+          visualDensity: DesktopTheme.maybeOf(context) == null
+              ? VisualDensity.standard
+              : VisualDensity.compact,
           padding: const EdgeInsets.symmetric(horizontal: 8),
-          minimumSize: const Size(0, 36),
+          minimumSize: Size(DesktopTheme.maybeOf(context) == null ? 48 : 0,
+              DesktopTheme.maybeOf(context) == null ? 48 : 36),
         ),
         child: Text(label),
       );
@@ -874,15 +1062,19 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
   Widget _badge(String label, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(12),
+          color: color.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: color.withValues(alpha: 0.24),
+            width: 1.0,
+          ),
         ),
         child: Text(
           label,
           style: TextStyle(
             color: color,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
+            fontSize: AppTokens.fontSizeFootnote,
+            fontWeight: FontWeight.w600,
           ),
         ),
       );

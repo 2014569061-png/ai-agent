@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/device_action_runner.dart';
@@ -126,9 +127,9 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
 
   Future<void> _newBackup() async {
     final choice = await showNexusSheet<String>(
-context: context,
-showDragHandle: true,
-builder: (context) => SafeArea(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -165,7 +166,7 @@ builder: (context) => SafeArea(
           ],
         ),
       ),
-);
+    );
     if (!mounted || choice == null) return;
     switch (choice) {
       case 'contacts':
@@ -241,9 +242,7 @@ builder: (context) => SafeArea(
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  scope == 'config'
-                      ? '设置、数据库与文件，不含缓存'
-                      : '整个数据目录（不含缓存）',
+                  scope == 'config' ? '设置、数据库与文件，不含缓存' : '整个数据目录（不含缓存）',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],
@@ -273,9 +272,9 @@ builder: (context) => SafeArea(
     final canRestoreContacts =
         kind == 'personal' && backup['category'] == 'contacts';
     final choice = await showNexusSheet<String>(
-context: context,
-showDragHandle: true,
-builder: (context) => SafeArea(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -307,7 +306,7 @@ builder: (context) => SafeArea(
           ],
         ),
       ),
-);
+    );
     if (!mounted || choice == null) return;
     switch (choice) {
       case 'inspect':
@@ -317,8 +316,8 @@ builder: (context) => SafeArea(
             {'action': 'restore_app_data', 'backupId': id},
             confirmLabel: '确认恢复');
       case 'restore_contacts':
-        await _run('导入通讯录备份 $id',
-            {'action': 'restore_contacts', 'backupId': id});
+        await _run(
+            '导入通讯录备份 $id', {'action': 'restore_contacts', 'backupId': id});
       case 'delete':
         await _run('删除备份 $id', {'action': 'backup_delete', 'backupId': id},
             confirmLabel: '确认删除');
@@ -337,10 +336,10 @@ builder: (context) => SafeArea(
     final entries = detail['entries'] is List ? detail['entries'] as List : [];
     final files = detail['files'] is List ? detail['files'] as List : [];
     await showNexusSheet<void>(
-context: context,
-showDragHandle: true,
-isScrollControlled: true,
-builder: (context) => SafeArea(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -386,7 +385,7 @@ builder: (context) => SafeArea(
           ],
         ),
       ),
-);
+    );
   }
 
   String _size(Object? bytes) {
@@ -401,8 +400,7 @@ builder: (context) => SafeArea(
     return '${size.toStringAsFixed(unit == 0 ? 0 : 1)} ${units[unit]}';
   }
 
-  String _kindLabel(Map<String, dynamic> backup) =>
-      switch (backup['kind']) {
+  String _kindLabel(Map<String, dynamic> backup) => switch (backup['kind']) {
         'personal' => switch (backup['category']) {
             'contacts' => '通讯录',
             'sms' => '短信',
@@ -423,7 +421,7 @@ builder: (context) => SafeArea(
     return Scaffold(
       backgroundColor: settingsBgColor(context),
       appBar: NexusPageHeader(
-        title: '备份与恢复',
+        title: '手机资料备份',
         subtitle: '预览后执行 · 恢复前自动快照',
         actions: [
           IconButton(
@@ -438,7 +436,7 @@ builder: (context) => SafeArea(
           ),
         ],
       ),
-      body: _body(context),
+      body: NexusPageLayout(child: _body(context)),
     );
   }
 
@@ -486,7 +484,7 @@ builder: (context) => SafeArea(
             ]),
           SettingsSectionTitle(
               '备份（${_listing['total'] ?? backups.length}）· 剩余空间 ${_size(_listing['freeBytes'])}'),
-          if (backups.isEmpty)
+          if (_error == null && backups.isEmpty)
             SettingsGroupCard(children: [
               SettingsTile(
                 icon: Icons.backup_outlined,
@@ -494,8 +492,8 @@ builder: (context) => SafeArea(
                 subtitle: '点右上角 + 新建。通讯录/短信/通话记录首次备份时才会请求权限。',
                 onTap: _newBackup,
               ),
-            ])
-          else
+            ]),
+          if (backups.isNotEmpty)
             SettingsGroupCard(children: [
               for (var i = 0; i < backups.length; i++) ...[
                 if (i > 0) const SettingsDivider(),

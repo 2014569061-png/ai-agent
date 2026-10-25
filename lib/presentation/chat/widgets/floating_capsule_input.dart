@@ -1,33 +1,28 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
+import '../../../application/desktop_host_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../../../domain/models.dart';
-import '../../motion/motion_intensity.dart';
-import '../../motion/motion_tier.dart';
-import '../../motion/nexus_entrance.dart';
+import 'chat_mode_switcher.dart';
+import '../../motion/mobile_motion.dart';
+import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_haptics.dart';
 import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../theme/desktop_theme.dart';
+import '../../widgets/desktop_reading_column.dart';
 import '../../widgets/nexus_execution_status.dart';
 import '../../widgets/nexus_pressable.dart';
 import '../../widgets/glass_surface.dart';
 import '../../motion/morph_icon.dart';
-import '../../motion/nexus_spring.dart';
 import '../../motion/send_flight.dart';
 
-/// 首页输入区（对标 DeepSeek App）。
-///
-/// 结构：
-///   外层 24px 大圆角 + surface 底色，聚焦时描边转 brand
-///   ├─ 输入行：最小高 44px，占位符「发消息」
-///   └─ 操作行：高 48px，左右两端对齐
-///        ├─ 左：模式与审批策略的圆形磁贴（26dp 图标 + 选中态品牌色底）
-///        └─ 右：代码块快捷 +「＋」圆形描边磁贴 + 尾键磁贴
-///           （生成中 = 停止 / 有内容 = 发送 / 空输入 = 置灰发送，不可点）
-///
-/// 磁贴 = 26dp 圆形图标按钮（触控区仍为 48x48）：文案不落在磁贴上，
-/// 避免中英文长度差异把小屏输入区撑开，可读名称保留在语义标签与 tooltip 中。
+/// Two-row phone composer: multiline input above attachments, model, settings
+/// and the primary action. Every icon retains a 48dp accessible hit target.
+/// Desktop uses its existing independent composer layout.
 class FloatingCapsuleInput extends StatefulWidget {
   const FloatingCapsuleInput({
     super.key,
@@ -39,6 +34,13 @@ class FloatingCapsuleInput extends StatefulWidget {
     this.onResume,
     required this.onAttachmentMenu,
     this.modeLabel = '聊天',
+    this.modelLabel,
+    this.desktopChatMode,
+    this.onDesktopChatModeChanged,
+    this.desktopMaxLines = 5,
+    this.onModelTap,
+    this.onSpeechInput,
+    this.onMetricsTap,
     this.onModeTap,
     this.approvalMode = ApprovalMode.ask,
     this.onApprovalModeTap,
@@ -63,6 +65,13 @@ class FloatingCapsuleInput extends StatefulWidget {
   final VoidCallback onAttachmentMenu;
 
   final String modeLabel;
+  final String? modelLabel;
+  final ChatMode? desktopChatMode;
+  final ValueChanged<ChatMode>? onDesktopChatModeChanged;
+  final int desktopMaxLines;
+  final VoidCallback? onModelTap;
+  final VoidCallback? onSpeechInput;
+  final VoidCallback? onMetricsTap;
   final VoidCallback? onModeTap;
   final ApprovalMode approvalMode;
   final VoidCallback? onApprovalModeTap;
@@ -83,19 +92,12 @@ class FloatingCapsuleInput extends StatefulWidget {
   State<FloatingCapsuleInput> createState() => _FloatingCapsuleInputState();
 }
 
-class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
-    with SingleTickerProviderStateMixin {
+class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
   late final ValueNotifier<bool> _focused;
   final FocusNode _focusNode = FocusNode();
 
   /// L2：输入框文字区域，发送时把它的位置交给 [SendFlightBus]。
   final GlobalKey _fieldKey = GlobalKey();
-
-  /// 发送光圈（M5）：只在点击发送时从 0 播放到 1，其余时间静止不绘制。
-  late final AnimationController _sendPulse = AnimationController(
-    vsync: this,
-    duration: NexusMotion.sendRipple,
-  );
 
   String _approvalModeLabel(ApprovalMode mode) => switch (mode) {
         ApprovalMode.ask => '每次询问',
@@ -129,14 +131,8 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
     _focused.dispose();
-    _sendPulse.dispose();
     SendFlightBus.cancel();
     super.dispose();
-  }
-
-  void _playSendRipple() {
-    if (!MotionBudget.of(context, listen: false).sendRipple) return;
-    _sendPulse.forward(from: 0);
   }
 
   void _onFocusChange() {
@@ -146,218 +142,190 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopTheme.maybeOf(context) != null) return _desktopInput(context);
+    final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textFaint =
-        isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+    final textColor = scheme.onSurface;
+    final textFaint = scheme.onSurfaceVariant;
+    final surface =
+        isDark ? scheme.surfaceContainerHighest : const Color(0xFFF4F5F7);
 
     final bottomPadding = widget.bottomPadding ??
         (MediaQuery.viewInsetsOf(context).bottom > 0
             ? 8.0
             : MediaQuery.paddingOf(context).bottom + 8.0);
 
-    // M2：首屏入场槽位 3（120ms 后），只位移不淡入，每进程一次。
-    return NexusEntrance(
-      slot: 3,
-      offset: const Offset(0, 12),
-      fade: false,
-      onceId: 'chat_composer',
-      child: Padding(
-        padding: EdgeInsets.only(bottom: bottomPadding),
-        child: _FocusMorphMargin(
-          focused: _focused,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 运行状态提示（仅生成 / 计划模式时出现，首页态不显示）
-              SpringAnimatedSize(child: _buildStatusLine()),
-
-              // 外层容器：20px 圆角，聚焦时描边转 brand
-              Builder(
-                builder: (context) {
-                  final inputCard = Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // 输入行：最小高 44px
-                      SpringAnimatedSize(
-                        key: _fieldKey,
-                        alignment: Alignment.bottomLeft,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                              minHeight: AppTokens.kMinTouchTarget),
-                          child: TextField(
-                            focusNode: _focusNode,
-                            controller: widget.controller,
-                            minLines: 1,
-                            maxLines: 5,
-                            textInputAction: TextInputAction.newline,
-                            onTapOutside: (_) => _focusNode.unfocus(),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w400,
-                              height: 1.6,
-                              color: textColor,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: widget.isRunning
-                                  ? (widget.isPaused ? '补充要求后继续' : '补充要求')
-                                  : '发消息',
-                              hintStyle: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w400,
-                                color: textFaint,
-                              ),
-                              isDense: true,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              filled: false,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 0),
-
-                      // 操作行：高 48px，左右两端对齐（左2靠左，右3靠右）
-                      SizedBox(
-                        height: 48,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            // 左：模式 + 审批策略（圆形磁贴，靠左）
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                _ModeTile(
-                                  icon: Icons.tune_rounded,
-                                  semanticLabel: '${widget.modeLabel}模式',
-                                  selected: true,
-                                  onTap: widget.onModeTap != null
-                                      ? () {
-                                          NexusHaptics.light(context);
-                                          widget.onModeTap!();
-                                        }
-                                      : null,
-                                ),
-                                if (widget.onApprovalModeTap != null)
-                                  _ModeTile(
-                                    icon: widget.approvalMode ==
-                                            ApprovalMode.fullAccess
-                                        ? Icons.shield_outlined
-                                        : Icons.verified_user_outlined,
-                                    semanticLabel:
-                                        _approvalModeLabel(widget.approvalMode),
-                                    selected: widget.approvalMode ==
-                                        ApprovalMode.fullAccess,
-                                    onTap: () {
-                                      NexusHaptics.light(context);
-                                      widget.onApprovalModeTap!();
-                                    },
-                                  ),
-                              ],
-                            ),
-                            // 右：代码块快捷 +「＋」附件 + 尾键（发送/停止/置灰发送，靠右）
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                PopupMenuButton<String>(
-                                  tooltip: '更多输入工具',
-                                  icon: const Icon(Icons.more_horiz_rounded,
-                                      size: 20),
-                                  constraints:
-                                      const BoxConstraints(minWidth: 160),
-                                  onSelected: (_) => _insertCodeBlock(),
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(
-                                        value: 'code', child: Text('插入代码块')),
-                                  ],
-                                ),
-                                _buildAttachmentButton(),
-                                if (widget.isRunning && widget.isPaused)
-                                  _buildPausedStopButton(isDark),
-                                _buildTrailingActionListenable(
-                                    textFaint, isDark),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-
-                  if (widget.glassIntensity == GlassIntensity.flat) {
-                    return _withFocusRing(
-                      radius: BorderRadius.circular(AppTokens.radiusComposer),
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(12, 6, 10, 4),
-                        decoration: BoxDecoration(
-                          color: surface,
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusComposer),
-                          border: Border.all(
-                            color: isDark
-                                ? AppPalette.darkHairline
-                                : AppPalette.lightHairline,
-                            width: 1.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: isDark
-                                  ? AppPalette.darkShadowAmbient
-                                  : AppPalette.lightShadowAmbient,
-                              blurRadius: AppTokens.shadowFloatingBlur,
-                              offset: AppTokens.shadowFloatingOffset,
-                            ),
-                          ],
-                        ),
-                        child: inputCard,
-                      ),
-                    );
-                  }
-
-                  return _withFocusRing(
-                    radius: BorderRadius.circular(AppTokens.radiusComposer),
-                    child: GlassSurface(
-                      role: GlassRole.control,
-                      variant: GlassVariant.regular,
-                      intensity: widget.glassIntensity,
-                      borderRadius:
-                          BorderRadius.circular(AppTokens.radiusComposer),
-                      blurSigma: 28,
-                      refraction: 20,
-                      edgeWidth: 24,
-                      gloss: 0.55,
-                      borderColor: isDark
-                          ? const Color(0x38FFFFFF)
-                          : const Color(0x90FFFFFF),
-                      borderWidth: 1.0,
-                      tint: isDark
-                          ? AppPalette.darkSurface.withValues(alpha: 0.36)
-                          : AppPalette.lightCanvas.withValues(alpha: 0.32),
-                      padding: const EdgeInsets.fromLTRB(12, 6, 10, 4),
-                      boxShadow: [
-                        BoxShadow(
-                          color: isDark
-                              ? const Color(0x60000000)
-                              : const Color(0x1A1E3A8A),
-                          blurRadius: 24,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                      child: inputCard,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, 8, 12, bottomPadding),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        AnimatedSize(
+          duration: MobileMotion.duration(context, MobileMotion.message),
+          curve: MobileMotion.curve,
+          alignment: Alignment.bottomCenter,
+          child: _buildStatusLine(),
+        ),
+        ValueListenableBuilder<bool>(
+          valueListenable: _focused,
+          builder: (context, focused, _) => AnimatedContainer(
+            duration: MotionPreferences.adjustDuration(
+                context, const Duration(milliseconds: 180)),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: focused
+                      ? Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withValues(alpha: .38)
+                      : Theme.of(context).colorScheme.outlineVariant),
+            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: ConstrainedBox(
+                  key: _fieldKey,
+                  constraints:
+                      const BoxConstraints(minHeight: 36, maxHeight: 128),
+                  child: TextField(
+                    focusNode: _focusNode,
+                    controller: widget.controller,
+                    minLines: 1,
+                    maxLines: 4,
+                    textInputAction: TextInputAction.newline,
+                    onTapOutside: (_) => _focusNode.unfocus(),
+                    style:
+                        TextStyle(fontSize: 16, height: 1.5, color: textColor),
+                    decoration: InputDecoration(
+                      hintText: widget.isRunning ? '补充要求…' : '给 NEXUS 发送消息',
+                      hintStyle: TextStyle(fontSize: 15, color: textFaint),
+                      isDense: true,
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 6),
                     ),
-                  );
-                },
+                  ),
+                ),
               ),
-            ],
+              Row(children: [
+                Align(
+                  widthFactor: 1,
+                  alignment: Alignment.centerLeft,
+                  child: Tooltip(
+                      message: widget.modelLabel?.isNotEmpty == true
+                          ? '当前模型：${widget.modelLabel}'
+                          : '选择模型',
+                      excludeFromSemantics: true,
+                      child: TextButton(
+                        onPressed: widget.onModelTap,
+                        style: TextButton.styleFrom(
+                          foregroundColor: textFaint,
+                          minimumSize: const Size(0, 48),
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          shape: const StadiumBorder(),
+                        ),
+                        child: Container(
+                          constraints: BoxConstraints(
+                              maxWidth: (MediaQuery.sizeOf(context).width -
+                                      (MediaQuery.sizeOf(context).width >=
+                                                  360 &&
+                                              MediaQuery.textScalerOf(context)
+                                                      .scale(1) <
+                                                  1.3
+                                          ? 240
+                                          : 200))
+                                  .clamp(60.0, 150.0)),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Flexible(
+                                child: Text(
+                              widget.modelLabel?.isNotEmpty == true
+                                  ? widget.modelLabel!
+                                  : '选择模型',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 12.5, fontWeight: FontWeight.w400),
+                            )),
+                            const SizedBox(width: 4),
+                            Icon(Icons.keyboard_arrow_down_rounded,
+                                size: 15, color: textFaint),
+                          ]),
+                        ),
+                      )),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: '更多输入工具',
+                  icon: MediaQuery.sizeOf(context).width >= 360 &&
+                          MediaQuery.textScalerOf(context).scale(1) < 1.3
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Text('执行选项',
+                                style: TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w400,
+                                    color: textFaint)),
+                            const SizedBox(width: 2),
+                            Icon(Icons.keyboard_arrow_down_rounded,
+                                size: 16, color: textFaint),
+                          ]))
+                      : Icon(Icons.tune_rounded, size: 20, color: textFaint),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'code':
+                        _insertCodeBlock();
+                      case 'mode':
+                        widget.onModeTap?.call();
+                      case 'approval':
+                        widget.onApprovalModeTap?.call();
+                      case 'speech':
+                        widget.onSpeechInput?.call();
+                      case 'metrics':
+                        widget.onMetricsTap?.call();
+                      case 'pause':
+                        widget.onPause?.call();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                        value: 'mode',
+                        enabled: widget.onModeTap != null,
+                        child: Text('执行模式 · ${widget.modeLabel}')),
+                    PopupMenuItem(
+                        value: 'approval',
+                        enabled: widget.onApprovalModeTap != null,
+                        child: Text(
+                            '审批 · ${_approvalModeLabel(widget.approvalMode)}')),
+                    if (widget.onSpeechInput != null)
+                      PopupMenuItem(
+                          value: 'speech',
+                          enabled: !widget.isRunning,
+                          child: const Text('语音输入（前台单句）')),
+                    if (widget.onMetricsTap != null)
+                      const PopupMenuItem(
+                          value: 'metrics', child: Text('用量与上下文')),
+                    if (widget.isRunning &&
+                        !widget.isPaused &&
+                        widget.onPause != null)
+                      const PopupMenuItem(value: 'pause', child: Text('暂停任务')),
+                    const PopupMenuItem(value: 'code', child: Text('插入代码块')),
+                  ],
+                ),
+                const Spacer(),
+                _buildAttachmentButton(),
+                if (widget.isRunning && widget.isPaused)
+                  _buildPausedStopButton(isDark),
+                _buildTrailingActionListenable(textFaint, isDark),
+              ]),
+            ]),
           ),
         ),
-      ),
+      ]),
     );
   }
 
@@ -375,42 +343,264 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     _focusNode.requestFocus();
   }
 
-  Widget _withFocusRing({
-    required BorderRadius radius,
-    required Widget child,
-  }) {
-    return Stack(
-      fit: StackFit.passthrough,
-      children: [
-        child,
-        Positioned.fill(
-          child: IgnorePointer(
-            child: ValueListenableBuilder<bool>(
-              valueListenable: _focused,
-              builder: (context, focused, _) => AnimatedContainer(
-                duration: NexusMotion.fast,
-                curve: Curves.easeOutCubic,
-                decoration: BoxDecoration(
-                  borderRadius: radius,
-                  border: focused
-                      ? Border.all(color: AppPalette.brand, width: 1.4)
-                      : Border.all(color: Colors.transparent, width: 1.4),
-                  boxShadow: focused
-                      ? [
-                          BoxShadow(
-                            color: AppPalette.brand.withValues(alpha: 0.16),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : const [],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
+  Future<void> _pasteDesktop() async {
+    try {
+      if (await DesktopHostService.instance.pasteImage()) return;
+      final text = (await Clipboard.getData('text/plain'))?.text;
+      if (text == null || !mounted) return;
+      final value = widget.controller.value;
+      final selection = value.selection;
+      final start = selection.isValid ? selection.start : value.text.length;
+      final end = selection.isValid ? selection.end : start;
+      widget.controller.value = TextEditingValue(
+          text: value.text.replaceRange(start, end, text),
+          selection: TextSelection.collapsed(offset: start + text.length));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('粘贴失败：$error')));
+      }
+    }
+  }
+
+  Widget _desktopInput(BuildContext context) {
+    final colors = DesktopTheme.maybeOf(context)!;
+    Widget menu(IconData icon, String label, VoidCallback? action,
+            {String? explanation}) =>
+        Tooltip(
+            message: explanation ?? label,
+            child: Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: TextButton.icon(
+                    onPressed: action,
+                    style: TextButton.styleFrom(
+                        backgroundColor: colors.hover,
+                        minimumSize: const Size(0, 26),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(7),
+                            side: BorderSide(color: colors.border))),
+                    icon: Icon(icon, size: 13, color: colors.muted),
+                    label: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 140),
+                        child: Text(label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                    fontSize: AppTokens.fontSizeFootnote,
+                                    fontWeight: FontWeight.w500,
+                                    color: colors.text))))));
+    return DesktopReadingColumn(
+        child: Padding(
+            padding: EdgeInsets.fromLTRB(16, 2, 16, widget.bottomPadding ?? 6),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (widget.desktopChatMode == ChatMode.plan &&
+                      !widget.planModeEnabled)
+                    const Padding(
+                      padding: EdgeInsets.only(left: 4, bottom: 4),
+                      child: NexusExecutionStatus(
+                        compact: true,
+                        state: NexusExecutionState.waitingForUser,
+                        label: '计划模式已开启 · 首轮需要确认',
+                      ),
+                    )
+                  else
+                    _buildStatusLine(),
+                  ValueListenableBuilder<bool>(
+                      valueListenable: _focused,
+                      builder: (context, focused, _) => Container(
+                          key: const ValueKey('desktop-composer-surface'),
+                          padding: const EdgeInsets.fromLTRB(12, 6, 8, 4),
+                          decoration: BoxDecoration(
+                              color: colors.panel,
+                              border: Border.all(
+                                  color:
+                                      focused ? colors.accent : colors.border,
+                                  width: focused ? 1.3 : 1.0),
+                              borderRadius: BorderRadius.circular(14),
+                              boxShadow: [
+                                BoxShadow(
+                                    color: colors.accent.withValues(
+                                        alpha: focused ? .10 : .035),
+                                    blurRadius: focused ? 18 : 10,
+                                    offset: const Offset(0, 3))
+                              ]),
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            CallbackShortcuts(
+                                bindings: {
+                                  const SingleActivator(LogicalKeyboardKey.keyV,
+                                      control: true): _pasteDesktop,
+                                  const SingleActivator(LogicalKeyboardKey.keyV,
+                                      meta: true): _pasteDesktop,
+                                  const SingleActivator(
+                                      LogicalKeyboardKey.enter,
+                                      shift: true): () {
+                                    final value = widget.controller.value;
+                                    final selection = value.selection;
+                                    final start = selection.isValid
+                                        ? selection.start
+                                        : value.text.length;
+                                    final end = selection.isValid
+                                        ? selection.end
+                                        : value.text.length;
+                                    widget.controller.value = TextEditingValue(
+                                        text: value.text
+                                            .replaceRange(start, end, '\n'),
+                                        selection: TextSelection.collapsed(
+                                            offset: start + 1));
+                                  },
+                                  const SingleActivator(
+                                      LogicalKeyboardKey.enter): () {
+                                    if (widget.controller.value.composing
+                                            .isValid &&
+                                        !widget.controller.value.composing
+                                            .isCollapsed) {
+                                      return;
+                                    }
+                                    if (widget.controller.text
+                                            .trim()
+                                            .isNotEmpty ||
+                                        widget.hasAttachments ||
+                                        widget.hasAttachmentsListenable
+                                                ?.value ==
+                                            true) {
+                                      widget.onSend();
+                                    }
+                                  },
+                                },
+                                child: Align(
+                                    key: _fieldKey,
+                                    alignment: Alignment.centerLeft,
+                                    child: TextField(
+                                        key: const ValueKey(
+                                            'desktop-composer-field'),
+                                        controller: widget.controller,
+                                        focusNode: _focusNode,
+                                        minLines: 1,
+                                        maxLines:
+                                            widget.desktopMaxLines.clamp(1, 5),
+                                        textInputAction:
+                                            TextInputAction.newline,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium,
+                                        decoration: InputDecoration(
+                                            hintText: widget.isRunning
+                                                ? '补充要求…'
+                                                : '描述任务，使用 / 选择技能…',
+                                            hintStyle: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall,
+                                            filled: false,
+                                            border: InputBorder.none,
+                                            enabledBorder: InputBorder.none,
+                                            focusedBorder: InputBorder.none,
+                                            contentPadding: EdgeInsets.zero)))),
+                            Row(children: [
+                              Expanded(
+                                  child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(children: [
+                                        IconButton(
+                                            tooltip: '添加附件',
+                                            onPressed: widget.onAttachmentMenu,
+                                            icon: const Icon(Icons.add,
+                                                size: 18)),
+                                        menu(
+                                            Icons.tune,
+                                            widget.modelLabel?.isNotEmpty ==
+                                                    true
+                                                ? widget.modelLabel!
+                                                : '选择模型',
+                                            widget.onModelTap),
+                                        if (widget.desktopChatMode != null &&
+                                            widget.onDesktopChatModeChanged !=
+                                                null)
+                                          ChatModeSwitcher(
+                                            inline: true,
+                                            mode: widget.desktopChatMode!,
+                                            running: widget.isRunning,
+                                            onChanged: widget
+                                                .onDesktopChatModeChanged!,
+                                          )
+                                        else
+                                          menu(
+                                              Icons.smart_toy_outlined,
+                                              widget.modeLabel,
+                                              widget.onModeTap),
+                                        menu(
+                                            Icons.shield_outlined,
+                                            widget.approvalMode ==
+                                                    ApprovalMode.ask
+                                                ? '操作前询问'
+                                                : _approvalModeLabel(
+                                                    widget.approvalMode),
+                                            widget.onApprovalModeTap,
+                                            explanation: '审批策略：决定执行操作前是否需要确认'),
+                                        PopupMenuButton<String>(
+                                            tooltip:
+                                                '更多输入工具 · Enter 发送 / Shift + Enter 换行',
+                                            icon: const Icon(Icons.more_horiz,
+                                                size: 18),
+                                            onSelected: (value) {
+                                              if (value == 'code') {
+                                                _insertCodeBlock();
+                                              }
+                                              if (value == 'session') {
+                                                widget.onModeTap?.call();
+                                              }
+                                            },
+                                            itemBuilder: (_) => [
+                                                  const PopupMenuItem(
+                                                      value: 'code',
+                                                      child: Text('插入代码块')),
+                                                  if (widget.onModeTap != null)
+                                                    const PopupMenuItem(
+                                                      value: 'session',
+                                                      child: Text('会话设置'),
+                                                    ),
+                                                  const PopupMenuItem(
+                                                    enabled: false,
+                                                    child: Text(
+                                                        'Enter 发送 · Shift + Enter 换行'),
+                                                  ),
+                                                ]),
+                                      ]))),
+                              if (widget.isRunning && widget.isPaused)
+                                _buildPausedStopButton(
+                                    Theme.of(context).brightness ==
+                                        Brightness.dark),
+                              _buildTrailingActionListenable(
+                                  colors.muted,
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark),
+                            ]),
+                            if (focused)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(top: 2, bottom: 2),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Enter 发送 · Shift+Enter 换行',
+                                    key: const ValueKey(
+                                        'desktop-composer-shortcut-hint'),
+                                    style: TextStyle(
+                                      fontSize: DesktopTheme.smallSize,
+                                      color: colors.muted,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ]))),
+                ])));
   }
 
   Widget _buildAttachmentButton() {
@@ -481,20 +671,24 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     if (widget.isRunning && canSend) {
       button = _FilledCircleButton(
         key: const ValueKey('trailing_action_follow_up'),
-        color: AppPalette.brand,
+        color:
+            DesktopTheme.maybeOf(context)?.accent ?? MobileTheme.brand(context),
         icon: Icons.playlist_add_rounded,
         tooltip: '补充要求',
         semanticLabel: '补充要求',
         onTap: () {
           NexusHaptics.medium(context);
-          SendFlightBus.launchFrom(_fieldKey.currentContext);
+          if (DesktopTheme.maybeOf(context) != null) {
+            SendFlightBus.launchFrom(_fieldKey.currentContext);
+          }
           widget.onSend();
         },
       );
     } else if (widget.isRunning && widget.isPaused) {
       button = _FilledCircleButton(
         key: const ValueKey('trailing_action_resume'),
-        color: AppPalette.brand,
+        color:
+            DesktopTheme.maybeOf(context)?.accent ?? MobileTheme.brand(context),
         icon: Icons.play_arrow_rounded,
         tooltip: '继续',
         semanticLabel: '继续',
@@ -504,15 +698,31 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
         },
       );
     } else if (widget.isRunning) {
+      final stopErr = Theme.of(context).colorScheme.error;
       button = _FilledCircleButton(
         key: const ValueKey('trailing_action_pause'),
-        color: AppPalette.warning,
-        icon: Icons.pause_rounded,
-        tooltip: '暂停（长按停止）',
-        semanticLabel: '暂停（长按停止）',
+        color: DesktopTheme.maybeOf(context) != null
+            ? AppPalette.warning
+            : stopErr.withValues(alpha: isDark ? 0.22 : 0.13),
+        borderColor: DesktopTheme.maybeOf(context) != null
+            ? null
+            : stopErr.withValues(alpha: isDark ? 0.40 : 0.28),
+        icon: DesktopTheme.maybeOf(context) != null
+            ? Icons.pause_rounded
+            : Icons.stop_rounded,
+        iconColor: DesktopTheme.maybeOf(context) != null
+            ? Colors.white
+            : stopErr,
+        tooltip: DesktopTheme.maybeOf(context) != null ? '暂停（长按停止）' : '停止任务',
+        semanticLabel:
+            DesktopTheme.maybeOf(context) != null ? '暂停（长按停止）' : '停止任务',
         onTap: () {
           NexusHaptics.medium(context);
-          (widget.onPause ?? widget.onStop)();
+          if (DesktopTheme.maybeOf(context) != null) {
+            (widget.onPause ?? widget.onStop)();
+          } else {
+            widget.onStop();
+          }
         },
         onLongPress: () {
           NexusHaptics.warning(context);
@@ -522,17 +732,25 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
     } else if (canSend) {
       button = _FilledCircleButton(
         key: const ValueKey('trailing_action_send_active'),
-        color: AppPalette.brand,
+        color:
+            DesktopTheme.maybeOf(context)?.accent ?? MobileTheme.brand(context),
         icon: Icons.arrow_upward_rounded,
         tooltip: '发送',
         semanticLabel: '发送',
-        pressedScale: NexusMotion.sendPressedScale,
-        releaseCurve: NexusMotion.curveSendRelease,
-        releaseDuration: NexusMotion.pressRelease,
+        pressedScale: DesktopTheme.maybeOf(context) != null
+            ? NexusMotion.sendPressedScale
+            : 0.97,
+        releaseCurve: DesktopTheme.maybeOf(context) != null
+            ? NexusMotion.curveSendRelease
+            : MobileMotion.curve,
+        releaseDuration: DesktopTheme.maybeOf(context) != null
+            ? NexusMotion.pressRelease
+            : MobileMotion.control,
         onTap: () {
           NexusHaptics.light(context);
-          _playSendRipple();
-          SendFlightBus.launchFrom(_fieldKey.currentContext);
+          if (DesktopTheme.maybeOf(context) != null) {
+            SendFlightBus.launchFrom(_fieldKey.currentContext);
+          }
           widget.onSend();
         },
       );
@@ -549,24 +767,22 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
       );
     }
 
-    return CustomPaint(
-      // 光圈画在按钮与输入框玻璃之上的前景层，不参与命中测试。
-      foregroundPainter: _SendRipplePainter(
-        progress: _sendPulse,
-        color: AppPalette.brand,
-        gain: MotionTierScope.gainOf(context),
-      ),
-      child: SizedBox(
-        key: const ValueKey('composer-primary-action-slot'),
-        width: 48,
-        height: 48,
-        // L1：发送 ↔ 停止以弹簧形变切换（缩放 + 轻旋转，5% 回弹）。
-        child: AnimatedSwitcher(
-          duration: NexusMorph.duration(context),
-          transitionBuilder: NexusMorph.transition(context),
-          layoutBuilder: NexusMorph.layout,
-          child: button,
-        ),
+    final phone = DesktopTheme.maybeOf(context) == null;
+    return SizedBox(
+      key: const ValueKey('composer-primary-action-slot'),
+      width: DesktopTheme.maybeOf(context) != null ? 36 : 48,
+      height: DesktopTheme.maybeOf(context) != null ? 36 : 48,
+      // Phone actions keep a stable 48dp slot and only crossfade.
+      child: AnimatedSwitcher(
+        duration: phone
+            ? MobileMotion.duration(context, MobileMotion.control)
+            : NexusMorph.duration(context),
+        transitionBuilder: phone
+            ? (child, animation) =>
+                FadeTransition(opacity: animation, child: child)
+            : NexusMorph.transition(context),
+        layoutBuilder: NexusMorph.layout,
+        child: button,
       ),
     );
   }
@@ -591,81 +807,6 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput>
 /// 选中：brandSoft 底 + 品牌色图标；未选中：透明底 + hairline 圆环 + 灰图标。
 /// 磁贴上只放图标，可读名称走 [semanticLabel] 与 tooltip（长按可见），
 /// 因此「聊天模式」「完全访问」在 360dp 小屏上也不会互相挤压或溢出。
-class _ModeTile extends StatelessWidget {
-  const _ModeTile({
-    required this.icon,
-    required this.semanticLabel,
-    required this.selected,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final String semanticLabel;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-
-    final bg = selected
-        ? (isDark
-            ? AppPalette.darkBrandSoft.withValues(alpha: 0.85)
-            : AppPalette.lightBrandSoft.withValues(alpha: 0.90))
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.black.withValues(alpha: 0.035));
-    final border = selected
-        ? AppPalette.brandAction.withValues(alpha: isDark ? 0.65 : 0.50)
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.14)
-            : Colors.black.withValues(alpha: 0.08));
-    final color = selected ? AppPalette.brandAction : textMuted;
-
-    return Semantics(
-      label: semanticLabel,
-      button: true,
-      selected: selected,
-      enabled: onTap != null,
-      child: Tooltip(
-        message: semanticLabel,
-        child: SizedBox(
-          width: AppTokens.kMinTouchTarget,
-          height: AppTokens.kMinTouchTarget,
-          child: Material(
-            color: Colors.transparent,
-            child: NexusPressable(
-              onTap: onTap,
-              borderRadius: BorderRadius.circular(24),
-              child: Center(
-                child: AnimatedContainer(
-                  duration: NexusMotion.durationFast(context),
-                  curve: NexusMotion.curveStandard,
-                  width: AppTokens.composerCircleButton,
-                  height: AppTokens.composerCircleButton,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: bg,
-                    border: Border.all(
-                      color: border,
-                      width: 1.0,
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(icon, size: 15, color: color),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 圆形描边按钮（「＋」附件入口）。48x48 触控区，视觉尺寸 26dp。
 class _CircleIconButton extends StatelessWidget {
   const _CircleIconButton({
     required this.icon,
@@ -683,8 +824,41 @@ class _CircleIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final resolved = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final desktop = DesktopTheme.maybeOf(context);
+    if (desktop != null) {
+      final enabled = onTap != null;
+      return Semantics(
+        label: semanticLabel,
+        button: true,
+        enabled: enabled,
+        child: Tooltip(
+          message: tooltip ?? semanticLabel,
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(DesktopTheme.radius),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(DesktopTheme.radius),
+                onTap: onTap,
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(DesktopTheme.radius),
+                    border: Border.all(color: desktop.border),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(icon,
+                      size: 16, color: enabled ? desktop.text : desktop.muted),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    final scheme = Theme.of(context).colorScheme;
+    final resolved = scheme.onSurfaceVariant;
 
     Widget button = SizedBox(
       width: 48,
@@ -696,30 +870,23 @@ class _CircleIconButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
           child: Center(
             child: Container(
-              width: AppTokens.composerCircleButton,
-              height: AppTokens.composerCircleButton,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.05)
-                    : Colors.black.withValues(alpha: 0.035),
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                color: Colors.transparent,
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.12)
-                      : Colors.black.withValues(alpha: 0.08),
-                  width: 1.0,
-                ),
               ),
               alignment: Alignment.center,
-              // L2：＋ ↔ × 以弹簧旋转形变切换。
+              // The attachment affordance crossfades without rotating.
               child: AnimatedSwitcher(
-                duration: NexusMorph.duration(context),
-                transitionBuilder: NexusMorph.transition(context),
+                duration: MobileMotion.duration(context, MobileMotion.control),
+                transitionBuilder: (child, animation) =>
+                    FadeTransition(opacity: animation, child: child),
                 layoutBuilder: NexusMorph.layout,
                 child: Icon(
                   icon,
                   key: ValueKey(icon),
-                  size: iconSize,
+                  size: 20,
                   color: resolved,
                 ),
               ),
@@ -752,6 +919,7 @@ class _FilledCircleButton extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.semanticLabel,
+    this.borderColor,
     this.tooltip,
     this.onTap,
     this.onLongPress,
@@ -762,6 +930,7 @@ class _FilledCircleButton extends StatelessWidget {
   });
 
   final Color color;
+  final Color? borderColor;
   final IconData icon;
   final String semanticLabel;
   final String? tooltip;
@@ -774,6 +943,36 @@ class _FilledCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = DesktopTheme.maybeOf(context);
+    if (desktop != null) {
+      final enabled = onTap != null || onLongPress != null;
+      final effectiveBg = enabled ? color : desktop.hover;
+      final effectiveFg = enabled ? iconColor : desktop.muted;
+      return Semantics(
+        label: semanticLabel,
+        button: true,
+        enabled: enabled,
+        child: Tooltip(
+          message: tooltip ?? semanticLabel,
+          child: SizedBox(
+            width: 32,
+            height: 32,
+            child: Material(
+              color: effectiveBg,
+              borderRadius: BorderRadius.circular(DesktopTheme.radius),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(DesktopTheme.radius),
+                onTap: onTap,
+                onLongPress: onLongPress,
+                child: Center(
+                  child: Icon(icon, size: 16, color: effectiveFg),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     Widget button = SizedBox(
       width: 48,
       height: 48,
@@ -790,11 +989,17 @@ class _FilledCircleButton extends StatelessWidget {
             child: AnimatedContainer(
               duration: NexusMotion.durationFast(context),
               curve: NexusMotion.curveStandard,
-              width: AppTokens.composerCircleButton,
-              height: AppTokens.composerCircleButton,
-              decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color,
+                border: borderColor == null
+                    ? null
+                    : Border.all(color: borderColor!),
+              ),
               alignment: Alignment.center,
-              child: Icon(icon, size: 15, color: iconColor),
+              child: Icon(icon, size: 21, color: iconColor),
             ),
           ),
         ),
@@ -812,70 +1017,4 @@ class _FilledCircleButton extends StatelessWidget {
       child: button,
     );
   }
-}
-
-/// 发送光圈：从按钮中心扩散的描边圆环，半径 0 → [maxRadius]，
-/// 透明度 [startAlpha] → 0。静止（进度为 0 或 1）时不绘制任何东西。
-/// S1：半径 / 透明度 / 线宽随强度放大（鲜明档 42dp、0.6、2.5dp）。
-class _SendRipplePainter extends CustomPainter {
-  _SendRipplePainter({
-    required this.progress,
-    required this.color,
-    this.gain = 1,
-  }) : super(repaint: progress);
-
-  static const double maxRadius = 28;
-  static const double startAlpha = 0.35;
-  static const double strokeWidth = 1.5;
-
-  final Animation<double> progress;
-  final Color color;
-  final double gain;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final t = progress.value;
-    if (t <= 0 || t >= 1) return;
-    final radius = amplify(maxRadius, gain, 0.5);
-    final alpha = amplify(startAlpha, gain, 0.72).clamp(0.0, 0.6);
-    final stroke = amplify(strokeWidth, gain, 0.67);
-    final eased = NexusMotion.curveEnter.transform(t);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..color = color.withValues(alpha: alpha * (1 - t));
-    canvas.drawCircle(size.center(Offset.zero), radius * eased, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _SendRipplePainter oldDelegate) =>
-      oldDelegate.progress != progress ||
-      oldDelegate.color != color ||
-      oldDelegate.gain != gain;
-}
-
-/// L2：聚焦时胶囊向两侧舒展（左右边距 12 → 8dp），失焦收回，弹簧驱动。
-class _FocusMorphMargin extends StatelessWidget {
-  const _FocusMorphMargin({required this.focused, required this.child});
-
-  final ValueListenable<bool> focused;
-  final Widget child;
-
-  static const double rest = 12;
-  static const double focusedInset = 8;
-
-  @override
-  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
-        valueListenable: focused,
-        child: child,
-        builder: (context, isFocused, child) => SpringValue(
-          value: isFocused ? focusedInset : rest,
-          spring: NexusSprings.smooth,
-          child: child,
-          builder: (context, inset, child) => Padding(
-            padding: EdgeInsets.symmetric(horizontal: inset),
-            child: child,
-          ),
-        ),
-      );
 }

@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -14,12 +15,14 @@ import '../../../application/error_humanizer.dart';
 import '../../../domain/models.dart';
 import '../../l10n/app_strings.dart';
 import '../chat_layout_controller.dart';
+import '../transcript_view_policy.dart';
 import '../../markdown/code_block.dart';
 import '../../motion/motion_preferences.dart';
 import '../../motion/nexus_haptics.dart';
 import '../../motion/nexus_motion.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../theme/desktop_theme.dart';
 import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/floating_toast.dart';
 import '../../widgets/speaking_wave.dart';
@@ -41,6 +44,7 @@ class MessageBubble extends StatelessWidget {
     required this.running,
     this.runProgress,
     required this.onLongPress,
+    this.onContextMenu,
     required this.onRegenerate,
     this.onStop,
     this.onEditPrompt,
@@ -57,6 +61,7 @@ class MessageBubble extends StatelessWidget {
   final bool running;
   final ChatRunProgress? runProgress;
   final VoidCallback? onLongPress;
+  final ValueChanged<Offset>? onContextMenu;
   final VoidCallback onRegenerate;
   final VoidCallback? onStop;
   final VoidCallback? onEditPrompt;
@@ -84,7 +89,9 @@ class MessageBubble extends StatelessWidget {
     final isDark = theme.brightness == Brightness.dark;
     final isUser = message.role == MessageRole.user;
     final isTool = message.role == MessageRole.tool;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
+    final desktop = DesktopTheme.maybeOf(context);
+    final textColor =
+        desktop?.text ?? (isDark ? AppPalette.darkText : AppPalette.lightText);
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
@@ -155,15 +162,18 @@ class MessageBubble extends StatelessWidget {
     // 这对"挑一段话复制"的场景可以接受。
     final plainStyle = TextStyle(
       color: textColor,
-      height: 1.6,
-      fontSize: AppTokens.fontSizeBody,
+      height: desktop != null ? 1.65 : 1.55,
+      fontSize: desktop != null ? AppTokens.fontSizeSubhead : 15.5,
       fontWeight: FontWeight.w400,
     );
 
     final userTextStyle = TextStyle(
-      color: isDark ? AppPalette.darkText : AppPalette.brandOnSoft,
-      height: 1.5,
-      fontSize: AppTokens.fontSizeBody,
+      color: desktop?.text ??
+          (isDark
+              ? AppPalette.darkText
+              : Theme.of(context).colorScheme.onSurface),
+      height: desktop != null ? 1.55 : 1.5,
+      fontSize: desktop != null ? AppTokens.fontSizeSubhead : 15.5,
       fontWeight: FontWeight.w400,
     );
 
@@ -180,27 +190,36 @@ class MessageBubble extends StatelessWidget {
     final body = isUser
         ? SendFlightAnchor(
             // L2：发送飞出的形变终点（与下方气泡底色 / 圆角一致）。
-            color:
-                isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-              bottomLeft: Radius.circular(20),
-              bottomRight: Radius.circular(6),
-            ),
+            color: desktop?.sidebar ??
+                (isDark
+                    ? theme.colorScheme.surfaceContainerHighest
+                    : const Color(0xFFF1F2F5)),
+            borderRadius: desktop != null
+                ? BorderRadius.circular(12)
+                : const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(6),
+                  ),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
               decoration: BoxDecoration(
-                color: isDark
-                    ? AppPalette.darkBrandSoft
-                    : AppPalette.lightBrandSoft,
+                color: desktop?.sidebar ??
+                    (isDark
+                        ? theme.colorScheme.surfaceContainerHighest
+                        : const Color(0xFFF1F2F5)),
+                border:
+                    desktop != null ? Border.all(color: desktop.border) : null,
                 // DeepSeek 式用户气泡：浅色品牌底、无描边，右下角收成小圆角。
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(20),
-                  topRight: Radius.circular(20),
-                  bottomLeft: Radius.circular(20),
-                  bottomRight: Radius.circular(6),
-                ),
+                borderRadius: desktop != null
+                    ? BorderRadius.circular(12)
+                    : const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                        bottomLeft: Radius.circular(20),
+                        bottomRight: Radius.circular(6),
+                      ),
               ),
               child: selecting
                   ? SelectableText(message.text, style: userTextStyle)
@@ -216,36 +235,49 @@ class MessageBubble extends StatelessWidget {
                     tailStyle: plainStyle,
                     styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                       p: plainStyle,
-                      blockSpacing: 6,
-                      listIndent: 24,
+                      blockSpacing: desktop != null ? 6 : 10,
+                      listIndent: desktop != null ? 24 : 20,
                       // 段落自带 6dp 上边距：段落之间、列表结束后接段落都是 12；
                       // 引导句与紧随其后的列表之间 6，列表项之间 6。
-                      pPadding: const EdgeInsets.only(top: 6),
+                      pPadding: desktop != null
+                          ? const EdgeInsets.only(top: 6)
+                          : EdgeInsets.zero,
+                      strong: const TextStyle(fontWeight: FontWeight.w600),
+                      horizontalRuleDecoration: BoxDecoration(
+                          border: Border(
+                              top: BorderSide(
+                                  color: theme.colorScheme.outlineVariant,
+                                  width: .5))),
                       // 代码块由 CodeBlockWidget 自绘圆角卡片；去掉 Markdown 外层
                       // 默认的直角底板，避免四角露出、形成两层卡片错位。
                       codeblockPadding: EdgeInsets.zero,
                       codeblockDecoration: const BoxDecoration(),
                       h1: TextStyle(
                         color: textColor,
-                        fontSize: AppTokens.fontSizeTitle,
+                        fontSize:
+                            desktop != null ? AppTokens.fontSizeTitle : 18,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h1Padding: const EdgeInsets.only(top: 20, bottom: 2),
+                      h1Padding: EdgeInsets.only(
+                          top: desktop != null ? 20 : 12, bottom: 2),
                       h2: TextStyle(
                         color: textColor,
-                        fontSize: AppTokens.fontSizeTitle,
+                        fontSize:
+                            desktop != null ? AppTokens.fontSizeTitle : 18,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h2Padding: const EdgeInsets.only(top: 20, bottom: 2),
+                      h2Padding: EdgeInsets.only(
+                          top: desktop != null ? 20 : 12, bottom: 2),
                       h3: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h3Padding: const EdgeInsets.only(top: 16, bottom: 2),
+                      h3Padding: EdgeInsets.only(
+                          top: desktop != null ? 16 : 10, bottom: 2),
                       h4: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
@@ -305,11 +337,11 @@ class MessageBubble extends StatelessWidget {
                       ),
                       blockquoteDecoration: BoxDecoration(
                         color: surface,
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusControl),
-                        border: const Border(
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
+                        border: Border(
                           left: BorderSide(
-                            color: AppPalette.brand,
+                            color: MobileTheme.brand(context),
                             width: 3,
                           ),
                         ),
@@ -323,34 +355,47 @@ class MessageBubble extends StatelessWidget {
                     textColor: textColor,
                     styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
                       p: plainStyle,
-                      blockSpacing: 6,
-                      listIndent: 24,
+                      blockSpacing: desktop != null ? 6 : 10,
+                      listIndent: desktop != null ? 24 : 20,
                       // 段落自带 6dp 上边距：段落之间、列表结束后接段落都是 12；
                       // 引导句与紧随其后的列表之间 6，列表项之间 6。
-                      pPadding: const EdgeInsets.only(top: 6),
+                      pPadding: desktop != null
+                          ? const EdgeInsets.only(top: 6)
+                          : EdgeInsets.zero,
+                      strong: const TextStyle(fontWeight: FontWeight.w600),
+                      horizontalRuleDecoration: BoxDecoration(
+                          border: Border(
+                              top: BorderSide(
+                                  color: theme.colorScheme.outlineVariant,
+                                  width: .5))),
                       codeblockPadding: EdgeInsets.zero,
                       codeblockDecoration: const BoxDecoration(),
                       h1: TextStyle(
                         color: textColor,
-                        fontSize: AppTokens.fontSizeTitle,
+                        fontSize:
+                            desktop != null ? AppTokens.fontSizeTitle : 18,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h1Padding: const EdgeInsets.only(top: 20, bottom: 2),
+                      h1Padding: EdgeInsets.only(
+                          top: desktop != null ? 20 : 12, bottom: 2),
                       h2: TextStyle(
                         color: textColor,
-                        fontSize: AppTokens.fontSizeTitle,
+                        fontSize:
+                            desktop != null ? AppTokens.fontSizeTitle : 18,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h2Padding: const EdgeInsets.only(top: 20, bottom: 2),
+                      h2Padding: EdgeInsets.only(
+                          top: desktop != null ? 20 : 12, bottom: 2),
                       h3: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
                         height: 1.4,
                         fontWeight: FontWeight.w500,
                       ),
-                      h3Padding: const EdgeInsets.only(top: 16, bottom: 2),
+                      h3Padding: EdgeInsets.only(
+                          top: desktop != null ? 16 : 10, bottom: 2),
                       h4: TextStyle(
                         color: textColor,
                         fontSize: AppTokens.fontSizeBody,
@@ -410,11 +455,11 @@ class MessageBubble extends StatelessWidget {
                       ),
                       blockquoteDecoration: BoxDecoration(
                         color: surface,
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusControl),
-                        border: const Border(
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
+                        border: Border(
                           left: BorderSide(
-                            color: AppPalette.brand,
+                            color: MobileTheme.brand(context),
                             width: 3,
                           ),
                         ),
@@ -423,12 +468,82 @@ class MessageBubble extends StatelessWidget {
                   );
 
     final reasoningText = message.reasoning;
+    final isStructuredError = !isUser && !isTool && errorDetail != null;
+    final trimmedPlain = plainText.trim();
+    final isSingleCodeMessage = desktop == null &&
+        !isUser &&
+        !isTool &&
+        !isLast &&
+        errorDetail == null &&
+        trimmedPlain.startsWith('```') &&
+        trimmedPlain.endsWith('```') &&
+        '```'.allMatches(trimmedPlain).length == 2;
+    final isIntermediateToolStep = desktop == null &&
+        !isUser &&
+        !isTool &&
+        !isLast &&
+        errorDetail == null &&
+        message.toolCalls.isNotEmpty;
+
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AttachmentStrip(parts: [...imageParts, ...audioParts, ...videoParts]),
-        if (hasText) _AnswerReveal(animate: lightweight, child: body),
+        if (isStructuredError)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            decoration: BoxDecoration(
+              color: AppPalette.danger.withValues(alpha: isDark ? 0.11 : 0.045),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppPalette.danger.withValues(alpha: isDark ? 0.28 : 0.18),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (hasText) _AnswerReveal(animate: lightweight, child: body),
+                const SizedBox(height: 4),
+                _ErrorDetailBlock(detail: errorDetail),
+                if (canRetryFailure) ...[
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _failureAction(
+                        label: '重试',
+                        icon: Icons.refresh_rounded,
+                        onPressed: onRegenerate,
+                        primary: true,
+                      ),
+                      if (onEditPrompt != null)
+                        _failureAction(
+                          label: '编辑问题',
+                          icon: Icons.edit_outlined,
+                          onPressed: onEditPrompt!,
+                        ),
+                      if (onSwitchModel != null)
+                        _failureAction(
+                          label: '切换模型',
+                          icon: Icons.tune_rounded,
+                          onPressed: onSwitchModel!,
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          )
+        else ...[
+          if (hasText) _AnswerReveal(animate: lightweight, child: body),
+          if (errorDetail != null) ...[
+            const SizedBox(height: 6),
+            _ErrorDetailBlock(detail: errorDetail),
+          ],
+        ],
         // 选择模式的退出入口：必须留在气泡内、且始终可达 —— 进入选择模式后
         // 长按会被文本选择器占用，菜单打不开，所以不能依赖菜单来退出。
         if (selecting && onExitSelection != null)
@@ -443,10 +558,6 @@ class MessageBubble extends StatelessWidget {
               child: const Text(AppStrings.finishSelecting),
             ),
           ),
-        if (errorDetail != null) ...[
-          const SizedBox(height: 6),
-          _ErrorDetailBlock(detail: errorDetail),
-        ],
         if (pauseNotice != null) ...[
           const SizedBox(height: 8),
           _RunPauseNoticeCard(
@@ -462,7 +573,11 @@ class MessageBubble extends StatelessWidget {
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final factor = ChatLayoutController.widthFactor.value;
-    final showActions = !isUser && !isTool && !(running && isLast);
+    final showActions = !isUser &&
+        !isTool &&
+        !(running && isLast) &&
+        !isIntermediateToolStep &&
+        !isSingleCodeMessage;
     final canRegenerate = isLast &&
         message.role == MessageRole.assistant &&
         !running &&
@@ -504,6 +619,33 @@ class MessageBubble extends StatelessWidget {
                 quietReply ? 'quiet-assistant-reply' : 'assistant-reply'),
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (desktop != null)
+                Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(children: [
+                      Container(
+                          width: 18,
+                          height: 18,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                              color: desktop.text,
+                              borderRadius: BorderRadius.circular(5)),
+                          child: Text('N',
+                              style: TextStyle(
+                                  color: desktop.canvas,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700))),
+                      const SizedBox(width: 8),
+                      Text('NEXUS',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: desktop.text)),
+                      const SizedBox(width: 6),
+                      Text('Agent',
+                          style:
+                              TextStyle(fontSize: 11.5, color: desktop.muted)),
+                    ])),
               if ((reasoningText?.trim().isNotEmpty ?? false) ||
                   (running && isLast && (runProgress != null || !hasText)))
                 ReasoningCompactBlock(
@@ -515,7 +657,7 @@ class MessageBubble extends StatelessWidget {
                   onStop: isLast ? onStop : null,
                 ),
               content,
-              if (canRetryFailure)
+              if (canRetryFailure && !isStructuredError)
                 Wrap(
                   spacing: 4,
                   children: [
@@ -523,6 +665,7 @@ class MessageBubble extends StatelessWidget {
                       label: '重试',
                       icon: Icons.refresh_rounded,
                       onPressed: onRegenerate,
+                      primary: true,
                     ),
                     if (onEditPrompt != null)
                       _failureAction(
@@ -553,9 +696,14 @@ class MessageBubble extends StatelessWidget {
         return Align(
           alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
           child: GestureDetector(
-            onLongPress: isTool ? null : onLongPress,
+            onLongPress: desktop != null || isTool ? null : onLongPress,
+            onSecondaryTapDown: desktop == null || isTool
+                ? null
+                : (event) => onContextMenu?.call(event.globalPosition),
             child: Tooltip(
-              message: isUser ? '长按可编辑 / 复制' : '长按可朗读 / 复制',
+              message: desktop != null
+                  ? '拖选复制 · 右键更多操作'
+                  : (isUser ? '长按可编辑 / 复制' : '长按可朗读 / 复制'),
               // 触发方式必须是 tap：`longPress` 会把长按从外层 GestureDetector
               // 手里抢走（实测对照：Tooltip(longPress)+Text 时父层收不到长按，
               // 改成 tap 就能收到），那样消息菜单就永远弹不出来。
@@ -564,11 +712,16 @@ class MessageBubble extends StatelessWidget {
               child: _SpeakSemantics(
                 speakingListenable: speakingListenable,
                 onSpeak: onSpeak,
+                semanticLabel: isUser ? '用户消息' : (isTool ? '工具结果' : '助手回复'),
                 onLongPressHint: isUser ? '编辑或复制' : '朗读或复制',
                 baseActions: customActions,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(maxWidth: maxWidth),
-                  child: bubble,
+                  // Reuse the list's registrar; avoid one region per history row.
+                  child: desktop != null &&
+                          SelectionContainer.maybeOf(context) == null
+                      ? SelectionArea(child: bubble)
+                      : bubble,
                 ),
               ),
             ),
@@ -582,16 +735,31 @@ class MessageBubble extends StatelessWidget {
     required String label,
     required IconData icon,
     required VoidCallback onPressed,
+    bool primary = false,
   }) =>
-      TextButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 16),
-        label: Text(label),
-        style: TextButton.styleFrom(
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-        ),
-      );
+      Builder(builder: (context) {
+        final brand = MobileTheme.brand(context);
+        final cs = Theme.of(context).colorScheme;
+        return TextButton.icon(
+          onPressed: onPressed,
+          icon: Icon(icon, size: 15),
+          label: Text(label),
+          style: TextButton.styleFrom(
+            minimumSize: const Size(0, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            backgroundColor: primary
+                ? brand.withValues(alpha: 0.11)
+                : cs.surface.withValues(alpha: 0.85),
+            foregroundColor: primary ? brand : cs.onSurface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(11),
+              side: primary
+                  ? BorderSide.none
+                  : BorderSide(color: cs.outlineVariant.withValues(alpha: 0.7)),
+            ),
+          ),
+        );
+      });
 }
 
 /// 可续跑暂停提示卡：预算用尽或连续失败熔断时显示在回复末尾。
@@ -633,7 +801,11 @@ class _RunPauseNoticeCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
         decoration: BoxDecoration(
           color: accent.withValues(alpha: isDark ? 0.14 : 0.08),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(MobileTheme.cardRadius(context)),
+          border: Border.all(
+            color: accent.withValues(alpha: isDark ? 0.28 : 0.20),
+            width: 1.0,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -754,6 +926,23 @@ class _ReplyActionRow extends StatelessWidget {
     final speaking = speakingListenable;
     final regenerate = onRegenerate;
     final meta = metaLabel;
+    final desktop = DesktopTheme.maybeOf(context);
+    final metaText = meta == null
+        ? null
+        : Text(
+            meta,
+            key: const ValueKey('reply-meta'),
+            textAlign: TextAlign.end,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: desktop != null
+                  ? DesktopTheme.smallSize
+                  : AppTokens.fontSizeBadge,
+              color: textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          );
     return Row(
       children: [
         CopyFeedbackButton(
@@ -800,22 +989,30 @@ class _ReplyActionRow extends StatelessWidget {
             SharePlus.instance.share(ShareParams(text: copyText)),
           ),
         ),
+        if (regenerate != null && desktop != null)
+          _action(
+            icon: Icons.refresh_rounded,
+            tooltip: '重新生成',
+            onPressed: regenerate,
+          ),
+        if (desktop != null && meta != null) const SizedBox(width: 8),
         Expanded(
-          child: meta == null
+          // Desktop hover must not introduce a mobile long-press recognizer.
+          child: metaText == null
               ? const SizedBox.shrink()
-              : Text(
-                  meta,
-                  key: const ValueKey('reply-meta'),
-                  textAlign: TextAlign.end,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: AppTokens.fontSizeFootnote - 1,
-                    color: textMuted,
-                  ),
-                ),
+              : desktop == null
+                  ? Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                          tooltip: meta,
+                          iconSize: 17,
+                          icon: Icon(Icons.info_outline_rounded,
+                              color: textMuted),
+                          onPressed: () =>
+                              FloatingToast.show(context, meta ?? '')))
+                  : Tooltip(message: meta, child: metaText),
         ),
-        if (regenerate != null)
+        if (regenerate != null && desktop == null)
           _action(
             icon: Icons.refresh_rounded,
             tooltip: '重新生成',
@@ -833,6 +1030,7 @@ class _ReplyActionRow extends StatelessWidget {
 /// 语义节点，不会顺带重建气泡正文（Markdown 解析成本高，且这是高频路径）。
 class _SpeakSemantics extends StatelessWidget {
   const _SpeakSemantics({
+    required this.semanticLabel,
     required this.onLongPressHint,
     required this.baseActions,
     required this.onSpeak,
@@ -840,6 +1038,7 @@ class _SpeakSemantics extends StatelessWidget {
     required this.child,
   });
 
+  final String semanticLabel;
   final String onLongPressHint;
   final Map<CustomSemanticsAction, VoidCallback> baseActions;
   final VoidCallback? onSpeak;
@@ -852,6 +1051,11 @@ class _SpeakSemantics extends StatelessWidget {
     final speak = onSpeak;
     if (listenable == null || speak == null) {
       return Semantics(
+        // Keep actions on a bounded message node, not a copy of the full reply.
+        // Paragraphs retain their own readable nodes during streaming.
+        container: true,
+        explicitChildNodes: true,
+        label: semanticLabel,
         onLongPressHint: onLongPressHint,
         customSemanticsActions: baseActions,
         child: child,
@@ -860,6 +1064,9 @@ class _SpeakSemantics extends StatelessWidget {
     return ValueListenableBuilder<bool>(
       valueListenable: listenable,
       builder: (context, speaking, child) => Semantics(
+        container: true,
+        explicitChildNodes: true,
+        label: semanticLabel,
         onLongPressHint: onLongPressHint,
         customSemanticsActions: {
           ...baseActions,
@@ -886,7 +1093,7 @@ class _ErrorDetailBlock extends StatefulWidget {
 }
 
 class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
-  bool _expanded = false;
+  bool _expanded = TranscriptViewPolicy.forError.errorDetailsExpanded;
 
   @override
   Widget build(BuildContext context) {
@@ -900,7 +1107,7 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
       children: [
         NexusDisclosure(
           semanticLabel: _expanded ? '技术细节已展开，点击收起' : '技术细节已收起，点击展开',
-          initiallyExpanded: false,
+          initiallyExpanded: TranscriptViewPolicy.forError.errorDetailsExpanded,
           onExpansionChanged: (expanded) =>
               setState(() => _expanded = expanded),
           headerPadding: const EdgeInsets.symmetric(vertical: 4),
@@ -920,7 +1127,8 @@ class _ErrorDetailBlockState extends State<_ErrorDetailBlock> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: surface,
-              borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+              borderRadius:
+                  BorderRadius.circular(MobileTheme.cardRadius(context)),
             ),
             child: SelectableText(
               widget.detail,
@@ -1018,7 +1226,13 @@ String toolResultSummary(String raw) {
   }
   if (decoded is! Map) return firstLine;
   final message = decoded['message']?.toString().trim() ?? '';
-  if (message.isEmpty) return firstLine;
+  if (message.isEmpty) {
+    final error = decoded['error'];
+    if (decoded['ok'] == false && error is String && error.trim().isNotEmpty) {
+      return '失败：${error.trim()}';
+    }
+    return firstLine;
+  }
   return decoded['ok'] == false ? '失败：$message' : message;
 }
 
@@ -1037,19 +1251,37 @@ class _ToolResultChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isFailed = summary.startsWith('失败：');
+    final chipBg = isFailed
+        ? AppPalette.danger.withValues(alpha: isDark ? 0.16 : 0.07)
+        : textColor.withValues(alpha: isDark ? 0.08 : 0.045);
+    final chipBorder = isFailed
+        ? Border.all(
+            color: AppPalette.danger.withValues(alpha: isDark ? 0.30 : 0.20),
+          )
+        : null;
+    final fgColor = isFailed
+        ? (isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB42318))
+        : textMuted;
+
     return Semantics(
       label: '工具调用：$summary',
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
         decoration: BoxDecoration(
-          color: textColor.withValues(alpha: isDark ? 0.08 : 0.045),
-          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+          color: chipBg,
+          borderRadius: BorderRadius.circular(12),
+          border: chipBorder,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.handyman_outlined, size: 14, color: textMuted),
+            Icon(
+              isFailed ? Icons.error_outline_rounded : Icons.handyman_outlined,
+              size: 14,
+              color: isFailed ? AppPalette.danger : textMuted,
+            ),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
@@ -1057,8 +1289,9 @@ class _ToolResultChip extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: textMuted,
+                  color: fgColor,
                   fontSize: AppTokens.fontSizeCaption,
+                  fontWeight: isFailed ? FontWeight.w500 : FontWeight.w400,
                   height: 1.3,
                 ),
               ),

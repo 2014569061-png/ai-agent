@@ -1,41 +1,43 @@
 import 'package:flutter/material.dart';
+import '../theme/app_tokens.dart';
 
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
-import '../widgets/glass_surface.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/section_card.dart';
 import '../motion/press_squash.dart';
 import '../widgets/nexus_switch.dart';
 
 /// 设置模块统一色彩入口。
 /// 全部委托给 AppPalette / AppSemanticColors，不再自带一套 iOS 色板。
 Color settingsBgColor(BuildContext context) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  final isFlat =
-      AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
-  return isFlat
-      ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-      : Colors.transparent;
+  final desktop = DesktopTheme.maybeOf(context);
+  if (desktop != null) return desktop.canvas;
+  return Colors.transparent;
 }
 
 Color settingsCardColor(BuildContext context) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  return isDark ? AppPalette.darkSurface : AppPalette.lightCanvas;
+  final desktop = DesktopTheme.maybeOf(context);
+  if (desktop != null) return desktop.panel;
+  return Theme.of(context).colorScheme.surface;
 }
 
 Color settingsDividerColor(BuildContext context) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  return isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+  final desktop = DesktopTheme.maybeOf(context);
+  if (desktop != null) return desktop.border;
+  return Theme.of(context).colorScheme.outlineVariant;
 }
 
 Color settingsMutedColor(BuildContext context) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  return isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+  final desktop = DesktopTheme.maybeOf(context);
+  if (desktop != null) return desktop.muted;
+  return Theme.of(context).colorScheme.onSurfaceVariant;
 }
 
 Color settingsFaintColor(BuildContext context) {
-  final isDark = Theme.of(context).brightness == Brightness.dark;
-  return isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
+  final desktop = DesktopTheme.maybeOf(context);
+  if (desktop != null) return desktop.muted;
+  return Theme.of(context).colorScheme.onSurfaceVariant;
 }
 
 /// 图标色归一化。
@@ -48,7 +50,13 @@ Color settingsFaintColor(BuildContext context) {
 /// 注意：这是「止血」措施，调用点里的字面量色值仍应逐步清理。
 Color normalizeIconTint(BuildContext context, Color? raw) {
   final semantic = AppTheme.semanticOf(context);
-  if (raw == null) return semantic.textMuted;
+  if (raw == null) {
+    return DesktopTheme.maybeOf(context)?.muted ?? semantic.textMuted;
+  }
+  if (DesktopTheme.maybeOf(context) == null &&
+      (raw == AppPalette.brand || raw == AppPalette.darkBrandText)) {
+    return Theme.of(context).colorScheme.primary;
+  }
   const iosGreen = Color(0xFF34C759);
   const iosOrange = Color(0xFFFF9500);
   const iosOrangeBright = Color(0xFFFF9F0A);
@@ -74,7 +82,7 @@ Color normalizeIconTint(BuildContext context, Color? raw) {
       raw == semantic.brand) {
     return raw;
   }
-  return semantic.textMuted;
+  return DesktopTheme.maybeOf(context)?.muted ?? semantic.textMuted;
 }
 
 class SettingsSectionTitle extends StatelessWidget {
@@ -84,25 +92,64 @@ class SettingsSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopTheme.maybeOf(context) == null) {
+      return Padding(
+        padding: padding ?? const EdgeInsets.fromLTRB(20, 24, 20, 8),
+        child: Semantics(
+            header: true,
+            child: Text(title,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant))),
+      );
+    }
+    final dividerColor = settingsDividerColor(context);
     return Padding(
-      padding: padding ?? const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      padding: padding ?? const EdgeInsets.fromLTRB(16, 18, 16, 8),
       child: Semantics(
         header: true,
-        child: Text(
-          title,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: settingsMutedColor(context),
-          ),
+        child: Row(
+          children: [
+            Container(
+              width: 3,
+              height: 12,
+              decoration: BoxDecoration(
+                color: AppPalette.brand,
+                borderRadius: BorderRadius.circular(1.5),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: AppTokens.fontSizeFootnote,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.35,
+                  color: settingsMutedColor(context),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Divider(
+                height: 1,
+                thickness: 0.8,
+                color: dividerColor,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// 设置分组卡片圆角：与设置主页（T3）、历史、任务、任务详情等页面统一为 16（Q6）。
-const kSettingsCardRadius = 16.0;
+/// Legacy radius retained for desktop callers; phone groups use SectionCard.
+const kSettingsCardRadius = AppTokens.radiusCard;
 
 class SettingsGroupCard extends StatelessWidget {
   const SettingsGroupCard({
@@ -118,82 +165,53 @@ class SettingsGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final intensity = AppAppearanceController.resolvedGlassIntensity;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final radius = BorderRadius.circular(kSettingsCardRadius);
-    final cardMargin = margin ?? const EdgeInsets.symmetric(horizontal: 16);
-
+    final cardMargin = margin ?? const EdgeInsets.symmetric(horizontal: 20);
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: children,
     );
 
-    if (intensity != GlassIntensity.flat) {
-      return GlassSurface(
-        role: GlassRole.content,
-        variant: GlassVariant.regular,
-        intensity: intensity,
-        borderRadius: radius,
+    final desktop = DesktopTheme.maybeOf(context);
+    if (desktop != null) {
+      return Container(
         margin: cardMargin,
         padding: padding,
-        borderColor: isDark ? const Color(0x33FFFFFF) : const Color(0x80FFFFFF),
-        tint: isDark
-            ? AppPalette.darkSurface.withValues(alpha: 0.42)
-            : AppPalette.lightCanvas.withValues(alpha: 0.46),
-        boxShadow: [
-          BoxShadow(
-            color: isDark ? const Color(0x40000000) : const Color(0x141E3A8A),
-            blurRadius: 16,
-            offset: const Offset(0, 5),
-          ),
-        ],
-        child: Material(
-          type: MaterialType.transparency,
-          borderRadius: radius,
-          clipBehavior: Clip.antiAlias,
-          child: content,
-        ),
+        decoration: BoxDecoration(
+            color: desktop.panel,
+            borderRadius: BorderRadius.circular(DesktopTheme.panelRadius),
+            border: Border.all(color: desktop.border)),
+        clipBehavior: Clip.antiAlias,
+        child: Material(type: MaterialType.transparency, child: content),
       );
     }
-
-    return Padding(
-      padding: cardMargin,
-      child: Container(
-        padding: padding,
-        decoration: BoxDecoration(
-          color: settingsCardColor(context),
-          borderRadius: radius,
-          border: Border.all(
-            color: settingsDividerColor(context),
-            width: 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: content,
-      ),
+    return SectionCard(
+      margin: cardMargin,
+      padding: padding,
+      child: content,
     );
   }
 }
 
 /// 设置分组内部的分隔线。
 ///
-/// 默认 [indent] 为 48，精确对齐 [SettingsTile] 文本起始位置：
-/// 16 (左侧内边距) + 20 (图标宽度) + 12 (图标与文本间距) = 48。
+/// Phone defaults align with SettingsTile text: 16dp padding + 40dp icon +
+/// 12dp gap. Explicit overrides and the desktop's 48dp inset are preserved.
 /// 使用 [ExcludeSemantics] 剔除无意义的视觉装饰线条，避免干扰读屏无障碍焦点序列。
 class SettingsDivider extends StatelessWidget {
-  const SettingsDivider({super.key, this.indent = 48, this.endIndent = 0});
-  final double indent;
-  final double endIndent;
+  const SettingsDivider({super.key, this.indent, this.endIndent});
+  final double? indent;
+  final double? endIndent;
 
   @override
   Widget build(BuildContext context) {
+    final mobile = DesktopTheme.maybeOf(context) == null;
     return ExcludeSemantics(
       child: Divider(
         height: 1,
-        thickness: 1,
-        indent: indent,
-        endIndent: endIndent,
+        thickness: mobile ? .7 : 1,
+        indent: indent ?? (mobile ? 68 : 48),
+        endIndent: endIndent ?? (mobile ? 16 : 0),
         color: settingsDividerColor(context),
       ),
     );
@@ -220,6 +238,7 @@ class SettingsTile extends StatelessWidget {
     this.onTap,
     this.contentPadding,
     this.subtitleMaxLines = 2,
+    this.wrapText = false,
   });
 
   final IconData? icon;
@@ -242,6 +261,9 @@ class SettingsTile extends StatelessWidget {
   /// 副标题最多行数；默认 2，承载多段状态信息的行可放宽。
   final int subtitleMaxLines;
 
+  /// Critical permission descriptions can grow instead of being truncated.
+  final bool wrapText;
+
   @override
   Widget build(BuildContext context) {
     final semantic = AppTheme.semanticOf(context);
@@ -249,11 +271,30 @@ class SettingsTile extends StatelessWidget {
     // 规范：单色 20px 线性图标，不再使用 iOS 风格的彩色圆角方块。
     Widget? leadingWidget = leading;
     if (leadingWidget == null && icon != null) {
-      leadingWidget = Icon(
-        icon,
-        size: 20,
-        color: normalizeIconTint(context, iconColor),
-      );
+      final resolvedTint = normalizeIconTint(context, iconColor);
+      final isDark = Theme.of(context).brightness == Brightness.dark;
+      if (DesktopTheme.maybeOf(context) != null) {
+        leadingWidget = Icon(
+          icon,
+          size: 18,
+          color: resolvedTint,
+        );
+      } else {
+        leadingWidget = Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: resolvedTint.withValues(alpha: isDark ? 0.14 : 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 20,
+            color: resolvedTint,
+          ),
+        );
+      }
     }
 
     final hasChevron = showChevron &&
@@ -262,7 +303,7 @@ class SettingsTile extends StatelessWidget {
         (selected == null);
 
     return PressSquash(
-      enabled: onTap != null,
+      enabled: onTap != null && DesktopTheme.maybeOf(context) == null,
       scale: NexusPressScale.row,
       child: Material(
         color: Colors.transparent,
@@ -275,7 +316,9 @@ class SettingsTile extends StatelessWidget {
           hint: onTap == null ? null : '打开$title',
           child: InkWell(
             onTap: onTap,
-            child: Padding(
+            child: Container(
+              constraints: BoxConstraints(
+                  minHeight: DesktopTheme.maybeOf(context) == null ? 58 : 44),
               padding: contentPadding ??
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
@@ -292,25 +335,41 @@ class SettingsTile extends StatelessWidget {
                         Text(
                           title,
                           style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w400,
+                            fontSize: DesktopTheme.maybeOf(context) == null
+                                ? 16
+                                : AppTokens.fontSizeBody,
+                            fontWeight: DesktopTheme.maybeOf(context) == null
+                                ? FontWeight.w500
+                                : FontWeight.w400,
                             height: 1.4,
-                            color: titleColor ?? semantic.textPrimary,
+                            color: titleColor ??
+                                DesktopTheme.maybeOf(context)?.text ??
+                                semantic.textPrimary,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          maxLines: wrapText
+                              ? null
+                              : (MediaQuery.textScalerOf(context).scale(15) > 19
+                                  ? 2
+                                  : 1),
+                          overflow: wrapText
+                              ? TextOverflow.visible
+                              : TextOverflow.ellipsis,
                         ),
                         if (subtitle != null && subtitle!.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Text(
                             subtitle!,
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: AppTokens.fontSizeCaption,
                               height: 1.55,
-                              color: subtitleColor ?? semantic.textMuted,
+                              color: subtitleColor ??
+                                  DesktopTheme.maybeOf(context)?.muted ??
+                                  semantic.textMuted,
                             ),
-                            maxLines: subtitleMaxLines,
-                            overflow: TextOverflow.ellipsis,
+                            maxLines: wrapText ? null : subtitleMaxLines,
+                            overflow: wrapText
+                                ? TextOverflow.visible
+                                : TextOverflow.ellipsis,
                           ),
                         ],
                       ],
@@ -326,15 +385,24 @@ class SettingsTile extends StatelessWidget {
                         if (trailingText != null &&
                             trailingText!.isNotEmpty) ...[
                           ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 150),
+                            constraints: BoxConstraints(
+                                maxWidth:
+                                    (MediaQuery.sizeOf(context).width * .28)
+                                        .clamp(72.0, 180.0)),
                             child: Text(
                               trailingText!,
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: AppTokens.fontSizeCaption,
                                 height: 1.55,
-                                color: trailingTextColor ?? semantic.textFaint,
+                                color: trailingTextColor ??
+                                    DesktopTheme.maybeOf(context)?.muted ??
+                                    semantic.textFaint,
                               ),
-                              maxLines: 1,
+                              maxLines:
+                                  MediaQuery.textScalerOf(context).scale(13) >
+                                          18
+                                      ? 2
+                                      : 1,
                               overflow: TextOverflow.ellipsis,
                               textAlign: TextAlign.end,
                             ),
@@ -383,17 +451,13 @@ class SettingsSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final control = NexusSwitch(
+        value: value,
+        onChanged: onChanged,
+        activeTrackColor: activeColor,
+        activeThumbColor: Colors.white);
+    if (DesktopTheme.maybeOf(context) == null) return control;
     return SizedBox(
-      height: 28,
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: NexusSwitch(
-          value: value,
-          onChanged: onChanged,
-          activeTrackColor: activeColor,
-          activeThumbColor: Colors.white,
-        ),
-      ),
-    );
+        height: 28, child: FittedBox(fit: BoxFit.contain, child: control));
   }
 }

@@ -1,4 +1,7 @@
+import '../widgets/nexus_search_field.dart';
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 
 import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
@@ -28,7 +31,8 @@ class PromptApplyResult {
 
 /// Prompt template library.
 class PromptLibraryPage extends StatefulWidget {
-  const PromptLibraryPage({super.key});
+  const PromptLibraryPage({super.key, this.database});
+  final Future<AppDatabase> Function()? database;
 
   @override
   State<PromptLibraryPage> createState() => _PromptLibraryPageState();
@@ -41,6 +45,10 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
   bool _favoritesOnly = false;
   List<PromptTemplate> _templates = const [];
   bool _loading = true;
+  Object? _error;
+
+  Future<AppDatabase> _database() =>
+      widget.database?.call() ?? DatabaseProvider.instance.database;
 
   @override
   void initState() {
@@ -49,13 +57,26 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
   }
 
   Future<void> _reload() async {
-    final db = await DatabaseProvider.instance.database;
-    final templates = await db.allPromptTemplates();
-    if (!mounted) return;
     setState(() {
-      _templates = templates;
-      _loading = false;
+      _loading = true;
+      _error = null;
     });
+    try {
+      final db = await _database();
+      final templates = await db.allPromptTemplates();
+      if (!mounted) return;
+      setState(() {
+        _templates = templates;
+        _loading = false;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error;
+          _loading = false;
+        });
+      }
+    }
   }
 
   Set<String> get _categories => _templates
@@ -83,9 +104,9 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final result = await showNexusSheet<(String, String, String)>(
-context: context,
-isScrollControlled: true,
-builder: (sheetContext) {
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
         return FractionallySizedBox(
           heightFactor: 0.85,
           child: SafeArea(
@@ -101,7 +122,7 @@ builder: (sheetContext) {
                     child: Row(
                       children: [
                         Text(
-                          existing == null ? '新建 Prompt' : '编辑 Prompt',
+                          existing == null ? '新建提示词' : '编辑 Prompt',
                           style: Theme.of(sheetContext)
                               .textTheme
                               .titleMedium
@@ -193,7 +214,7 @@ builder: (sheetContext) {
                             style: FilledButton.styleFrom(
                               minimumSize: const Size.fromHeight(
                                   AppTokens.kMinTouchTarget),
-                              backgroundColor: AppPalette.brandAction,
+                              backgroundColor: MobileTheme.brand(context),
                               foregroundColor: Colors.white,
                             ),
                             onPressed: () {
@@ -215,15 +236,15 @@ builder: (sheetContext) {
           ),
         );
       },
-removeInnerViewInsets: true,
-);
+      removeInnerViewInsets: true,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       name.dispose();
       category.dispose();
       content.dispose();
     });
     if (result == null || result.$1.isEmpty) return;
-    final db = await DatabaseProvider.instance.database;
+    final db = await _database();
     final now = DateTime.now();
     await db.savePromptTemplate(PromptTemplate(
       id: existing?.id ?? UniqueId.generate('prompt', now: now),
@@ -239,7 +260,7 @@ removeInnerViewInsets: true,
   }
 
   Future<void> _toggleFavorite(PromptTemplate template) async {
-    final db = await DatabaseProvider.instance.database;
+    final db = await _database();
     await db.savePromptTemplate(template.copyWith(
         isFavorite: !template.isFavorite, updatedAt: DateTime.now()));
     await _reload();
@@ -248,13 +269,13 @@ removeInnerViewInsets: true,
   Future<void> _delete(PromptTemplate template) async {
     final confirmed = await showConfirmAction(
       context,
-      title: '删除 Prompt',
+      title: '删除提示词',
       message: '确定删除“${template.name}”吗？',
       confirmLabel: '删除',
       isDanger: true,
     );
     if (!confirmed) return;
-    final db = await DatabaseProvider.instance.database;
+    final db = await _database();
     await db.deletePromptTemplate(template.id);
     await _reload();
   }
@@ -308,35 +329,37 @@ removeInnerViewInsets: true,
 
     return Scaffold(
       appBar: const NexusPageHeader(
-        title: 'Prompt 模板',
+        title: '提示词',
         subtitle: '分类管理与快速调用常用提示词',
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(),
-        backgroundColor: AppPalette.brand,
+        backgroundColor: MobileTheme.brand(context),
         foregroundColor: Colors.white,
         elevation: 0,
         focusElevation: 0,
         hoverElevation: 0,
         highlightElevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
         ),
         icon: const Icon(Icons.add),
-        label: const Text('新建 Prompt'),
+        label: const Text('新建提示词'),
       ),
-      body: Column(
+      body: NexusPageLayout(
+          child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+            child: NexusSearchField(
               controller: _searchController,
+              hintText: '搜索模板标题、内容或分类',
               onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(
-                hintText: '搜索 Prompt',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
-              ),
+              onClear: () {
+                _searchController.clear();
+                setState(() => _query = '');
+              },
             ),
           ),
           SingleChildScrollView(
@@ -373,11 +396,12 @@ removeInnerViewInsets: true,
           Expanded(
             child: AsyncStateView(
               loading: _loading,
+              error: _error,
+              onRetry: _reload,
               isEmpty: filtered.isEmpty,
               emptyIcon: Icons.lightbulb_outline,
-              emptyTitle: '暂无 Prompt 模板',
-              emptySubtitle: '点击右下角按钮新建你的第一个 Prompt 模板。',
-              onRetry: _reload,
+              emptyTitle: '暂无提示词',
+              emptySubtitle: '点击右下角按钮新建你的第一个提示词。',
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
                 itemCount: filtered.length,
@@ -390,7 +414,7 @@ removeInnerViewInsets: true,
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 
@@ -413,8 +437,8 @@ removeInnerViewInsets: true,
                         child: Text(
                           template.name,
                           style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
+                            fontSize: AppTokens.fontSizeBody,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
@@ -437,6 +461,10 @@ removeInnerViewInsets: true,
                     backgroundColor: isDark
                         ? AppPalette.darkSurface
                         : AppPalette.lightSurface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.controlRadius(context)),
+                    ),
                     side: BorderSide(
                       color: isDark
                           ? AppPalette.darkHairline
@@ -445,7 +473,8 @@ removeInnerViewInsets: true,
                     label: Text(
                       template.category,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTokens.fontSizeBadge,
+                        fontWeight: FontWeight.w600,
                         color: isDark
                             ? AppPalette.darkTextMuted
                             : AppPalette.lightTextMuted,
@@ -460,7 +489,7 @@ removeInnerViewInsets: true,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppTokens.fontSizeCaption,
                       color: isDark
                           ? AppPalette.darkTextMuted
                           : AppPalette.lightTextMuted,
@@ -472,11 +501,11 @@ removeInnerViewInsets: true,
                       FilledButton(
                         style: FilledButton.styleFrom(
                           elevation: 0,
-                          backgroundColor: AppPalette.brand,
+                          backgroundColor: MobileTheme.brand(context),
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusControl),
+                            borderRadius: BorderRadius.circular(
+                                MobileTheme.controlRadius(context)),
                           ),
                         ),
                         onPressed: () => _use(template),

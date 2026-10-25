@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,11 +7,11 @@ import '../../../application/dashboard_service.dart';
 import '../../../application/providers.dart';
 import '../../../application/task_service.dart';
 import '../../../domain/models.dart';
-import '../../../infrastructure/database/app_database.dart';
 import '../../l10n/app_strings.dart';
 import '../../motion/nexus_page_route_factory.dart';
 import '../../tasks/task_details_page.dart';
 import '../../theme/app_palette.dart';
+import '../../theme/app_tokens.dart';
 import '../../widgets/floating_toast.dart';
 import '../../widgets/nexus_section.dart';
 import '../../widgets/section_card.dart';
@@ -28,7 +29,7 @@ class TodoSection extends ConsumerStatefulWidget {
   });
 
   final List<DashboardTodoItem> todos;
-  final ValueChanged<Conversation>? onConversationSelected;
+  final ValueChanged<String>? onConversationSelected;
 
   @override
   ConsumerState<TodoSection> createState() => _TodoSectionState();
@@ -59,7 +60,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
 
           final badgeColor = isApproval
               ? AppPalette.warning
-              : (isPlan ? AppPalette.brand : AppPalette.success);
+              : (isPlan ? MobileTheme.brand(context) : AppPalette.success);
 
           final badgeText = isApproval
               ? AppStrings.pendingApproval
@@ -75,15 +76,15 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
             padding: const EdgeInsets.only(bottom: 8),
             child: SectionCard(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              glass: true,
+              glass: false,
               child: Row(
                 children: [
                   Container(
-                    width: 36,
-                    height: 36,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       color: badgeColor.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
                       isApproval
@@ -91,7 +92,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                           : (isPlan
                               ? Icons.front_hand_rounded
                               : Icons.replay_rounded),
-                      size: 18,
+                      size: 16,
                       color: badgeColor,
                     ),
                   ),
@@ -103,8 +104,8 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                         Text(
                           badgeText,
                           style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
+                            fontSize: AppTokens.fontSizeBadge,
+                            fontWeight: FontWeight.w600,
                             color: badgeColor,
                           ),
                         ),
@@ -114,7 +115,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: AppTokens.fontSizeSubhead,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -129,12 +130,15 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                       backgroundColor: badgeColor.withValues(alpha: 0.12),
                       foregroundColor: badgeColor,
                       elevation: 0,
-                      shape: const StadiumBorder(),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
+                      ),
                       visualDensity: VisualDensity.compact,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       textStyle: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
+                        fontSize: AppTokens.fontSizeFootnote,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     onPressed:
@@ -227,7 +231,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
     final db = await ref.read(databaseProvider.future);
     final conv = await db.findConversation(conversationId);
     if (conv != null && context.mounted) {
-      widget.onConversationSelected?.call(conv);
+      widget.onConversationSelected?.call(conv.id);
       Navigator.of(context).pop();
     }
   }

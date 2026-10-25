@@ -1,3 +1,4 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
@@ -83,7 +84,7 @@ Future<T?> showNexusActionSheet<T>({
                           title,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                            fontSize: AppTokens.fontSizeTitle,
                           ),
                         ),
                       if (subtitle != null) ...[
@@ -92,7 +93,7 @@ Future<T?> showNexusActionSheet<T>({
                           subtitle,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: semantic.mutedOnGlass,
-                            fontSize: 12,
+                            fontSize: AppTokens.fontSizeFootnote,
                           ),
                         ),
                       ],
@@ -113,9 +114,7 @@ Future<T?> showNexusActionSheet<T>({
               ),
               child: ListView.separated(
                 shrinkWrap: true,
-                physics: scrollable
-                    ? const ClampingScrollPhysics()
-                    : const NeverScrollableScrollPhysics(),
+                physics: const ClampingScrollPhysics(),
                 padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                 itemCount: items.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 2),
@@ -128,8 +127,8 @@ Future<T?> showNexusActionSheet<T>({
                       child: Text(
                         item.title,
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                          fontSize: AppTokens.fontSizeFootnote,
+                          fontWeight: FontWeight.w600,
                           color: semantic.mutedOnGlass,
                           letterSpacing: 0.3,
                         ),
@@ -144,14 +143,27 @@ Future<T?> showNexusActionSheet<T>({
 
                   Widget? leading = item.leading;
                   if (leading == null && item.icon != null) {
-                    leading = Icon(
-                      item.icon,
-                      size: 20,
-                      color: item.destructive
-                          ? semantic.danger
-                          : (item.selected
-                              ? theme.colorScheme.primary
-                              : theme.colorScheme.onSurfaceVariant),
+                    final iconFg = item.destructive
+                        ? semantic.danger
+                        : (item.selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant);
+                    leading = Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: iconFg.withValues(
+                          alpha:
+                              theme.brightness == Brightness.dark ? 0.14 : 0.08,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
+                      ),
+                      child: Icon(
+                        item.icon,
+                        size: 16,
+                        color: iconFg,
+                      ),
                     );
                   }
 
@@ -172,8 +184,8 @@ Future<T?> showNexusActionSheet<T>({
                       item.title,
                       style: TextStyle(
                         fontWeight:
-                            item.selected ? FontWeight.w500 : FontWeight.w400,
-                        fontSize: 14,
+                            item.selected ? FontWeight.w600 : FontWeight.w400,
+                        fontSize: AppTokens.fontSizeSubhead,
                         color: item.enabled
                             ? itemColor
                             : theme.colorScheme.onSurfaceVariant
@@ -184,15 +196,15 @@ Future<T?> showNexusActionSheet<T>({
                         ? Text(
                             item.subtitle!,
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: AppTokens.fontSizeFootnote,
                               color: semantic.mutedOnGlass,
                             ),
                           )
                         : null,
                     trailing: trailing,
                     shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppTokens.radiusControl),
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.controlRadius(context)),
                     ),
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
@@ -220,6 +232,7 @@ Future<T?> showNexusActionSheet<T>({
       );
 
       return SafeArea(
+        top: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4),
           // ListTile 的水波纹只能画在最近的 Material 上。本弹层外层是带底色+阴影的

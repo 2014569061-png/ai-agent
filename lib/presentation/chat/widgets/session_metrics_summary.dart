@@ -1,9 +1,9 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import '../../../domain/context_insights.dart';
 import '../../../domain/models.dart';
 import '../../../domain/session_metrics.dart';
 import '../../dashboard/widgets/token_numbers.dart';
-import '../../theme/app_tokens.dart';
 import 'context_budget_bar.dart';
 
 /// A compact overview; detailed telemetry remains available via explicit disclosure.
@@ -98,8 +98,8 @@ class SessionMetricsSummary extends StatelessWidget {
                   decoration: BoxDecoration(
                       color:
                           Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius:
-                          BorderRadius.circular(AppTokens.radiusCard)),
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.cardRadius(context))),
                   child: Padding(
                       padding: const EdgeInsets.all(12),
                       child: Column(

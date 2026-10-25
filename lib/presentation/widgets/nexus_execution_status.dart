@@ -1,3 +1,4 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import '../motion/motion_preferences.dart';
 import '../motion/motion_lifecycle.dart';
@@ -5,6 +6,7 @@ import '../motion/motion_tier.dart';
 import '../motion/nexus_motion.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 
 /// 全局统一执行状态枚举
 enum NexusExecutionState {
@@ -73,7 +75,9 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
 
   /// 外发光环是否可用：装饰动效在运行（full 档、前台、可见），且档位允许光感。
   bool get _glowRingAllowed =>
-      decorativeMotionActive && MotionBudget.of(context, listen: false).shimmer;
+      DesktopTheme.maybeOf(context) != null &&
+      decorativeMotionActive &&
+      MotionBudget.of(context, listen: false).shimmer;
 
   @override
   void didUpdateWidget(covariant NexusExecutionStatus oldWidget) {
@@ -196,8 +200,9 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
     // M9 外发光环：运行中与呼吸同相（α 0→0.25、外扩 0→6dp），完成时收拢。
     // 始终包一层 CustomPaint（painter 可为空），保持结构稳定；画在图标
     // 背后且允许溢出图标边界，不影响布局。
-    final ringAllowed =
-        decorativeMotionActive && MotionBudget.of(context).shimmer;
+    final ringAllowed = DesktopTheme.maybeOf(context) != null &&
+        decorativeMotionActive &&
+        MotionBudget.of(context).shimmer;
     final ringMode = !ringAllowed
         ? null
         : _shouldPulse(widget.state)
@@ -261,7 +266,7 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+          borderRadius: BorderRadius.circular(MobileTheme.cardRadius(context)),
           border: Border.all(
             color: fg.withValues(alpha: 0.2),
             width: 1.0,
@@ -334,7 +339,7 @@ class _NexusExecutionStatusState extends State<NexusExecutionStatus>
                     FilledButton(
                       style: FilledButton.styleFrom(
                         visualDensity: VisualDensity.compact,
-                        backgroundColor: AppPalette.brand,
+                        backgroundColor: MobileTheme.brand(context),
                       ),
                       onPressed: widget.onApprove,
                       child: const Text('授权继续'),
@@ -412,7 +417,7 @@ class _ActionTextButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+      borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
         child: Text(

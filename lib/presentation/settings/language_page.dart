@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import '../l10n/app_locale_controller.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
@@ -50,10 +51,12 @@ class _LanguagePageState extends State<LanguagePage> {
         title: '语言 / Language',
         subtitle: '选择应用界面显示语言与多语言支持',
       ),
-      body: AsyncStateView(
-        loading: _loading,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+      body: NexusPageLayout(
+          desktopMaxWidth: 920,
+          child: AsyncStateView(
+            loading: _loading,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
               children: [
                 const SettingsSectionTitle('界面显示语言'),
                 SettingsGroupCard(
@@ -91,7 +94,7 @@ class _LanguagePageState extends State<LanguagePage> {
                 ),
               ],
             ),
-      ),
+          )),
     );
   }
 }

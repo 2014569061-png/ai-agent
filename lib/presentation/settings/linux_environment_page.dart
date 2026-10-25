@@ -1,8 +1,10 @@
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 
 import '../theme/app_theme.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,6 +19,7 @@ import '../theme/app_tokens.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/nexus_disclosure.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
@@ -423,7 +426,8 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
             decoration: BoxDecoration(
               color: statusColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+              borderRadius:
+                  BorderRadius.circular(MobileTheme.controlRadius(context)),
             ),
             child: Text(
               _target == DevelopmentTarget.staticWeb
@@ -481,163 +485,175 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
         title: 'Linux 工具环境',
         subtitle: 'Termux · proot · 宿主终端交互管理',
       ),
-      body: _loading
-          ? const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: NexusListSkeleton(itemCount: 4),
-            )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
-              children: [
-                const SettingsSectionTitle('开发目标'),
-                _targetCard(context),
-                if (_showRuntimeDetails) const SettingsSectionTitle('运行环境状态'),
-                if (_showRuntimeDetails)
-                  SettingsGroupCard(
-                    children: [
-                      SettingsTile(
-                        icon: Icons.terminal_rounded,
-                        iconColor: settingsMutedColor(context),
-                        title: '当前运行环境',
-                        subtitle: kIsWeb
-                            ? 'Web Sandbox'
-                            : (snapshot?.summary ?? '尚未检测'),
-                        trailingBadge: Container(
-                          margin: const EdgeInsets.only(right: 4),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2.5),
-                          decoration: BoxDecoration(
-                            color: bridgeColor.withValues(alpha: 0.12),
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusControl),
+      body: NexusPageLayout(
+          child: _loading
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: NexusListSkeleton(itemCount: 4),
+                )
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+                  children: [
+                    const SettingsSectionTitle('开发目标'),
+                    _targetCard(context),
+                    if (_showRuntimeDetails)
+                      const SettingsSectionTitle('运行环境状态'),
+                    if (_showRuntimeDetails)
+                      SettingsGroupCard(
+                        children: [
+                          SettingsTile(
+                            icon: Icons.terminal_rounded,
+                            iconColor: settingsMutedColor(context),
+                            title: '当前运行环境',
+                            subtitle: kIsWeb
+                                ? 'Web Sandbox'
+                                : (snapshot?.summary ?? '尚未检测'),
+                            trailingBadge: Container(
+                              margin: const EdgeInsets.only(right: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 2.5),
+                              decoration: BoxDecoration(
+                                color: bridgeColor.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(
+                                    MobileTheme.controlRadius(context)),
+                              ),
+                              child: Text(
+                                bridgeText,
+                                style: TextStyle(
+                                  fontSize: AppTokens.fontSizeFootnote,
+                                  fontWeight: FontWeight.w600,
+                                  color: bridgeColor,
+                                ),
+                              ),
+                            ),
+                            showChevron: false,
                           ),
-                          child: Text(
-                            bridgeText,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: bridgeColor,
+                          const SettingsDivider(),
+                          SettingsTile(
+                            icon: Icons.health_and_safety_rounded,
+                            iconColor: settingsMutedColor(context),
+                            title: '环境状态诊断',
+                            subtitle: _diagnosticSummary,
+                            trailingWidget: IconButton(
+                              icon: const Icon(Icons.refresh_rounded, size: 20),
+                              tooltip: '重新检测',
+                              onPressed: _checkEnvironment,
                             ),
                           ),
-                        ),
-                        showChevron: false,
-                      ),
-                      const SettingsDivider(),
-                      SettingsTile(
-                        icon: Icons.health_and_safety_rounded,
-                        iconColor: settingsMutedColor(context),
-                        title: '环境状态诊断',
-                        subtitle: _diagnosticSummary,
-                        trailingWidget: IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          tooltip: '重新检测',
-                          onPressed: _checkEnvironment,
-                        ),
-                      ),
-                      if (snapshot != null) ...[
-                        const SettingsDivider(),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                          child: EnvironmentStatusView(
-                            snapshot: snapshot,
-                            compact: true,
-                            toolIds: _showFullInventory ? null : _targetToolIds,
-                            toolSectionTitle: _showFullInventory
-                                ? null
-                                : '当前目标工具（${_target.label}）',
-                            showGlobalMissing: _showFullInventory,
-                          ),
-                        ),
-                      ],
-                      if (snapshot == null && !kIsWeb)
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
-                          child: Text(
-                            '检测超时或平台桥不可用。请先打开 Termux，配置 '
-                            'allow-external-apps，并允许后台运行后重试。',
-                          ),
-                        ),
-                      if (!kIsWeb && _showTargetSetup) ...[
-                        const SettingsDivider(),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed: _openTargetHelp,
-                              icon: Icon(_target == DevelopmentTarget.windowsExe
-                                  ? Icons.open_in_new_rounded
-                                  : Icons.settings_suggest_rounded),
-                              label:
-                                  Text(_target == DevelopmentTarget.windowsExe
-                                      ? '查看 Windows 构建说明'
-                                      : needsCommonTools
-                                          ? '按需安装 ${_target.label} 工具'
-                                          : '查看 ${_target.label} 环境说明'),
+                          if (snapshot != null) ...[
+                            const SettingsDivider(),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                              child: EnvironmentStatusView(
+                                snapshot: snapshot,
+                                compact: true,
+                                toolIds:
+                                    _showFullInventory ? null : _targetToolIds,
+                                toolSectionTitle: _showFullInventory
+                                    ? null
+                                    : '当前目标工具（${_target.label}）',
+                                showGlobalMissing: _showFullInventory,
+                              ),
                             ),
-                          ),
-                        ),
-                      ],
+                          ],
+                          if (snapshot == null && !kIsWeb)
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                              child: Text(
+                                '检测超时或平台桥不可用。请先打开 Termux，配置 '
+                                'allow-external-apps，并允许后台运行后重试。',
+                              ),
+                            ),
+                          if (!kIsWeb && _showTargetSetup) ...[
+                            const SettingsDivider(),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: FilledButton.icon(
+                                  onPressed: _openTargetHelp,
+                                  icon: Icon(
+                                      _target == DevelopmentTarget.windowsExe
+                                          ? Icons.open_in_new_rounded
+                                          : Icons.settings_suggest_rounded),
+                                  label: Text(
+                                      _target == DevelopmentTarget.windowsExe
+                                          ? '查看 Windows 构建说明'
+                                          : needsCommonTools
+                                              ? '按需安装 ${_target.label} 工具'
+                                              : '查看 ${_target.label} 环境说明'),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      )
+                    else ...[
+                      const SettingsSectionTitle('运行时检测'),
+                      _runtimeRetryCard(context),
                     ],
-                  )
-                else ...[
-                  const SettingsSectionTitle('运行时检测'),
-                  _runtimeRetryCard(context),
-                ],
-                const SettingsSectionTitle('环境参数设置'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      // X6：去掉无语义的装饰色，统一描边图标。
-                      icon: Icons.folder_outlined,
-                      title: '默认工作目录',
-                      subtitle: _defaultWorkDir,
-                      onTap: _editWorkDir,
+                    NexusDisclosure(
+                      title: const Text('高级环境参数'),
+                      headerPadding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
+                      contentPadding: EdgeInsets.zero,
+                      child: Column(children: [
+                        const SettingsSectionTitle('环境参数设置'),
+                        SettingsGroupCard(
+                          children: [
+                            SettingsTile(
+                              // X6：去掉无语义的装饰色，统一描边图标。
+                              icon: Icons.folder_outlined,
+                              title: '默认工作目录',
+                              subtitle: _defaultWorkDir,
+                              onTap: _editWorkDir,
+                            ),
+                            const SettingsDivider(),
+                            SettingsTile(
+                              icon: Icons.code_rounded,
+                              title: 'Shell 类型',
+                              trailingText: _shellType,
+                              onTap: _chooseShell,
+                            ),
+                          ],
+                        ),
+                      ]),
                     ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.code_rounded,
-                      title: 'Shell 类型',
-                      trailingText: _shellType,
-                      onTap: _chooseShell,
+                    const SettingsSectionTitle('环境运维与检测'),
+                    SettingsGroupCard(
+                      children: [
+                        SettingsTile(
+                          icon: Icons.play_circle_outline_rounded,
+                          title: '环境检测与安装引导',
+                          subtitle: '检测 Alpine / Termux / Android Shell / 本机进程',
+                          onTap: _openSetupGuide,
+                        ),
+                        const SettingsDivider(),
+                        SettingsTile(
+                          icon: Icons.restart_alt_rounded,
+                          title: '重新初始化环境',
+                          subtitle: '重设桥接状态并执行环境重新连接',
+                          onTap: _reinitialize,
+                        ),
+                        const SettingsDivider(),
+                        SettingsTile(
+                          icon: Icons.receipt_long_rounded,
+                          iconColor: settingsMutedColor(context),
+                          title: '查看诊断日志',
+                          subtitle: '查看终端与工具执行的详细运行记录',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              NexusPageRoute.detail(
+                                builder: (_) => const LogViewerPage(),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ],
-                ),
-                const SettingsSectionTitle('环境运维与检测'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      icon: Icons.play_circle_outline_rounded,
-                      title: '环境检测与安装引导',
-                      subtitle: '检测 Alpine / Termux / Android Shell / 本机进程',
-                      onTap: _openSetupGuide,
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.restart_alt_rounded,
-                      title: '重新初始化环境',
-                      subtitle: '重设桥接状态并执行环境重新连接',
-                      onTap: _reinitialize,
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.receipt_long_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '查看诊断日志',
-                      subtitle: '查看终端与工具执行的详细运行记录',
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          NexusPageRoute.detail(
-                            builder: (_) => const LogViewerPage(),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                )),
     );
   }
 }

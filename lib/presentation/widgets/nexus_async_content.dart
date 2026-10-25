@@ -1,3 +1,4 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../application/error_humanizer.dart';
@@ -51,22 +52,30 @@ class NexusAsyncContent extends StatelessWidget {
       if (loadingSkeleton != null) {
         return loadingSkeleton!;
       }
-      return const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2.0),
-        ),
-      );
+      return Center(
+          child: SingleChildScrollView(
+        primary: false,
+        padding: const EdgeInsets.all(16),
+        child: Semantics(
+            liveRegion: true,
+            label: '正在加载内容',
+            child: ExcludeSemantics(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+              const SizedBox(height: 12),
+              Text('正在加载…', style: Theme.of(context).textTheme.bodySmall),
+            ]))),
+      ));
     }
 
     if (error != null) {
       if (retainContentOnError) {
-        return Column(
-          children: [
-            _InlineErrorBanner(error: error!, onRetry: onRetry),
-            Expanded(child: child),
-          ],
+        return _ContentFrame(
+          status: _InlineErrorBanner(error: error!, onRetry: onRetry),
+          child: child,
         );
       }
       return _FullPageErrorView(error: error!, onRetry: onRetry);
@@ -83,20 +92,47 @@ class NexusAsyncContent extends StatelessWidget {
       );
     }
 
-    if (refreshing) {
-      return Column(
-        children: [
-          const LinearProgressIndicator(
-            minHeight: 2,
-            backgroundColor: Colors.transparent,
-          ),
-          Expanded(child: child),
-        ],
-      );
-    }
-
-    return child;
+    return _ContentFrame(
+      status: refreshing
+          ? Semantics(
+              liveRegion: true,
+              child: const LinearProgressIndicator(
+                  minHeight: 2,
+                  backgroundColor: Colors.transparent,
+                  semanticsLabel: '正在刷新，当前内容仍可查看'))
+          : null,
+      child: child,
+    );
   }
+}
+
+class _ContentFrame extends StatelessWidget {
+  const _ContentFrame({required this.child, this.status});
+  final Widget child;
+  final Widget? status;
+  @override
+  Widget build(BuildContext context) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final bounded = constraints.hasBoundedHeight;
+        return Column(
+            mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+            crossAxisAlignment: constraints.hasBoundedWidth
+                ? CrossAxisAlignment.stretch
+                : CrossAxisAlignment.start,
+            children: [
+              if (status == null)
+                const SizedBox.shrink()
+              else
+                ConstrainedBox(
+                    constraints: BoxConstraints(
+                        maxHeight: bounded
+                            ? constraints.maxHeight * .45
+                            : double.infinity),
+                    child:
+                        SingleChildScrollView(primary: false, child: status!)),
+              if (bounded) Expanded(child: child) else child,
+            ]);
+      });
 }
 
 class _InlineErrorBanner extends StatelessWidget {
@@ -110,40 +146,46 @@ class _InlineErrorBanner extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final humanized = humanizeError(error.toString());
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      margin: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: isDark ? AppPalette.darkDangerSoft : AppPalette.lightDangerSoft,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.error_outline_rounded, size: 18, color: AppPalette.danger),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              humanized.summary,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: AppTokens.fontSizeFootnote,
-                  color: AppPalette.danger),
-            ),
+    final danger = Theme.of(context).colorScheme.error;
+    return Semantics(
+        liveRegion: true,
+        container: true,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color:
+                isDark ? AppPalette.darkDangerSoft : AppPalette.lightDangerSoft,
+            borderRadius:
+                BorderRadius.circular(MobileTheme.controlRadius(context)),
           ),
-          if (onRetry != null)
-            TextButton(
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-              ),
-              onPressed: onRetry,
-              child: const Text('重试',
-                  style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
-            ),
-        ],
-      ),
-    );
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.error_outline_rounded, size: 18, color: danger),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Tooltip(
+                      message: humanized.summary,
+                      child: Text(humanized.summary,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                              fontSize: AppTokens.fontSizeFootnote,
+                              color: danger)))),
+            ]),
+            const SizedBox(height: 4),
+            Text('已保留上次加载的内容',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall),
+            if (onRetry != null)
+              TextButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('重试')),
+          ]),
+        ));
   }
 }
 
@@ -170,7 +212,9 @@ class _FullPageErrorView extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: isDark ? AppPalette.darkDangerSoft : AppPalette.lightDangerSoft,
+                color: isDark
+                    ? AppPalette.darkDangerSoft
+                    : AppPalette.lightDangerSoft,
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -180,14 +224,17 @@ class _FullPageErrorView extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              '加载未成功',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w600,
-                color: isDark ? AppPalette.darkText : AppPalette.lightText,
-              ),
-            ),
+            Semantics(
+                header: true,
+                liveRegion: true,
+                child: Text(
+                  '加载未成功',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppPalette.darkText : AppPalette.lightText,
+                  ),
+                )),
             const SizedBox(height: 6),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 360),
@@ -217,8 +264,7 @@ class _FullPageErrorView extends StatelessWidget {
                   title: Text(
                     '技术诊断详情',
                     style: TextStyle(
-                        fontSize: AppTokens.fontSizeFootnote,
-                        color: textMuted),
+                        fontSize: AppTokens.fontSizeFootnote, color: textMuted),
                   ),
                   trailingActions: IconButton(
                     icon: const Icon(Icons.copy_rounded, size: 14),
@@ -237,21 +283,30 @@ class _FullPageErrorView extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                      color: isDark
+                          ? AppPalette.darkSurface
+                          : AppPalette.lightSurface,
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.controlRadius(context)),
                       border: Border.all(
-                        color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+                        color: isDark
+                            ? AppPalette.darkHairline
+                            : AppPalette.lightHairline,
                       ),
                     ),
-                    child: SelectableText(
-                      humanized.detail,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        fontSize: 11,
-                        height: 1.4,
-                        color: textMuted,
-                      ),
-                    ),
+                    child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 240),
+                        child: SingleChildScrollView(
+                            primary: false,
+                            child: SelectableText(
+                              humanized.detail,
+                              style: TextStyle(
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                                height: 1.4,
+                                color: textMuted,
+                              ),
+                            ))),
                   ),
                 ),
               ),

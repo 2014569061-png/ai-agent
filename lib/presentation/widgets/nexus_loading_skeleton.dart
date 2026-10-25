@@ -1,3 +1,4 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import '../motion/motion_lifecycle.dart';
 import '../theme/app_palette.dart';
@@ -29,7 +30,6 @@ class _NexusLoadingSkeletonState extends State<NexusLoadingSkeleton>
     _opacityAnimation = Tween<double>(begin: 0.45, end: 0.85).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
-
   }
 
   @override
@@ -84,7 +84,8 @@ class NexusSkeletonLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final color = isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
+    final color =
+        isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
 
     Widget block = Container(
       width: width,
@@ -122,8 +123,11 @@ class NexusChatMessageSkeleton extends StatelessWidget {
               width: 180,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft,
-                borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+                color: isDark
+                    ? AppPalette.darkBrandSoft
+                    : AppPalette.lightBrandSoft,
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.cardRadius(context)),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,7 +147,8 @@ class NexusChatMessageSkeleton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: surfaceColor,
-                borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.cardRadius(context)),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,7 +170,8 @@ class NexusChatMessageSkeleton extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: surfaceColor,
-                borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.cardRadius(context)),
               ),
               child: const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +182,10 @@ class NexusChatMessageSkeleton extends StatelessWidget {
                   SizedBox(height: 8),
                   NexusSkeletonLine(width: 170, height: 14),
                   SizedBox(height: 14),
-                  NexusSkeletonLine(width: 110, height: 18, borderRadius: AppTokens.radiusPill),
+                  NexusSkeletonLine(
+                      width: 110,
+                      height: 18,
+                      borderRadius: AppTokens.radiusPill),
                 ],
               ),
             ),
@@ -195,41 +204,47 @@ class NexusListSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return NexusLoadingSkeleton(
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: itemCount,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          return Container(
-            height: AppTokens.kListRowHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: const Row(
-              children: [
-                NexusSkeletonLine(
-                  width: 20,
-                  height: 20,
-                  borderRadius: AppTokens.radiusPill,
-                ),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      NexusSkeletonLine(width: 160, height: 14),
-                      SizedBox(height: 6),
-                      NexusSkeletonLine(width: 90, height: 10),
-                    ],
+    return LayoutBuilder(builder: (context, constraints) {
+      return NexusLoadingSkeleton(
+        child: ListView.separated(
+          // Root loaders keep their bounded viewport. Embedded cards must size
+          // to their rows instead of requesting infinite scroll-axis space.
+          primary: false,
+          shrinkWrap: !constraints.hasBoundedHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: itemCount,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            return Container(
+              height: AppTokens.kListRowHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: const Row(
+                children: [
+                  NexusSkeletonLine(
+                    width: 20,
+                    height: 20,
+                    borderRadius: AppTokens.radiusPill,
                   ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        NexusSkeletonLine(width: 160, height: 14),
+                        SizedBox(height: 6),
+                        NexusSkeletonLine(width: 90, height: 10),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    });
   }
 }
 
@@ -256,7 +271,8 @@ class NexusCardSkeleton extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: surfaceColor,
-              borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+              borderRadius:
+                  BorderRadius.circular(MobileTheme.cardRadius(context)),
             ),
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,

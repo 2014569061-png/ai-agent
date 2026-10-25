@@ -1,23 +1,25 @@
+import '../theme/mobile_theme.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/nexus_action_sheet.dart';
+import '../theme/desktop_theme.dart';
 
 class LogViewerPage extends ConsumerStatefulWidget {
   const LogViewerPage({super.key, this.runId});
@@ -146,107 +148,111 @@ class _LogViewerPageState extends ConsumerState<LogViewerPage> {
     var to = _to;
     final keyword = TextEditingController(text: _keywordController.text);
     await showNexusSheet<void>(
-context: context,
-isScrollControlled: true,
-builder: (context) => StatefulBuilder(
-        builder: (context, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-              16, 16, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text('筛选日志', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              TextField(
-                controller: keyword,
-                decoration: const InputDecoration(
-                    labelText: '关键词', prefixIcon: Icon(Icons.search)),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                initialValue: level,
-                decoration: const InputDecoration(labelText: '级别'),
-                items: const [
-                  DropdownMenuItem<String?>(value: null, child: Text('全部级别')),
-                  DropdownMenuItem(value: 'error', child: Text('错误')),
-                  DropdownMenuItem(value: 'warning', child: Text('警告')),
-                  DropdownMenuItem(value: 'info', child: Text('信息')),
-                ],
-                onChanged: (value) => setSheetState(() => level = value),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String?>(
-                initialValue: category,
-                decoration: const InputDecoration(labelText: '分类'),
-                items: const [
-                  DropdownMenuItem<String?>(value: null, child: Text('全部分类')),
-                  DropdownMenuItem(value: 'model', child: Text('模型')),
-                  DropdownMenuItem(value: 'tool', child: Text('工具')),
-                  DropdownMenuItem(value: 'file', child: Text('文件')),
-                  DropdownMenuItem(value: 'cache', child: Text('缓存')),
-                  DropdownMenuItem(value: 'network', child: Text('网络')),
-                  DropdownMenuItem(value: 'system', child: Text('系统')),
-                  DropdownMenuItem(value: 'session_log', child: Text('会话日志')),
-                ],
-                onChanged: (value) => setSheetState(() => category = value),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.date_range_outlined),
-                      label: Text(from == null ? '开始日期' : _date(from!)),
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                          initialDate: from ?? DateTime.now(),
-                        );
-                        if (picked != null) setSheetState(() => from = picked);
-                      },
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+                16, 16, 16, 16 + MediaQuery.viewInsetsOf(context).bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('筛选日志', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: keyword,
+                  decoration: const InputDecoration(
+                      labelText: '关键词', prefixIcon: Icon(Icons.search)),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String?>(
+                  initialValue: level,
+                  decoration: const InputDecoration(labelText: '级别'),
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('全部级别')),
+                    DropdownMenuItem(value: 'error', child: Text('错误')),
+                    DropdownMenuItem(value: 'warning', child: Text('警告')),
+                    DropdownMenuItem(value: 'info', child: Text('信息')),
+                  ],
+                  onChanged: (value) => setSheetState(() => level = value),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String?>(
+                  initialValue: category,
+                  decoration: const InputDecoration(labelText: '分类'),
+                  items: const [
+                    DropdownMenuItem<String?>(value: null, child: Text('全部分类')),
+                    DropdownMenuItem(value: 'model', child: Text('模型')),
+                    DropdownMenuItem(value: 'tool', child: Text('工具')),
+                    DropdownMenuItem(value: 'file', child: Text('文件')),
+                    DropdownMenuItem(value: 'cache', child: Text('缓存')),
+                    DropdownMenuItem(value: 'network', child: Text('网络')),
+                    DropdownMenuItem(value: 'system', child: Text('系统')),
+                    DropdownMenuItem(value: 'session_log', child: Text('会话日志')),
+                  ],
+                  onChanged: (value) => setSheetState(() => category = value),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.date_range_outlined),
+                        label: Text(from == null ? '开始日期' : _date(from!)),
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                            initialDate: from ?? DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setSheetState(() => from = picked);
+                          }
+                        },
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.event_outlined),
-                      label: Text(to == null ? '结束日期' : _date(to!)),
-                      onPressed: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                          initialDate: to ?? DateTime.now(),
-                        );
-                        if (picked != null) setSheetState(() => to = picked);
-                      },
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.event_outlined),
+                        label: Text(to == null ? '结束日期' : _date(to!)),
+                        onPressed: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime.now(),
+                            initialDate: to ?? DateTime.now(),
+                          );
+                          if (picked != null) setSheetState(() => to = picked);
+                        },
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () {
-                  _level = level;
-                  _category = category;
-                  _from = from;
-                  _to = to == null
-                      ? null
-                      : DateTime(to!.year, to!.month, to!.day + 1);
-                  _keywordController.text = keyword.text;
-                  Navigator.pop(context);
-                },
-                child: const Text('应用筛选'),
-              ),
-            ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () {
+                    _level = level;
+                    _category = category;
+                    _from = from;
+                    _to = to == null
+                        ? null
+                        : DateTime(to!.year, to!.month, to!.day + 1);
+                    _keywordController.text = keyword.text;
+                    Navigator.pop(context);
+                  },
+                  child: const Text('应用筛选'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-removeInnerViewInsets: true,
-);
+      removeInnerViewInsets: true,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) => keyword.dispose());
     if (mounted) await _load();
   }
@@ -285,16 +291,46 @@ removeInnerViewInsets: true,
     };
   }
 
+  Future<void> _showMore() async {
+    final action = await showNexusActionSheet<String>(
+      context: context,
+      title: '日志操作',
+      items: [
+        ActionSheetItem(
+            title: '复制日志',
+            icon: Icons.copy_outlined,
+            value: 'copy',
+            enabled: _logs.isNotEmpty),
+        ActionSheetItem(
+            title: '导出诊断包',
+            icon: Icons.file_download_outlined,
+            value: 'export',
+            enabled: _logs.isNotEmpty),
+        const ActionSheetItem(
+            title: '清理日志',
+            icon: Icons.delete_outline,
+            value: 'clear',
+            destructive: true),
+      ],
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'copy':
+        await Clipboard.setData(ClipboardData(text: _exportText()));
+        if (mounted) FloatingToast.show(context, '日志已复制');
+      case 'export':
+        await _export();
+      case 'clear':
+        await _clear();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: NexusPageHeader(
         title: widget.runId == null ? '诊断日志' : '任务日志',
         subtitle: widget.runId == null ? '运行追踪与错误排查' : 'Run: ${widget.runId}',
@@ -308,42 +344,52 @@ removeInnerViewInsets: true,
             icon: const Icon(Icons.filter_alt_outlined),
             onPressed: _openFilters,
           ),
-          IconButton(
-            tooltip: '复制日志',
-            constraints: const BoxConstraints(
-              minWidth: AppTokens.kMinTouchTarget,
-              minHeight: AppTokens.kMinTouchTarget,
+          if (DesktopTheme.maybeOf(context) == null)
+            IconButton(
+              tooltip: '更多日志操作',
+              icon: const Icon(Icons.more_horiz_rounded),
+              onPressed: _showMore,
+            )
+          else ...[
+            IconButton(
+              tooltip: '复制日志',
+              constraints: const BoxConstraints(
+                minWidth: AppTokens.kMinTouchTarget,
+                minHeight: AppTokens.kMinTouchTarget,
+              ),
+              icon: const Icon(Icons.copy_outlined),
+              onPressed: _logs.isEmpty
+                  ? null
+                  : () async {
+                      await Clipboard.setData(
+                          ClipboardData(text: _exportText()));
+                      if (!context.mounted) return;
+                      FloatingToast.show(context, '日志已复制');
+                    },
             ),
-            icon: const Icon(Icons.copy_outlined),
-            onPressed: _logs.isEmpty
-                ? null
-                : () async {
-                    await Clipboard.setData(ClipboardData(text: _exportText()));
-                    if (!context.mounted) return;
-                    FloatingToast.show(context, '日志已复制');
-                  },
-          ),
-          IconButton(
-            tooltip: '导出诊断包',
-            constraints: const BoxConstraints(
-              minWidth: AppTokens.kMinTouchTarget,
-              minHeight: AppTokens.kMinTouchTarget,
+            IconButton(
+              tooltip: '导出诊断包',
+              constraints: const BoxConstraints(
+                minWidth: AppTokens.kMinTouchTarget,
+                minHeight: AppTokens.kMinTouchTarget,
+              ),
+              icon: const Icon(Icons.file_download_outlined),
+              onPressed: _logs.isEmpty ? null : _export,
             ),
-            icon: const Icon(Icons.file_download_outlined),
-            onPressed: _logs.isEmpty ? null : _export,
-          ),
-          IconButton(
-            tooltip: '清理日志',
-            constraints: const BoxConstraints(
-              minWidth: AppTokens.kMinTouchTarget,
-              minHeight: AppTokens.kMinTouchTarget,
+            IconButton(
+              tooltip: '清理日志',
+              constraints: const BoxConstraints(
+                minWidth: AppTokens.kMinTouchTarget,
+                minHeight: AppTokens.kMinTouchTarget,
+              ),
+              icon: const Icon(Icons.delete_outline),
+              onPressed: _clear,
             ),
-            icon: const Icon(Icons.delete_outline),
-            onPressed: _clear,
-          ),
+          ],
         ],
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         error: _error,
         onRetry: _load,
@@ -382,10 +428,26 @@ removeInnerViewInsets: true,
                           collapsedShape: const Border(),
                           leading: Icon(Icons.circle,
                               size: 11, color: _levelColor(context, log.level)),
-                          title: Text(log.message),
+                          title: Text(
+                            log.message,
+                            style: const TextStyle(
+                              fontSize: AppTokens.fontSizeSubhead,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                           subtitle: Text(
                             '${log.level.toUpperCase()} · ${log.category} · '
                             '${log.createdAt.toLocal().toString().substring(0, 19)}',
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeFootnote,
+                              fontFamily: AppTokens.fontFamilyMono,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                              color: isDark
+                                  ? AppPalette.darkTextMuted
+                                  : AppPalette.lightTextMuted,
+                            ),
                           ),
                           children: [
                             if (log.errorCode != null)
@@ -407,7 +469,7 @@ removeInnerViewInsets: true,
                   ),
                 ),
               ),
-      ),
+      )),
     );
   }
 }

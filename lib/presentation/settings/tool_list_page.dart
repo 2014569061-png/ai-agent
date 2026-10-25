@@ -1,12 +1,17 @@
+import '../widgets/nexus_disclosure.dart';
+import '../theme/mobile_theme.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/audit_service.dart';
+import '../../application/auto_verification_policy.dart';
 import '../../application/nexus_guard.dart';
 import '../../application/providers.dart';
 import '../../domain/models.dart';
@@ -54,6 +59,8 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
   _RiskFilter _filter = _RiskFilter.all;
   bool _workspaceFilesEnabled = true;
   bool _terminalEnabled = true;
+  bool _autoVerificationEnabled = false;
+  bool _autoRepairEnabled = false;
 
   /// 信任清单纯属运行时状态：会话级授权只存在内存里，所以必须复用 provider
   /// 持有的那个实例，另建一个 ToolTrustStore 会看不到本会话已授予的项。
@@ -209,6 +216,10 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
     setState(() {
       _workspaceFilesEnabled = prefs.getBool(_workspaceFilesKey) ?? legacy;
       _terminalEnabled = prefs.getBool(_terminalKey) ?? legacy;
+      _autoVerificationEnabled =
+          prefs.getBool(AutoVerificationPolicy.preferenceKey) ?? false;
+      _autoRepairEnabled =
+          prefs.getBool(AutoVerificationPolicy.repairPreferenceKey) ?? false;
     });
   }
 
@@ -222,6 +233,12 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
     setState(() => _terminalEnabled = enabled);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_terminalKey, enabled);
+  }
+
+  Future<void> _setAutoVerification(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(AutoVerificationPolicy.preferenceKey, enabled);
+    if (mounted) setState(() => _autoVerificationEnabled = enabled);
   }
 
   static const List<_ToolEntry> _allTools = [
@@ -426,140 +443,164 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
   void _showToolDetail(_ToolEntry tool) {
     showNexusSheet(
       context: context,
+      // 外层统一处理键盘避让，正文不再叠加 viewInsets。
+      removeInnerViewInsets: true,
       builder: (ctx) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        final closeMinHeight = DesktopTheme.maybeOf(ctx) == null
+            ? AppTokens.kMinTouchTarget
+            : 44.0;
         return Padding(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    // X2：中性图标底，风险只由徽标表达。
-                    decoration: BoxDecoration(
-                      color: AppTheme.semanticOf(context)
-                          .textPrimary
-                          .withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(
-                      _toolIcon(tool),
-                      color: AppTheme.semanticOf(context).textMuted,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          tool.displayName,
-                          style: const TextStyle(
-                            fontSize: AppTokens.fontSizeBodyLarge,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          '代码: ${tool.name} · 分类: ${tool.category}',
-                          style: TextStyle(
-                            fontSize: AppTokens.fontSizeBadge,
-                            color: isDark
-                                ? AppPalette.darkTextMuted
-                                : AppPalette.lightTextMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _buildRiskBadge(tool),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                tool.description,
-                style: TextStyle(
-                  fontSize: AppTokens.fontSizeSubhead,
-                  color: isDark ? AppPalette.darkText : AppPalette.lightText,
-                  height: 1.45,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppPalette.darkHairline.withValues(alpha: 0.5)
-                      : AppPalette.lightSurface,
-                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '权限与审批策略',
-                      style: TextStyle(
-                        fontSize: AppTokens.fontSizeCaption,
-                        fontWeight: FontWeight.w500,
-                        color: isDark ? Colors.white : Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      tool.approvalPolicy,
-                      style: TextStyle(
-                        fontSize: AppTokens.fontSizeMeta,
-                        color: isDark
-                            ? AppPalette.darkTextMuted
-                            : AppPalette.lightTextMuted,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Icon(
-                          tool.isSensitive
-                              ? Icons.warning_amber_rounded
-                              : Icons.verified_user_outlined,
-                          size: 16,
-                          color: tool.isSensitive
-                              ? AppPalette.warning
-                              : AppPalette.brandTextFor(isDark),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            tool.isSensitive
-                                ? '敏感权限：涉及设备硬件或隐私操作，强制二次审批。'
-                                : '遵循全局当前生效的审批策略与沙箱安全边界。',
-                            style: TextStyle(
-                              fontSize: AppTokens.fontSizeSubcaption,
-                              color: tool.isSensitive
-                                  ? AppPalette.warning
-                                  : (isDark
-                                      ? AppPalette.darkTextMuted
-                                      : AppPalette.lightTextMuted),
+              Flexible(
+                child: SingleChildScrollView(
+                  key: const ValueKey('tool-detail-body'),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            // X2：中性图标底，风险只由徽标表达。
+                            decoration: BoxDecoration(
+                              color: AppTheme.semanticOf(context)
+                                  .textPrimary
+                                  .withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(
+                              _toolIcon(tool),
+                              color: AppTheme.semanticOf(context).textMuted,
+                              size: 20,
                             ),
                           ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  tool.displayName,
+                                  style: const TextStyle(
+                                    fontSize: AppTokens.fontSizeBodyLarge,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  '代码: ${tool.name} · 分类: ${tool.category}',
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeBadge,
+                                    color: isDark
+                                        ? AppPalette.darkTextMuted
+                                        : AppPalette.lightTextMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _buildRiskBadge(tool),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        tool.description,
+                        style: TextStyle(
+                          fontSize: AppTokens.fontSizeSubhead,
+                          color: isDark
+                              ? AppPalette.darkText
+                              : AppPalette.lightText,
+                          height: 1.45,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        key: const ValueKey('tool-detail-policy'),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppPalette.darkSurface
+                              : AppPalette.lightSurface,
+                          borderRadius: BorderRadius.circular(
+                              MobileTheme.controlRadius(context)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '权限与审批策略',
+                              style: TextStyle(
+                                fontSize: AppTokens.fontSizeCaption,
+                                fontWeight: FontWeight.w500,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              tool.approvalPolicy,
+                              style: TextStyle(
+                                fontSize: AppTokens.fontSizeMeta,
+                                color: isDark
+                                    ? AppPalette.darkTextMuted
+                                    : AppPalette.lightTextMuted,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Icon(
+                                  tool.isSensitive
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.verified_user_outlined,
+                                  size: 16,
+                                  color: tool.isSensitive
+                                      ? AppPalette.warning
+                                      : AppPalette.brandTextFor(isDark),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    tool.isSensitive
+                                        ? '敏感权限：涉及设备硬件或隐私操作，强制二次审批。'
+                                        : '遵循全局当前生效的审批策略与沙箱安全边界。',
+                                    style: TextStyle(
+                                      fontSize: AppTokens.fontSizeSubcaption,
+                                      color: tool.isSensitive
+                                          ? AppPalette.warning
+                                          : (isDark
+                                              ? AppPalette.darkTextMuted
+                                              : AppPalette.lightTextMuted),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 44,
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: double.infinity,
+                  minHeight: closeMinHeight,
+                ),
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppPalette.brandAction,
+                    minimumSize: Size.fromHeight(closeMinHeight),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    backgroundColor: MobileTheme.brand(context),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
@@ -585,7 +626,8 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            borderRadius:
+                BorderRadius.circular(MobileTheme.controlRadius(context)),
           ),
           child: Text(
             label,
@@ -599,7 +641,7 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
 
     final riskBadge = switch (tool.risk) {
       ToolRisk.safe => badge('安全', AppPalette.success),
-      ToolRisk.requiresConfirmation => badge('需确认', AppPalette.brand),
+      ToolRisk.requiresConfirmation => badge('需确认', MobileTheme.brand(context)),
       ToolRisk.dangerous => badge('高危', AppPalette.danger),
     };
 
@@ -627,7 +669,8 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
         title: '受控工具清单',
         subtitle: '查看与管理 Agent 可调用的全部工具及权限等级',
       ),
-      body: ListView(
+      body: NexusPageLayout(
+          child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
         children: [
           const SettingsSectionTitle('工作区权限'),
@@ -635,7 +678,9 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
             children: [
               SettingsTile(
                 icon: Icons.folder_open_rounded,
-                title: '允许 Agent 读写当前工作区文件',
+                wrapText: DesktopTheme.maybeOf(context) == null,
+                title:
+                    DesktopTheme.maybeOf(context) == null ? '文件读写' : '工作区文件读写',
                 subtitle: '创建和编辑网页、代码、文档等项目文件',
                 showChevron: false,
                 trailingWidget: NexusSwitch(
@@ -646,7 +691,9 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
               const SettingsDivider(),
               SettingsTile(
                 icon: Icons.terminal_rounded,
-                title: '允许 Agent 执行终端命令',
+                wrapText: DesktopTheme.maybeOf(context) == null,
+                title:
+                    DesktopTheme.maybeOf(context) == null ? '终端执行' : '终端命令执行',
                 subtitle: '安装依赖、运行脚本和构建项目需要此权限',
                 showChevron: false,
                 trailingWidget: NexusSwitch(
@@ -657,6 +704,94 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
               ),
             ],
           ),
+          if (DesktopTheme.maybeOf(context) != null) ...[
+            SettingsGroupCard(children: [
+              SettingsTile(
+                icon: Icons.fact_check_outlined,
+                wrapText: DesktopTheme.maybeOf(context) == null,
+                title: '开发任务完成后自动验证',
+                subtitle: '开启即允许在原工作区自动运行项目分析和测试脚本；不自动构建。需要文件与终端权限。',
+                showChevron: false,
+                trailingWidget: NexusSwitch(
+                  value: _autoVerificationEnabled,
+                  onChanged: _workspaceFilesEnabled && _terminalEnabled
+                      ? _setAutoVerification
+                      : null,
+                ),
+              ),
+            ]),
+            SettingsGroupCard(children: [
+              SettingsTile(
+                icon: Icons.build_outlined,
+                wrapText: DesktopTheme.maybeOf(context) == null,
+                title: '验证失败后尝试修复',
+                subtitle: '最多自动修复一次，再重跑全部检查。写文件仍遵循审批设置；环境和权限错误不自动修复。',
+                showChevron: false,
+                trailingWidget: NexusSwitch(
+                  value: _autoRepairEnabled,
+                  onChanged: _autoVerificationEnabled &&
+                          _workspaceFilesEnabled &&
+                          _terminalEnabled
+                      ? (enabled) async {
+                          final prefs = await SharedPreferences.getInstance();
+                          await prefs.setBool(
+                              AutoVerificationPolicy.repairPreferenceKey,
+                              enabled);
+                          if (mounted) {
+                            setState(() => _autoRepairEnabled = enabled);
+                          }
+                        }
+                      : null,
+                ),
+              ),
+            ]),
+          ] else
+            SettingsGroupCard(children: [
+              NexusDisclosure(
+                title: const Text('自动验证与修复', style: TextStyle(fontSize: 15)),
+                headerPadding: const EdgeInsets.all(16),
+                contentPadding: EdgeInsets.zero,
+                child: Column(children: [
+                  SettingsTile(
+                    icon: Icons.fact_check_outlined,
+                    wrapText: DesktopTheme.maybeOf(context) == null,
+                    title: '开发任务完成后自动验证',
+                    subtitle: '开启即允许在原工作区自动运行项目分析和测试脚本；不自动构建。需要文件与终端权限。',
+                    showChevron: false,
+                    trailingWidget: NexusSwitch(
+                      value: _autoVerificationEnabled,
+                      onChanged: _workspaceFilesEnabled && _terminalEnabled
+                          ? _setAutoVerification
+                          : null,
+                    ),
+                  ),
+                  SettingsTile(
+                    icon: Icons.build_outlined,
+                    wrapText: DesktopTheme.maybeOf(context) == null,
+                    title: '验证失败后尝试修复',
+                    subtitle: '最多自动修复一次，再重跑全部检查。写文件仍遵循审批设置；环境和权限错误不自动修复。',
+                    showChevron: false,
+                    trailingWidget: NexusSwitch(
+                      value: _autoRepairEnabled,
+                      onChanged: _autoVerificationEnabled &&
+                              _workspaceFilesEnabled &&
+                              _terminalEnabled
+                          ? (enabled) async {
+                              final prefs =
+                                  await SharedPreferences.getInstance();
+                              await prefs.setBool(
+                                  AutoVerificationPolicy.repairPreferenceKey,
+                                  enabled);
+                              if (mounted) {
+                                setState(() => _autoRepairEnabled = enabled);
+                              }
+                            }
+                          : null,
+                    ),
+                  ),
+                ]),
+              ),
+            ]),
           const SettingsSectionTitle('免审批范围'),
           SettingsGroupCard(children: _trustTiles()),
           // X3：无描边填充胶囊搜索框（与设置首页 T2 一致）。
@@ -667,7 +802,8 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
               decoration: BoxDecoration(
                 color: (isDark ? AppPalette.darkText : AppPalette.lightText)
                     .withValues(alpha: isDark ? 0.08 : 0.05),
-                borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.controlRadius(context)),
               ),
               child: TextField(
                 controller: _searchController,
@@ -707,24 +843,38 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
             ),
           ),
           const SizedBox(height: 10),
-          // Filter Chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                _buildFilterChip('全部', _RiskFilter.all),
-                const SizedBox(width: 8),
-                _buildFilterChip('安全 (Safe)', _RiskFilter.safe),
-                const SizedBox(width: 8),
-                _buildFilterChip('需确认', _RiskFilter.requiresConfirmation),
-                const SizedBox(width: 8),
-                _buildFilterChip('高危', _RiskFilter.dangerous),
-                const SizedBox(width: 8),
-                _buildFilterChip('敏感工具', _RiskFilter.sensitive),
-              ],
+          if (DesktopTheme.maybeOf(context) == null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.filter_list_rounded),
+                  label: Text('风险筛选 · ${_filterLabel(_filter)}'),
+                  onPressed: _chooseRiskFilter,
+                ),
+              ),
+            )
+          else ...[
+            // Filter Chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  _buildFilterChip('全部', _RiskFilter.all),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('安全 (Safe)', _RiskFilter.safe),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('需确认', _RiskFilter.requiresConfirmation),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('高危', _RiskFilter.dangerous),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('敏感工具', _RiskFilter.sensitive),
+                ],
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 8),
           SettingsSectionTitle('可用工具 (${tools.length})'),
           if (tools.isEmpty)
@@ -758,6 +908,38 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
               ],
             ),
         ],
+      )),
+    );
+  }
+
+  String _filterLabel(_RiskFilter value) => switch (value) {
+        _RiskFilter.all => '全部',
+        _RiskFilter.safe => '安全 (Safe)',
+        _RiskFilter.requiresConfirmation => '需确认',
+        _RiskFilter.dangerous => '高危',
+        _RiskFilter.sensitive => '敏感工具',
+      };
+
+  Future<void> _chooseRiskFilter() async {
+    await showNexusSheet<void>(
+      context: context,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(padding: EdgeInsets.all(16), child: Text('工具风险筛选')),
+          for (final value in _RiskFilter.values)
+            ListTile(
+              key: Key('tool-filter-${value.name}'),
+              title: Text(_filterLabel(value)),
+              selected: value == _filter,
+              trailing:
+                  value == _filter ? const Icon(Icons.check_rounded) : null,
+              onTap: () {
+                setState(() => _filter = value);
+                Navigator.of(sheetContext).pop();
+              },
+            ),
+        ],
       ),
     );
   }
@@ -770,7 +952,7 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
     final fg = selected
         ? AppPalette.brandTextFor(isDark)
         : base.withValues(alpha: 0.72);
-    final radius = BorderRadius.circular(AppTokens.radiusPill);
+    final radius = BorderRadius.circular(MobileTheme.controlRadius(context));
     return Semantics(
       button: true,
       selected: selected,
@@ -789,11 +971,17 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
                       : AppPalette.brandSoftLight)
                   : base.withValues(alpha: isDark ? 0.08 : 0.05),
               borderRadius: radius,
+              border: Border.all(
+                color: selected
+                    ? MobileTheme.brand(context).withValues(alpha: 0.35)
+                    : Colors.transparent,
+                width: 1.0,
+              ),
             ),
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppTokens.fontSizeFootnote,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: fg,
               ),

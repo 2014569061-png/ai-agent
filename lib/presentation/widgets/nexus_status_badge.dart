@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/app_palette.dart';
+import '../theme/app_status_colors.dart';
 import '../theme/app_tokens.dart';
 import '../motion/micro_interactions.dart';
 
@@ -31,40 +31,24 @@ class NexusStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    Color bg;
-    Color fg;
-
-    // Z1：语义前景随主题取值；深色下浅色值（如 #9A6700）对比度不足。
-    switch (tone) {
-      case NexusBadgeTone.brand:
-        bg = isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
-        fg = isDark ? AppPalette.darkBrandText : AppPalette.brand;
-        break;
-      case NexusBadgeTone.success:
-        bg = isDark ? AppPalette.darkSuccessSoft : AppPalette.lightSuccessSoft;
-        fg = isDark ? AppPalette.darkSuccess : AppPalette.success;
-        break;
-      case NexusBadgeTone.warning:
-        bg = isDark ? AppPalette.darkWarningSoft : AppPalette.lightWarningSoft;
-        fg = isDark ? AppPalette.darkWarning : AppPalette.warning;
-        break;
-      case NexusBadgeTone.danger:
-        bg = isDark ? AppPalette.darkDangerSoft : AppPalette.lightDangerSoft;
-        fg = isDark ? AppPalette.darkDanger : AppPalette.danger;
-        break;
-      case NexusBadgeTone.neutral:
-        bg =
-            isDark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
-        fg = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-        break;
-    }
+    final colors = AppStatusColors.resolve(
+        context,
+        switch (tone) {
+          NexusBadgeTone.neutral => AppStatusTone.neutral,
+          NexusBadgeTone.brand => AppStatusTone.brand,
+          NexusBadgeTone.success => AppStatusTone.success,
+          NexusBadgeTone.warning => AppStatusTone.warning,
+          NexusBadgeTone.danger => AppStatusTone.danger,
+        });
+    final bg = colors.background;
+    final fg = colors.foreground;
+    final highContrast = MediaQuery.maybeHighContrastOf(context) ?? false;
 
     Widget content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
+        border: highContrast ? Border.all(color: fg) : null,
         borderRadius: BorderRadius.circular(AppTokens.radiusPill),
       ),
       child: Row(
@@ -84,26 +68,36 @@ class NexusStatusBadge extends StatelessWidget {
             Icon(icon, size: 12, color: fg),
             const SizedBox(width: 4),
           ],
-          Text(
+          Flexible(
+              child: Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
               color: fg,
               height: 1.2,
             ),
-          ),
+          )),
         ],
       ),
     );
 
     content = PopOnChange(trigger: (label, tone), child: content);
+    content =
+        Tooltip(message: label, excludeFromSemantics: true, child: content);
     if (onTap != null) {
-      return InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-        child: content,
-      );
+      return Semantics(
+          button: true,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              child: Center(widthFactor: 1, heightFactor: 1, child: content),
+            ),
+          ));
     }
     return content;
   }

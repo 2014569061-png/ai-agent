@@ -106,33 +106,34 @@ class BranchTreeView extends StatelessWidget {
     final theme = Theme.of(context);
     final muted = theme.textTheme.bodySmall;
     return _SheetBody(children: [
-      if (tree.missingParentId != null)
-        const _Note(
-          icon: Icons.link_off_rounded,
-          text: '这一族分支的来源会话已被删除',
+      Flexible(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            if (tree.missingParentId != null)
+              const _Note(
+                icon: Icons.link_off_rounded,
+                text: '这一族分支的来源会话已被删除',
+              ),
+            if (forkPoint != null)
+              _Note(
+                icon: Icons.call_split_rounded,
+                text: '当前会话从「$forkPoint」处分出',
+              ),
+            if (!tree.hasBranches)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Text(
+                  '这个会话还没有分支。\n长按任意消息，选择「新建分支」，即可从那里分出新会话。',
+                  textAlign: TextAlign.center,
+                  style: muted,
+                ),
+              )
+            else
+              for (final node in tree.nodes) _row(context, node),
+          ],
         ),
-      if (forkPoint != null)
-        _Note(
-          icon: Icons.call_split_rounded,
-          text: '当前会话从「$forkPoint」处分出',
-        ),
-      if (!tree.hasBranches)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20),
-          child: Text(
-            '这个会话还没有分支。\n长按任意消息，选择「新建分支」，即可从那里分出新会话。',
-            textAlign: TextAlign.center,
-            style: muted,
-          ),
-        )
-      else
-        Flexible(
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: tree.nodes.length,
-            itemBuilder: (context, index) => _row(context, tree.nodes[index]),
-          ),
-        ),
+      ),
     ]);
   }
 
@@ -157,7 +158,9 @@ class BranchTreeView extends StatelessWidget {
                   ? Icons.account_tree_outlined
                   : Icons.subdirectory_arrow_right_rounded,
               size: 18,
-              color: node.onCurrentPath ? primary : theme.colorScheme.outline,
+              color: node.onCurrentPath
+                  ? primary
+                  : theme.colorScheme.onSurfaceVariant,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -181,7 +184,7 @@ class BranchTreeView extends StatelessWidget {
                   style: theme.textTheme.labelSmall?.copyWith(color: primary))
             else
               Icon(Icons.chevron_right_rounded,
-                  size: 18, color: theme.colorScheme.outline),
+                  size: 18, color: theme.colorScheme.onSurfaceVariant),
           ],
         ),
       ),
@@ -234,7 +237,7 @@ class _Note extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: theme.colorScheme.outline),
+          Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Expanded(child: Text(text, style: theme.textTheme.bodySmall)),
         ],

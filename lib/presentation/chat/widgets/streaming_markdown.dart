@@ -27,45 +27,54 @@ class StreamingMarkdown extends StatefulWidget {
 
 class _StreamingMarkdownState extends State<StreamingMarkdown> {
   final _scanner = StreamingMarkdownScanner();
-  Widget? _stableChild;
+  final List<Widget> _stableChildren = [];
+  String _renderedStable = '';
   Object? _signature;
 
   @override
   Widget build(BuildContext context) {
     final segments = _scanner.update(widget.data);
-    if (!segments.hasStableContent) {
-      _stableChild = null;
-      _signature = null;
-      return Text(segments.tail, style: widget.tailStyle);
-    }
-    // Stylesheets have value equality. Include custom style changes as well as
-    // inherited theme/text scale; equal styles still reuse the same child.
     final signature = (
-      segments.stable,
       widget.textColor,
       widget.tailStyle,
       widget.styleSheet,
       Theme.of(context),
       MediaQuery.textScalerOf(context)
     );
-    if (signature != _signature) {
+    // Reference definitions and lists can change earlier blocks. Keep their
+    // complete Markdown semantics; ordinary completed paragraphs are immutable.
+    final coupled = RegExp(r'^ {0,3}(?:\[[^\]]+\]:|[-*+] |[0-9]+[.)] |> |\$\$)',
+            multiLine: true)
+        .hasMatch(segments.stable);
+    if (signature != _signature ||
+        !segments.stable.startsWith(_renderedStable) ||
+        coupled) {
+      _stableChildren.clear();
+      _renderedStable = '';
       _signature = signature;
-      _stableChild = RepaintBoundary(
+    }
+    if (segments.stable.length > _renderedStable.length) {
+      final delta = segments.stable.substring(_renderedStable.length);
+      _stableChildren.add(RepaintBoundary(
           child: DeferredMarkdown(
-        data: segments.stable,
+        data: delta,
         selectable: false,
         builders: {'pre': CodeBlockBuilder()},
         textColor: widget.textColor,
         styleSheet: widget.styleSheet,
-      ));
+      )));
+      _renderedStable = segments.stable;
+    }
+    if (_stableChildren.isEmpty) {
+      return Text(segments.tail, style: widget.tailStyle);
     }
     return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          _stableChild!,
+          ..._stableChildren,
           if (segments.tail.isNotEmpty)
-            Text(segments.tail, style: widget.tailStyle),
+            Text(segments.tail, style: widget.tailStyle)
         ]);
   }
 }

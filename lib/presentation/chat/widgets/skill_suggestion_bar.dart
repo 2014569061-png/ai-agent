@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_palette.dart';
@@ -45,14 +46,15 @@ class SkillSuggestionBar extends StatelessWidget {
         height: 36,
         decoration: BoxDecoration(
           color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           border: Border.all(color: hairline),
         ),
         child: Row(
           children: [
             const SizedBox(width: 10),
-            const Icon(Icons.auto_awesome_outlined,
-                size: 15, color: AppPalette.brand),
+            Icon(Icons.auto_awesome_outlined,
+                size: 15, color: MobileTheme.brand(context)),
             const SizedBox(width: 6),
             Expanded(
               child: ListView.separated(
@@ -131,7 +133,8 @@ class LoadedSkillBar extends StatelessWidget {
         height: 36,
         decoration: BoxDecoration(
           color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           border: Border.all(color: hairline),
         ),
         child: Row(
@@ -212,7 +215,8 @@ class SlashSkillReferenceBar extends StatelessWidget {
         height: 36,
         decoration: BoxDecoration(
           color: surface,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           border: Border.all(color: hairline),
         ),
         child: Row(

@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import '../../../domain/attachment_file.dart';
 import '../../theme/app_palette.dart';
@@ -173,7 +174,7 @@ class _AttachmentThumbnail extends StatelessWidget {
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: selected ? AppPalette.brand : border,
+          color: selected ? MobileTheme.brand(context) : border,
           width: selected ? 1.5 : 0.8,
         ),
         boxShadow: [
@@ -207,7 +208,7 @@ class _AttachmentThumbnail extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: selected
-                    ? AppPalette.brand
+                    ? MobileTheme.brand(context)
                     : Colors.black.withValues(alpha: 0.35),
                 border: Border.all(color: Colors.white, width: 1.2),
               ),

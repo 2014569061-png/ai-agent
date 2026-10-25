@@ -1,4 +1,4 @@
-import '../../infrastructure/providers/provider_config.dart';
+import '../../domain/provider_config.dart';
 
 class ProviderPresetModel {
   const ProviderPresetModel({

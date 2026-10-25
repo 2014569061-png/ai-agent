@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import '../motion/motion_preferences.dart';
 import 'liquid_glass.dart';
 import '../motion/press_squash.dart';
@@ -109,6 +110,33 @@ class _GlassSurfaceState extends State<GlassSurface> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final desktop = DesktopTheme.maybeOf(context);
+    if (desktop != null) {
+      final radius = widget.borderRadius ??
+          BorderRadius.circular(widget.role == GlassRole.overlay
+              ? DesktopTheme.panelRadius
+              : DesktopTheme.radius);
+      final borderColor = widget.borderColor ?? desktop.border;
+      final border = widget.outlined
+          ? Border.all(color: borderColor, width: widget.borderWidth)
+          : null;
+      final bgColor = widget.role == GlassRole.prominent && widget.tint != null
+          ? widget.tint!
+          : (widget.tint != null && widget.role == GlassRole.control
+              ? Color.alphaBlend(widget.tint!, desktop.panel)
+              : desktop.panel);
+      return Container(
+        margin: widget.margin,
+        padding: widget.padding,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: radius,
+          border: border,
+          boxShadow: widget.boxShadow,
+        ),
+        child: _interactiveChild(radius, reduceMotion: true),
+      );
+    }
     final isDark = theme.brightness == Brightness.dark;
     final media = MediaQuery.maybeOf(context);
     final reduceMotion = MotionPreferences.shouldReduceMotion(context);

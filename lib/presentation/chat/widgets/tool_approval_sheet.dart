@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -11,7 +12,7 @@ import '../../theme/app_tokens.dart';
 import '../../../domain/models.dart';
 import '../../../application/approval_policy.dart';
 import '../../l10n/app_strings.dart';
-import '../../../infrastructure/tools/tool_humanizer.dart';
+import '../tool_humanizer.dart';
 import '../../widgets/nexus_disclosure.dart';
 
 /// 工具审批弹窗主体：按风险展示人性化摘要与关键参数，「技术细节」折叠完整 JSON，
@@ -22,6 +23,7 @@ class ToolApprovalSheet extends StatefulWidget {
     required this.call,
     required this.risk,
     this.allowSessionTrust = true,
+    this.sessionTrustLabel = '本会话允许',
     this.allowPersistentTrust = false,
     this.timeout = const Duration(minutes: 5),
     this.onExpired,
@@ -33,6 +35,7 @@ class ToolApprovalSheet extends StatefulWidget {
 
   /// 是否提供「本会话允许」。授权只存在内存，退出应用即失效。
   final bool allowSessionTrust;
+  final String sessionTrustLabel;
 
   /// 是否提供「始终允许」。会写入持久信任清单，因此默认关闭：
   /// 调用方只应在明确允许长期放行的场景显式打开。
@@ -167,12 +170,80 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
     return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  static String _fileNameOf(String rawPath) {
+    final normalized = rawPath.replaceAll('\\', '/');
+    final parts = normalized.split('/').where((s) => s.isNotEmpty).toList();
+    return parts.isEmpty ? rawPath : parts.last;
+  }
+
+  static String? _parentDirOf(String rawPath) {
+    final normalized = rawPath.replaceAll('\\', '/');
+    final idx = normalized.lastIndexOf('/');
+    if (idx <= 0) return null;
+    return normalized.substring(0, idx + 1);
+  }
+
+  Widget _buildTimerBadge(BuildContext context, Color riskColor,
+      {required bool inline}) {
+    return Semantics(
+      liveRegion: true,
+      label: _expired ? '审批已过期，已自动拒绝' : '审批剩余 ${_formatRemaining()}',
+      child: Container(
+        width: inline ? null : double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: inline ? 10 : 12,
+          vertical: inline ? 5 : 7,
+        ),
+        decoration: BoxDecoration(
+          color: riskColor.withValues(alpha: _expired ? 0.14 : 0.09),
+          borderRadius: BorderRadius.circular(inline ? 999 : 10),
+          border: Border.all(
+            color: riskColor.withValues(alpha: _expired ? 0.32 : 0.22),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: inline ? MainAxisSize.min : MainAxisSize.max,
+          children: [
+            ExcludeSemantics(
+              child: Icon(
+                _expired ? Icons.timer_off_outlined : Icons.timer_outlined,
+                size: 15,
+                color: riskColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                _expired
+                    ? '审批已过期，请重试任务'
+                    : (inline
+                        ? _formatRemaining()
+                        : '审批有效时间 ${_formatRemaining()}'),
+                style: TextStyle(
+                  color: riskColor,
+                  fontSize: AppTokens.fontSizeFootnote,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final danger = widget.risk == ToolRisk.dangerous;
-    // Z3：风险色与弱化文字随主题取值（原 outline 描边色作文字几乎不可见）。
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    // Z3：风险色与弱化文字随主题取值；普通确认操作回归品牌蓝白基调，仅危险操作采用高警示红色。
     final semantic = AppTheme.semanticOf(context);
+    final brandColor = MobileTheme.brand(context);
     final riskColor = danger ? semantic.danger : semantic.warning;
+    final headerAccent = danger ? semantic.danger : brandColor;
     final riskLabel =
         danger ? AppStrings.dangerOperation : AppStrings.requiresConfirmation;
     final humanizer = const ToolHumanizer();
@@ -187,155 +258,273 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
             widget.call.arguments['command'] ??
             widget.call.arguments['cmd'])
         ?.toString();
-    // 指令已在下方预览块完整展示，摘要里不再重复同一条命令。
-    final visibleParamLines = [
-      for (final line in paramLines)
-        if (command == null || line.$2 != command) line,
-    ];
     final targetContent = widget.call.arguments['TargetContent']?.toString();
     final replacementContent =
         widget.call.arguments['ReplacementContent']?.toString();
-    final targetFile = (widget.call.arguments['TargetFile'] ??
+    final rawTargetFile = (widget.call.arguments['TargetFile'] ??
             widget.call.arguments['path'] ??
             widget.call.arguments['file'])
         ?.toString();
+    final targetFile =
+        (rawTargetFile != null && rawTargetFile.trim().isNotEmpty)
+            ? rawTargetFile.trim()
+            : null;
     final codeContent = (widget.call.arguments['CodeContent'] ??
             widget.call.arguments['content'])
         ?.toString();
 
+    final hasDedicatedFileCard = targetFile != null &&
+        (widget.call.name == 'edit_file' ||
+            widget.call.name == 'write_file' ||
+            widget.call.name == 'read_file' ||
+            widget.call.name == 'delete_file' ||
+            widget.call.name == 'apply_patch');
+
+    // 指令或单文件卡片已完整展示目标路径时，不再在下方参数行重复打印同一路径。
+    final visibleParamLines = [
+      for (final line in paramLines)
+        if ((command == null || line.$2 != command) &&
+            !(hasDedicatedFileCard && line.$1 == 'path' && line.$2 == targetFile))
+          line,
+    ];
+
+    final media = MediaQuery.of(context);
+    final inlineTimer = !_expired &&
+        media.size.width >= 350 &&
+        media.textScaler.scale(14) <= 18.5;
+
+    final cardBg = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : cs.surfaceContainerLowest;
+    final cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : cs.outlineVariant.withValues(alpha: 0.65);
+
     // 高度随内容收缩，上限不变：短内容不再在按钮上方留出大片空白。
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxHeight: math.min(MediaQuery.sizeOf(context).height * 0.76, 640.0),
+        maxHeight: math.min(media.size.height * 0.76, 640.0),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Flexible(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                          color: riskColor.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(12)),
-                      child: Semantics(
-                        label: riskLabel,
-                        child: Icon(
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: headerAccent.withValues(alpha: 0.11),
+                          borderRadius: BorderRadius.circular(
+                              MobileTheme.controlRadius(context)),
+                        ),
+                        child: Semantics(
+                          label: riskLabel,
+                          child: Icon(
                             danger
                                 ? Icons.warning_amber_rounded
                                 : Icons.shield_outlined,
-                            color: riskColor),
+                            color: headerAccent,
+                            size: 21,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
+                      const SizedBox(width: 12),
+                      Expanded(
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              AppStrings.confirmToolCall,
+                              style: theme.textTheme.titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            Text(
+                              AppStrings.requiresAuthorization,
+                              style: TextStyle(
+                                color: semantic.textMuted,
+                                fontSize: AppTokens.fontSizeCaption,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (inlineTimer) ...[
+                        const SizedBox(width: 8),
+                        _buildTimerBadge(context, riskColor, inline: true),
+                      ],
+                    ],
+                  ),
+                  if (!inlineTimer) ...[
+                    const SizedBox(height: 12),
+                    _buildTimerBadge(context, riskColor, inline: false),
+                  ],
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: cardBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.08)
+                                          : cs.surfaceContainerHigh,
+                                      borderRadius: BorderRadius.circular(7),
+                                    ),
+                                    child: Text(
+                                      widget.call.name,
+                                      style: const TextStyle(
+                                        fontFamily: AppTokens.fontFamilyMono,
+                                        fontSize: AppTokens.fontSizeFootnote,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: riskColor.withValues(alpha: 0.11),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      riskLabel,
+                                      style: TextStyle(
+                                        color: riskColor,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: AppTokens.fontSizeBadge,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (hasDedicatedFileCard) ...[
+                          const SizedBox(height: 10),
+                          Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                          Text(AppStrings.confirmToolCall,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.w500)),
-                          Text(AppStrings.requiresAuthorization,
-                              style: TextStyle(
-                                  color: semantic.textMuted, fontSize: 13)),
-                        ])),
-                  ]),
-                  const SizedBox(height: 16),
-                  Semantics(
-                    liveRegion: true,
-                    label:
-                        _expired ? '审批已过期，已自动拒绝' : '审批剩余 ${_formatRemaining()}',
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color:
-                            riskColor.withValues(alpha: _expired ? 0.16 : 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _expired
-                                ? Icons.timer_off_outlined
-                                : Icons.timer_outlined,
-                            size: 16,
-                            color: riskColor,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              _expired
-                                  ? '审批已过期，请重试任务'
-                                  : '审批有效时间 ${_formatRemaining()}',
-                              style: TextStyle(
-                                color: riskColor,
-                                fontSize: AppTokens.fontSizeFootnote,
-                                fontWeight: FontWeight.w500,
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: ExcludeSemantics(
+                                  child: Icon(
+                                    Icons.description_outlined,
+                                    size: 17,
+                                    color: headerAccent,
+                                  ),
+                                ),
                               ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  _fileNameOf(targetFile),
+                                  style: const TextStyle(
+                                    fontSize: AppTokens.fontSizeBody,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.35,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_parentDirOf(targetFile) != null) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.black.withValues(alpha: 0.22)
+                                    : cs.surface,
+                                borderRadius: BorderRadius.circular(9),
+                                border: Border.all(
+                                  color: cs.outlineVariant.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Text(
+                                _parentDirOf(targetFile)!,
+                                style: TextStyle(
+                                  fontFamily: AppTokens.fontFamilyMono,
+                                  fontSize: AppTokens.fontSizeFootnote,
+                                  color: cs.onSurfaceVariant,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ] else if (summary != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            summary,
+                            style: const TextStyle(
+                              fontSize: AppTokens.fontSizeBody,
+                              height: 1.45,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
-                      ),
+                        if (visibleParamLines.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              for (final (k, v) in visibleParamLines)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 9, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.black.withValues(alpha: 0.2)
+                                        : cs.surface,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: cs.outlineVariant
+                                          .withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '$k：$v',
+                                    style: TextStyle(
+                                      fontSize: AppTokens.fontSizeFootnote,
+                                      color: cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                        color: riskColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                            color: riskColor.withValues(alpha: 0.4))),
-                    child: Row(children: [
-                      ExcludeSemantics(
-                        child: Icon(Icons.build_circle_outlined,
-                            size: 16, color: riskColor),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                          child: Text(widget.call.name,
-                              style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontWeight: FontWeight.w500))),
-                      Text(riskLabel,
-                          style: TextStyle(
-                              color: riskColor,
-                              fontWeight: FontWeight.w500,
-                              fontSize: AppTokens.fontSizeFootnote)),
-                    ]),
-                  ),
-                  // 人性化摘要：默认展示一句话做的事 + 关键参数，代替原始 JSON。
-                  if (summary != null) ...[
-                    const SizedBox(height: 12),
-                    Text(summary,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w500)),
-                    if (visibleParamLines.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      for (final (k, v) in visibleParamLines)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 1),
-                          child: Text('· $k: $v',
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant)),
-                        ),
-                    ],
-                  ],
 
                   // 代码与指令可视化预览 (Diff / Shell Command)
                   if (command != null && command.isNotEmpty)
@@ -345,6 +534,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                   else if (codeContent != null && targetFile != null)
                     _codeWritePreview(codeContent, targetFile),
 
+                  const SizedBox(height: 6),
                   // 完整 JSON 收进「技术细节」折叠区，供审计/核对，不干扰主决策。
                   NexusDisclosure(
                     headerPadding: EdgeInsets.zero,
@@ -358,18 +548,15 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                       constraints: const BoxConstraints(maxHeight: 160),
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHighest,
+                          color: cs.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(10)),
                       child: SingleChildScrollView(
                           child: SelectableText(_prettyJson(approvalArguments),
                               style: const TextStyle(
-                                  fontFamily: 'monospace',
+                                  fontFamily: AppTokens.fontFamilyMono,
                                   fontSize: AppTokens.fontSizeFootnote))),
                     ),
                   ),
-                  const SizedBox(height: 16),
                 ],
               ),
             ),
@@ -410,6 +597,13 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                   Expanded(
                     child: OutlinedButton(
                       autofocus: true,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                        foregroundColor: Theme.of(context).colorScheme.onSurface,
+                        side: BorderSide(
+                          color: Theme.of(context).colorScheme.outlineVariant,
+                        ),
+                      ),
                       onPressed: _expired
                           ? null
                           : () {
@@ -423,7 +617,10 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                   Expanded(
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: riskColor,
+                        minimumSize: const Size(0, 48),
+                        backgroundColor:
+                            danger ? riskColor : MobileTheme.brand(context),
+                        foregroundColor: Colors.white,
                       ),
                       onPressed: _expired
                           ? null
@@ -457,7 +654,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                         // allowSession 的语义是「本会话内一直允许」。此前写作
                         // 「仅本次允许」，与上排 allowOnce（确认执行）重复，用户
                         // 无法区分两个按钮的差别。
-                        child: const Text('本会话允许'),
+                        child: Text(widget.sessionTrustLabel),
                       ),
                     ),
                     if (showPersistentTrust) ...[
@@ -479,10 +676,10 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                   showPersistentTrust
                       ? '「本会话允许」退出应用后失效；「始终允许」全局持久生效，'
                           '可在「设置 → 工具清单」中撤销。'
-                      : '「本会话允许」只在本次应用运行期间生效，重启后需要重新确认。',
+                      : '「${widget.sessionTrustLabel}」仅在当前授权范围内生效；修改目标或结束运行后需要重新确认。',
                   style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.outline,
+                    fontSize: AppTokens.fontSizeBadge,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -500,20 +697,20 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppPalette.terminalBg,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         border: Border.all(color: Colors.white12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               ExcludeSemantics(
                 child: Icon(Icons.terminal_rounded,
-                    size: 14, color: AppPalette.brand),
+                    size: 14, color: MobileTheme.brand(context)),
               ),
-              SizedBox(width: 6),
-              Text('将要执行的指令',
+              const SizedBox(width: 6),
+              const Text('将要执行的指令',
                   style: TextStyle(
                       fontSize: AppTokens.fontSizeBadge,
                       color: AppPalette.darkTextMuted,
@@ -542,7 +739,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppPalette.terminalBg,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         border: Border.all(color: Colors.white12),
       ),
       child: Column(
@@ -613,7 +810,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: AppPalette.terminalBg,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         border: Border.all(color: Colors.white12),
       ),
       child: Column(
@@ -626,9 +823,9 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
             ),
             child: Row(
               children: [
-                const ExcludeSemantics(
+                ExcludeSemantics(
                   child: Icon(Icons.edit_note_rounded,
-                      size: 14, color: AppPalette.brand),
+                      size: 14, color: MobileTheme.brand(context)),
                 ),
                 const SizedBox(width: 6),
                 Expanded(

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -15,6 +16,7 @@ import '../widgets/nexus_page_header.dart';
 import 'device_action_confirm_sheet.dart';
 import 'settings_components.dart';
 import '../widgets/nexus_sheet.dart';
+import '../widgets/nexus_disclosure.dart';
 
 /// 设备自动化：触发器状态、待确认触发、规则、执行记录与撤销。
 ///
@@ -174,10 +176,10 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
 
   Future<void> _showRun(AutomationRun run) async {
     await showNexusSheet<void>(
-context: context,
-showDragHandle: true,
-isScrollControlled: true,
-builder: (context) => SafeArea(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -224,7 +226,7 @@ builder: (context) => SafeArea(
           ],
         ),
       ),
-);
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -308,9 +310,9 @@ builder: (context) => SafeArea(
 
   Future<void> _ruleMenu(AutomationRule rule) async {
     final choice = await showNexusSheet<String>(
-context: context,
-showDragHandle: true,
-builder: (context) => SafeArea(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -333,7 +335,7 @@ builder: (context) => SafeArea(
           ],
         ),
       ),
-);
+    );
     if (!mounted) return;
     switch (choice) {
       case 'run':
@@ -352,9 +354,9 @@ builder: (context) => SafeArea(
 
   Future<void> _addFromTemplate() async {
     final template = await showNexusSheet<String>(
-context: context,
-showDragHandle: true,
-builder: (context) => SafeArea(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -385,7 +387,7 @@ builder: (context) => SafeArea(
           ],
         ),
       ),
-);
+    );
     if (!mounted || template == null) return;
     final draft = await showDialog<_RuleDraft>(
       context: context,
@@ -499,7 +501,7 @@ builder: (context) => SafeArea(
           ),
         ],
       ),
-      body: _body(context),
+      body: NexusPageLayout(child: _body(context)),
     );
   }
 
@@ -548,12 +550,22 @@ builder: (context) => SafeArea(
               ],
             ]),
           ],
-          const SettingsSectionTitle('触发器状态'),
-          _statusCard(),
+          if (_statusError != null)
+            _statusCard()
+          else
+            NexusDisclosure(
+              title: const Text('触发器状态与权限'),
+              headerPadding:
+                  const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              contentPadding: EdgeInsets.zero,
+              child: _statusCard(),
+            ),
           const SettingsSectionTitle('规则'),
           _rulesCard(),
-          const SettingsSectionTitle('最近执行'),
-          _runsCard(),
+          if (_runs.isNotEmpty) ...[
+            const SettingsSectionTitle('最近执行'),
+            _runsCard(),
+          ],
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Text(

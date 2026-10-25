@@ -1,8 +1,9 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
 import '../../widgets/empty_state_view.dart';
-import '../../../infrastructure/providers/provider_config.dart';
+import '../../../domain/provider_config.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
@@ -158,7 +159,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                       '选择模型',
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w600,
-                        fontSize: 18,
+                        fontSize: AppTokens.fontSizeTitle,
                       ),
                     ),
                   ),
@@ -190,7 +191,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                 decoration: InputDecoration(
                   hintText: '搜索模型…',
                   hintStyle: TextStyle(
-                    fontSize: 13,
+                    fontSize: AppTokens.fontSizeCaption,
                     color: isDark
                         ? AppPalette.darkTextMuted
                         : AppPalette.lightTextMuted,
@@ -217,8 +218,8 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                       ? Colors.white.withValues(alpha: 0.05)
                       : Colors.black.withValues(alpha: 0.035),
                   border: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
                     borderSide: BorderSide(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.08)
@@ -226,8 +227,8 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                     ),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
                     borderSide: BorderSide(
                       color: isDark
                           ? Colors.white.withValues(alpha: 0.08)
@@ -235,10 +236,10 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                     ),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
                     borderSide: BorderSide(
-                      color: AppPalette.brandAction.withValues(alpha: 0.5),
+                      color: MobileTheme.brand(context).withValues(alpha: 0.5),
                     ),
                   ),
                   contentPadding:
@@ -272,8 +273,15 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                                         ? AppPalette.darkText
                                         : AppPalette.lightText)
                                     .withValues(alpha: isDark ? 0.08 : 0.05),
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusPill),
+                            borderRadius: BorderRadius.circular(
+                                MobileTheme.controlRadius(context)),
+                            border: Border.all(
+                              color: selected
+                                  ? MobileTheme.brand(context)
+                                      .withValues(alpha: 0.35)
+                                  : Colors.transparent,
+                              width: 1.0,
+                            ),
                           ),
                           child: Text(
                             cat,
@@ -284,7 +292,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                               color: selected
                                   ? (isDark
                                       ? AppPalette.darkBrandHover
-                                      : AppPalette.brandAction)
+                                      : MobileTheme.brand(context))
                                   : (isDark
                                       ? AppPalette.darkText
                                       : AppPalette.lightText),
@@ -309,8 +317,7 @@ class _ModelPickerSheetState extends State<ModelPickerSheet> {
                           for (final entry in grouped.entries) ...[
                             if (grouped.length > 1)
                               Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(4, 6, 4, 4),
+                                padding: const EdgeInsets.fromLTRB(4, 6, 4, 4),
                                 child: Text(
                                   entry.key,
                                   style: theme.textTheme.labelMedium?.copyWith(
@@ -370,7 +377,7 @@ class _OptionBar extends StatelessWidget {
         color: isDark
             ? Colors.white.withValues(alpha: 0.045)
             : Colors.black.withValues(alpha: 0.025),
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         border: Border.all(
           color: isDark
               ? Colors.white.withValues(alpha: 0.08)
@@ -379,8 +386,8 @@ class _OptionBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.psychology_outlined,
-              size: 17, color: AppPalette.brandAction),
+          Icon(Icons.psychology_outlined,
+              size: 17, color: MobileTheme.brand(context)),
           const SizedBox(width: 6),
           Text(
             '思考',
@@ -439,7 +446,8 @@ class _OptionBar extends StatelessWidget {
     );
   }
 
-  Widget _effortChip(BuildContext context, String label, ReasoningEffort effort) {
+  Widget _effortChip(
+      BuildContext context, String label, ReasoningEffort effort) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = reasoningEffort == effort;
     return Padding(
@@ -453,23 +461,27 @@ class _OptionBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: selected
                 ? (isDark
-                    ? AppPalette.brandAction.withValues(alpha: 0.25)
-                    : AppPalette.brandAction.withValues(alpha: 0.12))
+                    ? MobileTheme.brand(context).withValues(alpha: 0.25)
+                    : MobileTheme.brand(context).withValues(alpha: 0.12))
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            borderRadius:
+                BorderRadius.circular(MobileTheme.controlRadius(context)),
             border: Border.all(
               color: selected
-                  ? AppPalette.brandAction.withValues(alpha: isDark ? 0.6 : 0.4)
+                  ? MobileTheme.brand(context)
+                      .withValues(alpha: isDark ? 0.6 : 0.4)
                   : Colors.transparent,
             ),
           ),
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: AppTokens.fontSizeBadge,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
               color: selected
-                  ? (isDark ? AppPalette.darkBrandHover : AppPalette.brandAction)
+                  ? (isDark
+                      ? AppPalette.darkBrandHover
+                      : MobileTheme.brand(context))
                   : (isDark
                       ? AppPalette.darkTextMuted
                       : AppPalette.lightTextMuted),
@@ -532,15 +544,15 @@ class _ModelTile extends StatelessWidget {
     final tags = _extractCapabilities(profile.model, profile.contextTokens);
 
     final borderColor = selected
-        ? AppPalette.brandAction.withValues(alpha: isDark ? 0.65 : 0.45)
+        ? MobileTheme.brand(context).withValues(alpha: isDark ? 0.65 : 0.45)
         : (isDark
             ? Colors.white.withValues(alpha: 0.08)
             : Colors.black.withValues(alpha: 0.06));
 
     final cardBg = selected
         ? (isDark
-            ? AppPalette.brandAction.withValues(alpha: 0.15)
-            : AppPalette.brandAction.withValues(alpha: 0.07))
+            ? MobileTheme.brand(context).withValues(alpha: 0.15)
+            : MobileTheme.brand(context).withValues(alpha: 0.07))
         : (isDark
             ? Colors.white.withValues(alpha: 0.035)
             : Colors.black.withValues(alpha: 0.02));
@@ -549,12 +561,12 @@ class _ModelTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 7),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         border: Border.all(color: borderColor, width: selected ? 1.2 : 1.0),
         boxShadow: selected
             ? [
                 BoxShadow(
-                  color: AppPalette.brandAction
+                  color: MobileTheme.brand(context)
                       .withValues(alpha: isDark ? 0.22 : 0.10),
                   blurRadius: 10,
                   spreadRadius: 0,
@@ -565,7 +577,8 @@ class _ModelTile extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -580,7 +593,7 @@ class _ModelTile extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 14.5,
+                          fontSize: AppTokens.fontSizeBody,
                           fontWeight: FontWeight.w600,
                           color: textColor,
                         ),
@@ -593,7 +606,7 @@ class _ModelTile extends StatelessWidget {
                         size: 18,
                         color: isDark
                             ? AppPalette.darkBrandHover
-                            : AppPalette.brandAction,
+                            : MobileTheme.brand(context),
                       ),
                   ],
                 ),
@@ -604,7 +617,12 @@ class _ModelTile extends StatelessWidget {
                       : '${profile.name} · 未配置 API Key',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5, color: textMuted),
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeBadge,
+                    fontFamily:
+                        profile.isConfigured ? AppTokens.fontFamilyMono : null,
+                    color: textMuted,
+                  ),
                 ),
                 if (tags.isNotEmpty) ...[
                   const SizedBox(height: 7),
@@ -618,9 +636,9 @@ class _ModelTile extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: selected
                               ? (isDark
-                                  ? AppPalette.brandAction
+                                  ? MobileTheme.brand(context)
                                       .withValues(alpha: 0.20)
-                                  : AppPalette.brandAction
+                                  : MobileTheme.brand(context)
                                       .withValues(alpha: 0.09))
                               : (isDark
                                   ? Colors.white.withValues(alpha: 0.05)
@@ -628,7 +646,8 @@ class _ModelTile extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: selected
-                                ? AppPalette.brandAction.withValues(alpha: 0.4)
+                                ? MobileTheme.brand(context)
+                                    .withValues(alpha: 0.4)
                                 : (isDark
                                     ? Colors.white.withValues(alpha: 0.07)
                                     : Colors.black.withValues(alpha: 0.05)),
@@ -637,12 +656,13 @@ class _ModelTile extends StatelessWidget {
                         child: Text(
                           tag,
                           style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w500,
+                            fontSize: AppTokens.fontSizeMetricSmall,
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: const [FontFeature.tabularFigures()],
                             color: selected
                                 ? (isDark
                                     ? AppPalette.darkBrandHover
-                                    : AppPalette.brandAction)
+                                    : MobileTheme.brand(context))
                                 : textMuted,
                           ),
                         ),

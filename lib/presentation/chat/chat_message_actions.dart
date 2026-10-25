@@ -2,7 +2,7 @@ part of 'chat_page.dart';
 
 extension _ChatMessageActions on _ChatPageState {
   /// 消息长按菜单：助手消息 → 朗读 / 停止朗读 / 复制；用户消息 → 编辑 / 复制。
-  Future<void> _showMessageActions(int messageIndex) async {
+  Future<void> _showMessageActions(int messageIndex, {Offset? position}) async {
     final snapshot = ref.read(chatControllerProvider);
     if (messageIndex < 0 || messageIndex >= snapshot.messages.length) return;
     final message = snapshot.messages[messageIndex];
@@ -19,49 +19,78 @@ extension _ChatMessageActions on _ChatPageState {
     if (_selectingMessageIndex.value != null) {
       _selectingMessageIndex.value = null;
     }
-    final action = await showNexusActionSheet<String>(
-      context: context,
-      title: AppStrings.messageActions,
-      items: [
-        if (canSpeak)
-          ActionSheetItem(
-            icon: speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
-            title: speaking ? AppStrings.stopSpeaking : AppStrings.speakAloud,
-            value: 'speak',
-          ),
-        if (isUser)
-          const ActionSheetItem(
-            icon: Icons.edit_outlined,
-            title: '编辑并重发',
-            subtitle: '替换此消息，并重新生成其后的回复',
-            value: 'edit',
-          ),
-        const ActionSheetItem(
-          icon: Icons.call_split_outlined,
-          title: '新建分支',
-          subtitle: '只复制到此的对话上下文，不重放工具、不改文件',
-          value: 'fork',
+    final items = <ActionSheetItem<String>>[
+      if (canSpeak)
+        ActionSheetItem(
+          icon: speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+          title: speaking ? AppStrings.stopSpeaking : AppStrings.speakAloud,
+          value: 'speak',
         ),
+      if (isUser)
         const ActionSheetItem(
-          icon: Icons.copy_outlined,
-          title: AppStrings.copyFullText,
-          value: 'copy',
+          icon: Icons.edit_outlined,
+          title: '编辑并重发',
+          subtitle: '替换此消息，并重新生成其后的回复',
+          value: 'edit',
         ),
-        if (message.role != MessageRole.tool)
-          const ActionSheetItem(
-            icon: Icons.text_fields_rounded,
-            title: AppStrings.selectText,
-            subtitle: '进入后可拖动选择局部文本',
-            value: 'select',
-          ),
-      ],
-    );
+      const ActionSheetItem(
+        icon: Icons.call_split_outlined,
+        title: '新建分支',
+        subtitle: '只复制到此的对话上下文，不重放工具、不改文件',
+        value: 'fork',
+      ),
+      const ActionSheetItem(
+          icon: Icons.format_quote, title: '引用到输入框', value: 'quote'),
+      if (!isUser && !snapshot.running)
+        const ActionSheetItem(
+            icon: Icons.refresh, title: '重新生成', value: 'regenerate'),
+      const ActionSheetItem(
+        icon: Icons.copy_outlined,
+        title: AppStrings.copyFullText,
+        value: 'copy',
+      ),
+      if (message.role != MessageRole.tool)
+        const ActionSheetItem(
+          icon: Icons.text_fields_rounded,
+          title: AppStrings.selectText,
+          subtitle: '进入后可拖动选择局部文本',
+          value: 'select',
+        ),
+    ];
+    final action = position != null
+        ? await showMenu<String>(
+            context: context,
+            position: RelativeRect.fromLTRB(
+                position.dx, position.dy, position.dx, position.dy),
+            items: [
+                for (final item in items)
+                  PopupMenuItem(
+                      value: item.value,
+                      enabled: item.enabled,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (item.icon != null) ...[
+                          Icon(item.icon, size: 16),
+                          const SizedBox(width: 10)
+                        ],
+                        Text(item.title)
+                      ]))
+              ])
+        : await showNexusActionSheet<String>(
+            context: context,
+            title: AppStrings.messageActions,
+            items: items,
+            scrollable: true);
     if (!mounted ||
         action == null ||
         ref.read(chatControllerProvider).conversationId != conversationId) {
       return;
     }
-    if (action == 'edit') {
+    if (action == 'quote') {
+      _controller.text +=
+          '\n> ${stripRunPauseMarker(message.text).replaceAll('\n', '\n> ')}\n';
+    } else if (action == 'regenerate') {
+      _regenerate();
+    } else if (action == 'edit') {
       await _editAndResend(messageIndex, message);
     } else if (action == 'fork') {
       try {
@@ -170,8 +199,8 @@ extension _ChatMessageActions on _ChatPageState {
                           width: 0.8,
                         ),
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusControl),
+                          borderRadius: BorderRadius.circular(
+                              MobileTheme.controlRadius(context)),
                         ),
                       ),
                       onPressed: () => Navigator.pop(dialogContext, false),
@@ -185,12 +214,12 @@ extension _ChatMessageActions on _ChatPageState {
                     height: 42,
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppPalette.brand,
+                        backgroundColor: MobileTheme.brand(context),
                         foregroundColor: Colors.white,
                         elevation: 0,
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusControl),
+                          borderRadius: BorderRadius.circular(
+                              MobileTheme.controlRadius(context)),
                         ),
                       ),
                       onPressed: () => Navigator.pop(dialogContext, true),

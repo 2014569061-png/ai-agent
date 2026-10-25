@@ -1,9 +1,13 @@
+import '../theme/mobile_theme.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/desktop_resource_view.dart';
 
 import '../../infrastructure/providers/openai_compatible_provider.dart';
-import '../../infrastructure/providers/provider_config.dart';
+import '../../domain/provider_config.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_sheet.dart';
@@ -81,8 +85,79 @@ class _ModelListPageState extends State<ModelListPage> {
       ..sort((a, b) => a.displayName.compareTo(b.displayName));
   }
 
+  Widget _desktopModels() => DesktopResourceView<_DisplayModel>(
+        title: '选择模型',
+        icon: Icons.view_in_ar_outlined,
+        description: '${widget.config.name} · 能力标签来自预设或服务返回，不代表经过实际调用验证。',
+        items: _models,
+        loading: _loading && _models.isEmpty,
+        searchHint: '搜索模型名称或 Model ID',
+        searchText: (model) => '${model.id} ${model.displayName}',
+        filters: [
+          DesktopResourceFilter('工具调用', (model) => model.capabilities.tools),
+          DesktopResourceFilter('视觉输入', (model) => model.capabilities.vision),
+          DesktopResourceFilter('JSON', (model) => model.capabilities.jsonMode)
+        ],
+        sorts: [
+          DesktopResourceSort(
+              '名称 A–Z', (a, b) => a.displayName.compareTo(b.displayName)),
+          DesktopResourceSort('上下文：大到小',
+              (a, b) => (b.contextTokens ?? 0).compareTo(a.contextTokens ?? 0))
+        ],
+        actions: [
+          FilledButton.icon(
+              onPressed: _addCustomModel,
+              icon: const Icon(Icons.add),
+              label: const Text('自定义模型')),
+          OutlinedButton.icon(
+              onPressed: _loading ||
+                      widget.config.type != ProviderType.openaiCompatible
+                  ? null
+                  : _loadRemote,
+              icon: const Icon(Icons.cloud_download_outlined),
+              label: Text(_loading ? '正在获取…' : '获取远端列表'))
+        ],
+        banner: _error == null && !_loading
+            ? null
+            : Card(
+                margin: EdgeInsets.zero,
+                child: ListTile(
+                    leading: Icon(_loading ? Icons.sync : Icons.info_outline),
+                    title: Text(_loading ? '正在读取兼容 API 的模型列表' : '远端列表读取失败'),
+                    subtitle:
+                        const Text('已有预设仍可选择，也可以手动填写 Model ID；不会自动保存服务商配置。'))),
+        emptyTitle: '当前没有可显示的模型',
+        emptyMessage: '使用兼容 API 获取列表，或手动填写服务商支持的 Model ID。',
+        itemBuilder: (context, model) => DesktopResourceCard(
+          key: ValueKey('desktop-model-${model.id}'),
+          title: model.displayName,
+          icon: Icons.auto_awesome_outlined,
+          description: model.id,
+          selected: model.id == widget.config.model,
+          metadata: [
+            if (model.id == widget.config.model) '当前选择',
+            _remoteModels.any((item) => item.id == model.id) ? '远端返回' : '内置预设',
+            if (model.contextTokens != null)
+              '${formatContextTokens(model.contextTokens!)} 上下文'
+            else
+              '上下文未提供',
+            if (model.capabilities.tools) '工具调用',
+            if (model.capabilities.vision) '视觉输入',
+            if (model.capabilities.jsonMode) 'JSON'
+          ],
+          onTap: () => Navigator.pop(context, model.id),
+          actions: [
+            OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context, model.id),
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text('选择此模型'))
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
+    if (DesktopTheme.maybeOf(context) != null) return _desktopModels();
     final models = _models;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
@@ -90,7 +165,8 @@ class _ModelListPageState extends State<ModelListPage> {
     return Scaffold(
       backgroundColor: settingsBgColor(context),
       appBar: NexusPageHeader(title: widget.config.name, subtitle: '模型列表'),
-      body: ListView(
+      body: NexusPageLayout(
+          child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
         children: [
           const SettingsSectionTitle('获取与添加'),
@@ -158,15 +234,18 @@ class _ModelListPageState extends State<ModelListPage> {
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderRadius:
+                      BorderRadius.circular(MobileTheme.controlRadius(context)),
                   borderSide: BorderSide.none,
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderRadius:
+                      BorderRadius.circular(MobileTheme.controlRadius(context)),
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+                  borderRadius:
+                      BorderRadius.circular(MobileTheme.controlRadius(context)),
                   borderSide: BorderSide(
                     color: AppPalette.brandTextFor(isDark),
                     width: 1.2,
@@ -220,7 +299,7 @@ class _ModelListPageState extends State<ModelListPage> {
               ],
             ),
         ],
-      ),
+      )),
     );
   }
 
@@ -338,9 +417,9 @@ class _ModelTile extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: AppTokens.fontSizeBody,
                               fontWeight:
-                                  selected ? FontWeight.w500 : FontWeight.w400,
+                                  selected ? FontWeight.w600 : FontWeight.w500,
                               color: isDark
                                   ? AppPalette.darkText
                                   : AppPalette.lightText,
@@ -358,14 +437,14 @@ class _ModelTile extends StatelessWidget {
                               color: isDark
                                   ? AppPalette.darkBrandSoft
                                   : AppPalette.lightBrandSoft,
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text(
+                            child: Text(
                               '默认',
                               style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w500,
-                                color: AppPalette.brandAction,
+                                fontSize: AppTokens.fontSizeMetricSmall,
+                                fontWeight: FontWeight.w600,
+                                color: MobileTheme.brand(context),
                               ),
                             ),
                           ),
@@ -377,8 +456,8 @@ class _ModelTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
-                        fontFamily: 'monospace',
+                        fontSize: AppTokens.fontSizeFootnote,
+                        fontFamily: AppTokens.fontFamilyMono,
                         color: settingsMutedColor(context),
                       ),
                     ),
@@ -398,12 +477,15 @@ class _ModelTile extends StatelessWidget {
                                   color: isDark
                                       ? AppPalette.darkHairline
                                       : AppPalette.lightHairline,
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
                                   chip,
                                   style: TextStyle(
-                                    fontSize: 10.5,
+                                    fontSize: AppTokens.fontSizeMetricSmall,
+                                    fontFeatures: const [
+                                      FontFeature.tabularFigures()
+                                    ],
                                     color: settingsMutedColor(context),
                                   ),
                                 ),
@@ -417,10 +499,10 @@ class _ModelTile extends StatelessWidget {
               ),
               if (selected) ...[
                 const SizedBox(width: 8),
-                const Icon(
+                Icon(
                   Icons.check_rounded,
                   size: 20,
-                  color: AppPalette.brandAction,
+                  color: MobileTheme.brand(context),
                 ),
               ],
             ],

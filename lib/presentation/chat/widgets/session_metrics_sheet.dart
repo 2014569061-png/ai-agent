@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -370,19 +371,16 @@ class _MetricsTabs extends StatelessWidget {
                 onSelected: (_) => onSelected(index),
                 selectedColor: isDark
                     ? AppPalette.darkBrandSoft
-                    : AppPalette.brand.withValues(alpha: 0.14),
+                    : MobileTheme.brand(context).withValues(alpha: 0.14),
                 side: BorderSide(
-                  color: selected == index
-                      ? brandColor
-                      : scheme.outlineVariant,
+                  color: selected == index ? brandColor : scheme.outlineVariant,
                 ),
                 labelStyle: TextStyle(
                   fontSize: AppTokens.fontSizeCaption,
                   fontWeight:
                       selected == index ? FontWeight.w600 : FontWeight.w400,
-                  color: selected == index
-                      ? brandColor
-                      : scheme.onSurfaceVariant,
+                  color:
+                      selected == index ? brandColor : scheme.onSurfaceVariant,
                 ),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
@@ -506,8 +504,10 @@ class _StepsTab extends StatelessWidget {
         const _SectionTitle(icon: Icons.analytics_outlined, label: '当前步骤'),
         const SizedBox(height: 10),
         _MetricRows(rows: [
-          _MetricRowData('对话轮次', '${metrics.rounds}', '轮', AppPalette.brand),
-          _MetricRowData('模型步骤', '${metrics.steps}', '步', AppPalette.brand),
+          _MetricRowData(
+              '对话轮次', '${metrics.rounds}', '轮', MobileTheme.brand(context)),
+          _MetricRowData(
+              '模型步骤', '${metrics.steps}', '步', MobileTheme.brand(context)),
           _MetricRowData(
               '估算上下文',
               estimated == null ? '--' : '≈${formatCompact(estimated)}',
@@ -521,7 +521,7 @@ class _StepsTab extends StatelessWidget {
               '模型请求',
               '${timing.modelCalls > 0 ? timing.modelCalls : metrics.steps}',
               '次',
-              AppPalette.brand),
+              MobileTheme.brand(context)),
         ]),
         if (snapshot != null) ...[
           const SizedBox(height: 16),
@@ -530,7 +530,7 @@ class _StepsTab extends StatelessWidget {
               limit: snapshot!.contextWindow,
               reservedOutputTokens: snapshot!.reservedOutputTokens,
               fallbackRatio: snapshot!.ratio,
-              fallbackColor: AppPalette.brand),
+              fallbackColor: MobileTheme.brand(context)),
         ],
       ],
     );
@@ -571,7 +571,7 @@ class _ContextTrend extends StatelessWidget {
                               parts: step.snapshot.parts,
                               limit: step.snapshot.usedTokens,
                               fallbackRatio: 1,
-                              fallbackColor: AppPalette.brand,
+                              fallbackColor: MobileTheme.brand(context),
                             ),
                           ),
                         ),
@@ -616,13 +616,13 @@ class _StepRow extends StatelessWidget {
               height: 24,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                  color: AppPalette.brand.withValues(alpha: 0.12),
+                  color: MobileTheme.brand(context).withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(5)),
               child: Text('${record.step}',
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: AppTokens.fontSizeFootnote,
                       fontWeight: FontWeight.w600,
-                      color: AppPalette.brand)),
+                      color: MobileTheme.brand(context))),
             ),
             const SizedBox(width: 9),
             Expanded(
@@ -690,7 +690,7 @@ class _ContextBrowserTab extends StatelessWidget {
             limit: limit,
             reservedOutputTokens: reservedOutputTokens,
             fallbackRatio: limit <= 0 ? 0 : total / limit,
-            fallbackColor: AppPalette.brand),
+            fallbackColor: MobileTheme.brand(context)),
         const SizedBox(height: 12),
         if (parts.isEmpty)
           const _EmptyTabState(
@@ -731,7 +731,7 @@ class _EventsTab extends StatelessWidget {
           for (final event in historyEvents)
             _EventRow(
               icon: _eventIcon(event.type),
-              color: _eventColor(event.type, event.status),
+              color: _eventColor(context, event.type, event.status),
               title: event.name,
               detail: _eventDetail(event),
             )
@@ -739,7 +739,7 @@ class _EventsTab extends StatelessWidget {
           if (runLabel?.isNotEmpty == true)
             _EventRow(
                 icon: Icons.radio_button_checked_rounded,
-                color: AppPalette.brand,
+                color: MobileTheme.brand(context),
                 title: runLabel!,
                 detail: '当前状态'),
           for (final activity in toolActivities)
@@ -796,7 +796,7 @@ class _FileActivityTab extends StatelessWidget {
           for (final event in fileEvents)
             _EventRow(
               icon: Icons.description_outlined,
-              color: _eventColor(event.type, event.status),
+              color: _eventColor(context, event.type, event.status),
               title: event.metadata['path']?.toString() ?? event.name,
               detail: _eventDetail(event),
             )
@@ -854,8 +854,9 @@ class _AgentNetworkTab extends StatelessWidget {
                 label: runLabel ?? '主 Agent')),
         const SizedBox(height: 16),
         _MetricRows(rows: [
-          const _MetricRowData('运行 Agent', '1', '个', AppPalette.brand),
-          _MetricRowData('模型请求', '${timing.modelCalls}', '次', AppPalette.brand),
+          _MetricRowData('运行 Agent', '1', '个', MobileTheme.brand(context)),
+          _MetricRowData(
+              '模型请求', '${timing.modelCalls}', '次', MobileTheme.brand(context)),
           _MetricRowData(
               '上下文合计', formatCompact(liveTokens), 'tok', AppPalette.success),
         ]),
@@ -920,16 +921,16 @@ IconData _eventIcon(String type) => switch (type) {
       _ => Icons.event_note_outlined,
     };
 
-Color _eventColor(String type, String status) {
+Color _eventColor(BuildContext context, String type, String status) {
   if (status == 'failed') return AppPalette.danger;
   if (type == 'file_operation') return AppPalette.success;
-  if (type == 'model_request') return AppPalette.brand;
+  if (type == 'model_request') return MobileTheme.brand(context);
   if (type == 'context_snapshot' || type == 'context_usage') {
-    return AppPalette.brand;
+    return MobileTheme.brand(context);
   }
   if (type == 'context_inject') return AppPalette.success;
   if (type == 'context_prune') return AppPalette.warning;
-  if (type == 'context_compress') return AppPalette.brand;
+  if (type == 'context_compress') return MobileTheme.brand(context);
   if (type == 'context_budget') {
     return status == 'critical' ? AppPalette.danger : AppPalette.warning;
   }
@@ -1267,14 +1268,14 @@ class _TokenComposition extends StatelessWidget {
         _MetricRows(
           rows: [
             _MetricRowData('输入', hasUsage ? formatCompact(prompt) : '--', 'tok',
-                AppPalette.brand),
+                MobileTheme.brand(context)),
             _MetricRowData('输出', hasUsage ? formatCompact(output) : '--', 'tok',
                 AppPalette.danger),
             _MetricRowData('缓存命中', cacheKnown ? formatCompact(cached) : '--',
                 cacheKnown ? 'tok' : '未上报', AppPalette.success),
             if ((usage?.reasoningTokens ?? 0) > 0)
               _MetricRowData('推理', formatCompact(usage!.reasoningTokens), 'tok',
-                  AppPalette.brand),
+                  MobileTheme.brand(context)),
             if ((usage?.cacheWriteTokens ?? 0) > 0)
               _MetricRowData(
                   'Cache write',
@@ -1312,12 +1313,12 @@ class _TimingBreakdown extends StatelessWidget {
                 '模型等待',
                 formatDurationLabel(Duration(milliseconds: timing.modelWaitMs)),
                 '${timing.modelCalls} 次',
-                AppPalette.brand),
+                MobileTheme.brand(context)),
             _MetricRowData(
                 '模型推理',
                 formatDurationLabel(Duration(milliseconds: timing.reasoningMs)),
                 '',
-                AppPalette.brand),
+                MobileTheme.brand(context)),
             _MetricRowData(
                 '模型输出',
                 formatDurationLabel(Duration(milliseconds: timing.outputMs)),
@@ -1331,8 +1332,8 @@ class _TimingBreakdown extends StatelessWidget {
                 AppPalette.success),
           ]
         : [
-            _MetricRowData(
-                '模型耗时', formatDurationLabel(fallbackLlm), '', AppPalette.brand),
+            _MetricRowData('模型耗时', formatDurationLabel(fallbackLlm), '',
+                MobileTheme.brand(context)),
             _MetricRowData('工具执行', formatDurationLabel(fallbackTool), '',
                 AppPalette.success),
           ];
@@ -1477,6 +1478,7 @@ class _NetworkNode extends StatelessWidget {
           height: 104,
           child: CustomPaint(
             painter: _NetworkRingPainter(
+                brand: MobileTheme.brand(context),
                 progress: ratio,
                 track: Theme.of(context).colorScheme.surfaceContainerHighest),
             child: Center(
@@ -1504,9 +1506,11 @@ class _NetworkNode extends StatelessWidget {
 }
 
 class _NetworkRingPainter extends CustomPainter {
-  const _NetworkRingPainter({required this.progress, required this.track});
+  const _NetworkRingPainter(
+      {required this.progress, required this.track, required this.brand});
   final double progress;
   final Color track;
+  final Color brand;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1520,13 +1524,15 @@ class _NetworkRingPainter extends CustomPainter {
     canvas.drawCircle(center, radius, paint..color = track);
     if (progress > 0) {
       canvas.drawArc(rect, -math.pi / 2, math.pi * 2 * progress, false,
-          paint..color = AppPalette.brand);
+          paint..color = brand);
     }
   }
 
   @override
   bool shouldRepaint(covariant _NetworkRingPainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.track != track;
+      oldDelegate.progress != progress ||
+      oldDelegate.track != track ||
+      oldDelegate.brand != brand;
 }
 
 bool _isFileTool(String name) => const {
@@ -1592,7 +1598,7 @@ class _TokenBar extends StatelessWidget {
             if (fresh > 0)
               Expanded(
                   flex: fresh,
-                  child: const ColoredBox(color: AppPalette.brand)),
+                  child: ColoredBox(color: MobileTheme.brand(context))),
             if (cached > 0)
               Expanded(
                   flex: cached,

@@ -1,3 +1,4 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../motion/nexus_haptics.dart';
@@ -59,13 +60,13 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
-    final barBg = isDark ? AppPalette.terminalHeaderBg : AppPalette.lightSurfaceHover;
-    final borderColor = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
+    final barBg = theme.colorScheme.surface;
+    final borderColor = theme.colorScheme.outlineVariant;
 
     return Container(
-      height: 44,
+      // Reserve the vertical padding and both .8dp borders as well as the key.
+      height: AppTokens.kMinTouchTarget + 10,
       width: double.infinity,
       decoration: BoxDecoration(
         color: barBg,
@@ -176,21 +177,22 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
     Color border;
 
     if (active) {
-      bg = AppPalette.brand;
-      fg = Colors.white;
-      border = AppPalette.brand;
+      bg = theme.colorScheme.primary;
+      fg = theme.colorScheme.onPrimary;
+      border = theme.colorScheme.primary;
     } else if (danger) {
       bg = isDark ? AppPalette.darkDangerSoft : AppPalette.lightDangerSoft;
       fg = isDark ? AppPalette.darkDanger : AppPalette.lightDanger;
-      border = (isDark ? AppPalette.darkDanger : AppPalette.lightDanger).withValues(alpha: 0.3);
+      border = (isDark ? AppPalette.darkDanger : AppPalette.lightDanger)
+          .withValues(alpha: 0.3);
     } else if (highlight) {
-      bg = isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
-      fg = isDark ? AppPalette.darkBrandHover : AppPalette.brandAction;
-      border = (isDark ? AppPalette.darkBrandHover : AppPalette.brand).withValues(alpha: 0.25);
+      bg = theme.colorScheme.primaryContainer;
+      fg = theme.colorScheme.primary;
+      border = theme.colorScheme.primary.withValues(alpha: .15);
     } else {
-      bg = isDark ? AppPalette.terminalSurface : AppPalette.lightCanvas;
-      fg = isDark ? AppPalette.terminalText : AppPalette.lightText;
-      border = isDark ? AppPalette.terminalBorder : AppPalette.lightHairline;
+      bg = theme.colorScheme.surface;
+      fg = theme.colorScheme.onSurface;
+      border = theme.colorScheme.outlineVariant;
     }
 
     return Padding(
@@ -199,14 +201,19 @@ class _TerminalAccessoryBarState extends State<TerminalAccessoryBar> {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           child: Container(
-            constraints: const BoxConstraints(minWidth: 38),
+            constraints: const BoxConstraints(
+              minWidth: AppTokens.kMinTouchTarget,
+              minHeight: AppTokens.kMinTouchTarget,
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 8),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: bg,
-              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+              borderRadius:
+                  BorderRadius.circular(MobileTheme.controlRadius(context)),
               border: Border.all(color: border, width: 0.8),
             ),
             child: Text(

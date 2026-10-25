@@ -1,3 +1,4 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import '../motion/motion_preferences.dart';
 import '../motion/nexus_haptics.dart';
@@ -136,7 +137,8 @@ class _NexusDisclosureState extends State<NexusDisclosure>
               scale: NexusPressScale.row,
               child: InkWell(
                 onTap: _toggleExpansion,
-                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.controlRadius(context)),
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
                     minHeight: AppTokens.kMinTouchTarget, // 确保最小 48dp 触控区

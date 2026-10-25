@@ -5,8 +5,11 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../../../domain/models.dart';
 import '../../../domain/history_load_result.dart';
 import '../../motion/motion_preferences.dart';
+import '../../motion/mobile_motion.dart';
 import '../../motion/nexus_motion.dart';
 import '../../widgets/speaking_wave.dart';
+import '../../theme/desktop_theme.dart';
+import '../../widgets/desktop_reading_column.dart';
 import 'message_bubble.dart';
 import '../../motion/send_flight.dart';
 import '../../motion/nexus_spring.dart';
@@ -21,6 +24,7 @@ class ChatMessageList extends StatefulWidget {
     required this.running,
     this.runProgress,
     required this.onLongPress,
+    this.onContextMenu,
     required this.onRegenerate,
     this.onStop,
     this.onEditPrompt,
@@ -44,6 +48,7 @@ class ChatMessageList extends StatefulWidget {
   final bool running;
   final ChatRunProgress? runProgress;
   final ValueChanged<int> onLongPress;
+  final void Function(int, Offset)? onContextMenu;
   final VoidCallback onRegenerate;
   final VoidCallback? onStop;
   final VoidCallback? onEditPrompt;
@@ -134,7 +139,12 @@ class ChatMessageListState extends State<ChatMessageList> {
       for (var index = oldWidget.messages.length;
           index < widget.messages.length;
           index++) {
-        _enteringMessageIndices.add(index);
+        // The assistant body already owns its first-token reveal. Avoid
+        // multiplying two opacity transitions on the phone.
+        if (DesktopTheme.maybeOf(context) != null ||
+            widget.messages[index].role != MessageRole.assistant) {
+          _enteringMessageIndices.add(index);
+        }
       }
     }
   }
@@ -274,7 +284,7 @@ class ChatMessageListState extends State<ChatMessageList> {
   Widget build(BuildContext context) {
     final count = widget.messages.length - _start;
     final totalCount = count + widget.trailingWidgets.length;
-    return ListView.builder(
+    final list = ListView.builder(
       controller: widget.controller,
       padding: widget.padding ?? const EdgeInsets.fromLTRB(16, 0, 16, 10),
       itemCount: totalCount,
@@ -317,6 +327,8 @@ class ChatMessageListState extends State<ChatMessageList> {
           running: widget.running,
           runProgress: widget.runProgress,
           onLongPress: () => widget.onLongPress(index),
+          onContextMenu: (position) =>
+              widget.onContextMenu?.call(index, position),
           // Cached bubbles must dispatch to the current parent callbacks.
           onRegenerate: () => widget.onRegenerate(),
           onStop: widget.onStop == null ? null : () => widget.onStop?.call(),
@@ -384,14 +396,26 @@ class ChatMessageListState extends State<ChatMessageList> {
               : null,
           child: Padding(
             padding: EdgeInsets.only(bottom: beforeNewTurn ? 12 : 0),
-            // L3：流式输出时高度弹簧连续追随，不逐行跳变。
+            // Phone streaming uses natural height; desktop keeps its existing
+            // spring follow. Avoid animating height and scroll simultaneously.
             child: message.role == MessageRole.user
                 ? child
-                : SpringFollowHeight(enabled: liveIndex == index, child: child),
+                : SpringFollowHeight(
+                    enabled: DesktopTheme.maybeOf(context) != null &&
+                        liveIndex == index,
+                    child: child,
+                  ),
           ),
         );
       },
     );
+    // Share desktop selection infrastructure across lazy rows. Standalone
+    // bubbles still provide their own region when no registrar is inherited.
+    final content = DesktopReadingColumn(child: list);
+    return DesktopTheme.maybeOf(context) == null ||
+            SelectionContainer.maybeOf(context) != null
+        ? content
+        : SelectionArea(child: content);
   }
 }
 
@@ -449,14 +473,14 @@ class _MessageEntrance extends StatefulWidget {
   final Widget child;
   final VoidCallback? onCompleted;
 
-  /// 用户气泡（M5）：从右下角弹簧升起。为 false 时保持原有淡入 + 上移。
+  /// Phone user messages rise 6dp without scaling; desktop keeps M5.
   final bool isUser;
 
-  /// 用户气泡升起的起始位移与起始缩放。
+  /// Desktop user-message entrance.
   static const double userRiseOffset = 16;
   static const double userRiseScale = 0.96;
 
-  /// L3：助手气泡入场上移距离与起始缩放（bouncy 弹簧带一次回弹）。
+  /// Desktop assistant-message entrance.
   static const double assistantRiseOffset = 14;
   static const double assistantRiseScale = 0.97;
 
@@ -467,6 +491,8 @@ class _MessageEntrance extends StatefulWidget {
 class _MessageEntranceState extends State<_MessageEntrance>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  late final Animation<double> _phoneProgress =
+      _controller.drive(CurveTween(curve: MobileMotion.curve));
 
   /// L2：用户刚从输入框发送的气泡认领一次「飞出」，从输入框位置飞入。
   SendFlight? _flight;
@@ -491,10 +517,12 @@ class _MessageEntranceState extends State<_MessageEntrance>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final phone = DesktopTheme.maybeOf(context) == null;
     if (!_claimed) {
       _claimed = true;
       if (widget.animate &&
           widget.isUser &&
+          !phone &&
           !MotionPreferences.shouldReduceMotion(context)) {
         _flight = SendFlightBus.claim();
       }
@@ -505,14 +533,16 @@ class _MessageEntranceState extends State<_MessageEntrance>
         ..value = 1.0;
       return;
     }
-    final pop = widget.isUser
+    final pop = widget.isUser || phone
         ? null
         : NexusSpringPolicy.resolve(context, NexusSprings.bouncy);
     _popCurve = pop == null
         ? NexusMotion.curveEnter
         : NexusSprings.curveOf(pop, allowOvershoot: true);
     _controller.duration = pop == null
-        ? MotionPreferences.adjustDuration(context, _baseDuration)
+        ? (phone
+            ? MobileMotion.duration(context, MobileMotion.message)
+            : MotionPreferences.adjustDuration(context, _baseDuration))
         : NexusSprings.settleOf(pop);
     if (!widget.animate || MotionPreferences.shouldReduceMotion(context)) {
       _controller
@@ -543,6 +573,26 @@ class _MessageEntranceState extends State<_MessageEntrance>
   Widget build(BuildContext context) {
     if (!widget.animate) {
       return widget.child;
+    }
+    if (DesktopTheme.maybeOf(context) == null) {
+      if (MotionPreferences.shouldReduceMotion(context)) return widget.child;
+      // Only newly appended user messages move. Assistant text fades once,
+      // without scaling or replaying its entrance on each streamed update.
+      final animation = _phoneProgress;
+      return FadeTransition(
+        opacity: animation,
+        child: widget.isUser
+            ? AnimatedBuilder(
+                animation: animation,
+                child: widget.child,
+                builder: (context, child) => Transform.translate(
+                  offset: Offset(
+                      0, MobileMotion.messageLift * (1 - animation.value)),
+                  child: child,
+                ),
+              )
+            : widget.child,
+      );
     }
     if (widget.isUser) {
       final flight = _flight;

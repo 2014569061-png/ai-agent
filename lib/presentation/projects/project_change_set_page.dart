@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/change_review.dart';
@@ -16,10 +17,14 @@ class ProjectChangeSetPage extends ConsumerStatefulWidget {
     super.key,
     required this.projectId,
     required this.workspacePath,
+    this.taskId,
+    this.taskLabel,
   });
 
   final String projectId;
   final String workspacePath;
+  final String? taskId;
+  final String? taskLabel;
 
   @override
   ConsumerState<ProjectChangeSetPage> createState() =>
@@ -27,9 +32,12 @@ class ProjectChangeSetPage extends ConsumerStatefulWidget {
 }
 
 class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
+  List<DevelopmentTaskInfo> _tasks = const <DevelopmentTaskInfo>[];
+  DevelopmentTaskInfo? _task;
   ChangeSet? _set;
   bool _loading = true;
   String? _error;
+  String? _emptyNotice;
 
   @override
   void initState() {
@@ -38,18 +46,55 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _task = null;
+      _set = null;
+      _error = null;
+      _emptyNotice = null;
+      _loading = true;
+    });
     try {
       final db = await ref.read(databaseProvider.future);
-      final tasks = await db.tasksForProject(widget.projectId, limit: 1);
+      final requestedTaskId = widget.taskId;
+      final tasks = await TaskService().changeSetTasks(db,
+          projectId: widget.projectId, taskId: requestedTaskId);
+      if (!mounted) return;
       if (tasks.isEmpty) {
         setState(() {
           _loading = false;
-          _error = '还没有可回退的任务';
+          _tasks = const <DevelopmentTaskInfo>[];
+          _emptyNotice =
+              requestedTaskId == null ? '还没有可回退的任务' : '未找到要回退的任务，或任务不属于当前项目';
         });
         return;
       }
-      final info = TaskService().describe(tasks.first);
-      final review = info.changeReview ??
+      if (!mounted) return;
+      setState(() {
+        _tasks = tasks;
+        _loading = false;
+      });
+      if (requestedTaskId != null || tasks.length == 1) {
+        await _selectTask(tasks.first);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$error';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _selectTask(DevelopmentTaskInfo task) async {
+    setState(() {
+      _task = task;
+      _set = null;
+      _error = null;
+      _emptyNotice = null;
+      _loading = true;
+    });
+    try {
+      final review = task.changeReview ??
           const ChangeReview(
             files: [],
             mark: ChangeVerificationMark.unverified,
@@ -58,7 +103,7 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
       // capturing again after manual edits would treat them as task output.
       final set = await const ChangeSetService().loadOrCapture(
         projectId: widget.projectId,
-        taskId: tasks.first.id,
+        taskId: task.id,
         workspacePath: widget.workspacePath,
         review: review,
       );
@@ -95,49 +140,98 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
     }
   }
 
+  Widget _taskSelector() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      children: [
+        SectionCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '按任务选择要回退的变更集',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '回退前请确认任务范围；包含删除或移动的文件只报告，不自动恢复。',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          child: Column(
+            children: [
+              for (final task in _tasks)
+                NexusListTile(
+                  key: ValueKey('rollback-task-${task.id}'),
+                  icon: Icons.task_alt_outlined,
+                  title: task.title,
+                  subtitle:
+                      '${TaskService.taskTypeLabel(task.type)} · ${task.status}',
+                  onTap: () => _selectTask(task),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final set = _set;
+    final selectedTitle = _task == null ? widget.taskLabel : _task!.title;
+    final showSelector =
+        !_loading && _error == null && _emptyNotice == null && _task == null;
     return Scaffold(
-      appBar: const NexusPageHeader(
+      appBar: NexusPageHeader(
         title: '任务变更集',
-        subtitle: '回退前检查当前版本，人工修改不会被覆盖',
+        subtitle: selectedTitle == null
+            ? '选择要回退的具体任务，人工修改不会被覆盖'
+            : '当前任务：$selectedTitle · 人工修改不会被覆盖',
       ),
-      body: AsyncStateView(
-        loading: _loading,
-        error: _error,
-        isEmpty: set == null || set.files.isEmpty,
-        emptyIcon: Icons.history_outlined,
-        emptyTitle: '没有可回退内容',
-        emptySubtitle: _error,
-        onRetry: _load,
-        child: set == null
-            ? const SizedBox.shrink()
-            : ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                children: [
-                  SectionCard(
-                    child: Column(
-                      children: [
-                        for (final file in set.files)
-                          NexusListTile(
-                            icon: Icons.difference_outlined,
-                            title: file.relativePath,
-                            subtitle: file.reversible
-                                ? file.operation
-                                : '${file.operation} · ${file.note ?? '不可自动回退'}',
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: _rollback,
-                    child: const Text('回退本任务改动'),
-                  ),
-                ],
-              ),
-      ),
+      body: NexusPageLayout(
+          child: showSelector
+              ? _taskSelector()
+              : AsyncStateView(
+                  loading: _loading,
+                  error: _error,
+                  isEmpty: set == null || set.files.isEmpty,
+                  emptyIcon: Icons.history_outlined,
+                  emptyTitle: _emptyNotice ?? '没有可回退内容',
+                  emptySubtitle: _emptyNotice == null ? _error : null,
+                  onRetry: _load,
+                  child: set == null
+                      ? const SizedBox.shrink()
+                      : ListView(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                          children: [
+                            SectionCard(
+                              child: Column(
+                                children: [
+                                  for (final file in set.files)
+                                    NexusListTile(
+                                      icon: Icons.difference_outlined,
+                                      title: file.relativePath,
+                                      subtitle: file.reversible
+                                          ? file.operation
+                                          : '${file.operation} · ${file.note ?? '不可自动回退'}',
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton(
+                              onPressed: _rollback,
+                              child: const Text('回退本任务改动'),
+                            ),
+                          ],
+                        ),
+                )),
     );
   }
 }

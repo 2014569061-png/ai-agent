@@ -1,3 +1,5 @@
+import '../../theme/desktop_theme.dart';
+import '../../theme/mobile_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -13,6 +15,7 @@ import '../../widgets/shimmer_text.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
 import '../../motion/morph_icon.dart';
+import '../transcript_view_policy.dart';
 
 /// 思考过程与运行进度折叠块。
 ///
@@ -51,8 +54,8 @@ class ReasoningCompactBlock extends StatefulWidget {
   State<ReasoningCompactBlock> createState() => _ReasoningCompactBlockState();
 }
 
-/// 消息区卡片圆角（S1：卡片 16 / 芯片半高 / 用户气泡 20 + 右下 6）。
-const _cardRadius = 16.0;
+/// 消息区思考卡片圆角（Pure Zen：12px 低噪微圆角）。
+const _cardRadius = AppTokens.radiusCard;
 
 class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
   bool _expanded = false;
@@ -65,6 +68,11 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
   @override
   void initState() {
     super.initState();
+    _expanded = TranscriptViewPolicy.forReasoning(
+            streaming: widget.streaming,
+            hasAnswer: widget.hasStartedAnswer,
+            hasProgress: widget.progress != null)
+        .reasoningExpanded;
     _syncProgressCounters(resetElapsed: true);
     _syncTicker();
   }
@@ -184,16 +192,18 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
     final cardBg = isDark
-        ? Colors.white.withValues(alpha: 0.05)
-        : Colors.black.withValues(alpha: 0.035);
-    final cardBorder = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
+        ? Colors.white.withValues(alpha: 0.035)
+        : Colors.black.withValues(alpha: 0.022);
+    final cardBorder =
+        isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
     final hasReasoning = widget.reasoning.trim().isNotEmpty;
     final thinking = widget.streaming;
-    final condensedProgress =
-        thinking && widget.progress != null && widget.hasStartedAnswer;
+    final policy = TranscriptViewPolicy.forReasoning(
+        streaming: thinking,
+        hasProgress: widget.progress != null,
+        hasAnswer: widget.hasStartedAnswer);
+    final condensedProgress = policy.condensedProgress;
 
     return Container(
       // S7：流式正文紧跟进度卡时留 10dp；完成态 6 + 段落上距 6 ≈ 12。
@@ -202,9 +212,15 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
         bottom: condensedProgress ? 10 : 6,
       ),
       decoration: BoxDecoration(
-        color: cardBg,
-        // S1：卡片统一 16 圆角，去描边只留浅底（描边色仍用于内部分隔线）。
+        color: DesktopTheme.maybeOf(context) == null && !thinking
+            ? Colors.transparent
+            : cardBg,
         borderRadius: BorderRadius.circular(_cardRadius),
+        border: Border.all(
+            color: DesktopTheme.maybeOf(context) == null && !thinking
+                ? Colors.transparent
+                : cardBorder,
+            width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,7 +277,9 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                         Expanded(
                           // M9：思考中标题流光；响应变慢时停止，避免「假装在忙」。
                           child: ShimmerText(
-                            enabled: thinking && !_isStalled,
+                            enabled: DesktopTheme.maybeOf(context) != null &&
+                                thinking &&
+                                !_isStalled,
                             child: Text(
                               _label,
                               maxLines: 1,
@@ -284,6 +302,9 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
                               fontFamily: AppTokens.fontFamilyMono,
                               fontSize: AppTokens.fontSizeMetricSmall,
                               color: textMuted,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
                             ),
                           ),
                         ],
@@ -449,7 +470,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
       _ProgressRowState.done =>
         isDark ? AppPalette.darkSuccess : AppPalette.lightSuccess,
       _ProgressRowState.current =>
-        isDark ? const Color(0xFF93C5FD) : AppPalette.brandAction,
+        isDark ? AppPalette.darkBrandText : MobileTheme.brand(context),
       _ProgressRowState.pending => textMuted,
     };
     final icon = switch (row.state) {
@@ -541,7 +562,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
           left: BorderSide(
             color: isDark
                 ? AppPalette.darkBrandText.withValues(alpha: 0.35)
-                : AppPalette.brandAction.withValues(alpha: 0.25),
+                : MobileTheme.brand(context).withValues(alpha: 0.25),
             width: 2.0,
           ),
         ),

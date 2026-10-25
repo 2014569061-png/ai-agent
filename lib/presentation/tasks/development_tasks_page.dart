@@ -1,20 +1,19 @@
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/project_kind.dart';
 import '../../application/providers.dart';
 import '../../application/task_service.dart';
-import '../../infrastructure/database/app_database.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../motion/nexus_motion.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
@@ -29,7 +28,7 @@ import 'task_details_page.dart';
 class DevelopmentTasksPage extends ConsumerStatefulWidget {
   const DevelopmentTasksPage({super.key, this.onConversationSelected});
 
-  final ValueChanged<Conversation>? onConversationSelected;
+  final ValueChanged<String>? onConversationSelected;
 
   @override
   ConsumerState<DevelopmentTasksPage> createState() =>
@@ -133,13 +132,9 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
   Widget build(BuildContext context) {
     final tasks = _filtered;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: NexusPageHeader(
         title: '开发任务中心',
         actions: [
@@ -164,8 +159,11 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
           ),
         ],
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
+        refreshing: _loading && _tasks.isNotEmpty,
+        retainContentOnError: _tasks.isNotEmpty,
         error: _error,
         onRetry: _load,
         child: Column(
@@ -173,7 +171,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
             // 搜索输入栏
             if (_showSearch)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 6),
                 // W6：与设置 / 历史页一致的无描边浅底胶囊搜索；聚焦时品牌色细描边。
                 child: TextField(
                   controller: _searchController,
@@ -220,23 +218,35 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
               ),
 
             // 统计与筛选胶囊标签行
-            _filtersRow(context),
+            if (_tasks.isNotEmpty) _filtersRow(context),
 
             // 任务列表
             Expanded(
               child: tasks.isEmpty
                   ? EmptyStateView(
                       icon: Icons.task_alt_outlined,
-                      title: _searchQuery.isNotEmpty ? '未搜到相关任务' : '暂无开发任务记录',
-                      message: _searchQuery.isNotEmpty
-                          ? '可以尝试更换关键词搜索'
-                          : '从首页发起开发任务后，这里会呈现所有任务步骤、结构化产物与协作记录。',
+                      title: _searchQuery.isNotEmpty
+                          ? '未搜到相关任务'
+                          : _filter != 'all'
+                              ? '当前筛选下暂无任务'
+                              : '暂无开发任务记录',
+                      actionLabel: _searchQuery.isNotEmpty || _filter != 'all'
+                          ? '清除筛选'
+                          : null,
+                      onAction: () => setState(() {
+                        _filter = 'all';
+                        _searchQuery = '';
+                        _searchController.clear();
+                      }),
+                      message: _searchQuery.isNotEmpty || _filter != 'all'
+                          ? '可以更换关键词，或清除筛选查看全部任务。'
+                          : '从助手对话或工作区发起开发任务后，这里会呈现历史任务、执行步骤与产物。',
                     )
                   : RefreshIndicator(
                       onRefresh: _load,
                       child: ListView.separated(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+                        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                         itemCount: tasks.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) =>
@@ -246,7 +256,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -260,11 +270,15 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
     };
 
     return SizedBox(
-      height: 48,
+      height: (MediaQuery.textScalerOf(context).scale(12) * 1.6 + 24)
+          .clamp(48, 120),
       child: ListView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-        children: values.entries.map((entry) {
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+        children: values.entries.where((entry) {
+          final count = _countFor(entry.key);
+          return entry.key == 'all' || entry.key == _filter || count > 0;
+        }).map((entry) {
           final count = _countFor(entry.key);
           final isSelected = _filter == entry.key;
           return Padding(
@@ -281,8 +295,9 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
   Widget _filterPill(String key, String label, int count, bool selected) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final base = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final fg = selected ? AppPalette.brand : base.withValues(alpha: 0.72);
-    final radius = BorderRadius.circular(AppTokens.radiusPill);
+    final fg =
+        selected ? MobileTheme.brand(context) : base.withValues(alpha: 0.72);
+    final radius = BorderRadius.circular(MobileTheme.controlRadius(context));
     return Center(
       child: Semantics(
         button: true,
@@ -305,6 +320,12 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                         : AppPalette.brandSoftLight)
                     : base.withValues(alpha: isDark ? 0.08 : 0.05),
                 borderRadius: radius,
+                border: Border.all(
+                  color: selected
+                      ? MobileTheme.brand(context).withValues(alpha: 0.35)
+                      : Colors.transparent,
+                  width: 1.0,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -323,7 +344,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTokens.fontSizeFootnote,
                       fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                       color: fg,
                     ),
@@ -332,8 +353,9 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                   Text(
                     '$count',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppTokens.fontSizeFootnote,
                       color: fg.withValues(alpha: 0.6),
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
                 ],
@@ -358,11 +380,11 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
     final showProjectKind =
         projectKind != null && projectKind != ProjectKind.unknown;
 
-    // W1：任务卡片与其他页面统一 16 圆角（只传参，不改 SectionCard）。
+    // Linear Pro：二级/三级工程任务卡片统一 12px 圆角。
     return SectionCard(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(MobileTheme.cardRadius(context)),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(MobileTheme.cardRadius(context)),
         onTap: () {
           HapticFeedback.lightImpact();
           _openTaskDetails(task);
@@ -372,25 +394,36 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 标题与状态徽标
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      task.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  NexusStatusPill.fromString(task.status, isCompact: true),
-                ],
-              ),
+              // Long titles and status remain separate, readable targets.
+              LayoutBuilder(builder: (context, constraints) {
+                final title = Tooltip(
+                    message: task.title,
+                    child: Text(task.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            fontSize: AppTokens.fontSizeBody)));
+                final status =
+                    NexusStatusPill.fromString(task.status, isCompact: true);
+                if (constraints.maxWidth < 420 &&
+                    MediaQuery.textScalerOf(context).scale(14) > 19) {
+                  return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        title,
+                        const SizedBox(height: 8),
+                        status,
+                      ]);
+                }
+                return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: title),
+                      const SizedBox(width: 8),
+                      status,
+                    ]);
+              }),
               if (task.prompt.isNotEmpty && task.prompt != task.title) ...[
                 const SizedBox(height: 4),
                 Text(
@@ -398,7 +431,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppTokens.fontSizeFootnote,
                     color: theme.colorScheme.onSurfaceVariant.withAlpha(210),
                     height: 1.35,
                   ),
@@ -415,14 +448,14 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                           horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
                         color: metaColor.withValues(alpha: 0.1),
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusPill),
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
                       ),
                       child: Text(
                         typeLabel,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+                          fontSize: AppTokens.fontSizeBadge,
+                          fontWeight: FontWeight.w600,
                           color: metaColor,
                         ),
                       ),
@@ -438,8 +471,9 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppTokens.fontSizeFootnote,
                         color: theme.colorScheme.onSurfaceVariant,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ),

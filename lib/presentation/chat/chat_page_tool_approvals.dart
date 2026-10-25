@@ -12,38 +12,100 @@ extension _ChatToolApprovals on _ChatPageState {
     if (previous != null && !previous.isCompleted) {
       previous.complete(ToolApproval.reject);
     }
+    final scope = RunApprovalScope.current;
     final approval = Completer<ToolApproval>();
+    if (scope != null) _pendingApprovalScopes[call.id] = scope;
+    final activities = ref
+        .read(chatControllerProvider)
+        .toolActivities
+        .where((a) => a.call.id == call.id);
+    if (activities.isNotEmpty) {
+      _pendingApprovalCalls[call.id] = activities.last.call;
+    }
+    var transferring = false;
+    final backgroundPoll =
+        Timer.periodic(const Duration(milliseconds: 400), (_) async {
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (!mounted ||
+          transferring ||
+          approval.isCompleted ||
+          lifecycle == null ||
+          lifecycle == AppLifecycleState.resumed) {
+        return;
+      }
+      transferring = true;
+      try {
+        final decision = await promptToolApproval(
+            context, ref, call, risk, sensitive,
+            approvalScope: scope);
+        if (!approval.isCompleted) approval.complete(decision);
+      } catch (error) {
+        debugPrint('审批转交通道失败: ${error.runtimeType}');
+        if (!approval.isCompleted) approval.complete(ToolApproval.reject);
+      }
+    });
     _pendingToolApprovals[call.id] = approval;
     try {
-      return await approval.future;
+      return await Future.any<ToolApproval>([
+        approval.future,
+        if (scope != null) scope.invalidated.then((_) => ToolApproval.reject)
+      ]);
     } finally {
+      backgroundPoll.cancel();
       if (identical(_pendingToolApprovals[call.id], approval)) {
         _pendingToolApprovals.remove(call.id);
+        _pendingApprovalScopes.remove(call.id);
+        _pendingApprovalCalls.remove(call.id);
       }
     }
   }
 
-  bool _resolveToolApproval(String callId, ToolApproval decision) {
+  Future<bool> _resolveToolApproval(String callId, ToolApproval decision,
+      {ToolActivity? activity}) async {
     final approval = _pendingToolApprovals[callId];
     if (approval == null || approval.isCompleted) return false;
+    if (activity != null &&
+        !identical(activity.call, _pendingApprovalCalls[callId])) {
+      return false;
+    }
+    final scope = _pendingApprovalScopes[callId];
+    if (scope != null &&
+        (!await scope.isCurrent() || !await scope.decide(decision))) {
+      return false;
+    }
+    if (!identical(_pendingToolApprovals[callId], approval) ||
+        approval.isCompleted) {
+      return false;
+    }
     approval.complete(decision);
     return true;
   }
 
-  void _confirmToolActivity(ToolActivity activity) {
-    if (!_resolveToolApproval(activity.call.id, ToolApproval.allowOnce)) {
+  Future<void> _confirmToolActivity(ToolActivity activity) async {
+    // Inline approval must not bypass the detailed foreground/auth path.
+    if (requiresFreshToolAuthentication(
+        activity.risk, activity.sensitive, activity.call.name)) {
+      _reviewToolActivity(activity);
+      return;
+    }
+    if (!await _resolveToolApproval(activity.call.id, ToolApproval.allowOnce,
+            activity: activity) &&
+        mounted) {
       FloatingToast.show(context, '该审批已失效，请重试任务', tone: ToastTone.warning);
     }
   }
 
-  void _rejectToolActivity(ToolActivity activity) {
-    if (!_resolveToolApproval(activity.call.id, ToolApproval.reject)) {
+  Future<void> _rejectToolActivity(ToolActivity activity) async {
+    if (!await _resolveToolApproval(activity.call.id, ToolApproval.reject,
+            activity: activity) &&
+        mounted) {
       FloatingToast.show(context, '该审批已失效，请重试任务', tone: ToastTone.warning);
     }
   }
 
   void _reviewToolActivity(ToolActivity activity) {
-    if (!_pendingToolApprovals.containsKey(activity.call.id)) {
+    if (!_pendingToolApprovals.containsKey(activity.call.id) ||
+        !identical(activity.call, _pendingApprovalCalls[activity.call.id])) {
       FloatingToast.show(context, '该审批已失效，请重试任务', tone: ToastTone.warning);
       return;
     }
@@ -57,9 +119,10 @@ extension _ChatToolApprovals on _ChatPageState {
       activity.call,
       activity.risk,
       activity.sensitive,
+      approvalScope: _pendingApprovalScopes[activity.call.id],
     );
     if (!mounted) return;
-    _resolveToolApproval(activity.call.id, decision);
+    await _resolveToolApproval(activity.call.id, decision, activity: activity);
   }
 
   void _retryToolActivity(ToolActivity activity) {
@@ -68,11 +131,25 @@ extension _ChatToolApprovals on _ChatPageState {
       FloatingToast.show(context, '当前任务仍在运行', tone: ToastTone.warning);
       return;
     }
+    if (!state.toolActivities.any((a) => identical(a.call, activity.call))) {
+      FloatingToast.show(context, '该工具记录已不属于当前任务', tone: ToastTone.warning);
+      return;
+    }
     unawaited(_confirmToolRetry(activity));
   }
 
   Future<void> _confirmToolRetry(ToolActivity activity) async {
     final unknownEffect = activity.effect == ToolEffect.unknown;
+    final snapshot = ref.read(chatControllerProvider);
+    final activities = snapshot.toolActivities;
+    if (activities.any((a) => a.effect == ToolEffect.unknown ||
+        a.effect == ToolEffect.applied || a.status == ToolActivity.statusRunning)) {
+      await showConfirmAction(context,
+          title: '先核实操作结果',
+          message: RunRecoveryNeedsReview.verificationSteps,
+          confirmLabel: '我知道了', cancelLabel: '关闭');
+      return;
+    }
     final confirmed = await showConfirmAction(
       context,
       title: '重试上一次任务？',
@@ -82,6 +159,12 @@ extension _ChatToolApprovals on _ChatPageState {
       confirmLabel: '确认重试',
       isDanger: unknownEffect,
     );
-    if (confirmed && mounted) _regenerate();
+    if (!confirmed || !mounted) return;
+    final current = ref.read(chatControllerProvider);
+    if (current.running || current.conversationId != snapshot.conversationId ||
+        !current.toolActivities.any((a) => identical(a.call, activity.call))) {
+      return;
+    }
+    _regenerate();
   }
 }

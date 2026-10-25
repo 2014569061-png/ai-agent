@@ -1,3 +1,7 @@
+import '../widgets/nexus_page_layout.dart';
+import '../widgets/nexus_page_header.dart';
+import '../theme/desktop_theme.dart';
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -216,9 +220,9 @@ class _TerminalPageState extends State<TerminalPage> {
         'pkg update && pkg install -y openssh nodejs python git && passwd && whoami && sshd';
 
     showNexusSheet<void>(
-context: context,
-isScrollControlled: true,
-builder: (ctx) {
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
             left: 20,
@@ -254,20 +258,20 @@ builder: (ctx) {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: AppPalette.terminalSurfaceHover,
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
                     border:
                         Border.all(color: AppPalette.darkHairline, width: 0.8),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
+                      Row(
                         children: [
                           Icon(Icons.info_outline,
-                              size: 16, color: AppPalette.brand),
-                          SizedBox(width: 6),
-                          Text(
+                              size: 16, color: MobileTheme.brand(context)),
+                          const SizedBox(width: 6),
+                          const Text(
                             'Termux SSH/PTY 首次配置命令（只需执行一次）',
                             style: TextStyle(
                               fontSize: AppTokens.fontSizeCaption,
@@ -313,7 +317,8 @@ builder: (ctx) {
                           },
                           icon: const Icon(Icons.copy, size: 14),
                           label: const Text('复制命令',
-                              style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
+                              style: TextStyle(
+                                  fontSize: AppTokens.fontSizeFootnote)),
                         ),
                       ),
                     ],
@@ -326,8 +331,9 @@ builder: (ctx) {
                       flex: 3,
                       child: TextField(
                         controller: hostCtrl,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '主机 (Host)',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -341,8 +347,9 @@ builder: (ctx) {
                       child: TextField(
                         controller: portCtrl,
                         keyboardType: TextInputType.number,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '端口 (Port)',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -358,8 +365,9 @@ builder: (ctx) {
                     Expanded(
                       child: TextField(
                         controller: userCtrl,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '用户名（Termux whoami）',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -372,8 +380,9 @@ builder: (ctx) {
                       child: TextField(
                         controller: passCtrl,
                         obscureText: true,
-                        style:
-                            const TextStyle(color: Colors.white, fontSize: AppTokens.fontSizeCaption),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: AppTokens.fontSizeCaption),
                         decoration: const InputDecoration(
                           labelText: '密码（先在 Termux 执行 passwd）',
                           labelStyle: TextStyle(color: Colors.white60),
@@ -389,10 +398,10 @@ builder: (ctx) {
                   height: 44,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppPalette.brand,
+                      backgroundColor: MobileTheme.brand(context),
                       shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusControl),
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
                       ),
                     ),
                     onPressed: () async {
@@ -438,11 +447,12 @@ builder: (ctx) {
           ),
         );
       },
-removeInnerViewInsets: true,
-);
+      removeInnerViewInsets: true,
+    );
   }
 
   Widget _buildStatusIndicator() {
+    final mobile = DesktopTheme.maybeOf(context) == null;
     Color dotColor;
     String statusText;
 
@@ -467,7 +477,9 @@ removeInnerViewInsets: true,
           _state == SSHTerminalState.connected ? _showConfigSheet : _reconnect,
       borderRadius: BorderRadius.circular(AppTokens.radiusPill),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        constraints: BoxConstraints(minHeight: mobile ? 48 : 0),
+        padding: EdgeInsets.symmetric(
+            horizontal: mobile ? 12 : 8, vertical: mobile ? 8 : 3),
         decoration: BoxDecoration(
           color: dotColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(AppTokens.radiusPill),
@@ -486,13 +498,17 @@ removeInnerViewInsets: true,
               ),
             ),
             const SizedBox(width: 5),
-            Text(
-              statusText,
-              style: TextStyle(
-                color: dotColor,
-                fontSize: AppTokens.fontSizeBadge,
-                fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
+            Flexible(
+              child: Text(
+                statusText,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: dotColor,
+                  fontSize: mobile ? 13 : AppTokens.fontSizeBadge,
+                  fontFamily: mobile ? null : 'monospace',
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
@@ -503,87 +519,152 @@ removeInnerViewInsets: true,
 
   @override
   Widget build(BuildContext context) {
+    final desktop = DesktopTheme.maybeOf(context) != null;
     return Scaffold(
-      backgroundColor: AppPalette.terminalBg,
-      appBar: AppBar(
-        backgroundColor: AppPalette.terminalHeaderBg,
-        elevation: 0,
-        leading: IconButton(
-          tooltip: '返回',
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-          onPressed: () => Navigator.pop(context),
-        ),
-        titleSpacing: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Linux 交互终端',
-              style: TextStyle(
-                fontSize: AppTokens.fontSizeBodyLarge,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+      backgroundColor: desktop ? AppPalette.terminalBg : Colors.transparent,
+      appBar: desktop
+          ? AppBar(
+              toolbarHeight: (MediaQuery.textScalerOf(context).scale(30) + 18)
+                  .clamp(56, 112)
+                  .toDouble(),
+              backgroundColor: AppPalette.terminalHeaderBg,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              leading: IconButton(
+                tooltip: '返回',
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                onPressed: () => Navigator.pop(context),
               ),
-            ),
-            const SizedBox(height: 2),
-            _buildStatusIndicator(),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: '发送诊断给 Agent',
-            icon: const Icon(Icons.smart_toy_outlined, color: AppPalette.brand),
-            onPressed: _sendDiagnosticsToAgent,
-          ),
-          IconButton(
-            tooltip: '放大字体',
-            icon: const Icon(Icons.zoom_in_rounded),
-            onPressed: _zoomIn,
-          ),
-          IconButton(
-            tooltip: '缩小字体',
-            icon: const Icon(Icons.zoom_out_rounded),
-            onPressed: _zoomOut,
-          ),
-          IconButton(
-            tooltip: '清屏',
-            icon: const Icon(Icons.delete_sweep_outlined),
-            onPressed: _clearTerminal,
-          ),
-          IconButton(
-            tooltip: '设置与配置向导',
-            icon: const Icon(Icons.settings_outlined),
-            onPressed: _showConfigSheet,
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                color: AppPalette.terminalBg,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: TerminalView(
-                  _terminal,
-                  theme: TerminalThemes.defaultTheme,
-                  textStyle: TerminalStyle(
-                    fontSize: _fontSize,
-                    fontFamily: 'monospace',
+              titleSpacing: 0,
+              title: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Linux 交互终端',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeBodyLarge,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
-                  autofocus: true,
-                ),
+                  const SizedBox(height: 2),
+                  _buildStatusIndicator(),
+                ],
               ),
+              actions: [
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '发送诊断给 Agent',
+                  icon: Icon(Icons.smart_toy_outlined,
+                      color: MobileTheme.brand(context)),
+                  onPressed: _sendDiagnosticsToAgent,
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '放大字体',
+                  icon: const Icon(Icons.zoom_in_rounded),
+                  onPressed: _zoomIn,
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '缩小字体',
+                  icon: const Icon(Icons.zoom_out_rounded),
+                  onPressed: _zoomOut,
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '清屏',
+                  icon: const Icon(Icons.delete_sweep_outlined),
+                  onPressed: _clearTerminal,
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  tooltip: '设置与配置向导',
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: _showConfigSheet,
+                ),
+              ],
+            )
+          : NexusPageHeader(
+              title: 'Linux 交互终端',
+              actions: [
+                IconButton(
+                  tooltip: '设置与配置向导',
+                  icon: const Icon(Icons.settings_outlined),
+                  onPressed: _showConfigSheet,
+                ),
+                PopupMenuButton<String>(
+                  tooltip: '更多终端操作',
+                  icon: const Icon(Icons.more_horiz_rounded),
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'diagnostics':
+                        _sendDiagnosticsToAgent();
+                      case 'zoom-in':
+                        _zoomIn();
+                      case 'zoom-out':
+                        _zoomOut();
+                      case 'clear':
+                        _clearTerminal();
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                        value: 'diagnostics', child: Text('发送诊断给 Agent')),
+                    PopupMenuItem(value: 'zoom-in', child: Text('放大字体')),
+                    PopupMenuItem(value: 'zoom-out', child: Text('缩小字体')),
+                    PopupMenuItem(value: 'clear', child: Text('清屏')),
+                  ],
+                ),
+              ],
             ),
-            TerminalAccessoryBar(
-              onSendInput: (input) => _session.sendInput(input),
-              onSendCtrl: (char) => _session.sendCtrl(char),
-              ctrlActive: _ctrlActive,
-              onToggleCtrl: (val) => setState(() => _ctrlActive = val),
-            ),
-          ],
-        ),
+      body: NexusPageLayout(
+        desktopMaxWidth: double.infinity,
+        mobileMaxWidth: double.infinity,
+        child: LayoutBuilder(
+            builder: (context, constraints) => Column(
+                  children: [
+                    if (!desktop)
+                      Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: _buildStatusIndicator()),
+                    Expanded(
+                      child: Container(
+                        width: double.infinity,
+                        margin: desktop
+                            ? EdgeInsets.zero
+                            : const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                        clipBehavior: Clip.antiAlias,
+                        decoration: BoxDecoration(
+                          color: AppPalette.terminalBg,
+                          borderRadius: BorderRadius.circular(desktop ? 0 : 12),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 4),
+                        child: TerminalView(
+                          _terminal,
+                          theme: TerminalThemes.defaultTheme,
+                          textStyle: TerminalStyle(
+                            fontSize: _fontSize,
+                            fontFamily: 'monospace',
+                          ),
+                          autofocus: true,
+                        ),
+                      ),
+                    ),
+                    if (constraints.maxHeight >= AppTokens.kMinTouchTarget + 56)
+                      TerminalAccessoryBar(
+                        onSendInput: (input) => _session.sendInput(input),
+                        onSendCtrl: (char) => _session.sendCtrl(char),
+                        ctrlActive: _ctrlActive,
+                        onToggleCtrl: (val) =>
+                            setState(() => _ctrlActive = val),
+                      ),
+                  ],
+                )),
       ),
     );
   }

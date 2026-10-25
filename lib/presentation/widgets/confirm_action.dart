@@ -1,6 +1,6 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
-import '../theme/app_tokens.dart';
 import 'nexus_sheet.dart';
 
 Future<bool> showConfirmAction(
@@ -78,7 +78,7 @@ class _ConfirmActionDialogState extends State<_ConfirmActionDialog> {
             widget.requiredKeyword!.trim().toLowerCase();
 
     final confirmColor =
-        widget.isDanger ? AppPalette.danger : AppPalette.brandAction;
+        widget.isDanger ? AppPalette.danger : MobileTheme.brand(context);
 
     return AlertDialog(
       title: Row(
@@ -99,7 +99,8 @@ class _ConfirmActionDialogState extends State<_ConfirmActionDialog> {
           Expanded(
             child: Text(
               widget.title,
-              style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600),
+              style:
+                  const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -163,8 +164,8 @@ class _ConfirmActionDialogState extends State<_ConfirmActionDialog> {
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(0, 42),
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
                   ),
                 ),
                 onPressed: () => Navigator.pop(context, false),
@@ -179,8 +180,8 @@ class _ConfirmActionDialogState extends State<_ConfirmActionDialog> {
                   foregroundColor: Colors.white,
                   minimumSize: const Size(0, 42),
                   shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
                   ),
                 ),
                 onPressed:

@@ -70,10 +70,11 @@ abstract final class AppTheme {
   static const lightSemantic = AppSemanticColors.light;
   static const darkSemantic = AppSemanticColors.dark;
 
-  static AppSemanticColors semanticOf(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-          ? darkSemantic
-          : lightSemantic;
+  static AppSemanticColors semanticOf(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.extension<AppSemanticTheme>()?.colors ??
+        (theme.brightness == Brightness.dark ? darkSemantic : lightSemantic);
+  }
 
   // 字体族串联：Latin 用随包分发的 Inter（400/500 已在 pubspec 声明），中文走
   // PingFang SC, Microsoft YaHei, Noto Sans SC。勿只声明不打包 —— 那会让字重合成
@@ -282,6 +283,8 @@ abstract final class AppTheme {
       colorScheme: scheme,
       scaffoldBackgroundColor: isFlat ? canvas : Colors.transparent,
       useMaterial3: true,
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       fontFamily: 'Inter',
       fontFamilyFallback: _fontFallback,
       textTheme: _baseTextTheme(
@@ -319,6 +322,9 @@ abstract final class AppTheme {
         margin: EdgeInsets.zero,
       ),
       inputDecorationTheme: InputDecorationTheme(
+        errorMaxLines: 3,
+        helperMaxLines: 3,
+        labelStyle: TextStyle(color: textMuted, fontSize: 14),
         filled: true,
         fillColor: isFlat
             ? canvas
@@ -377,7 +383,12 @@ abstract final class AppTheme {
         ),
       ),
       // L6：Tab 指示器滑动时弹性拉伸。
-      tabBarTheme: const TabBarThemeData(indicatorAnimation: TabIndicatorAnimation.elastic),
+      tabBarTheme: TabBarThemeData(
+        labelColor: AppPalette.brandTextFor(isDark),
+        unselectedLabelColor: textMuted,
+        indicatorColor: AppPalette.brand,
+        indicatorAnimation: TabIndicatorAnimation.elastic,
+      ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: isFlat
             ? canvas
@@ -420,9 +431,13 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
-          minimumSize: const Size(0, AppTokens.kControlHeight),
+          minimumSize: const Size(0, AppTokens.kMinTouchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          textStyle: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Inter',
+              fontFamilyFallback: _fontFallback),
         )),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -437,31 +452,45 @@ abstract final class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
-          minimumSize: const Size(0, AppTokens.kControlHeight),
+          minimumSize: const Size(0, AppTokens.kMinTouchTarget),
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          textStyle: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Inter',
+              fontFamilyFallback: _fontFallback),
         )),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: NexusPressStyle.apply(OutlinedButton.styleFrom(
+          foregroundColor: AppPalette.brandTextFor(isDark),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
             side: BorderSide(color: hairline, width: 1.0),
           ),
-          minimumSize: const Size(0, AppTokens.kControlHeight),
+          minimumSize: const Size(0, AppTokens.kMinTouchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          textStyle: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Inter',
+              fontFamilyFallback: _fontFallback),
         )),
       ),
       textButtonTheme: TextButtonThemeData(
         style: NexusPressStyle.apply(TextButton.styleFrom(
+          foregroundColor: AppPalette.brandTextFor(isDark),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
-          minimumSize: const Size(0, AppTokens.kControlHeight),
+          minimumSize: const Size(0, AppTokens.kMinTouchTarget),
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+          textStyle: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              fontFamily: 'Inter',
+              fontFamilyFallback: _fontFallback),
         )),
       ),
       // L1：所有 IconButton 按下压缩、松手回弹。
@@ -495,6 +524,21 @@ abstract final class AppTheme {
       ),
     );
   }
+}
+
+/// Allows platform themes to supply the same colors to legacy shared widgets.
+@immutable
+class AppSemanticTheme extends ThemeExtension<AppSemanticTheme> {
+  const AppSemanticTheme(this.colors);
+  final AppSemanticColors colors;
+
+  @override
+  AppSemanticTheme copyWith({AppSemanticColors? colors}) =>
+      AppSemanticTheme(colors ?? this.colors);
+
+  @override
+  AppSemanticTheme lerp(covariant AppSemanticTheme? other, double t) =>
+      other == null || t < .5 ? this : other;
 }
 
 /// 明暗两套语义色彩定义集合

@@ -1,7 +1,12 @@
+import '../widgets/nexus_disclosure.dart';
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/desktop_editor_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,12 +20,10 @@ import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/tools/tool_registry.dart';
 import '../l10n/app_strings.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_undo_toast.dart';
@@ -60,6 +63,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
   late Set<String> _enabledTools;
   bool _loadingTools = true;
   List<AgentTool> _availableTools = const [];
+  String _toolQuery = "";
 
   bool _isDirty = false;
   bool _isSaving = false;
@@ -74,14 +78,13 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     )..addListener(_markDirty);
 
     _promptController = TextEditingController(
-      text: a?.systemPrompt ??
-          draft?.systemPrompt ??
-          '你是一个智能、严谨且富有创造力的 AI 助手。',
+      text: a?.systemPrompt ?? draft?.systemPrompt ?? '你是一个智能、严谨且富有创造力的 AI 助手。',
     )..addListener(_markDirty);
 
     _steps = (a?.maxSteps ?? draft?.maxSteps ?? AgentDraft.defaultMaxSteps)
         .clamp(1, 100);
-    _temperature = (a?.temperature ?? draft?.temperature ?? 0.7).clamp(0.0, 2.0);
+    _temperature =
+        (a?.temperature ?? draft?.temperature ?? 0.7).clamp(0.0, 2.0);
     final storedMaxTokens =
         a?.maxTokens ?? draft?.maxTokens ?? OutputTokenPolicy.legacyDefault;
     _autoMaxTokens = storedMaxTokens == OutputTokenPolicy.legacyDefault;
@@ -102,9 +105,8 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
       // never silently grant tools or turn a malformed record into a crash.
       try {
         final decoded = jsonDecode(a.enabledToolsJson);
-        _enabledTools = decoded is List
-            ? decoded.whereType<String>().toSet()
-            : <String>{};
+        _enabledTools =
+            decoded is List ? decoded.whereType<String>().toSet() : <String>{};
       } catch (_) {
         _enabledTools = <String>{};
       }
@@ -257,18 +259,43 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     Navigator.of(context).pop(true);
   }
 
+  Widget _advancedParameters(Widget fields) {
+    if (DesktopTheme.maybeOf(context) != null) return fields;
+    return NexusDisclosure(
+      key: const ValueKey('agent-advanced-parameters'),
+      leading: const Icon(Icons.tune_rounded, size: 20),
+      headerPadding: const EdgeInsets.all(16),
+      contentPadding: EdgeInsets.zero,
+      title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('高级执行参数', style: TextStyle(fontSize: 15)),
+        const SizedBox(height: 4),
+        Text('最多 $_steps 步 · 输出${_autoMaxTokens ? "自动" : " $_maxTokens Token"}',
+            style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      ]),
+      child: fields,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
-    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
-    final hairline = isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
-    final surface = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final desktop = DesktopTheme.maybeOf(context);
+    final hairline = desktop?.border ??
+        (isDark ? AppPalette.darkHairline : AppPalette.lightHairline);
+    final surface = desktop?.panel ??
+        (isDark ? AppPalette.darkSurface : AppPalette.lightSurface);
+    final textColor =
+        desktop?.text ?? (isDark ? AppPalette.darkText : AppPalette.lightText);
+    final textMuted = desktop?.muted ??
+        (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted);
 
+    final visibleTools = _availableTools
+        .where((tool) => '${tool.manifest.name} ${tool.manifest.description}'
+            .toLowerCase()
+            .contains(_toolQuery.toLowerCase()))
+        .toList();
     return PopScope(
       canPop: !_isDirty,
       onPopInvokedWithResult: (didPop, _) async {
@@ -279,7 +306,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
         }
       },
       child: Scaffold(
-        backgroundColor: isFlat ? canvas : Colors.transparent,
+        backgroundColor: MobileTheme.pageBackground(context),
         appBar: NexusPageHeader(
           title: widget.agent == null ? '新建智能体' : '编辑智能体',
           subtitle: widget.agent == null ? '定制专属角色的系统指令与能力' : '调整配置与工具箱授权',
@@ -299,311 +326,396 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
               ),
           ],
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-          children: [
-            if (widget.draft != null) ...[
-              _DraftNotice(draft: widget.draft!),
-              const SizedBox(height: 20),
-            ],
-            // 1. 基础信息卡片
-            const _SectionTitle(title: '基本设定', icon: Icons.badge_outlined),
-            SectionCard(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextField(
-                      controller: _nameController,
-                      style: TextStyle(fontSize: AppTokens.fontSizeBody, color: textColor),
-                      decoration: InputDecoration(
-                        labelText: '智能体名称 *',
-                        labelStyle: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
-                        hintText: '如：代码审计专家、架构顾问、翻译助手',
-                        hintStyle: TextStyle(fontSize: AppTokens.fontSizeSubhead, color: textMuted),
-                        prefixIcon: const Icon(Icons.smart_toy_outlined, size: 20),
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusControl),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 12),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _promptController,
-                      maxLines: 5,
-                      minLines: 3,
-                      style: TextStyle(fontSize: AppTokens.fontSizeSubhead, height: 1.4, color: textColor),
-                      decoration: InputDecoration(
-                        labelText: '系统提示词 (System Prompt) *',
-                        labelStyle: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
-                        hintText: '明确描述该 Agent 的角色人设、专业领域、工作流规范与输出限制…',
-                        hintStyle: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusControl),
-                        ),
-                        contentPadding: const EdgeInsets.all(14),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // 2. 模型与调优参数
-            const _SectionTitle(title: '模型与推理参数', icon: Icons.tune_rounded),
-            SectionCard(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _ParamSlider(
-                      label: '最大思考执行步数',
-                      valueText: '$_steps 步',
-                      description: 'Agent 自主循环规划与调用工具的最大上限',
-                      value: _steps.toDouble(),
-                      min: 1,
-                      max: 100,
-                      divisions: 99,
-                      onChanged: (val) {
-                        _markDirty();
-                        setState(() => _steps = val.round());
-                      },
-                    ),
-                    const Divider(height: 24),
-                    _ParamSlider(
-                      label: '发散度 (Temperature)',
-                      valueText: _temperature.toStringAsFixed(2),
-                      description: '较低值更具确定性与严谨，较高值更具创造力',
-                      value: _temperature,
-                      min: 0.0,
-                      max: 2.0,
-                      divisions: 40,
-                      onChanged: (val) {
-                        _markDirty();
-                        setState(() => _temperature = val);
-                      },
-                    ),
-                    const Divider(height: 24),
-                    SwitchListTile.adaptive(
-                      key: const ValueKey('agent-max-tokens-auto'),
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        '单次最大输出：自动（推荐）',
-                        style: TextStyle(
-                          fontSize: AppTokens.fontSizeBodySmall,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      subtitle: Text(
-                        agentMaxTokensSubtitle(
-                          auto: _autoMaxTokens,
-                          manualTokens: _maxTokens,
-                          activeModel: _activeModel,
-                          activeContextTokens: _activeContextTokens,
-                        ),
-                        style: const TextStyle(
-                            fontSize: AppTokens.fontSizeFootnote),
-                      ),
-                      value: _autoMaxTokens,
-                      onChanged: (value) {
-                        _markDirty();
-                        setState(() => _autoMaxTokens = value);
-                      },
-                    ),
-                    if (!_autoMaxTokens)
-                      _ParamSlider(
-                        label: '单次最大输出 (Max Tokens)',
-                        valueText: '$_maxTokens Tokens',
-                        description: '推理模型的上限同时包含思考与正文，过小会导致回答被截断',
-                        value: _maxTokenStepIndex(_maxTokens).toDouble(),
-                        min: 0,
-                        max: (_maxTokenSteps.length - 1).toDouble(),
-                        divisions: _maxTokenSteps.length - 1,
-                        onChanged: (val) {
-                          _markDirty();
-                          setState(
-                              () => _maxTokens = _maxTokenSteps[val.round()]);
-                        },
-                      ),
-                    const Divider(height: 24),
-                    _ParamSlider(
-                      label: '核采样阈值 (Top P)',
-                      valueText: _topP.toStringAsFixed(2),
-                      description: '与 Temperature 共同控制文本采样的候选词概率质量',
-                      value: _topP,
-                      min: 0.0,
-                      max: 1.0,
-                      divisions: 20,
-                      onChanged: (val) {
-                        _markDirty();
-                        setState(() => _topP = val);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // 3. 工具箱授权
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const _SectionTitle(title: '可用工具箱授权', icon: Icons.handyman_outlined),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+        body: NexusPageLayout(
+            child: DesktopEditorLayout(
+                title: 'Agent 配置摘要',
+                icon: Icons.smart_toy_outlined,
+                status: _isSaving
+                    ? '正在保存…'
+                    : _isDirty
+                        ? '有尚未保存的更改'
+                        : widget.agent == null
+                            ? '新 Agent · 尚未保存'
+                            : '配置未修改',
+                facts: [
+                  (label: '最大执行步数', value: '$_steps 步'),
+                  (
+                    label: '输出 Token',
+                    value: _autoMaxTokens ? '自动匹配模型' : '$_maxTokens'
                   ),
-                  onPressed: () {
-                    _markDirty();
-                    setState(() {
-                      _enabledTools = {
-                        'calculator',
-                        'get_time',
-                        'json_query',
-                        'http_request',
-                        'web_search',
-                      };
-                    });
-                  },
-                  child: const Text('推荐预设', style: TextStyle(fontSize: AppTokens.fontSizeFootnote)),
-                ),
-              ],
-            ),
-            SectionCard(
-              child: _loadingTools
-                  ? const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: NexusListSkeleton(itemCount: 3),
-                    )
-                  : _availableTools.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Center(
-                            child: Text(
-                              '未检测到已注册工具',
-                              style: TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
-                            ),
-                          ),
-                        )
-                      : ListView.separated(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _availableTools.length,
-                          separatorBuilder: (_, __) =>
-                              Divider(height: 1, color: hairline),
-                          itemBuilder: (context, index) {
-                            final tool = _availableTools[index];
-                            final isChecked =
-                                _enabledTools.contains(tool.manifest.name);
-                            final isDanger =
-                                tool.manifest.risk == ToolRisk.dangerous;
-                            final isConfirm = tool.manifest.risk ==
-                                ToolRisk.requiresConfirmation;
-
-                            return CheckboxListTile(
-                              value: isChecked,
-                              activeColor: AppPalette.brand,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 4),
-                              title: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      tool.manifest.name,
-                                      style: TextStyle(
-                                        fontSize: AppTokens.fontSizeSubhead,
-                                        fontWeight: FontWeight.w500,
-                                        color: textColor,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isDanger
-                                          ? AppPalette.danger.withAlpha(25)
-                                          : isConfirm
-                                              ? AppPalette.warning.withAlpha(25)
-                                              : AppPalette.brand.withAlpha(25),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      isDanger
-                                          ? '危险操作'
-                                          : isConfirm
-                                              ? '需确认'
-                                              : '安全',
-                                      style: TextStyle(
-                                        fontSize: AppTokens.fontSizeMetricSmall,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDanger
-                                          ? AppPalette.danger
-                                          : isConfirm
-                                              ? AppPalette.warning
-                                              : AppPalette.brand,
-                                      ),
-                                    ),
-                                  ),
-                                  if (widget.draft?.pendingTools
-                                          .contains(tool.manifest.name) ==
-                                      true) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: AppPalette.brand.withAlpha(25),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: const Text(
-                                        'AI 建议',
-                                        style: TextStyle(
-                                          fontSize: AppTokens.fontSizeMetricSmall,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppPalette.brand,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  tool.manifest.description,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: AppTokens.fontSizeFootnote, color: textMuted),
+                  (
+                    label: '工具选择',
+                    value: _loadingTools
+                        ? '正在读取工具…'
+                        : '${_enabledTools.length} 项已选择'
+                  ),
+                ],
+                notes: const [
+                  '工具勾选决定可用范围，不会绕过运行时的风险审批。',
+                  '生成的角色草稿必须确认保存后才会成为可用 Agent。',
+                  '删除和放弃修改仍需要明确确认。'
+                ],
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+                  children: [
+                    if (widget.draft != null) ...[
+                      _DraftNotice(draft: widget.draft!),
+                      const SizedBox(height: 20),
+                    ],
+                    // 1. 基础信息卡片
+                    const _SectionTitle(
+                        title: '基本设定', icon: Icons.badge_outlined),
+                    SectionCard(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextField(
+                              controller: _nameController,
+                              style: TextStyle(
+                                  fontSize: AppTokens.fontSizeBody,
+                                  color: textColor),
+                              decoration: InputDecoration(
+                                labelText: '智能体名称 *',
+                                labelStyle: TextStyle(
+                                    fontSize: AppTokens.fontSizeCaption,
+                                    color: textMuted),
+                                hintText: '如：代码审计专家、架构顾问、翻译助手',
+                                hintStyle: TextStyle(
+                                    fontSize: AppTokens.fontSizeSubhead,
+                                    color: textMuted),
+                                prefixIcon: const Icon(Icons.smart_toy_outlined,
+                                    size: 20),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      MobileTheme.controlRadius(context)),
                                 ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 12),
                               ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _promptController,
+                              maxLines: 5,
+                              minLines: 3,
+                              style: TextStyle(
+                                  fontSize: AppTokens.fontSizeSubhead,
+                                  height: 1.4,
+                                  color: textColor),
+                              decoration: InputDecoration(
+                                labelText: '系统提示词 (System Prompt) *',
+                                labelStyle: TextStyle(
+                                    fontSize: AppTokens.fontSizeCaption,
+                                    color: textMuted),
+                                hintText: '明确描述该 Agent 的角色人设、专业领域、工作流规范与输出限制…',
+                                hintStyle: TextStyle(
+                                    fontSize: AppTokens.fontSizeCaption,
+                                    color: textMuted),
+                                alignLabelWithHint: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(
+                                      MobileTheme.controlRadius(context)),
+                                ),
+                                contentPadding: const EdgeInsets.all(14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 2. 模型与调优参数
+                    if (DesktopTheme.maybeOf(context) != null)
+                      const _SectionTitle(
+                          title: '模型与推理参数', icon: Icons.tune_rounded),
+                    SectionCard(
+                      child: _advancedParameters(Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _ParamSlider(
+                              label: '最大思考执行步数',
+                              valueText: '$_steps 步',
+                              description: 'Agent 自主循环规划与调用工具的最大上限',
+                              value: _steps.toDouble(),
+                              min: 1,
+                              max: 100,
+                              divisions: 99,
                               onChanged: (val) {
                                 _markDirty();
-                                setState(() {
-                                  if (val == true) {
-                                    _enabledTools.add(tool.manifest.name);
-                                  } else {
-                                    _enabledTools.remove(tool.manifest.name);
-                                  }
-                                });
+                                setState(() => _steps = val.round());
                               },
-                            );
-                          },
+                            ),
+                            const Divider(height: 24),
+                            _ParamSlider(
+                              label: '发散度 (Temperature)',
+                              valueText: _temperature.toStringAsFixed(2),
+                              description: '较低值更具确定性与严谨，较高值更具创造力',
+                              value: _temperature,
+                              min: 0.0,
+                              max: 2.0,
+                              divisions: 40,
+                              onChanged: (val) {
+                                _markDirty();
+                                setState(() => _temperature = val);
+                              },
+                            ),
+                            const Divider(height: 24),
+                            SwitchListTile.adaptive(
+                              key: const ValueKey('agent-max-tokens-auto'),
+                              contentPadding: EdgeInsets.zero,
+                              title: const Text(
+                                '单次最大输出：自动（推荐）',
+                                style: TextStyle(
+                                  fontSize: AppTokens.fontSizeBodySmall,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              subtitle: Text(
+                                agentMaxTokensSubtitle(
+                                  auto: _autoMaxTokens,
+                                  manualTokens: _maxTokens,
+                                  activeModel: _activeModel,
+                                  activeContextTokens: _activeContextTokens,
+                                ),
+                                style: const TextStyle(
+                                    fontSize: AppTokens.fontSizeFootnote),
+                              ),
+                              value: _autoMaxTokens,
+                              onChanged: (value) {
+                                _markDirty();
+                                setState(() => _autoMaxTokens = value);
+                              },
+                            ),
+                            if (!_autoMaxTokens)
+                              _ParamSlider(
+                                label: '单次最大输出 (Max Tokens)',
+                                valueText: '$_maxTokens Tokens',
+                                description: '推理模型的上限同时包含思考与正文，过小会导致回答被截断',
+                                value:
+                                    _maxTokenStepIndex(_maxTokens).toDouble(),
+                                min: 0,
+                                max: (_maxTokenSteps.length - 1).toDouble(),
+                                divisions: _maxTokenSteps.length - 1,
+                                onChanged: (val) {
+                                  _markDirty();
+                                  setState(() =>
+                                      _maxTokens = _maxTokenSteps[val.round()]);
+                                },
+                              ),
+                            const Divider(height: 24),
+                            _ParamSlider(
+                              label: '核采样阈值 (Top P)',
+                              valueText: _topP.toStringAsFixed(2),
+                              description: '与 Temperature 共同控制文本采样的候选词概率质量',
+                              value: _topP,
+                              min: 0.0,
+                              max: 1.0,
+                              divisions: 20,
+                              onChanged: (val) {
+                                _markDirty();
+                                setState(() => _topP = val);
+                              },
+                            ),
+                          ],
                         ),
-            ),
-          ],
-        ),
+                      )),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 3. 工具箱授权
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const _SectionTitle(
+                            title: '可用工具箱授权', icon: Icons.handyman_outlined),
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: () {
+                            _markDirty();
+                            setState(() {
+                              _enabledTools = {
+                                'calculator',
+                                'get_time',
+                                'json_query',
+                                'http_request',
+                                'web_search',
+                              };
+                            });
+                          },
+                          child: const Text('推荐预设',
+                              style: TextStyle(
+                                  fontSize: AppTokens.fontSizeFootnote)),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: TextField(
+                        decoration: const InputDecoration(
+                            hintText: '搜索工具名称或用途',
+                            prefixIcon: Icon(Icons.search_rounded)),
+                        onChanged: (value) =>
+                            setState(() => _toolQuery = value),
+                      ),
+                    ),
+                    SectionCard(
+                      child: _loadingTools
+                          ? const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: NexusListSkeleton(itemCount: 3),
+                            )
+                          : _availableTools.isEmpty
+                              ? Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Center(
+                                    child: Text(
+                                      '未检测到已注册工具',
+                                      style: TextStyle(
+                                          fontSize: AppTokens.fontSizeCaption,
+                                          color: textMuted),
+                                    ),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: visibleTools.length,
+                                  separatorBuilder: (_, __) =>
+                                      Divider(height: 1, color: hairline),
+                                  itemBuilder: (context, index) {
+                                    final tool = visibleTools[index];
+                                    final isChecked = _enabledTools
+                                        .contains(tool.manifest.name);
+                                    final isDanger = tool.manifest.risk ==
+                                        ToolRisk.dangerous;
+                                    final isConfirm = tool.manifest.risk ==
+                                        ToolRisk.requiresConfirmation;
+
+                                    return CheckboxListTile(
+                                      value: isChecked,
+                                      activeColor: MobileTheme.brand(context),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 14, vertical: 4),
+                                      title: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              tool.manifest.name,
+                                              style: TextStyle(
+                                                fontSize:
+                                                    AppTokens.fontSizeSubhead,
+                                                fontFamily:
+                                                    AppTokens.fontFamilyMono,
+                                                fontWeight: FontWeight.w600,
+                                                color: textColor,
+                                              ),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: isDanger
+                                                  ? AppPalette.danger
+                                                      .withAlpha(25)
+                                                  : isConfirm
+                                                      ? AppPalette.warning
+                                                          .withAlpha(25)
+                                                      : MobileTheme.brand(
+                                                              context)
+                                                          .withAlpha(25),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              isDanger
+                                                  ? '危险操作'
+                                                  : isConfirm
+                                                      ? '需确认'
+                                                      : '安全',
+                                              style: TextStyle(
+                                                fontSize: AppTokens
+                                                    .fontSizeMetricSmall,
+                                                fontWeight: FontWeight.w500,
+                                                color: isDanger
+                                                    ? AppPalette.danger
+                                                    : isConfirm
+                                                        ? AppPalette.warning
+                                                        : MobileTheme.brand(
+                                                            context),
+                                              ),
+                                            ),
+                                          ),
+                                          if (widget.draft?.pendingTools
+                                                  .contains(
+                                                      tool.manifest.name) ==
+                                              true) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    MobileTheme.brand(context)
+                                                        .withAlpha(25),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'AI 建议',
+                                                style: TextStyle(
+                                                  fontSize: AppTokens
+                                                      .fontSizeMetricSmall,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: MobileTheme.brand(
+                                                      context),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      subtitle: Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Text(
+                                          tool.manifest.description,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize:
+                                                  AppTokens.fontSizeFootnote,
+                                              color: textMuted),
+                                        ),
+                                      ),
+                                      onChanged: (val) {
+                                        _markDirty();
+                                        setState(() {
+                                          if (val == true) {
+                                            _enabledTools
+                                                .add(tool.manifest.name);
+                                          } else {
+                                            _enabledTools
+                                                .remove(tool.manifest.name);
+                                          }
+                                        });
+                                      },
+                                    );
+                                  },
+                                ),
+                    ),
+                  ],
+                ))),
         bottomNavigationBar: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
@@ -617,10 +729,11 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                 Expanded(
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(AppTokens.kControlHeight),
+                      minimumSize:
+                          const Size.fromHeight(AppTokens.kControlHeight),
                       shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusControl),
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
                       ),
                     ),
                     onPressed: () async {
@@ -636,12 +749,16 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                 Expanded(
                   child: FilledButton(
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(AppTokens.kControlHeight),
-                      backgroundColor: AppPalette.brand,
-                      foregroundColor: Colors.white,
+                      minimumSize:
+                          const Size.fromHeight(AppTokens.kControlHeight),
+                      backgroundColor:
+                          desktop?.accent ?? MobileTheme.brand(context),
+                      foregroundColor: desktop != null
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusControl),
+                        borderRadius: BorderRadius.circular(
+                            MobileTheme.controlRadius(context)),
                       ),
                     ),
                     onPressed: _isSaving ? null : _save,
@@ -656,7 +773,8 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
                           )
                         : const Text('保存智能体',
                             style: TextStyle(
-                                fontSize: AppTokens.fontSizeSubhead, fontWeight: FontWeight.w500)),
+                                fontSize: AppTokens.fontSizeSubhead,
+                                fontWeight: FontWeight.w500)),
                   ),
                 ),
               ],
@@ -783,15 +901,18 @@ class _ParamSlider extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label,
-                style: TextStyle(
-                    fontSize: AppTokens.fontSizeBodySmall,
-                    fontWeight: FontWeight.w500,
-                    color: textColor)),
+            Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: AppTokens.fontSizeBodySmall,
+                      fontWeight: FontWeight.w500,
+                      color: textColor)),
+            ),
+            const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                color: isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas,
+                color: MobileTheme.pageBackground(context),
                 borderRadius: BorderRadius.circular(4),
                 border: Border.all(
                   color: isDark
@@ -801,10 +922,10 @@ class _ParamSlider extends StatelessWidget {
               ),
               child: Text(
                 valueText,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: AppTokens.fontSizeFootnote,
                   fontWeight: FontWeight.w600,
-                  color: AppPalette.brand,
+                  color: MobileTheme.brand(context),
                 ),
               ),
             ),
@@ -813,7 +934,8 @@ class _ParamSlider extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           description,
-          style: TextStyle(fontSize: AppTokens.fontSizeSubcaption, color: textMuted),
+          style: TextStyle(
+              fontSize: AppTokens.fontSizeSubcaption, color: textMuted),
         ),
         const SizedBox(height: 4),
         SliderTheme(
@@ -827,7 +949,7 @@ class _ParamSlider extends StatelessWidget {
             min: min,
             max: max,
             divisions: divisions,
-            activeColor: AppPalette.brand,
+            activeColor: MobileTheme.brand(context),
             onChanged: onChanged,
           ),
         ),
@@ -880,7 +1002,10 @@ class _DraftNotice extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '目标：${draft.goal.trim()}',
-                style: TextStyle(fontSize: AppTokens.fontSizeFootnote, height: 1.5, color: textMuted),
+                style: TextStyle(
+                    fontSize: AppTokens.fontSizeFootnote,
+                    height: 1.5,
+                    color: textMuted),
               ),
             ],
             if (draft.notes.isNotEmpty) ...[
@@ -890,8 +1015,10 @@ class _DraftNotice extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 4),
                   child: Text(
                     '· $note',
-                    style:
-                        TextStyle(fontSize: AppTokens.fontSizeFootnote, height: 1.5, color: textColor),
+                    style: TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote,
+                        height: 1.5,
+                        color: textColor),
                   ),
                 ),
             ],
@@ -900,13 +1027,17 @@ class _DraftNotice extends StatelessWidget {
               Text(
                 '这些工具高于安全级，因此没有默认勾选，需要就去下面的工具箱里手动打开：'
                 '${draft.pendingTools.join('、')}',
-                style: TextStyle(fontSize: AppTokens.fontSizeFootnote, height: 1.5, color: textColor),
+                style: TextStyle(
+                    fontSize: AppTokens.fontSizeFootnote,
+                    height: 1.5,
+                    color: textColor),
               ),
             ],
             const SizedBox(height: 8),
             Text(
               '保存前你可以修改任何内容；只有点了保存才会写入。',
-              style: TextStyle(fontSize: AppTokens.fontSizeSubcaption, color: textMuted),
+              style: TextStyle(
+                  fontSize: AppTokens.fontSizeSubcaption, color: textMuted),
             ),
           ],
         ),

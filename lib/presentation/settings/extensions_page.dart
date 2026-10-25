@@ -1,20 +1,28 @@
+import '../theme/mobile_theme.dart';
+import '../widgets/nexus_list_tile.dart';
+import '../widgets/section_card.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../application/mcp_service.dart';
 import '../../infrastructure/system/battery_optimization.dart';
+import '../agents/agents_page.dart';
+import '../dashboard/dashboard_page.dart';
 import '../diagnostics/run_analysis_page.dart';
 import '../l10n/app_strings.dart';
+import '../diagnostics/log_viewer_page.dart';
 import '../mcp/mcp_servers_page.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../plugins/plugins_page.dart';
-import '../theme/app_appearance_controller.dart';
+import '../prompts/prompt_library_page.dart';
+import '../workflows/mobile_workflows_page.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_content_box.dart';
 import '../widgets/nexus_page_header.dart';
 import 'linux_environment_page.dart';
@@ -49,8 +57,7 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
     } catch (_) {
       // 计数为 0 会被读成「没有启用任何 MCP 服务器」，因此失败要明说。
       if (mounted) {
-        FloatingToast.show(context, 'MCP 服务器列表读取失败',
-            tone: ToastTone.warning);
+        FloatingToast.show(context, 'MCP 服务器列表读取失败', tone: ToastTone.warning);
       }
     }
 
@@ -87,22 +94,20 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
-    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    final textMuted = DesktopTheme.maybeOf(context)?.muted ??
+        (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted);
 
     return Scaffold(
-      backgroundColor: isFlat ? canvas : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: const NexusPageHeader(
         title: '扩展与环境',
       ),
-      body: SafeArea(
+      body: NexusPageLayout(
+          child: SafeArea(
         top: false,
         child: NexusContentBox(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
             children: [
               _buildSectionHeader('扩展协议与技能', textMuted),
               _buildCard(
@@ -122,6 +127,30 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
                     trailing: '技能管理',
                     isDark: isDark,
                     onTap: () => _openPage(const PluginsPage()),
+                  ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.smart_toy_outlined,
+                    title: 'Agent 预设管理',
+                    trailing: '角色与技能绑定',
+                    isDark: isDark,
+                    onTap: () => _openPage(const AgentsPage()),
+                  ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.library_books_outlined,
+                    title: '提示词模板库',
+                    trailing: '复用系统与任务模板',
+                    isDark: isDark,
+                    onTap: () => _openPage(const PromptLibraryPage()),
+                  ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.account_tree_outlined,
+                    title: '可复用工作流',
+                    trailing: '确定性编排与沙盒试跑',
+                    isDark: isDark,
+                    onTap: () => _openPage(const MobileWorkflowsPage()),
                   ),
                 ],
               ),
@@ -161,6 +190,22 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
                     isDark: isDark,
                     onTap: () => _openPage(const RunAnalysisPage()),
                   ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.bar_chart_outlined,
+                    title: '用量看板与统计',
+                    trailing: '调用与消耗统计',
+                    isDark: isDark,
+                    onTap: () => _openPage(const DashboardPage()),
+                  ),
+                  _buildDivider(isDark),
+                  _buildRow(
+                    icon: Icons.receipt_long_outlined,
+                    title: '系统与运行日志',
+                    trailing: '检索事件与诊断',
+                    isDark: isDark,
+                    onTap: () => _openPage(const LogViewerPage()),
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -180,7 +225,7 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 
@@ -199,49 +244,28 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
   }
 
   Widget _buildCard({required bool isDark, required List<Widget> children}) {
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
-    if (isFlat) {
+    final desktop = DesktopTheme.maybeOf(context);
+    if (desktop != null) {
       return Container(
         decoration: BoxDecoration(
-          color: isDark ? AppPalette.darkSurface : Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
-            width: 0.8,
-          ),
-        ),
+            color: desktop.panel,
+            borderRadius: BorderRadius.circular(DesktopTheme.panelRadius),
+            border: Border.all(color: desktop.border)),
         clipBehavior: Clip.antiAlias,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: children,
-        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: children),
       );
     }
-    return GlassSurface(
-      role: GlassRole.content,
-      variant: GlassVariant.regular,
-      intensity: AppAppearanceController.resolvedGlassIntensity,
-      borderRadius: BorderRadius.circular(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      ),
-    );
+    return SectionCard(
+        child: Column(mainAxisSize: MainAxisSize.min, children: children));
   }
 
   Widget _buildDivider(bool isDark) {
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     return Divider(
-      height: 0.8,
-      thickness: 0.8,
-      indent: 48,
-      endIndent: 0,
-      color: isDark
-          ? AppPalette.darkHairline
-          : (isFlat ? AppPalette.lightHairline : const Color(0x28000000)),
-    );
+        height: 1,
+        thickness: .7,
+        indent: 70,
+        endIndent: 16,
+        color: Theme.of(context).colorScheme.outlineVariant);
   }
 
   Widget _buildRow({
@@ -251,9 +275,21 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
     required bool isDark,
     required VoidCallback onTap,
   }) {
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
+    if (DesktopTheme.maybeOf(context) == null) {
+      return NexusListTile(
+        icon: icon,
+        title: title,
+        subtitle: trailing,
+        onTap: onTap,
+        trailing: const Icon(Icons.chevron_right_rounded, size: 20),
+        showDivider: false,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      );
+    }
+    final textColor = DesktopTheme.maybeOf(context)?.text ??
+        (isDark ? AppPalette.darkText : AppPalette.lightText);
+    final textMuted = DesktopTheme.maybeOf(context)?.muted ??
+        (isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted);
 
     return Material(
       color: Colors.transparent,
@@ -266,6 +302,7 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
               Icon(icon, size: 20, color: textColor),
               const SizedBox(width: 12),
               Expanded(
+                flex: 3,
                 child: Text(
                   title,
                   style: TextStyle(
@@ -275,14 +312,18 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
                   ),
                 ),
               ),
-              Text(
-                trailing,
-                style: TextStyle(
-                  fontSize: AppTokens.fontSizeSubhead,
-                  fontWeight: FontWeight.w400,
-                  color: textMuted,
-                ),
-              ),
+              const SizedBox(width: 8),
+              Flexible(
+                  flex: 2,
+                  child: Text(
+                    trailing,
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeSubhead,
+                      fontWeight: FontWeight.w400,
+                      color: textMuted,
+                    ),
+                  )),
               const SizedBox(width: 4),
               Icon(
                 Icons.chevron_right_rounded,

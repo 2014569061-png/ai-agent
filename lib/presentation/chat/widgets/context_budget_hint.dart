@@ -1,8 +1,8 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../../domain/context_insights.dart';
 import '../../theme/app_palette.dart';
-import '../../theme/app_tokens.dart';
 
 class ContextBudgetHint extends StatelessWidget {
   const ContextBudgetHint(
@@ -46,7 +46,7 @@ class ContextBudgetHint extends StatelessWidget {
         ? AppPalette.danger
         : warning
             ? AppPalette.warning
-            : AppPalette.brand;
+            : MobileTheme.brand(context);
     final hint = omittedContext.isNotEmpty
         ? '因预算省略：${omittedContext.join('、')}'
         : switch (level) {
@@ -62,11 +62,12 @@ class ContextBudgetHint extends StatelessWidget {
                 ? AppPalette.danger
                 : warning
                     ? AppPalette.warning
-                    : AppPalette.brand)
+                    : MobileTheme.brand(context))
             .withValues(alpha: urgent || warning ? .14 : .10),
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         child: InkWell(
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),

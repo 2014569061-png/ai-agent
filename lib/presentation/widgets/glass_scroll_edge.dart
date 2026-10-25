@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_palette.dart';
+import '../motion/nexus_motion.dart';
 
 /// A subtle edge transition that keeps floating glass controls legible while
 /// scrollable content passes underneath them.
@@ -58,8 +59,7 @@ class _GlassScrollEdgeState extends State<GlassScrollEdge> {
     final baseColor = widget.color ??
         (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas);
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    final duration =
-        reduceMotion ? Duration.zero : const Duration(milliseconds: 180);
+    final duration = reduceMotion ? Duration.zero : NexusMotion.pageExit;
 
     return NotificationListener<ScrollNotification>(
       onNotification: _onNotification,

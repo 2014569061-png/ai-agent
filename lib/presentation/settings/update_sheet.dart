@@ -1,12 +1,16 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
 
-import '../../../infrastructure/update/update_service.dart';
+import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
+
+import '../../infrastructure/update/update_service.dart';
 
 /// G1 发现新版本的更新说明弹层:版本号 + Release 说明 + 下载安装(带进度)。
 class UpdateSheet extends StatefulWidget {
-  const UpdateSheet({super.key, required this.info});
+  const UpdateSheet({super.key, required this.info, this.service});
 
   final UpdateInfo info;
+  final UpdateService? service;
 
   @override
   State<UpdateSheet> createState() => _UpdateSheetState();
@@ -17,21 +21,38 @@ class _UpdateSheetState extends State<UpdateSheet> {
   double _progress = 0;
   String? _error;
   bool _launched = false;
+  String? _downloadedPath;
+  bool get _windows => widget.info.windowsZipUrl != null;
 
   Future<void> _downloadAndInstall() async {
-    if (_downloading || widget.info.apkUrl == null) return;
+    final url = widget.info.windowsZipUrl ?? widget.info.apkUrl;
+    if (_downloading || url == null) return;
     setState(() {
       _downloading = true;
       _error = null;
       _progress = 0;
     });
-    final result = await UpdateService().downloadAndInstallDetailed(
-      widget.info.apkUrl!,
+    final service = widget.service ?? UpdateService();
+    void progress(double value) {
+      if (mounted) setState(() => _progress = value);
+    }
+
+    if (_windows) {
+      final result = await service.downloadWindowsPackage(url,
+          expectedSha256: widget.info.sha256, onProgress: progress);
+      if (!mounted) return;
+      setState(() {
+        _downloading = false;
+        _downloadedPath = result.path;
+        _error = result.error;
+      });
+      return;
+    }
+    final result = await service.downloadAndInstallDetailed(
+      url,
       expectedSha256: widget.info.sha256,
       requireSha256: true,
-      onProgress: (p) {
-        if (mounted) setState(() => _progress = p);
-      },
+      onProgress: progress,
     );
     if (!mounted) return;
     setState(() {
@@ -44,10 +65,20 @@ class _UpdateSheetState extends State<UpdateSheet> {
     });
   }
 
+  Future<void> _openDownloadDirectory() async {
+    try {
+      await Process.start('explorer.exe', [p.dirname(_downloadedPath!)],
+          mode: ProcessStartMode.detached);
+    } catch (_) {
+      if (mounted) setState(() => _error = '无法打开下载目录：$_downloadedPath');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
+    return SingleChildScrollView(
+        child: Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -57,9 +88,10 @@ class _UpdateSheetState extends State<UpdateSheet> {
             Icon(Icons.system_update_alt_rounded,
                 color: theme.colorScheme.primary),
             const SizedBox(width: 8),
-            Text('发现新版本 v${widget.info.version}',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w500)),
+            Expanded(
+                child: Text('发现新版本 v${widget.info.version}',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w500))),
           ]),
           const Divider(height: 20),
           if (widget.info.notes.trim().isNotEmpty)
@@ -78,6 +110,12 @@ class _UpdateSheetState extends State<UpdateSheet> {
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.hintColor)),
           const SizedBox(height: 16),
+          if (_windows) ...[
+            Text(
+                '关闭程序后，将完整压缩包解压到新目录，再运行其中的 mobile_agent.exe。保留 DLL 和 data 文件夹。',
+                style: theme.textTheme.bodySmall),
+            const SizedBox(height: 12),
+          ],
           if (_downloading) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
@@ -94,7 +132,17 @@ class _UpdateSheetState extends State<UpdateSheet> {
                     ?.copyWith(color: theme.colorScheme.error)),
             const SizedBox(height: 12),
           ],
-          if (_launched)
+          if (_downloadedPath != null) ...[
+            Text('Windows 更新包已下载，SHA-256 校验通过。',
+                style: theme.textTheme.bodySmall),
+            const SizedBox(height: 12),
+            SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                    onPressed: _openDownloadDirectory,
+                    icon: const Icon(Icons.folder_open_rounded),
+                    label: const Text('打开下载位置'))),
+          ] else if (_launched)
             Text('已拉起系统安装,请在弹出的安装页确认。',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.primary))
@@ -102,13 +150,21 @@ class _UpdateSheetState extends State<UpdateSheet> {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _downloading ? null : _downloadAndInstall,
+                onPressed: _downloading ||
+                        (widget.info.apkUrl == null &&
+                            widget.info.windowsZipUrl == null)
+                    ? null
+                    : _downloadAndInstall,
                 icon: const Icon(Icons.download_rounded),
-                label: Text(_downloading ? '下载中...' : '下载并安装'),
+                label: Text(_downloading
+                    ? '下载中...'
+                    : _windows
+                        ? '下载 Windows 更新包'
+                        : '下载并安装'),
               ),
             ),
         ],
       ),
-    );
+    ));
   }
 }

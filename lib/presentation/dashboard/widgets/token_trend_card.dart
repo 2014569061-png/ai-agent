@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../../application/dashboard_service.dart';
@@ -32,7 +33,7 @@ class TokenTrendCard extends StatelessWidget {
     final hasData = maxValue > 0;
 
     return SectionCard(
-      glass: true,
+      glass: false,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,6 +75,7 @@ class TokenTrendCard extends StatelessWidget {
               width: double.infinity,
               child: CustomPaint(
                 painter: _TokenBarPainter(
+                  brand: MobileTheme.brand(context),
                   values: data,
                   isDark: isDark,
                 ),
@@ -99,7 +101,7 @@ class TokenTrendCard extends StatelessWidget {
                   width: 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: AppPalette.brand,
+                    color: MobileTheme.brand(context),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -143,8 +145,10 @@ class TokenTrendCard extends StatelessWidget {
 /// 7 天柱状图绘制器：柱顶精确数字（今天品牌色，其余灰）、
 /// 基线 hairline、今天柱用品牌色。
 class _TokenBarPainter extends CustomPainter {
-  const _TokenBarPainter({required this.values, required this.isDark});
+  const _TokenBarPainter(
+      {required this.values, required this.isDark, required this.brand});
 
+  final Color brand;
   final List<int> values;
   final bool isDark;
 
@@ -185,7 +189,7 @@ class _TokenBarPainter extends CustomPainter {
 
       final today = i == isToday;
       final color = today
-          ? AppPalette.brand
+          ? brand
           : (isDark
               ? AppPalette.darkSurfaceHover
               : AppPalette.lightSurfaceHover);
@@ -207,7 +211,7 @@ class _TokenBarPainter extends CustomPainter {
             fontSize: 10,
             fontWeight: FontWeight.w500,
             color: today
-                ? AppPalette.brand
+                ? brand
                 : (isDark
                     ? AppPalette.darkTextMuted
                     : AppPalette.lightTextMuted),
@@ -232,5 +236,7 @@ class _TokenBarPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TokenBarPainter oldDelegate) =>
-      oldDelegate.values != values || oldDelegate.isDark != isDark;
+      oldDelegate.values != values ||
+      oldDelegate.isDark != isDark ||
+      oldDelegate.brand != brand;
 }

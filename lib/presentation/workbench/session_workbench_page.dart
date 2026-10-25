@@ -1,15 +1,14 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/chat_controller.dart';
 import '../../application/workbench/session_workbench.dart';
 import '../motion/nexus_page_route_factory.dart';
-import '../theme/app_appearance_controller.dart';
-import '../theme/app_palette.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import '../workspace/workspace_editor_page.dart';
@@ -25,7 +24,8 @@ class SessionWorkbenchPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final messages = ref.watch(chatControllerProvider.select((s) => s.messages));
+    final messages =
+        ref.watch(chatControllerProvider.select((s) => s.messages));
     final activities =
         ref.watch(chatControllerProvider.select((s) => s.toolActivities));
     final running = ref.watch(chatControllerProvider.select((s) => s.running));
@@ -76,18 +76,13 @@ class SessionWorkbenchView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final changed = workbench.files.where((f) => f.changed).length;
 
     return DefaultTabController(
       length: 2,
       initialIndex: initialTab.clamp(0, 1),
       child: Scaffold(
-        backgroundColor: isFlat
-            ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-            : Colors.transparent,
+        backgroundColor: MobileTheme.pageBackground(context),
         appBar: NexusPageHeader(
           title: '会话工作台',
           subtitle: title.isEmpty ? '当前会话' : title,
@@ -100,9 +95,14 @@ class SessionWorkbenchView extends StatelessWidget {
                     : '结果 (${workbench.turns.length})'),
           ]),
         ),
-        body: Column(
+        body: NexusPageLayout(
+            child: Column(
           children: [
-            WorkbenchStatusBar(status: workbench.status),
+            if (workbench.status.running ||
+                workbench.status.paused ||
+                workbench.status.pendingApprovals > 0 ||
+                workbench.status.failedTools > 0)
+              WorkbenchStatusBar(status: workbench.status),
             Expanded(
               child: TabBarView(children: [
                 _FilesTab(
@@ -114,7 +114,7 @@ class SessionWorkbenchView extends StatelessWidget {
               ]),
             ),
           ],
-        ),
+        )),
       ),
     );
   }
@@ -131,11 +131,17 @@ class WorkbenchStatusBar extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final (IconData icon, String label, Color color) = status.running
-        ? (Icons.play_circle_outline_rounded, status.stageLabel ?? '运行中',
-            scheme.primary)
+        ? (
+            Icons.play_circle_outline_rounded,
+            status.stageLabel ?? '运行中',
+            scheme.primary
+          )
         : status.paused
-            ? (Icons.pause_circle_outline_rounded, status.stageLabel ?? '已暂停',
-                scheme.tertiary)
+            ? (
+                Icons.pause_circle_outline_rounded,
+                status.stageLabel ?? '已暂停',
+                scheme.tertiary
+              )
             : (Icons.check_circle_outline_rounded, '空闲', scheme.outline);
     final chips = <String>[
       '${status.turns} 轮',
@@ -146,8 +152,8 @@ class WorkbenchStatusBar extends StatelessWidget {
     ];
     return SectionCard(
       key: const ValueKey('workbench_status_bar'),
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
           Icon(icon, size: 18, color: color),
@@ -227,20 +233,23 @@ class _FilesTab extends StatelessWidget {
       if (file.failures > 0) '失败 ${file.failures} 次',
     ];
     return SectionCard(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       padding: EdgeInsets.zero,
-      child: ListTile(
-        dense: true,
-        leading: Icon(workbenchChangeIcon(file.change),
-            color: file.failures > 0 &&
-                    file.change == WorkbenchFileChange.attempted
-                ? scheme.error
-                : file.changed
-                    ? scheme.primary
-                    : scheme.outline),
-        title: Text(file.path, maxLines: 2, overflow: TextOverflow.ellipsis),
-        subtitle: Text(details.join(' · ')),
-        onTap: () => _open(context, file),
+      child: Material(
+        color: Colors.transparent,
+        child: ListTile(
+          dense: true,
+          leading: Icon(workbenchChangeIcon(file.change),
+              color: file.failures > 0 &&
+                      file.change == WorkbenchFileChange.attempted
+                  ? scheme.error
+                  : file.changed
+                      ? scheme.primary
+                      : scheme.outline),
+          title: Text(file.path, maxLines: 2, overflow: TextOverflow.ellipsis),
+          subtitle: Text(details.join(' · ')),
+          onTap: () => _open(context, file),
+        ),
       ),
     );
   }
@@ -285,17 +294,18 @@ class _ResultsTab extends StatelessWidget {
       );
     }
     final textTheme = Theme.of(context).textTheme;
-    final faint = Theme.of(context).colorScheme.outline;
+    final faint = Theme.of(context).colorScheme.onSurfaceVariant;
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: turns.length,
       itemBuilder: (context, index) {
         final turn = turns[index];
         return SectionCard(
-          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
           padding: EdgeInsets.zero,
           child: InkWell(
-            onTap: turn.answer == null ? null : () => _showAnswer(context, turn),
+            onTap:
+                turn.answer == null ? null : () => _showAnswer(context, turn),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(

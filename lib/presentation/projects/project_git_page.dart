@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 
 import '../../application/git_service.dart';
 import '../theme/app_tokens.dart';
@@ -79,6 +80,33 @@ class _ProjectGitPageState extends State<ProjectGitPage> {
     }
   }
 
+  static String _statusName(String code) {
+    return switch (code) {
+      'M' => '修改',
+      'A' => '新增',
+      'D' => '删除',
+      'R' => '重命名',
+      'C' => '复制',
+      'U' => '冲突',
+      '?' => '未跟踪',
+      _ => code,
+    };
+  }
+
+  String _formatStatus(GitStatusEntry entry) {
+    final parts = <String>[];
+    if (entry.indexStatus != ' ' && entry.indexStatus != '?') {
+      parts.add('暂存区: ${_statusName(entry.indexStatus)}');
+    }
+    if (entry.workTreeStatus != ' ') {
+      parts.add('工作区: ${_statusName(entry.workTreeStatus)}');
+    }
+    if (parts.isEmpty) {
+      return '无变更 (${entry.indexStatus}${entry.workTreeStatus})';
+    }
+    return '${parts.join(" · ")} (${entry.indexStatus}${entry.workTreeStatus})';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -86,67 +114,67 @@ class _ProjectGitPageState extends State<ProjectGitPage> {
         title: 'Git',
         subtitle: '查看状态、按文件暂存并提交',
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         error: _error,
         onRetry: _reload,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                  children: [
-                    SectionCard(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          TextField(
-                            decoration: const InputDecoration(
-                              labelText: '提交说明',
-                              hintText: '只提交你勾选的文件',
-                            ),
-                            onChanged: (value) => _message = value,
-                          ),
-                          const SizedBox(height: 12),
-                          FilledButton(
-                            onPressed: _commit,
-                            child: const Text('暂存并提交所选文件'),
-                          ),
-                        ],
-                      ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+          children: [
+            SectionCard(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: '提交说明',
+                      hintText: '只提交你勾选的文件',
                     ),
-                    const SizedBox(height: AppTokens.sp4),
-                    if (_entries.isEmpty)
-                      const EmptyStateView(
-                        icon: Icons.check_circle_outline,
-                        title: '工作区干净',
-                        message: '没有可提交的改动。',
-                      )
-                    else
-                      SectionCard(
-                        child: Column(
-                          children: [
-                            for (final entry in _entries)
-                              NexusListTile(
-                                icon: _selected.contains(entry.path)
-                                    ? Icons.check_box
-                                    : Icons.check_box_outline_blank,
-                                title: entry.path,
-                                subtitle:
-                                    'index=${entry.indexStatus} worktree=${entry.workTreeStatus}',
-                                onTap: () {
-                                  setState(() {
-                                    if (_selected.contains(entry.path)) {
-                                      _selected.remove(entry.path);
-                                    } else {
-                                      _selected.add(entry.path);
-                                    }
-                                  });
-                                },
-                              ),
-                          ],
-                        ),
+                    onChanged: (value) => _message = value,
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _commit,
+                    child: const Text('暂存并提交所选文件'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppTokens.sp4),
+            if (_entries.isEmpty)
+              const EmptyStateView(
+                icon: Icons.check_circle_outline,
+                title: '工作区干净',
+                message: '没有可提交的改动。',
+              )
+            else
+              SectionCard(
+                child: Column(
+                  children: [
+                    for (final entry in _entries)
+                      NexusListTile(
+                        icon: _selected.contains(entry.path)
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                        title: entry.path,
+                        subtitle: _formatStatus(entry),
+                        onTap: () {
+                          setState(() {
+                            if (_selected.contains(entry.path)) {
+                              _selected.remove(entry.path);
+                            } else {
+                              _selected.add(entry.path);
+                            }
+                          });
+                        },
                       ),
                   ],
                 ),
-      ),
+              ),
+          ],
+        ),
+      )),
     );
   }
 }

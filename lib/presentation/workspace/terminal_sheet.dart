@@ -1,8 +1,11 @@
 import 'dart:async';
+import '../../application/bounded_log_buffer.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 
 import '../../infrastructure/tools/command_tool.dart';
 import '../motion/nexus_page_route_factory.dart';
@@ -18,9 +21,11 @@ class TerminalSheet extends StatefulWidget {
     required this.workspacePath,
     this.onReselectWorkspace,
     this.sharedService,
+    this.embedded = false,
   });
 
   final String workspacePath;
+  final bool embedded;
 
   /// 透传给文件树的“重新选择工作区”回调。
   final VoidCallback? onReselectWorkspace;
@@ -36,7 +41,13 @@ class _TerminalSheetState extends State<TerminalSheet> {
   late final TerminalCommandService _service;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  String _output = '';
+  final _logBuffer = BoundedLogBuffer();
+  String get _output => _logBuffer.text;
+  set _output(String text) {
+    _logBuffer.clear();
+    _logBuffer.append(text);
+  }
+
   bool _running = false;
   String? _activeJobId;
   int _lastSequence = -1;
@@ -55,16 +66,22 @@ class _TerminalSheetState extends State<TerminalSheet> {
   }
 
   Future<void> _bootstrap() async {
-    final info = await _service.inspectRuntime();
-    final session =
-        await _service.openSession(workingDirectory: widget.workspacePath);
-    if (!mounted) return;
-    setState(() {
-      _sessionId = session.id;
-      _runtimeLabel = info.available
-          ? '${info.label} · ${info.detail}'
-          : '${info.label} 不可用 · ${info.detail}';
-    });
+    try {
+      final info = await _service.inspectRuntime();
+      final session =
+          await _service.openSession(workingDirectory: widget.workspacePath);
+      if (!mounted) return;
+      setState(() {
+        _sessionId = session.id;
+        _runtimeLabel = info.available
+            ? '${info.label} · ${info.detail}'
+            : '${info.label} 不可用 · ${info.detail}';
+      });
+      final jobs = _service.listJobs();
+      if (jobs.isNotEmpty) await _selectJob(jobs.last.jobId);
+    } catch (error) {
+      if (mounted) setState(() => _runtimeLabel = '检测失败：$error');
+    }
   }
 
   @override
@@ -88,25 +105,30 @@ class _TerminalSheetState extends State<TerminalSheet> {
       _lastSequence = -1;
       _pendingChunk = '';
     });
-    final handle = await _service.startJob(
-      command: command,
-      workingDirectory: widget.workspacePath,
-    );
-    _activeJobId = handle.jobId;
-    if (!handle.liveOutput) {
-      _queueOutput('运行中，完成后返回日志\n');
-    }
-    _jobSub = _service.watchJob(handle.jobId).listen((event) {
-      if (event.sequence <= _lastSequence) return;
-      _lastSequence = event.sequence;
-      if (event.type == 'started') return;
-      if (event.type == 'completed' || event.type == 'timeout') {
-        _queueOutput('\n[退出码 ${event.exitCode ?? -1}]', flush: true);
-        if (mounted) setState(() => _running = false);
-        return;
+    try {
+      final handle = await _service.startJob(
+        command: command,
+        workingDirectory: widget.workspacePath,
+      );
+      _activeJobId = handle.jobId;
+      if (!handle.liveOutput) {
+        _queueOutput('运行中，完成后返回日志\n');
       }
-      _queueOutput(event.payload);
-    });
+      _jobSub = _service.watchJob(handle.jobId).listen((event) {
+        if (event.sequence <= _lastSequence) return;
+        _lastSequence = event.sequence;
+        if (event.type == 'started') return;
+        if (event.type == 'completed' || event.type == 'timeout') {
+          _queueOutput('\n[退出码 ${event.exitCode ?? -1}]', flush: true);
+          if (mounted) setState(() => _running = false);
+          return;
+        }
+        _queueOutput(event.payload);
+      });
+    } catch (error) {
+      _queueOutput('\n执行失败：$error', flush: true);
+      if (mounted) setState(() => _running = false);
+    }
   }
 
   void _queueOutput(String chunk, {bool flush = false}) {
@@ -123,10 +145,13 @@ class _TerminalSheetState extends State<TerminalSheet> {
     _flushTimer = null;
     if (!mounted || _pendingChunk.isEmpty) return;
     final chunk = _pendingChunk;
+    final following = !_scrollController.hasClients ||
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 24;
     _pendingChunk = '';
-    setState(() => _output += chunk);
+    setState(() => _logBuffer.append(chunk));
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (following && _scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
@@ -176,6 +201,93 @@ class _TerminalSheetState extends State<TerminalSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final jobs = _service.listJobs();
+    if (widget.embedded) {
+      final colors = DesktopTheme.maybeOf(context)!;
+      return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Column(children: [
+            Row(children: [
+              Expanded(
+                  child: Tooltip(
+                      message: widget.workspacePath,
+                      child: Text('手动命令 · $_runtimeLabel',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall))),
+              if (jobs.isNotEmpty)
+                PopupMenuButton<String>(
+                    tooltip: '切换命令作业',
+                    onSelected: _selectJob,
+                    itemBuilder: (_) => [
+                          for (final job in jobs)
+                            PopupMenuItem(
+                                value: job.jobId,
+                                child: Text(
+                                    '${job.command} · ${job.completed ? '退出 ${job.exitCode ?? '-'}' : '运行中'}'))
+                        ],
+                    child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Text('${jobs.length} 个作业',
+                            style: theme.textTheme.bodySmall))),
+              IconButton(
+                  tooltip: '清空显示（不停止作业）',
+                  onPressed: _clearDisplay,
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 16)),
+            ]),
+            Expanded(
+                child: Container(
+                    width: double.infinity,
+                    color: colors.canvas,
+                    child: SelectionArea(
+                        child: ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            itemCount: _logBuffer.lines.isEmpty
+                                ? 1
+                                : _logBuffer.lines.length +
+                                    (_logBuffer.droppedCharacters > 0 ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (_logBuffer.lines.isEmpty) {
+                                return const Text('在当前项目目录执行命令，输出保留在此面板。');
+                              }
+                              if (_logBuffer.droppedCharacters > 0 &&
+                                  index == 0) {
+                                return const Text('仅显示最近日志；完整输出可在作业记录中查看。');
+                              }
+                              final line = index -
+                                  (_logBuffer.droppedCharacters > 0 ? 1 : 0);
+                              return Text(_logBuffer.lines[line],
+                                  style: DesktopTheme.monospaceStyle(context,
+                                      size: DesktopTheme.smallSize));
+                            })))),
+            const SizedBox(height: 4),
+            Row(children: [
+              Expanded(
+                  child: TextField(
+                      controller: _controller,
+                      enabled: !_running,
+                      onSubmitted: (_) => _run(),
+                      style: DesktopTheme.monospaceStyle(context,
+                          size: DesktopTheme.smallSize),
+                      decoration: const InputDecoration(
+                          hintText: '例如 git status',
+                          prefixText: '> ',
+                          isDense: true))),
+              const SizedBox(width: 8),
+              IconButton(
+                  tooltip: _running ? '停止当前作业' : '运行命令',
+                  onPressed: _running
+                      ? () {
+                          final id = _activeJobId;
+                          if (id != null) _cancelJob(id);
+                        }
+                      : _run,
+                  icon: Icon(
+                      _running ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                      size: 16))
+            ]),
+          ]));
+    }
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -191,7 +303,7 @@ class _TerminalSheetState extends State<TerminalSheet> {
                           TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
                 ),
                 IconButton(
-                  tooltip: '打开全屏交互终端 (PTY)',
+                  tooltip: '打开远程交互终端',
                   icon: const Icon(Icons.open_in_new_rounded),
                   onPressed: () {
                     // 先收起 Sheet 再推入全屏页：让整屏转场作用在 Sheet 下方的
@@ -229,11 +341,27 @@ class _TerminalSheetState extends State<TerminalSheet> {
                 ),
               ],
             ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(widget.workspacePath,
-                  style: theme.textTheme.bodySmall,
-                  overflow: TextOverflow.ellipsis),
+            Row(
+              children: [
+                Expanded(
+                  child: SelectableText(
+                    widget.workspacePath,
+                    maxLines: 2,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                IconButton(
+                  tooltip: '复制项目路径',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    Clipboard.setData(
+                      ClipboardData(text: widget.workspacePath),
+                    );
+                    FloatingToast.show(context, '项目路径已复制');
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Align(

@@ -1,8 +1,10 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/environment_service.dart';
 import '../../infrastructure/terminal/linux_runtime.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_status_colors.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/section_card.dart';
 
@@ -45,7 +47,9 @@ class EnvironmentStatusView extends StatelessWidget {
             Text(snapshot.scenarioLabel, style: theme.textTheme.titleSmall),
             const SizedBox(height: 4),
             Text(
-              '${snapshot.selected.label} · ${snapshot.architecture}',
+              compact
+                  ? '当前运行时：${snapshot.selected.label}'
+                  : '${snapshot.selected.label} · ${snapshot.architecture}',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
@@ -97,7 +101,7 @@ class EnvironmentStatusView extends StatelessWidget {
                 ),
               ],
             ),
-            if (selectedTools.isNotEmpty) ...[
+            if (selectedTools.isNotEmpty && (!compact || toolIds != null)) ...[
               const SizedBox(height: 12),
               Text(
                 toolSectionTitle ?? '工具探测（当前运行时：${snapshot.selected.label}）',
@@ -123,7 +127,7 @@ class EnvironmentStatusView extends StatelessWidget {
                     isSelected:
                         candidate.runtime.kind == snapshot.selected.kind,
                   ),
-            if (showGlobalMissing) ...[
+            if (showGlobalMissing && !compact) ...[
               const SizedBox(height: 10),
               Text('全局缺失（所有可用运行时）', style: theme.textTheme.labelLarge),
               const SizedBox(height: 6),
@@ -234,19 +238,34 @@ class EnvironmentStatusView extends StatelessWidget {
     Color color, {
     double? maxWidth,
   }) {
-    final text = Text(
-      label,
-      softWrap: true,
-      style: TextStyle(color: color, fontSize: 12),
-    );
-    return Container(
-      constraints: maxWidth == null ? null : BoxConstraints(maxWidth: maxWidth),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-      ),
-      child: text,
+    return Builder(
+      builder: (context) {
+        final highContrast = MediaQuery.maybeHighContrastOf(context) ?? false;
+        final colors = AppStatusColors.resolve(
+            context,
+            switch (color) {
+              AppPalette.success => AppStatusTone.success,
+              AppPalette.warning => AppStatusTone.warning,
+              AppPalette.danger => AppStatusTone.danger,
+              _ => AppStatusTone.neutral,
+            });
+        return Container(
+          constraints:
+              maxWidth == null ? null : BoxConstraints(maxWidth: maxWidth),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: colors.background,
+            borderRadius:
+                BorderRadius.circular(MobileTheme.controlRadius(context)),
+            border: highContrast ? Border.all(color: colors.foreground) : null,
+          ),
+          child: Text(
+            label,
+            softWrap: true,
+            style: TextStyle(color: colors.foreground, fontSize: 12),
+          ),
+        );
+      },
     );
   }
 }

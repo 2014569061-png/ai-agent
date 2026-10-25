@@ -1,7 +1,9 @@
+import '../widgets/nexus_disclosure.dart';
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -21,10 +23,12 @@ import '../motion/nexus_page_route_factory.dart';
 import '../tasks/task_details_page.dart';
 import '../terminal/terminal_page.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
+import '../widgets/nexus_page_layout.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
@@ -34,6 +38,7 @@ import '../../application/preview_service.dart';
 import 'project_change_set_page.dart';
 import 'project_git_page.dart';
 import 'remote_execution_page.dart';
+import 'static_web_delivery_page.dart';
 import '../workspace/development_workbench_page.dart';
 import '../workspace/file_tree_sheet.dart';
 import '../workspace/terminal_sheet.dart';
@@ -42,9 +47,11 @@ import '../workspace/workspace_editor_page.dart';
 import '../widgets/nexus_sheet.dart';
 
 class ProjectHomePage extends ConsumerStatefulWidget {
-  const ProjectHomePage({super.key, required this.projectId});
+  const ProjectHomePage(
+      {super.key, required this.projectId, this.onContinueInChat});
 
   final String projectId;
+  final VoidCallback? onContinueInChat;
 
   @override
   ConsumerState<ProjectHomePage> createState() => _ProjectHomePageState();
@@ -69,6 +76,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
   InstallJob? _installJob;
   bool _installing = false;
   PreviewSession? _preview;
+  bool _previewBusy = false;
   PreviewService? _previewService;
   List<ProjectArtifact> _recordedArtifacts = const [];
 
@@ -83,7 +91,11 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
   void dispose() {
     _tabs.dispose();
     final previewService = _previewService;
-    if (previewService != null) unawaited(previewService.stop());
+    if (previewService != null) {
+      unawaited(previewService.stop().catchError((Object error) {
+        debugPrint('页面退出时预览停止未确认：$error');
+      }));
+    }
     _terminal?.stop();
     super.dispose();
   }
@@ -124,7 +136,16 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
       unawaited(_loadFiles(project, generation));
       unawaited(_loadTasks(project, generation));
       unawaited(_loadArtifacts(project, generation));
-      unawaited(_loadEnvironment(generation));
+      if (ProjectKindX.parse(project.projectKind) == ProjectKind.staticWeb) {
+        // Static delivery uses the in-app HTTP server, not a Linux toolchain.
+        setState(() {
+          _environment = null;
+          _environmentError = null;
+          _environmentLoading = false;
+        });
+      } else {
+        unawaited(_loadEnvironment(generation));
+      }
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
@@ -223,7 +244,12 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
     final project = _project;
     if (project == null) return;
     await ref.read(chatControllerProvider.notifier).openProject(project);
-    if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    if (!mounted) return;
+    if (widget.onContinueInChat != null) {
+      widget.onContinueInChat!();
+    } else {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 
   @override
@@ -232,7 +258,10 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
     return Scaffold(
       appBar: NexusPageHeader(
         title: project?.name ?? '项目',
-        subtitle: project == null
+        subtitle: project == null ||
+                (DesktopTheme.maybeOf(context) == null &&
+                    project.name ==
+                        ProjectKindX.parse(project.projectKind).label)
             ? null
             : ProjectKindX.parse(project.projectKind).label,
         actions: [
@@ -254,7 +283,8 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
           ],
         ),
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         error: _error,
         onRetry: _reload,
@@ -270,46 +300,193 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
                   _artifactsTab(project),
                 ],
               ),
-      ),
+      )),
+    );
+  }
+
+  Widget _overviewDetails({
+    required bool mobile,
+    required String title,
+    required Widget child,
+    IconData? icon,
+    String? subtitle,
+    EdgeInsetsGeometry? headerPadding,
+  }) {
+    if (!mobile) return child;
+    final theme = Theme.of(context);
+    return NexusDisclosure(
+      headerPadding: headerPadding ??
+          const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      contentPadding: EdgeInsets.only(top: icon != null ? 0 : 8),
+      leading: icon == null
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 20, color: theme.colorScheme.primary),
+              ),
+            ),
+      title: subtitle == null
+          ? Text(title, style: const TextStyle(fontSize: 15))
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+      child: child,
     );
   }
 
   Widget _overview(Project project) {
+    // Match the accepted mobile prototype without changing desktop density or
+    // the real loading, navigation and execution contracts below.
+    final mobile = DesktopTheme.maybeOf(context) == null;
+    final sectionGap = mobile ? 12.0 : AppTokens.sp4;
+    final contentRadius = mobile ? BorderRadius.circular(24) : null;
+    final toolPadding = mobile
+        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 10)
+        : const EdgeInsets.symmetric(horizontal: 16, vertical: 12);
     final settings = ProjectSettings.decode(project.settingsJson);
     final accessible = Directory(project.canonicalRootPath).existsSync();
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      key: const ValueKey('project-home-overview-scroll'),
+      padding: EdgeInsets.fromLTRB(
+          mobile ? 20 : 16, 12, mobile ? 20 : 16, mobile ? 24 : 32),
       children: [
         SectionCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(project.name,
-                  style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 6),
-              Text(project.canonicalRootPath,
-                  style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+          key: const ValueKey('project-home-directory'),
+          glass: mobile ? false : null,
+          borderRadius: contentRadius,
+          padding: mobile
+              ? const EdgeInsets.symmetric(horizontal: 8, vertical: 2)
+              : const EdgeInsets.all(16),
+          child: _overviewDetails(
+              mobile: mobile,
+              title: accessible ? '项目位置与信息' : '项目位置 · 目录不可访问',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _chip(ProjectKindX.parse(project.projectKind).label),
-                  _chip(accessible ? '目录可访问' : '目录失效'),
-                  _chip(project.sourceKind),
+                  Row(
+                    crossAxisAlignment: mobile
+                        ? CrossAxisAlignment.center
+                        : CrossAxisAlignment.start,
+                    children: [
+                      if (mobile) ...[
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.code_rounded,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.primary),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '项目目录',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            if (!mobile) ...[
+                              const SizedBox(height: 4),
+                              SelectableText(
+                                key: const ValueKey('project-home-path'),
+                                project.canonicalRootPath,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '复制项目路径',
+                        constraints: mobile
+                            ? const BoxConstraints(minWidth: 48, minHeight: 48)
+                            : null,
+                        icon: const Icon(Icons.copy_rounded, size: 20),
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: project.canonicalRootPath),
+                          );
+                          if (mounted) {
+                            FloatingToast.show(context, '项目路径已复制',
+                                tone: ToastTone.success);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  if (mobile) ...[
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      key: const ValueKey('project-home-path'),
+                      project.canonicalRootPath,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            height: 1.5,
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                  SizedBox(height: mobile ? 10 : 12),
+                  Wrap(
+                    spacing: mobile ? 6 : 8,
+                    runSpacing: mobile ? 6 : 8,
+                    children: [
+                      _chip(ProjectKindX.parse(project.projectKind).label),
+                      _chip(accessible ? '目录可访问' : '目录失效'),
+                      _chip(project.sourceKind),
+                    ],
+                  ),
                 ],
-              ),
-            ],
-          ),
+              )),
         ),
-        const SizedBox(height: AppTokens.sp4),
+        SizedBox(height: sectionGap),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
             onPressed: _continueInChat,
             style: FilledButton.styleFrom(
-              minimumSize: const Size.fromHeight(AppTokens.kControlHeight),
+              minimumSize:
+                  Size.fromHeight(mobile ? 48 : AppTokens.kControlHeight),
+              padding: mobile
+                  ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+                  : null,
+              shape: mobile
+                  ? RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16))
+                  : null,
             ),
             icon: const Icon(Icons.chat_bubble_outline),
             label: const Text('继续开发此项目'),
@@ -318,70 +495,112 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
         if (_environmentLoading ||
             _environment != null ||
             _environmentError != null) ...[
-          const SizedBox(height: AppTokens.sp4),
+          SizedBox(height: sectionGap),
           SectionCard(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('运行环境', style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 8),
-                if (_environmentLoading)
-                  const ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    title: Text('正在检查本机环境…'),
-                  )
-                else if (_environmentError != null)
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.warning_amber_outlined),
-                    title: const Text('环境检查失败'),
-                    subtitle: Text(_environmentError!),
-                    trailing: TextButton(
-                      onPressed: _reload,
-                      child: const Text('重试'),
-                    ),
-                  )
-                else
-                  EnvironmentStatusView(
-                    snapshot: _environment!,
-                    compact: true,
-                  ),
-                if (!_environmentLoading &&
-                    _environmentError == null &&
-                    _blockedReason(project) != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    '缺失能力：${_blockedReason(project)}',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.tonal(
-                    onPressed: _installing ? null : () => _planInstall(project),
-                    child: const Text('安装缺失项'),
-                  ),
-                ],
-              ],
-            ),
+            key: const ValueKey('project-home-environment'),
+            glass: mobile ? false : null,
+            borderRadius: contentRadius,
+            padding: mobile
+                ? const EdgeInsets.symmetric(horizontal: 8, vertical: 2)
+                : const EdgeInsets.all(16),
+            child: _overviewDetails(
+                mobile: mobile,
+                title: _environmentError != null
+                    ? '运行环境 · 检查失败'
+                    : _environmentLoading
+                        ? '运行环境 · 检查中'
+                        : _blockedReason(project) != null
+                            ? '运行环境 · 需要配置'
+                            : '运行环境与能力',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('运行环境', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    if (_environmentLoading)
+                      const ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        title: Text('正在检查本机环境…'),
+                      )
+                    else if (_environmentError != null)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.warning_amber_outlined),
+                        title: const Text('环境检查失败'),
+                        subtitle: Text(_environmentError!),
+                        trailing: TextButton(
+                          onPressed: _reload,
+                          child: const Text('重试'),
+                        ),
+                      )
+                    else
+                      EnvironmentStatusView(
+                        snapshot: _environment!,
+                        compact: true,
+                      ),
+                    if (!_environmentLoading &&
+                        _environmentError == null &&
+                        _blockedReason(project) != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '缺失能力：${_blockedReason(project)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.tonal(
+                        onPressed:
+                            _installing ? null : () => _planInstall(project),
+                        child: const Text('安装缺失项'),
+                      ),
+                    ],
+                  ],
+                )),
           ),
         ],
-        const SizedBox(height: AppTokens.sp4),
+        SizedBox(height: sectionGap),
         Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          padding: EdgeInsets.only(left: 4, bottom: mobile ? 6 : 8),
           child: Text('项目工具', style: Theme.of(context).textTheme.titleSmall),
         ),
         SectionCard(
+          key: const ValueKey('project-home-tools'),
+          glass: mobile ? false : null,
+          borderRadius: contentRadius,
           child: Column(
             children: [
+              if (ProjectKindX.parse(project.projectKind) ==
+                  ProjectKind.staticWeb)
+                NexusListTile(
+                  key: const ValueKey('project-web-delivery'),
+                  icon: Icons.web_outlined,
+                  padding: toolPadding,
+                  showDivider: mobile,
+                  title: '网页预览与交付',
+                  subtitle: '本机预览、编辑文件、核对并导出 ZIP',
+                  onTap: !accessible
+                      ? null
+                      : () async {
+                          await Navigator.of(context)
+                              .push(NexusPageRoute.workspace(
+                            builder: (_) => StaticWebDeliveryPage(
+                                projectId: project.id,
+                                workspacePath: project.canonicalRootPath,
+                                projectName: project.name),
+                          ));
+                          if (mounted) unawaited(_reload());
+                        },
+                ),
               NexusListTile(
                 icon: Icons.play_circle_outline,
+                padding: toolPadding,
+                showDivider: mobile,
                 title: '打开开发工作台',
-                subtitle: '在工作台运行预览、执行验证',
+                subtitle: '识别项目并执行验证',
                 onTap: accessible
                     ? () {
                         Navigator.of(context).push(NexusPageRoute.workspace(
@@ -396,49 +615,75 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
                             tone: ToastTone.warning);
                       },
               ),
-              NexusListTile(
-                icon: Icons.account_tree_outlined,
-                title: 'Git',
-                subtitle: '状态、按文件暂存和提交',
-                onTap: () {
-                  Navigator.of(context).push(NexusPageRoute.workspace(
-                    builder: (_) => ProjectGitPage(
-                      workspacePath: project.canonicalRootPath,
+              _overviewDetails(
+                  mobile: mobile,
+                  icon: Icons.account_tree_outlined,
+                  title: 'Git、变更与远程',
+                  subtitle: '分支状态、变更集回退与远程连接验证',
+                  headerPadding: toolPadding,
+                  child: Column(children: [
+                    NexusListTile(
+                      icon: Icons.account_tree_outlined,
+                      padding: toolPadding,
+                      showDivider: mobile,
+                      title: 'Git',
+                      subtitle: '状态、按文件暂存和提交',
+                      onTap: () {
+                        Navigator.of(context).push(NexusPageRoute.workspace(
+                          builder: (_) => ProjectGitPage(
+                            workspacePath: project.canonicalRootPath,
+                          ),
+                        ));
+                      },
                     ),
-                  ));
-                },
-              ),
-              NexusListTile(
-                icon: Icons.difference_outlined,
-                title: '任务变更集',
-                subtitle: '回退本任务改动，人工修改不会覆盖',
-                onTap: () {
-                  Navigator.of(context).push(NexusPageRoute.workspace(
-                    builder: (_) => ProjectChangeSetPage(
-                      projectId: project.id,
-                      workspacePath: project.canonicalRootPath,
+                    NexusListTile(
+                      icon: Icons.difference_outlined,
+                      padding: toolPadding,
+                      showDivider: mobile,
+                      title: '任务变更集',
+                      subtitle: '选择具体任务回退，人工修改不会覆盖',
+                      onTap: () {
+                        Navigator.of(context).push(NexusPageRoute.workspace(
+                          builder: (_) => ProjectChangeSetPage(
+                            projectId: project.id,
+                            workspacePath: project.canonicalRootPath,
+                          ),
+                        ));
+                      },
                     ),
-                  ));
-                },
-              ),
-              NexusListTile(
-                icon: Icons.cloud_outlined,
-                title: '远程执行验证',
-                subtitle: '握手后再决定是否同步代码',
-                onTap: () {
-                  Navigator.of(context).push(NexusPageRoute.detail(
-                    builder: (_) => const RemoteExecutionPage(),
-                  ));
-                },
-              ),
+                    NexusListTile(
+                      icon: Icons.cloud_outlined,
+                      padding: toolPadding,
+                      showDivider:
+                          mobile && settings.previewCommand?.isNotEmpty == true,
+                      title: '远程执行验证',
+                      subtitle: mobile ? '验证电脑端连接，不会同步代码' : '握手后再决定是否同步代码',
+                      onTap: () {
+                        Navigator.of(context).push(NexusPageRoute.detail(
+                          builder: (_) => const RemoteExecutionPage(),
+                        ));
+                      },
+                    ),
+                  ])),
               if (settings.previewCommand?.isNotEmpty == true)
                 NexusListTile(
                   icon: Icons.language_outlined,
-                  title: _preview == null ? '启动预览服务' : '预览 ${_preview!.url}',
+                  padding: toolPadding,
+                  showDivider: false,
+                  title: _previewBusy
+                      ? '正在处理预览…'
+                      : _preview == null
+                          ? ProjectKindX.parse(project.projectKind) ==
+                                  ProjectKind.staticWeb
+                              ? '启动自定义预览服务'
+                              : '启动预览服务'
+                          : '预览 ${_preview!.url}',
                   subtitle: _preview == null
                       ? '默认监听 127.0.0.1'
                       : 'job ${_preview!.jobId}',
-                  onTap: () => _togglePreview(project, settings),
+                  onTap: _previewBusy
+                      ? null
+                      : () => _togglePreview(project, settings),
                 ),
             ],
           ),
@@ -457,7 +702,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
       );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       children: [
         SectionCard(
           child: Column(
@@ -468,14 +713,14 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
                 subtitle: '预览文本并引用到对话',
                 onTap: () {
                   showNexusSheet<void>(
-context: context,
-isScrollControlled: true,
-builder: (sheetContext) => WorkspaceSheetFrame(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (sheetContext) => WorkspaceSheetFrame(
                       child: FileTreeSheet(
                         workspacePath: project.canonicalRootPath,
                       ),
                     ),
-);
+                  );
                 },
               ),
               for (final entity in _files.take(40))
@@ -506,13 +751,13 @@ builder: (sheetContext) => WorkspaceSheetFrame(
 
   Widget _terminalTab(Project project) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       children: [
         SectionCard(
           child: NexusListTile(
             icon: Icons.terminal_rounded,
-            title: '全屏交互终端 (PTY)',
-            subtitle: '实时 SSH/PTY 会话，支持 Vim、Node、Python 及移动辅助键盘',
+            title: '远程交互终端',
+            subtitle: '连接 SSH/PTY 会话，支持 Vim、Node、Python 和移动辅助键盘',
             onTap: () {
               Navigator.push(
                 context,
@@ -527,22 +772,22 @@ builder: (sheetContext) => WorkspaceSheetFrame(
         SectionCard(
           child: NexusListTile(
             icon: Icons.splitscreen_outlined,
-            title: '终端作业面板 (Sheet)',
-            subtitle: '在项目目录中执行构建命令与后台作业管理',
+            title: '项目命令与作业',
+            subtitle: '在当前项目目录执行构建命令并管理后台作业',
             onTap: () {
               _terminal ??= TerminalCommandService(
                 workspacePath: project.canonicalRootPath,
               );
               showNexusSheet<void>(
-context: context,
-isScrollControlled: true,
-builder: (_) => WorkspaceSheetFrame(
+                context: context,
+                isScrollControlled: true,
+                builder: (_) => WorkspaceSheetFrame(
                   child: TerminalSheet(
                     workspacePath: project.canonicalRootPath,
                     sharedService: _terminal,
                   ),
                 ),
-);
+              );
             },
           ),
         ),
@@ -560,7 +805,7 @@ builder: (_) => WorkspaceSheetFrame(
       );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       children: [
         SectionCard(
           child: Column(
@@ -575,11 +820,33 @@ builder: (_) => WorkspaceSheetFrame(
 
   Widget _projectTaskTile(Task task) {
     final info = TaskService().describe(task);
+    final project = _project;
     return NexusListTile(
       icon: Icons.task_alt_outlined,
       title: info.title,
       subtitle: TaskService.taskTypeLabel(info.type),
-      trailing: NexusStatusPill.fromString(info.status, isCompact: true),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          NexusStatusPill.fromString(info.status, isCompact: true),
+          IconButton(
+            tooltip: '回退本任务改动',
+            icon: const Icon(Icons.difference_outlined),
+            onPressed: project == null
+                ? null
+                : () {
+                    Navigator.of(context).push(NexusPageRoute.workspace(
+                      builder: (_) => ProjectChangeSetPage(
+                        projectId: project.id,
+                        workspacePath: project.canonicalRootPath,
+                        taskId: task.id,
+                        taskLabel: info.title,
+                      ),
+                    ));
+                  },
+          ),
+        ],
+      ),
       onTap: () {
         Navigator.of(context).push(NexusPageRoute.detail(
           builder: (_) => TaskDetailsPage(task: info),
@@ -598,7 +865,7 @@ builder: (_) => WorkspaceSheetFrame(
       );
     }
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
       children: [
         SectionCard(
           child: Column(
@@ -609,17 +876,26 @@ builder: (_) => WorkspaceSheetFrame(
                       ? Icons.android_outlined
                       : Icons.inventory_2_outlined,
                   title: artifact.relativePath,
-                  subtitle:
-                      '${artifact.kind} · ${artifact.bytes} bytes · task ${artifact.taskId}',
-                  onTap: () => _openArtifactTask(artifact),
+                  subtitle: '${_artifactKindLabel(artifact.kind)} · '
+                      '${artifact.bytes} bytes · '
+                      '${artifact.taskId == 'manual' ? '手动验证' : '任务产物'}',
+                  onTap: artifact.taskId == 'manual'
+                      ? () => _copyArtifactPath(project, artifact)
+                      : () => _openArtifactTask(artifact),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        tooltip: '查看所属任务结果',
-                        icon: const Icon(Icons.open_in_new_rounded),
-                        onPressed: () => _openArtifactTask(artifact),
+                        tooltip: '复制产物路径',
+                        icon: const Icon(Icons.copy_rounded),
+                        onPressed: () => _copyArtifactPath(project, artifact),
                       ),
+                      if (artifact.taskId != 'manual')
+                        IconButton(
+                          tooltip: '查看所属任务结果',
+                          icon: const Icon(Icons.open_in_new_rounded),
+                          onPressed: () => _openArtifactTask(artifact),
+                        ),
                       if (artifact.kind == 'apk')
                         IconButton(
                           tooltip: '安装 APK',
@@ -650,6 +926,30 @@ builder: (_) => WorkspaceSheetFrame(
     );
   }
 
+  String _artifactKindLabel(String kind) => switch (kind.toLowerCase()) {
+        'apk' => 'APK',
+        'web' => '网页',
+        'archive' => '压缩包',
+        _ => '文件',
+      };
+
+  Future<void> _copyArtifactPath(
+      Project project, ProjectArtifact artifact) async {
+    try {
+      final file = await const ArtifactService().verifiedPayload(artifact);
+      await Clipboard.setData(ClipboardData(text: file.path));
+      if (mounted) {
+        FloatingToast.show(context, '已复制校验副本的本地路径；对外使用请在成果中心分享',
+            tone: ToastTone.success);
+      }
+    } catch (_) {
+      if (mounted) {
+        FloatingToast.show(context, '成果副本缺失或已变化，请重新生成',
+            tone: ToastTone.warning);
+      }
+    }
+  }
+
   Future<void> _openArtifactTask(ProjectArtifact artifact) async {
     try {
       final db = await ref.read(databaseProvider.future);
@@ -671,7 +971,8 @@ builder: (_) => WorkspaceSheetFrame(
 
   Future<void> _togglePreview(Project project, ProjectSettings settings) async {
     final command = settings.previewCommand;
-    if (command == null || command.isEmpty) return;
+    if (_previewBusy || command == null || command.isEmpty) return;
+    setState(() => _previewBusy = true);
     try {
       _terminal ??= TerminalCommandService(
         workspacePath: project.canonicalRootPath,
@@ -682,6 +983,7 @@ builder: (_) => WorkspaceSheetFrame(
       );
       if (_preview != null) {
         await _previewService!.stop();
+        if (!mounted) return;
         setState(() => _preview = null);
         return;
       }
@@ -700,12 +1002,23 @@ builder: (_) => WorkspaceSheetFrame(
       if (mounted) {
         FloatingToast.show(context, '预览失败：$error', tone: ToastTone.warning);
       }
+    } finally {
+      if (mounted) setState(() => _previewBusy = false);
     }
   }
 
   Future<void> _installRecordedArtifact(
       Project project, ProjectArtifact artifact) async {
-    final path = p.join(project.canonicalRootPath, artifact.relativePath);
+    String path;
+    try {
+      path = (await const ArtifactService().verifiedPayload(artifact)).path;
+    } catch (_) {
+      if (mounted) {
+        FloatingToast.show(context, '成果副本缺失或已变化，未启动安装',
+            tone: ToastTone.warning);
+      }
+      return;
+    }
     final result = await const ApkInstallBridge().install(path);
     if (!mounted) return;
     final message = switch (result.status) {
@@ -753,9 +1066,9 @@ builder: (_) => WorkspaceSheetFrame(
     setState(() => _installJob = job);
     if (!mounted) return;
     await showNexusSheet<void>(
-context: context,
-isScrollControlled: true,
-builder: (sheetContext) {
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             return InstallJobSheet(
@@ -770,13 +1083,13 @@ builder: (sheetContext) {
           },
         );
       },
-);
+    );
   }
 
   Future<String?> _chooseLockfile(LockfileConflict conflict) {
     return showNexusSheet<String>(
-context: context,
-builder: (context) => SafeArea(
+      context: context,
+      builder: (context) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -790,7 +1103,7 @@ builder: (context) => SafeArea(
           ],
         ),
       ),
-);
+    );
   }
 
   Future<void> _runInstall(
@@ -829,11 +1142,13 @@ builder: (context) => SafeArea(
   }
 
   Widget _chip(String label) {
+    final mobile = DesktopTheme.maybeOf(context) == null;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: mobile ? 8 : 10, vertical: 4),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius:
+            BorderRadius.circular(mobile ? AppTokens.radiusControl : 999),
       ),
       child: Text(label, style: Theme.of(context).textTheme.labelSmall),
     );

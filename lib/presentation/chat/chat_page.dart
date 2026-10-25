@@ -1,3 +1,14 @@
+import '../navigation/mobile_navigation_scope.dart';
+import '../theme/mobile_theme.dart';
+import '../navigation/assistant_entry_surface.dart';
+import '../browser/browser_page.dart';
+import '../voice/speech_capture_sheet.dart';
+import '../../application/speech_submission_guard.dart';
+import '../navigation/assistant_input_review_sheet.dart';
+import '../../infrastructure/share/assistant_entry.dart';
+import '../../application/assistant_role.dart';
+import '../../application/assistant_entry_delivery.dart';
+import '../../application/run_approval_scope.dart';
 import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
 import 'dart:async';
@@ -8,6 +19,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
+import '../navigation/desktop_chat_bridge.dart';
+import '../navigation/desktop_workbench_panels.dart' show DesktopCitationStrip;
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,15 +32,21 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../application/attachment_policy.dart';
+import '../../application/desktop_host_service.dart';
 import '../../application/chat_controller.dart';
 import '../../application/context_compression_planner.dart';
 import '../../application/draft_service.dart';
 import '../../application/error_humanizer.dart';
+import '../../application/nexus_guard.dart';
+import '../../application/log_service.dart';
 import '../../application/file_citation.dart';
+import '../../application/personal_context_service.dart';
 import '../../application/project_context_service.dart';
 import '../../application/app_lock_service.dart';
+import '../../application/foreground_approval_guard.dart';
 import '../../application/providers.dart';
 import '../../application/task_service.dart';
+import '../../application/run_recovery_safety.dart';
 import '../../domain/attachment_file.dart';
 import '../../domain/unique_id.dart';
 import '../../domain/context_insights.dart';
@@ -43,14 +63,14 @@ import '../../infrastructure/skills/skill_parser.dart';
 import '../../infrastructure/tts/tts_service.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
 import '../../infrastructure/share/deep_link_service.dart';
-import '../../infrastructure/share/sharing_service.dart';
 import '../../infrastructure/notifications/notification_intent.dart';
 import '../agents/agents_page.dart';
-import '../dashboard/dashboard_page.dart';
 import '../dashboard/widgets/token_numbers.dart';
 import '../history/history_page.dart';
+import '../jobs/jobs_inbox_page.dart';
 import '../tasks/development_tasks_page.dart';
 import '../tasks/task_details_page.dart';
+import '../scheduled/scheduled_tasks_page.dart';
 import '../memory/memory_page.dart';
 import '../mcp/mcp_servers_page.dart';
 import '../widgets/image_cache_policy.dart';
@@ -81,7 +101,7 @@ import 'widgets/session_metrics_bar.dart';
 import 'widgets/provider_setup_hint.dart';
 import 'widgets/composer_skill_slot.dart';
 import 'widgets/session_metrics_sheet.dart';
-import '../../../infrastructure/background_service.dart';
+import '../../infrastructure/background_service.dart';
 import 'widgets/session_configuration_sheet.dart';
 import 'widgets/capsule_top_bar.dart';
 import 'widgets/chat_empty_state.dart';
@@ -89,6 +109,8 @@ import 'widgets/chat_message_list.dart';
 import 'widgets/conversation_restore_skeleton.dart';
 import 'widgets/model_picker_sheet.dart';
 import 'widgets/tool_activity_section.dart';
+import 'widgets/conversation_result_timeline.dart';
+import '../../infrastructure/database/conversation_result_store.dart';
 import 'widgets/skill_suggestion_bar.dart';
 import 'widgets/chat_catalog_drawer.dart';
 import '../widgets/nexus_sheet.dart';
@@ -132,7 +154,8 @@ bool shouldStopSpeakingOnSwitch(
     speakingHere && previous.conversationId != next.conversationId;
 
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key});
+  const ChatPage({super.key, this.desktopBridge});
+  final DesktopChatBridge? desktopBridge;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -141,6 +164,12 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage>
     with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final GlobalKey<_DrawerBackGuardState> _drawerBackGuardKey =
+      GlobalKey<_DrawerBackGuardState>();
+  bool get _embeddedDesktop =>
+      widget.desktopBridge != null &&
+      DesktopTheme.maybeOf(context) != null &&
+      MediaQuery.sizeOf(context).width >= 900;
 
   Future<void> _pickWorkspace() async {
     // 与项目页保持一致：不把「所有文件访问权限」挡在目录选择器之前。
@@ -257,6 +286,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
     }
   }
 
+  StreamSubscription<List<String>>? _desktopDropSubscription;
+  StreamSubscription<Uint8List>? _desktopImageSubscription;
   final _controller = TextEditingController();
   final _draftService = const DraftService();
   Timer? _draftPersistTimer;
@@ -281,16 +312,20 @@ class _ChatPageState extends ConsumerState<ChatPage>
   late final ChatScrollCoordinator _scrollIndicator;
   bool _deepLinkScheduled = false;
   bool _handlingDeepLink = false;
+  bool _entryUnlockConfirmed = false;
+  bool _entryUnlockInFlight = false;
+  bool _entryForeground = true;
+  int _entryUnlockEpoch = 0;
 
   bool _longPressHintShown = false;
   final Map<String, String> _draftsByConversation = <String, String>{};
-  StreamSubscription<List<String>>? _shareSub;
-  StreamSubscription<NotificationIntent>? _notificationIntentSub;
   StreamSubscription<void>? _skillChangesSub;
   int _skillLoadGeneration = 0;
   String _pendingTaskType = 'general';
   String _pendingSourceType = 'manual';
   final Map<String, Completer<ToolApproval>> _pendingToolApprovals = {};
+  final Map<String, RunApprovalScope> _pendingApprovalScopes = {};
+  final Map<String, ToolCall> _pendingApprovalCalls = {};
 
   /// 处于「文本选择模式」的消息索引（null = 无）。
   /// 正文默认不可选，否则长按会被文本选择器截走、消息菜单永远打不开。
@@ -316,9 +351,45 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   final BackgroundService _backgroundService = BackgroundService();
 
+  MobileDrawerBridge? _mobileDrawerBridge;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bridge = MobileNavigationScope.maybeOf(context)?.drawerBridge;
+    if (!identical(bridge, _mobileDrawerBridge)) {
+      _mobileDrawerBridge?.bind(null);
+      _mobileDrawerBridge = bridge;
+      bridge?.bind((_) => _buildCatalogDrawer());
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    if (widget.desktopBridge != null) {
+      _desktopDropSubscription = DesktopHostService.instance.droppedFiles
+          .listen((paths) => unawaited(_attachDesktopPaths(paths)));
+      _desktopImageSubscription = DesktopHostService.instance.pastedImages
+          .listen((bytes) => unawaited(_attachPickedFiles([
+                _PickedAttachment.inMemory(name: '粘贴图片.png', knownBytes: bytes)
+              ])));
+    }
+    final bridge = widget.desktopBridge;
+    if (bridge != null) {
+      bridge.newConversation = () => _startNewConversation();
+      bridge.switchConversation = (id) async {
+        if (mounted) await _switchConversationId(id);
+      };
+      bridge.sessionSettings = _showSessionConfiguration;
+      bridge.openDrawer = () => _scaffoldKey.currentState?.openDrawer();
+      bridge.insertPrompt = (prompt) {
+        final existing = _controller.text.trimRight();
+        _controller.text = existing.isEmpty ? prompt : '$existing\n\n$prompt';
+        _controller.selection =
+            TextSelection.collapsed(offset: _controller.text.length);
+      };
+    }
     TtsService.instance.speakingListenable.addListener(_onTtsSpeakingChanged);
     SharedPreferences.getInstance().then((prefs) {
       if (mounted) {
@@ -336,32 +407,13 @@ class _ChatPageState extends ConsumerState<ChatPage>
         adjustDuration: (duration) =>
             MotionPreferences.adjustDuration(context, duration, listen: false));
     _scrollIndicator.reset();
-    // 消费冷启动缓冲的分享内容。整批合并成一个会话：相册多选分享 3 张图不该
-    // 生成 3 个新会话（此前对每条各调一次 _startNewConversation，异步时序下
-    // 前面的会被后面的覆盖，用户最终只看得到最后一张）。
-    final pendingShares = SharingService.instance.drainPending();
-    if (pendingShares.isNotEmpty) {
-      unawaited(_onSharedTexts(pendingShares));
-    }
-    // 监听热分享（其他 App 分享进来），同样按批次合并。
-    _shareSub = SharingService.instance.shares.listen(
-      (batch) => unawaited(_onSharedTexts(batch)),
-    );
     // 应用锁：启动即触发（若开启）。
     Future.microtask(_maybeLock);
     // C2 断点恢复：启动时检测中断任务并提示继续执行。
     Future.microtask(_checkRecoverableTask);
-    // E4 深度链接：冷启动预填 prompt / 打开记忆页。
+    // 深链、分享批次和通知统一排队；解锁、可见且空闲后消费。
     DeepLinkService.instance.addListener(_scheduleDeepLinkConsumption);
     _scheduleDeepLinkConsumption();
-    // E3 通知点击：先消费冷启动缓冲（应用被点通知拉起时 ChatPage 尚未订阅），
-    // 再订阅运行中的实时点击，保证两种路径都能导航到通知所指的会话/任务。
-    for (final intent in NotificationIntentRouter.drainPending()) {
-      unawaited(_handleNotificationIntent(intent));
-    }
-    _notificationIntentSub = NotificationIntentRouter.intents.listen((intent) {
-      unawaited(_handleNotificationIntent(intent));
-    });
     // G1 聊天背景:加载持久化配置到全局通知器。
     _backgroundService.load().then((c) {
       BackgroundService.bgNotifier.value = c;
@@ -406,13 +458,15 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   @override
   void dispose() {
+    unawaited(_desktopDropSubscription?.cancel());
+    unawaited(_desktopImageSubscription?.cancel());
+    widget.desktopBridge?.clear();
+    _mobileDrawerBridge?.bind(null);
     WidgetsBinding.instance.removeObserver(this);
     for (final approval in _pendingToolApprovals.values) {
       if (!approval.isCompleted) approval.complete(ToolApproval.reject);
     }
     _pendingToolApprovals.clear();
-    _shareSub?.cancel();
-    _notificationIntentSub?.cancel();
     _skillChangesSub?.cancel();
     _skillSuggestionDebounce?.cancel();
     _draftPersistTimer?.cancel();
@@ -434,12 +488,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _entryForeground = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.paused) {
+      _entryUnlockConfirmed = false;
+      _entryUnlockEpoch++;
+    }
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
       _rememberCurrentDraft();
     }
     if (state == AppLifecycleState.resumed) {
-      Future.microtask(_maybeLock);
+      if (!_entryUnlockConfirmed) Future.microtask(_maybeLock);
+      _scheduleDeepLinkConsumption();
     }
   }
 
@@ -469,6 +529,75 @@ class _ChatPageState extends ConsumerState<ChatPage>
     return false;
   }
 
+  bool _openingSpeech = false;
+  Future<void> _openSpeechCapture() async {
+    final initial = ref.read(chatControllerProvider);
+    if (_openingSpeech ||
+        initial.running ||
+        initial.loading ||
+        initial.restoringConversation ||
+        !AssistantEntrySurface.canConsume(context)) {
+      return;
+    }
+    _openingSpeech = true;
+    final owner = ref.read(chatControllerProvider.notifier);
+    final conversationId = initial.conversationId;
+    final submission = SpeechSubmissionGuard.capture(DeepLinkService.instance);
+    final initialDraft = _controller.text;
+    final initiallyEmpty = initialDraft.trim().isEmpty && _attachments.isEmpty;
+    try {
+      await TtsService.instance.stop();
+      if (!mounted) return;
+      final result = await showModalBottomSheet<SpeechCaptureDraft>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          builder: (_) => const SpeechCaptureSheet());
+      if (!mounted || result == null) return;
+      final current = ref.read(chatControllerProvider);
+      if (!identical(ref.read(chatControllerProvider.notifier), owner) ||
+          current.conversationId != conversationId) {
+        await showDialog<void>(
+            context: context,
+            builder: (dialog) => AlertDialog(
+                    title: const Text('会话已变化，转写未发送'),
+                    content: SingleChildScrollView(
+                        child: SelectableText(result.text)),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialog),
+                          child: const Text('关闭'))
+                    ]));
+        return;
+      }
+      final currentDraft = _controller.text;
+      final mayAutoSend = submission.allowsAutoSend(
+          links: DeepLinkService.instance,
+          requested: result.autoSend,
+          initiallyEmpty: initiallyEmpty,
+          draftUnchanged: currentDraft == initialDraft,
+          attachmentsEmpty: _attachments.isEmpty,
+          contextAvailable: !_handlingDeepLink &&
+              AssistantEntrySurface.canConsume(context,
+                  busy: current.running ||
+                      current.loading ||
+                      current.restoringConversation));
+      final staged = currentDraft.trim().isEmpty
+          ? result.text
+          : '$currentDraft\n${result.text}';
+      _controller.value = TextEditingValue(
+          text: staged,
+          selection: TextSelection.collapsed(offset: staged.length));
+      if (mayAutoSend) await _send();
+      if (mounted && result.autoSend && !mayAutoSend) {
+        FloatingToast.show(context, '转写已暂存；入口或会话状态变化，请确认后发送',
+            tone: ToastTone.warning);
+      }
+    } finally {
+      _openingSpeech = false;
+    }
+  }
+
   Future<void> _send() async {
     final state = ref.read(chatControllerProvider);
     final input = _controller.text.trim();
@@ -476,15 +605,19 @@ class _ChatPageState extends ConsumerState<ChatPage>
     final canSend = input.isNotEmpty || _attachments.isNotEmpty;
     if (!canSend || state.loading) return;
     if (state.running) {
-      final accepted = _chat.steer(input);
+      final accepted = await _chat.steer(input);
+      if (!mounted) return;
       if (accepted) {
-        _controller.clear();
-        _clearCurrentDraft();
+        if (_controller.text.trim() == input) {
+          _controller.clear();
+          _clearCurrentDraft();
+        }
         if (mounted) {
           FloatingToast.show(context, '已接收，将在下一检查点生效', tone: ToastTone.success);
         }
       } else if (mounted) {
-        FloatingToast.show(context, '任务已结束，请新建后续任务', tone: ToastTone.warning);
+        FloatingToast.show(context, '纠正未确认或任务已结束，输入已保留；请刷新核实',
+            tone: ToastTone.warning);
       }
       return;
     }
@@ -581,8 +714,9 @@ class _ChatPageState extends ConsumerState<ChatPage>
     FloatingToast.show(context, '断点已失效，已填好续跑指令，点发送即可继续');
   }
 
-  void _pause() {
-    if (_chat.pause()) return;
+  Future<void> _pause() async {
+    if (await _chat.pause()) return;
+    if (!mounted) return;
     // 没有前台运行控制器（例如后台开发任务）时暂停无法生效，明确告诉用户，
     // 不再表现为「点了没反应」。
     FloatingToast.show(
@@ -626,12 +760,67 @@ class _ChatPageState extends ConsumerState<ChatPage>
   /// 所有附件的总字节预算。
   static const int _maxAttachmentTotalBytes = maxAttachmentTotalBytes;
 
+  Widget _buildCatalogDrawer() {
+    final state = ref.read(chatControllerProvider);
+    void onAssistant(VoidCallback action) {
+      MobileNavigationScope.maybeOf(context)?.selectDestination(0);
+      action();
+    }
+
+    return ChatCatalogDrawer(
+      currentConversationId: state.conversationId,
+      currentWorkspacePath: state.currentWorkspacePath,
+      contextTokens: state.contextTokens,
+      liveContextTokens: state.liveContextTokens,
+      activeModel: state.activeModel,
+      activeProviderName: state.activeProviderName,
+      messages: state.messages,
+      isRunning: state.running,
+      planModeEnabled: state.planMode,
+      approvalMode: state.approvalMode,
+      onApprovalModeTap: () => onAssistant(_selectApprovalMode),
+      onNewConversation: () =>
+          onAssistant(() => unawaited(_startNewConversation())),
+      onSelectConversation: (conv) =>
+          onAssistant(() => unawaited(_switchConversation(conv))),
+      onWorkspaceTap: () => onAssistant(_handleTopBarWorkspace),
+      onModelTap: () => onAssistant(_switchProvider),
+      onMcpMenu: () => onAssistant(() => Navigator.of(context).push(
+            NexusPageRoute.detail(builder: (_) => const McpServersPage()),
+          )),
+      onTasks: () => unawaited(_openJobsInbox()),
+      onPromptLibrary: () => onAssistant(_openPromptLibrary),
+      onPlanModeToggle: () => _chat.setPlanMode(!state.planMode),
+      onMore: () => onAssistant(_showAvatarMenu),
+      onOpenHistory: () => onAssistant(_openHistory),
+      onConversationDeleted: (id) {
+        // 删掉的若是当前会话，立即另起新会话，避免停留在已删除的会话上。
+        if (ref.read(chatControllerProvider).conversationId == id) {
+          _startNewConversation();
+        }
+      },
+    );
+  }
+
   Future<void> _openHistory() async {
     final selected = await Navigator.of(context).push<Conversation>(
       NexusPageRoute.detail(builder: (_) => const HistoryPage()),
     );
     if (selected == null || !mounted) return;
     await _switchConversation(selected);
+  }
+
+  Future<void> _openJobsInbox() async {
+    await Navigator.of(context).push<void>(
+      NexusPageRoute.detail(
+        builder: (_) => JobsInboxPage(
+          onConversationSelected: (conversation) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            unawaited(_switchConversationId(conversation));
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _openPromptLibrary() async {
@@ -710,6 +899,14 @@ class _ChatPageState extends ConsumerState<ChatPage>
 
   Widget _emptyState(BuildContext context) {
     final state = ref.read(chatControllerProvider);
+    final conversationId = state.conversationId;
+    final resultProjectId = state.currentProjectId;
+    bool resultSourceCurrent() =>
+        mounted &&
+        ref.read(chatControllerProvider).conversationId == conversationId &&
+        ConversationResultScope.normalizeProject(
+                ref.read(chatControllerProvider).currentProjectId) ==
+            ConversationResultScope.normalizeProject(resultProjectId);
     final ws = state.currentWorkspacePath;
     final hasWorkspace = ws != null && ws.isNotEmpty;
     final suggestions = <QuickAction>[
@@ -749,11 +946,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
       },
       onAnalyzeWorkspace: () =>
           _fillSuggestion(const QuickAction(label: '解读项目')),
+      trailing: conversationId == null
+          ? null
+          : ConversationResultTimeline(
+              key: ValueKey(
+                  'conversation-results-empty-$conversationId-${resultProjectId ?? ''}'),
+              scope: ConversationResultScope(conversationId,
+                  projectId: resultProjectId),
+              running: state.running,
+              sourceIsCurrent: resultSourceCurrent),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final links = DeepLinkService.instance;
+    if (_entryUnlockConfirmed &&
+        _entryForeground &&
+        (links.consumptionReady || links.hasRejection) &&
+        _canConsumeEntry()) {
+      _scheduleDeepLinkConsumption();
+    }
+
     ref.listen(chatControllerProvider, (previous, next) {
       if (previous == null) return;
       _scrollIndicator.messagesChanged(
@@ -767,7 +981,8 @@ class _ChatPageState extends ConsumerState<ChatPage>
         running: next.running,
         completed: previous.running && !next.running,
       );
-      if ((previous.loading && !next.loading) ||
+      if ((previous.running && !next.running) ||
+          (previous.loading && !next.loading) ||
           (previous.restoringConversation && !next.restoringConversation)) {
         _scheduleDeepLinkConsumption();
       }
@@ -798,6 +1013,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
             chatControllerProvider.select((s) => s.restoringConversation));
         final conversationId =
             ref.watch(chatControllerProvider.select((s) => s.conversationId));
+        final resultProjectId =
+            ref.watch(chatControllerProvider.select((s) => s.currentProjectId));
+        final resultTaskId =
+            ref.watch(chatControllerProvider.select((s) => s.currentTaskId));
+        final resultRunId =
+            ref.watch(chatControllerProvider.select((s) => s.currentRunId));
+        bool resultSourceCurrent() =>
+            mounted &&
+            ref.read(chatControllerProvider).conversationId == conversationId &&
+            ConversationResultScope.normalizeProject(
+                    ref.read(chatControllerProvider).currentProjectId) ==
+                ConversationResultScope.normalizeProject(resultProjectId);
         final currentWorkspacePath = ref.watch(
             chatControllerProvider.select((s) => s.currentWorkspacePath));
         final contextTokens =
@@ -856,643 +1083,923 @@ class _ChatPageState extends ConsumerState<ChatPage>
             systemStatusBarContrastEnforced: false,
             systemNavigationBarContrastEnforced: false,
           ),
-          child: Scaffold(
-            key: _scaffoldKey,
-            // 键盘高度只作用于底部输入区（KeyboardSpacer），不再让 Scaffold 按
-            // viewInsets 缩小整个 body：部分 ROM 会残留过期的键盘 inset，body 被
-            // 压缩一个键盘高度后底部露出背景（白块）、输入框悬在半空。
-            resizeToAvoidBottomInset: false,
-            backgroundColor: Colors.transparent, // Background handled by stack
-            drawerScrimColor: isDark
-                ? Colors.black.withValues(alpha: 0.35)
-                : Colors.black.withValues(alpha: 0.05),
-            drawer: ChatCatalogDrawer(
-              currentConversationId: conversationId,
-              currentWorkspacePath: currentWorkspacePath,
-              contextTokens: contextTokens,
-              liveContextTokens: liveContextTokens,
-              activeModel: activeModel,
-              activeProviderName: activeProviderName,
-              messages: messages,
-              isRunning: running,
-              planModeEnabled: planMode,
-              approvalMode: approvalMode,
-              onApprovalModeTap: _selectApprovalMode,
-              onNewConversation: () => _startNewConversation(),
-              onSelectConversation: (conv) => _switchConversation(conv),
-              onWorkspaceTap: _handleTopBarWorkspace,
-              onModelTap: _switchProvider,
-              onMcpMenu: () => Navigator.of(context).push(
-                NexusPageRoute.detail(builder: (_) => const McpServersPage()),
-              ),
-              onPromptLibrary: _openPromptLibrary,
-              onPlanModeToggle: () => _chat.setPlanMode(!planMode),
-              onMore: _showAvatarMenu,
-              onOpenHistory: _openHistory,
-              onConversationDeleted: (id) {
-                // 删掉的若是当前会话，立即另起新会话，避免停留在已删除的会话上。
-                if (ref.read(chatControllerProvider).conversationId == id) {
-                  _startNewConversation();
-                }
-              },
-            ),
-            body: Semantics(
-              namesRoute: true,
-              label: '对话',
-              child: ValueListenableBuilder<double>(
-                valueListenable: AppAppearanceController.glassIntensity,
-                builder: (context, _, __) {
-                  final glassIntensity =
-                      AppAppearanceController.resolvedGlassIntensity;
-                  return GlassSurfaceGroup(
-                    child: Stack(
-                      // 顶部悬浮层（顶栏、计划与工具面板）允许展示自身阴影，
-                      // 不受页面 Stack 的默认裁剪影响。
-                      clipBehavior: Clip.none,
-                      children: [
-                        // G1 聊天背景:自定义图 > 默认云朵图 > 渐变兜底;轻微 scrim 保消息可读。
-                        //
-                        // RepaintBoundary：这是全屏贴图，而本页没有任何分层，任何一处变化
-                        // （流式输出、指标条刷新、滚动）都会一路 markNeedsPaint 到页面的
-                        // 顶层边界层，把整张背景图跟着重画一遍。包起来后它只在自己的配置
-                        // 变化时才重绘，其余时间直接复用 layer。
-                        // 它是最底层且不含 BackdropFilter，不会干扰玻璃采样。
-                        Positioned.fill(
-                          child: RepaintBoundary(
-                            child: ValueListenableBuilder<BackgroundConfig>(
-                              valueListenable: BackgroundService.bgNotifier,
-                              builder: (context, bg, _) {
-                                final dark = Theme.of(context).brightness ==
-                                    Brightness.dark;
-                                final Widget? image = switch (bg.mode) {
-                                  'clouds' => Image.asset(
-                                      BackgroundService.cloudsAsset,
-                                      fit: BoxFit.cover,
-                                      cacheWidth: imageCacheWidth(context),
-                                      errorBuilder: (_, __, ___) =>
-                                          const SizedBox.shrink()),
-                                  'custom' when bg.customPath != null =>
-                                    Image.file(
-                                      File(bg.customPath!),
-                                      fit: BoxFit.cover,
-                                      cacheWidth: imageCacheWidth(context),
-                                      errorBuilder: (_, __, ___) =>
-                                          const SizedBox.shrink(),
-                                    ),
-                                  _ => null,
-                                };
-                                if (image == null) {
-                                  return const SizedBox.shrink();
-                                }
-                                // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
-                                final scrim = bg.mode == 'custom' || dark
-                                    ? (dark
-                                        ? Colors.black.withValues(alpha: .18)
-                                        : Colors.white.withValues(alpha: .10))
-                                    : Colors.white.withValues(alpha: .06);
-                                return Stack(fit: StackFit.expand, children: [
-                                  image,
-                                  Container(color: scrim),
-                                ]);
-                              },
+          child: _DrawerBackGuard(
+            key: _drawerBackGuardKey,
+            scaffoldKey: _scaffoldKey,
+            attachmentPanelExpanded: _attachmentPanelExpanded,
+            child: Scaffold(
+              key: _scaffoldKey,
+              onDrawerChanged: (bool isOpened) =>
+                  _drawerBackGuardKey.currentState?.syncDrawerState(isOpened),
+              // 键盘高度只作用于底部输入区（KeyboardSpacer），不再让 Scaffold 按
+              // viewInsets 缩小整个 body：部分 ROM 会残留过期的键盘 inset，body 被
+              // 压缩一个键盘高度后底部露出背景（白块）、输入框悬在半空。
+              resizeToAvoidBottomInset: false,
+              backgroundColor: DesktopTheme.maybeOf(context)?.canvas ??
+                  (isDark
+                      ? Theme.of(context).colorScheme.surface
+                      : Colors.white),
+              drawerScrimColor: isDark
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : Colors.black.withValues(alpha: 0.32),
+              drawer:
+                  _mobileDrawerBridge == null ? _buildCatalogDrawer() : null,
+              body: Semantics(
+                namesRoute: true,
+                label: '对话',
+                child: ValueListenableBuilder<double>(
+                  valueListenable: AppAppearanceController.glassIntensity,
+                  builder: (context, _, __) {
+                    final glassIntensity = DesktopTheme.maybeOf(context) != null
+                        ? GlassIntensity.flat
+                        : AppAppearanceController.resolvedGlassIntensity;
+                    return GlassSurfaceGroup(
+                      child: Stack(
+                        // 顶部悬浮层（顶栏、计划与工具面板）允许展示自身阴影，
+                        // 不受页面 Stack 的默认裁剪影响。
+                        clipBehavior: Clip.none,
+                        children: [
+                          // G1 聊天背景:自定义图 > 默认云朵图 > 渐变兜底;轻微 scrim 保消息可读。
+                          //
+                          // RepaintBoundary：这是全屏贴图，而本页没有任何分层，任何一处变化
+                          // （流式输出、指标条刷新、滚动）都会一路 markNeedsPaint 到页面的
+                          // 顶层边界层，把整张背景图跟着重画一遍。包起来后它只在自己的配置
+                          // 变化时才重绘，其余时间直接复用 layer。
+                          // 它是最底层且不含 BackdropFilter，不会干扰玻璃采样。
+                          Positioned.fill(
+                            child: RepaintBoundary(
+                              child: ValueListenableBuilder<BackgroundConfig>(
+                                valueListenable: BackgroundService.bgNotifier,
+                                builder: (context, bg, _) {
+                                  if (DesktopTheme.maybeOf(context) != null) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final dark = Theme.of(context).brightness ==
+                                      Brightness.dark;
+                                  final Widget? image = switch (bg.mode) {
+                                    'clouds' => Image.asset(
+                                        BackgroundService.cloudsAsset,
+                                        fit: BoxFit.cover,
+                                        cacheWidth: imageCacheWidth(context),
+                                        errorBuilder: (_, __, ___) =>
+                                            const SizedBox.shrink()),
+                                    'custom' when bg.customPath != null =>
+                                      Image.file(
+                                        File(bg.customPath!),
+                                        fit: BoxFit.cover,
+                                        cacheWidth: imageCacheWidth(context),
+                                        errorBuilder: (_, __, ___) =>
+                                            const SizedBox.shrink(),
+                                      ),
+                                    _ => null,
+                                  };
+                                  if (image == null) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  // 图案背景上叠轻微同色 scrim 保消息可读;纯白/纯黑默认不加。
+                                  final scrim = bg.mode == 'custom' || dark
+                                      ? (dark
+                                          ? Colors.black.withValues(alpha: .18)
+                                          : Colors.white.withValues(alpha: .10))
+                                      : Colors.white.withValues(alpha: .06);
+                                  return Stack(fit: StackFit.expand, children: [
+                                    image,
+                                    Container(color: scrim),
+                                  ]);
+                                },
+                              ),
                             ),
                           ),
-                        ),
-                        SafeArea(
-                          bottom: false,
-                          child: LayoutBuilder(builder: (context, constraints) {
-                            // 横屏 / 平板等宽屏下限制正文最大宽度，避免输入框与卡片过宽（文档 9）。
-                            final wide = constraints.maxWidth > 700;
-                            // 顶部状态文字只在运行中显示，结束后不再残留旧状态。
-                            final showActivityLog =
-                                running && activityLog != null;
-                            final hasTopDock = showActivityLog ||
-                                (planState != null &&
-                                    planState.status != 'cancelled') ||
-                                toolActivities.isNotEmpty;
-                            Widget column = Column(children: [
-                              if (hasTopDock ||
-                                  glassIntensity == GlassIntensity.flat)
-                                SizedBox(
-                                    height: capsuleTopBarHeight(context) +
-                                        4), // Clear the absolute positioned top bar
-                              if (showActivityLog)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(activityLog,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall),
-                                  ),
-                                ),
-                              if ((planState != null &&
+                          SafeArea(
+                            bottom: false,
+                            child:
+                                LayoutBuilder(builder: (context, constraints) {
+                              // 横屏 / 平板等宽屏下限制正文最大宽度，避免输入框与卡片过宽（文档 9）。
+                              final wide = constraints.maxWidth > 700;
+                              // 顶部状态文字只在运行中显示，结束后不再残留旧状态。
+                              final showActivityLog =
+                                  running && activityLog != null;
+                              final hasTopDock = showActivityLog ||
+                                  (planState != null &&
                                       planState.status != 'cancelled') ||
-                                  toolActivities.isNotEmpty)
-                                ConstrainedBox(
-                                  // 顶部执行面板限高：最多占可用高度 38% 且不超过
-                                  // 320dp，给消息列表留足空间。时间线只显示最近
-                                  // 几条（其余进「查看全部」），不再嵌套滚动；
-                                  // reverse 让内容超高时默认停在底部，最新一步
-                                  // 始终可见，往下拖才看到上面的计划。
-                                  constraints: BoxConstraints(
-                                    maxHeight: math.min(
-                                        constraints.maxHeight * 0.38, 320.0),
+                                  toolActivities.isNotEmpty;
+                              Widget column = Column(children: [
+                                if (hasTopDock ||
+                                    glassIntensity == GlassIntensity.flat)
+                                  SizedBox(
+                                      height: _embeddedDesktop
+                                          ? 4
+                                          : capsuleTopBarHeight(context) +
+                                              4), // Clear the absolute positioned top bar
+                                if (showActivityLog)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12),
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(activityLog,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall),
+                                    ),
                                   ),
-                                  child: SingleChildScrollView(
-                                    key: const ValueKey('chat_activity_dock'),
-                                    reverse: true,
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                          12, 4, 12, 8),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.stretch,
-                                        children: [
-                                          if (planState != null &&
-                                              planState.status != 'cancelled')
-                                            PlanPanel(
-                                              plan: planState,
-                                              goal: planState.steps.isEmpty
-                                                  ? null
-                                                  : planState
-                                                      .steps.first.description,
-                                              onApprove: () =>
-                                                  _chat.respondToPlan(true),
-                                              onCancel: () =>
-                                                  _chat.respondToPlan(false),
-                                              onResume: () =>
-                                                  _chat.resumeFromBudgetPause(
-                                                      approveTool:
-                                                          _approveTool),
-                                            ),
-                                          if (toolActivities.isNotEmpty)
-                                            ToolActivityTimeline(
-                                              activities: toolActivities,
-                                              running: running,
-                                              compact: true,
-                                              onConfirm: _confirmToolActivity,
-                                              onReject: _rejectToolActivity,
-                                              onReview: _reviewToolActivity,
-                                              onRetry: _retryToolActivity,
-                                            ),
-                                        ],
+                                if ((planState != null &&
+                                        planState.status != 'cancelled') ||
+                                    toolActivities.isNotEmpty)
+                                  ConstrainedBox(
+                                    // 顶部执行面板限高：最多占可用高度 38% 且不超过
+                                    // 240dp，给消息列表留足空间。时间线只显示最近
+                                    // 几条（其余进「查看全部」），不再嵌套滚动；
+                                    // reverse 让内容超高时默认停在底部，最新一步
+                                    // 始终可见，往下拖才看到上面的计划。
+                                    constraints: BoxConstraints(
+                                      maxHeight: math.min(
+                                          constraints.maxHeight *
+                                              (_embeddedDesktop ? 0.25 : 0.32),
+                                          _embeddedDesktop ? 180.0 : 240.0),
+                                    ),
+                                    child: SingleChildScrollView(
+                                      key: const ValueKey('chat_activity_dock'),
+                                      reverse: true,
+                                      child: Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                            12, 2, 12, 6),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            if (planState != null &&
+                                                planState.status != 'cancelled')
+                                              PlanPanel(
+                                                plan: planState,
+                                                onOpenResults: conversationId ==
+                                                            null ||
+                                                        resultTaskId == null ||
+                                                        resultRunId == null
+                                                    ? null
+                                                    : () => unawaited(openConversationResults(
+                                                        context,
+                                                        scope: ConversationResultScope(
+                                                            conversationId,
+                                                            projectId:
+                                                                resultProjectId,
+                                                            taskId:
+                                                                resultTaskId,
+                                                            runId: resultRunId),
+                                                        sourceIsCurrent:
+                                                            resultSourceCurrent)),
+                                                goal: planState.steps.isEmpty
+                                                    ? null
+                                                    : planState.steps.first
+                                                        .description,
+                                                onApprove: () =>
+                                                    _chat.respondToPlan(true),
+                                                onCancel: () =>
+                                                    _chat.respondToPlan(false),
+                                                onResume: () =>
+                                                    _chat.resumeFromBudgetPause(
+                                                        approveTool:
+                                                            _approveTool),
+                                                onApproveEdited: (text) => _chat
+                                                    .respondToPlanWithEdits(
+                                                        text),
+                                              ),
+                                            if (toolActivities.isNotEmpty)
+                                              ToolActivityTimeline(
+                                                activities: toolActivities,
+                                                running: running,
+                                                compact: true,
+                                                onConfirm: _confirmToolActivity,
+                                                onReject: _rejectToolActivity,
+                                                onReview: _reviewToolActivity,
+                                                onRetry: _retryToolActivity,
+                                                onOpenResults: conversationId ==
+                                                            null ||
+                                                        resultTaskId == null ||
+                                                        resultRunId == null
+                                                    ? null
+                                                    : () => unawaited(openConversationResults(
+                                                        context,
+                                                        scope: ConversationResultScope(
+                                                            conversationId,
+                                                            projectId:
+                                                                resultProjectId,
+                                                            taskId:
+                                                                resultTaskId,
+                                                            runId: resultRunId),
+                                                        sourceIsCurrent:
+                                                            resultSourceCurrent)),
+                                              ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              Expanded(
-                                child: Stack(
-                                  children: [
-                                    loading || restoringConversation
-                                        ? (restoringConversation
-                                            ? const ConversationRestoreSkeleton()
-                                            : const NexusChatMessageSkeleton())
-                                        : (messages.isEmpty
-                                            ? Builder(builder: _emptyState)
-                                            : NotificationListener<
-                                                Notification>(
-                                                // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
-                                                onNotification: _scrollIndicator
-                                                    .handleNotification,
-                                                child: Consumer(
-                                                  builder: (context, ref, _) {
-                                                    // 高频流式文本在此单独订阅：只有本子树随
-                                                    // liveReply 更新而重建，页面其余部分不动。
-                                                    final liveReply = ref.watch(
-                                                        liveReplyProvider);
-                                                    return ValueListenableBuilder<
-                                                        int?>(
-                                                      valueListenable:
-                                                          _selectingMessageIndex,
-                                                      builder: (context,
-                                                              selectionIndex,
-                                                              _) =>
-                                                          RepaintBoundary(
-                                                        // Streaming tokens rebuild this subtree frequently. Isolate
-                                                        // its raster work from the backdrop and glass controls.
-                                                        child: GlassScrollEdge(
-                                                          height: 20,
-                                                          child:
-                                                              ChatMessageList(
-                                                            key:
-                                                                _messageListKey,
-                                                            sessionKey:
-                                                                conversationId,
-                                                            messages: messages,
-                                                            liveReply:
-                                                                liveReply,
-                                                            controller:
-                                                                _scrollController,
-                                                            running: running,
-                                                            runProgress:
-                                                                runProgress,
-                                                            onStop: running
-                                                                ? _stop
-                                                                : null,
-                                                            padding: (hasTopDock ||
-                                                                    glassIntensity ==
-                                                                        GlassIntensity
-                                                                            .flat)
-                                                                ? const EdgeInsets
-                                                                    .fromLTRB(
-                                                                    16,
-                                                                    0,
-                                                                    16,
-                                                                    10)
-                                                                : EdgeInsets
-                                                                    .fromLTRB(
-                                                                    16,
-                                                                    capsuleTopBarHeight(
-                                                                            context) +
-                                                                        12,
-                                                                    16,
-                                                                    10,
-                                                                  ),
-                                                            onLoadHistory: () =>
-                                                                _chat
-                                                                    .loadOlderHistory(),
-                                                            onLongPress:
-                                                                (index) {
-                                                              if (!_longPressHintShown) {
-                                                                _longPressHintShown =
-                                                                    true;
-                                                              }
-                                                              _showMessageActions(
-                                                                  index);
-                                                            },
-                                                            onRegenerate:
-                                                                _regenerate,
-                                                            onResumeRun:
-                                                                _continueAfterPause,
-                                                            onEditPrompt:
-                                                                _editLatestQuestion,
-                                                            onSwitchModel:
-                                                                _switchProvider,
-                                                            onSpeak: TtsService
-                                                                    .instance
-                                                                    .isAvailable
-                                                                ? _speakMessageAt
-                                                                : null,
-                                                            speakingListenable:
-                                                                TtsService
-                                                                    .instance
-                                                                    .speakingListenable,
-                                                            speakingIndexListenable:
-                                                                _speakingMessageIndex,
-                                                            selectionIndex:
+                                Expanded(
+                                  child: Stack(
+                                    key:
+                                        const ValueKey('chat-message-viewport'),
+                                    children: [
+                                      loading || restoringConversation
+                                          ? (restoringConversation
+                                              ? const ConversationRestoreSkeleton()
+                                              : const NexusChatMessageSkeleton())
+                                          : (messages.isEmpty
+                                              ? Builder(builder: _emptyState)
+                                              : NotificationListener<
+                                                  Notification>(
+                                                  // 用户拖拽消息列表时暂停自动跟随，松手后恢复。
+                                                  onNotification:
+                                                      _scrollIndicator
+                                                          .handleNotification,
+                                                  child: Consumer(
+                                                    builder: (context, ref, _) {
+                                                      // 高频流式文本在此单独订阅：只有本子树随
+                                                      // liveReply 更新而重建，页面其余部分不动。
+                                                      final liveReply =
+                                                          ref.watch(
+                                                              liveReplyProvider);
+                                                      return ValueListenableBuilder<
+                                                          int?>(
+                                                        valueListenable:
+                                                            _selectingMessageIndex,
+                                                        builder: (context,
                                                                 selectionIndex,
-                                                            onExitSelection: () =>
-                                                                _selectingMessageIndex
-                                                                        .value =
-                                                                    null,
-                                                            trailingWidgets: const [],
+                                                                _) =>
+                                                            RepaintBoundary(
+                                                          // Streaming tokens rebuild this subtree frequently. Isolate
+                                                          // its raster work from the backdrop and glass controls.
+                                                          child:
+                                                              GlassScrollEdge(
+                                                            // In liquid mode the message list scrolls beneath the
+                                                            // floating mobile header. Fade the full header area so
+                                                            // long messages never collide with the model/title text.
+                                                            height: !_embeddedDesktop &&
+                                                                    !hasTopDock &&
+                                                                    glassIntensity !=
+                                                                        GlassIntensity
+                                                                            .flat
+                                                                ? capsuleTopBarHeight(
+                                                                        context) +
+                                                                    20
+                                                                : 20,
+                                                            child:
+                                                                ChatMessageList(
+                                                              key:
+                                                                  _messageListKey,
+                                                              sessionKey:
+                                                                  conversationId,
+                                                              messages:
+                                                                  messages,
+                                                              liveReply:
+                                                                  liveReply,
+                                                              controller:
+                                                                  _scrollController,
+                                                              running: running,
+                                                              runProgress:
+                                                                  runProgress,
+                                                              onStop: running
+                                                                  ? _stop
+                                                                  : null,
+                                                              padding: (hasTopDock ||
+                                                                      glassIntensity ==
+                                                                          GlassIntensity
+                                                                              .flat)
+                                                                  ? EdgeInsets.fromLTRB(
+                                                                      _embeddedDesktop
+                                                                          ? 12
+                                                                          : 16,
+                                                                      _embeddedDesktop
+                                                                          ? 8
+                                                                          : 0,
+                                                                      _embeddedDesktop
+                                                                          ? 12
+                                                                          : 16,
+                                                                      10)
+                                                                  : EdgeInsets
+                                                                      .fromLTRB(
+                                                                      16,
+                                                                      capsuleTopBarHeight(
+                                                                              context) +
+                                                                          12,
+                                                                      16,
+                                                                      10,
+                                                                    ),
+                                                              onLoadHistory:
+                                                                  () => _chat
+                                                                      .loadOlderHistory(),
+                                                              onContextMenu: (index,
+                                                                      position) =>
+                                                                  _showMessageActions(
+                                                                      index,
+                                                                      position:
+                                                                          position),
+                                                              onLongPress:
+                                                                  (index) {
+                                                                if (!_longPressHintShown) {
+                                                                  _longPressHintShown =
+                                                                      true;
+                                                                }
+                                                                _showMessageActions(
+                                                                    index);
+                                                              },
+                                                              onRegenerate:
+                                                                  _regenerate,
+                                                              onResumeRun:
+                                                                  _continueAfterPause,
+                                                              onEditPrompt:
+                                                                  _editLatestQuestion,
+                                                              onSwitchModel:
+                                                                  _switchProvider,
+                                                              onSpeak: TtsService
+                                                                      .instance
+                                                                      .isAvailable
+                                                                  ? _speakMessageAt
+                                                                  : null,
+                                                              speakingListenable:
+                                                                  TtsService
+                                                                      .instance
+                                                                      .speakingListenable,
+                                                              speakingIndexListenable:
+                                                                  _speakingMessageIndex,
+                                                              selectionIndex:
+                                                                  selectionIndex,
+                                                              onExitSelection: () =>
+                                                                  _selectingMessageIndex
+                                                                          .value =
+                                                                      null,
+                                                              trailingWidgets: [
+                                                                if (conversationId !=
+                                                                    null)
+                                                                  ConversationResultTimeline(
+                                                                      key: ValueKey(
+                                                                          'conversation-results-$conversationId-${resultProjectId ?? ''}'),
+                                                                      scope: ConversationResultScope(
+                                                                          conversationId,
+                                                                          projectId:
+                                                                              resultProjectId),
+                                                                      running:
+                                                                          running,
+                                                                      sourceIsCurrent:
+                                                                          resultSourceCurrent),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                )),
+                                      Positioned(
+                                        right: 16,
+                                        bottom: 16,
+                                        child: ListenableBuilder(
+                                          listenable: _scrollIndicator,
+                                          builder: (context, _) {
+                                            final reduceMotion =
+                                                MotionPreferences
+                                                    .shouldReduceMotion(
+                                                        context);
+                                            return AnimatedSwitcher(
+                                              duration: reduceMotion
+                                                  ? Duration.zero
+                                                  : NexusMotion.fast,
+                                              switchInCurve:
+                                                  NexusMotion.curveEnter,
+                                              switchOutCurve:
+                                                  NexusMotion.curveExit,
+                                              transitionBuilder:
+                                                  (child, animation) =>
+                                                      FadeTransition(
+                                                opacity: animation,
+                                                child: SlideTransition(
+                                                  position: Tween<Offset>(
+                                                    begin: const Offset(0, 0.2),
+                                                    end: Offset.zero,
+                                                  ).animate(animation),
+                                                  child: child,
+                                                ),
+                                              ),
+                                              child: _scrollIndicator
+                                                      .showScrollToBottom
+                                                  ? NexusBackToLatestButton(
+                                                      key: const ValueKey(
+                                                          'back_to_latest'),
+                                                      onTap: _scrollIndicator
+                                                          .scrollToBottom,
+                                                      unreadCount:
+                                                          _scrollIndicator
+                                                              .unreadCount,
+                                                      isRunning: running,
+                                                    )
+                                                  : const SizedBox(
+                                                      key: ValueKey(
+                                                          'back_to_latest_hidden'),
+                                                    ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ValueListenableBuilder<int>(
+                                  valueListenable: _attachmentsRevision,
+                                  builder: (context, _, __) {
+                                    if (_attachments.isEmpty) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return SizedBox(
+                                      height: 56,
+                                      child: ListView(
+                                        scrollDirection: Axis.horizontal,
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8),
+                                        children: _attachments.map((file) {
+                                          // 与发送端共用图片名单：此前这里漏了 gif，
+                                          // 于是 gif 能发却没有缩略图。
+                                          final isImage =
+                                              isImageAttachmentFileName(
+                                                  file.name);
+                                          return Padding(
+                                            padding:
+                                                const EdgeInsets.only(right: 8),
+                                            child: Stack(
+                                              children: [
+                                                Container(
+                                                  width: 52,
+                                                  height: 52,
+                                                  margin: const EdgeInsets.only(
+                                                      top: 4, right: 4),
+                                                  child: NexusSurface(
+                                                    level: SurfaceLevel.thin,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            8),
+                                                    child: Container(
+                                                      decoration: BoxDecoration(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                        image: isImage &&
+                                                                file.bytes !=
+                                                                    null
+                                                            ? DecorationImage(
+                                                                image: MemoryImage(
+                                                                    file
+                                                                        .bytes!),
+                                                                fit: BoxFit
+                                                                    .cover)
+                                                            : null,
+                                                      ),
+                                                      child: !isImage ||
+                                                              file.bytes == null
+                                                          ? const Center(
+                                                              child: Icon(
+                                                                  Icons
+                                                                      .insert_drive_file_outlined,
+                                                                  size: 24))
+                                                          : null,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Positioned(
+                                                  right: -4,
+                                                  top: -4,
+                                                  child: Semantics(
+                                                    button: true,
+                                                    label: '移除附件 ${file.name}',
+                                                    child: SizedBox(
+                                                      width: 48,
+                                                      height: 48,
+                                                      child: IconButton(
+                                                        padding:
+                                                            EdgeInsets.zero,
+                                                        tooltip:
+                                                            '移除附件 ${file.name}',
+                                                        onPressed: () {
+                                                          _attachments
+                                                              .remove(file);
+                                                          _notifyAttachmentsChanged();
+                                                        },
+                                                        icon: Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .all(2),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Theme.of(
+                                                                    context)
+                                                                .colorScheme
+                                                                .error,
+                                                            shape:
+                                                                BoxShape.circle,
+                                                          ),
+                                                          child: Icon(
+                                                            Icons.close,
+                                                            size: 12,
+                                                            color: Theme.of(
+                                                                    context)
+                                                                .colorScheme
+                                                                .onError,
                                                           ),
                                                         ),
                                                       ),
-                                                    );
-                                                  },
+                                                    ),
+                                                  ),
                                                 ),
-                                              )),
-                                    Positioned(
-                                      right: 16,
-                                      bottom: 16,
-                                      child: ListenableBuilder(
-                                        listenable: _scrollIndicator,
-                                        builder: (context, _) {
-                                          final reduceMotion = MotionPreferences
-                                              .shouldReduceMotion(context);
-                                          return AnimatedSwitcher(
-                                            duration: reduceMotion
-                                                ? Duration.zero
-                                                : NexusMotion.fast,
-                                            switchInCurve:
-                                                NexusMotion.curveEnter,
-                                            switchOutCurve:
-                                                NexusMotion.curveExit,
-                                            transitionBuilder:
-                                                (child, animation) =>
-                                                    FadeTransition(
-                                              opacity: animation,
-                                              child: SlideTransition(
-                                                position: Tween<Offset>(
-                                                  begin: const Offset(0, 0.2),
-                                                  end: Offset.zero,
-                                                ).animate(animation),
-                                                child: child,
-                                              ),
+                                              ],
                                             ),
-                                            child: _scrollIndicator
-                                                    .showScrollToBottom
-                                                ? NexusBackToLatestButton(
-                                                    key: const ValueKey(
-                                                        'back_to_latest'),
-                                                    onTap: _scrollIndicator
-                                                        .scrollToBottom,
-                                                    unreadCount:
-                                                        _scrollIndicator
-                                                            .unreadCount,
-                                                    isRunning: running,
-                                                  )
-                                                : const SizedBox(
-                                                    key: ValueKey(
-                                                        'back_to_latest_hidden'),
-                                                  ),
                                           );
-                                        },
+                                        }).toList(),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              ValueListenableBuilder<int>(
-                                valueListenable: _attachmentsRevision,
-                                builder: (context, _, __) {
-                                  if (_attachments.isEmpty) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return SizedBox(
-                                    height: 56,
-                                    child: ListView(
-                                      scrollDirection: Axis.horizontal,
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8),
-                                      children: _attachments.map((file) {
-                                        // 与发送端共用图片名单：此前这里漏了 gif，
-                                        // 于是 gif 能发却没有缩略图。
-                                        final isImage =
-                                            isImageAttachmentFileName(
-                                                file.name);
-                                        return Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 8),
-                                          child: Stack(
-                                            children: [
-                                              Container(
-                                                width: 52,
-                                                height: 52,
-                                                margin: const EdgeInsets.only(
-                                                    top: 4, right: 4),
-                                                child: NexusSurface(
-                                                  level: SurfaceLevel.thin,
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                  child: Container(
-                                                    decoration: BoxDecoration(
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              8),
-                                                      image: isImage &&
-                                                              file.bytes != null
-                                                          ? DecorationImage(
-                                                              image: MemoryImage(
-                                                                  file.bytes!),
-                                                              fit: BoxFit.cover)
-                                                          : null,
-                                                    ),
-                                                    child: !isImage ||
-                                                            file.bytes == null
-                                                        ? const Center(
-                                                            child: Icon(
-                                                                Icons
-                                                                    .insert_drive_file_outlined,
-                                                                size: 24))
-                                                        : null,
-                                                  ),
-                                                ),
-                                              ),
-                                              Positioned(
-                                                right: -4,
-                                                top: -4,
-                                                child: Semantics(
-                                                  button: true,
-                                                  label: '移除附件 ${file.name}',
-                                                  child: SizedBox(
-                                                    width: 48,
-                                                    height: 48,
-                                                    child: IconButton(
-                                                      padding: EdgeInsets.zero,
-                                                      tooltip:
-                                                          '移除附件 ${file.name}',
-                                                      onPressed: () {
-                                                        _attachments
-                                                            .remove(file);
-                                                        _notifyAttachmentsChanged();
-                                                      },
-                                                      icon: Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .all(2),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .error,
-                                                          shape:
-                                                              BoxShape.circle,
-                                                        ),
-                                                        child: Icon(
-                                                          Icons.close,
-                                                          size: 12,
-                                                          color:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .onError,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 8),
-                              if (!providerConfigured &&
-                                  !loading &&
-                                  !restoringConversation &&
-                                  !_providerHintDismissed)
-                                ProviderSetupHint(
-                                  onConfigure: _configureModel,
-                                  onDismiss: () {
-                                    setState(
-                                        () => _providerHintDismissed = true);
-                                    SharedPreferences.getInstance().then((p) =>
-                                        p.setBool(
-                                            'chat.provider_hint_dismissed',
-                                            true));
+                                    );
                                   },
                                 ),
-                              SessionMetricsHud(
-                                messages: messages,
-                                totalSteps: totalSteps,
-                                toolActivities: toolActivities,
-                                running: running,
-                                onTap: _openSessionMetricsSheet,
-                                onCompress:
-                                    running ? _requestContextCompression : null,
-                                contextSnapshot: ref
-                                    .read(chatControllerProvider)
-                                    .contextSnapshot,
-                              ),
-                              // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
-                              ComposerSkillPromptSlot(
-                                running: running,
-                                sessionSkills: sessionSkills,
-                                slashSkills:
-                                    _toSkillItems(_slashSkillSuggestions),
-                                suggestions: _toSkillItems(_skillSuggestions),
-                                onSlashSelect: _insertSlashSkillReference,
-                                onSuggestionSelect: _loadSuggestedSkill,
-                                onSuggestionDismiss: _dismissSkillSuggestions,
-                                onRemove: _removeSessionSkill,
-                              ),
-                              FloatingCapsuleInput(
-                                glassIntensity: glassIntensity,
-                                // 键盘与底部安全区统一由 KeyboardSpacer 处理。
-                                bottomPadding: 8,
-                                controller: _controller,
-                                isRunning: running,
-                                onSend: _send,
-                                onStop: _stop,
-                                onPause: _pause,
-                                onResume: () => _chat.resume(),
-                                isPaused: paused,
-                                onAttachmentMenu: () {
-                                  _attachmentPanelExpanded.value =
-                                      !_attachmentPanelExpanded.value;
-                                },
-                                approvalMode: approvalMode,
-                                onApprovalModeTap: _selectApprovalMode,
-                                modeLabel: chatMode.label,
-                                onModeTap: _showSessionConfiguration,
-                                planModeEnabled: planMode,
-                                hasAttachments: _attachments.isNotEmpty,
-                                hasAttachmentsListenable: _hasAttachments,
-                                isAttachmentExpanded:
-                                    _attachmentPanelExpanded.value,
-                                attachmentExpandedListenable:
-                                    _attachmentPanelExpanded,
-                              ),
-                              ValueListenableBuilder<bool>(
-                                valueListenable: _attachmentPanelExpanded,
-                                builder: (context, expanded, _) =>
-                                    NexusExpandSection(
-                                  expanded: expanded,
-                                  duration: NexusMotion.durationBase(context),
-                                  reverseDuration:
-                                      NexusMotion.durationFast(context),
-                                  child: expanded
-                                      ? AttachmentDrawerPanel(
-                                          attachments: _attachments,
-                                          onCamera: () async {
-                                            _attachmentPanelExpanded.value =
-                                                false;
-                                            await _pickImage(
-                                                ImageSource.camera);
-                                          },
-                                          onGallery: () async {
-                                            _attachmentPanelExpanded.value =
-                                                false;
-                                            await _pickMultiImage();
-                                          },
-                                          onFile: () async {
-                                            _attachmentPanelExpanded.value =
-                                                false;
-                                            await _pickFiles();
-                                          },
-                                        )
-                                      : const SizedBox.shrink(),
+                                const SizedBox(height: 8),
+                                if (!providerConfigured &&
+                                    messages.isNotEmpty &&
+                                    !loading &&
+                                    !restoringConversation &&
+                                    !_providerHintDismissed)
+                                  ProviderSetupHint(
+                                    onConfigure: _configureModel,
+                                    onDismiss: () {
+                                      setState(
+                                          () => _providerHintDismissed = true);
+                                      SharedPreferences.getInstance().then(
+                                          (p) => p.setBool(
+                                              'chat.provider_hint_dismissed',
+                                              true));
+                                    },
+                                  ),
+                                if (_embeddedDesktop)
+                                  SessionMetricsHud(
+                                    messages: messages,
+                                    totalSteps: totalSteps,
+                                    toolActivities: toolActivities,
+                                    running: running,
+                                    onTap: _openSessionMetricsSheet,
+                                    onCompress: running
+                                        ? _requestContextCompression
+                                        : null,
+                                    contextSnapshot: ref
+                                        .read(chatControllerProvider)
+                                        .contextSnapshot,
+                                  ),
+                                // 避免三条 44dp 的同类横条在 360dp 屏上叠加。
+                                ComposerSkillPromptSlot(
+                                  running: running,
+                                  sessionSkills: sessionSkills,
+                                  slashSkills:
+                                      _toSkillItems(_slashSkillSuggestions),
+                                  suggestions: _toSkillItems(_skillSuggestions),
+                                  onSlashSelect: _insertSlashSkillReference,
+                                  onSuggestionSelect: _loadSuggestedSkill,
+                                  onSuggestionDismiss: _dismissSkillSuggestions,
+                                  onRemove: _removeSessionSkill,
                                 ),
-                              ),
-                              // 键盘弹出时占位有效键盘高度，把输入区顶到键盘
-                              // 上方；收起时占位底部安全区。
-                              const KeyboardSpacer(),
-                            ]);
-                            if (wide) {
-                              column = Align(
-                                alignment: Alignment.topCenter,
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 700),
-                                  child: column,
+                                if (_embeddedDesktop)
+                                  const DesktopCitationStrip(),
+                                FloatingCapsuleInput(
+                                  desktopChatMode:
+                                      _embeddedDesktop ? chatMode : null,
+                                  onDesktopChatModeChanged:
+                                      _embeddedDesktop ? _chat.setMode : null,
+                                  desktopMaxLines:
+                                      constraints.maxHeight < 520 ? 3 : 5,
+                                  onMetricsTap: _openSessionMetricsSheet,
+                                  modelLabel: activeModel,
+                                  onModelTap: _switchProvider,
+                                  onSpeechInput: !kIsWeb &&
+                                          defaultTargetPlatform ==
+                                              TargetPlatform.android &&
+                                          !_embeddedDesktop
+                                      ? _openSpeechCapture
+                                      : null,
+                                  glassIntensity: glassIntensity,
+                                  // 键盘与底部安全区统一由 KeyboardSpacer 处理。
+                                  bottomPadding: _embeddedDesktop ? 6 : 8,
+                                  controller: _controller,
+                                  isRunning: running,
+                                  onSend: _send,
+                                  onStop: _stop,
+                                  onPause: _pause,
+                                  onResume: () async {
+                                    if (!await _chat.resume() &&
+                                        context.mounted) {
+                                      FloatingToast.show(
+                                          context, '恢复未确认，请刷新任务状态',
+                                          tone: ToastTone.warning);
+                                    }
+                                  },
+                                  isPaused: paused,
+                                  onAttachmentMenu: () {
+                                    _attachmentPanelExpanded.value =
+                                        !_attachmentPanelExpanded.value;
+                                  },
+                                  approvalMode: approvalMode,
+                                  onApprovalModeTap: _selectApprovalMode,
+                                  modeLabel: chatMode.label,
+                                  onModeTap: _showSessionConfiguration,
+                                  planModeEnabled: planMode,
+                                  hasAttachments: _attachments.isNotEmpty,
+                                  hasAttachmentsListenable: _hasAttachments,
+                                  isAttachmentExpanded:
+                                      _attachmentPanelExpanded.value,
+                                  attachmentExpandedListenable:
+                                      _attachmentPanelExpanded,
                                 ),
-                              );
-                            }
-                            return KeyboardInsetScope(child: column);
-                          }),
-                        ),
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: SafeArea(
-                            bottom: false,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
-                              child: CapsuleTopBar(
-                                glassIntensity: glassIntensity,
-                                maxContextTokens: contextTokens,
-                                workspaceLabel: (currentWorkspacePath == null ||
-                                        currentWorkspacePath.isEmpty ||
-                                        currentWorkspacePath == '未选择项目')
-                                    ? null
-                                    : (ref
-                                            .read(chatControllerProvider)
-                                            .currentProjectName ??
-                                        p.basename(currentWorkspacePath)),
-                                modelLabel: activeModel.isNotEmpty
-                                    ? activeModel
-                                    : (activeProviderName.isEmpty
-                                        ? '未配置模型'
-                                        : activeProviderName),
-                                modeLabel: chatMode.label,
-                                sessionTitle:
-                                    messages.isEmpty ? null : conversationTitle,
-                                runningStage: executionStage?.label,
-                                runningStageKind: executionStage?.stage,
-                                statusActive: running,
-                                currentContextTokens: liveContextTokens > 0
-                                    ? liveContextTokens
-                                    : messages.reversed
-                                            .where((m) => m.usage != null)
-                                            .map((m) =>
-                                                m.usage!.promptTokens +
-                                                m.usage!.completionTokens)
-                                            .firstOrNull ??
-                                        0,
-                                onMenu: () =>
-                                    _scaffoldKey.currentState?.openDrawer(),
-                                onNewChat: () => _startNewConversation(),
-                                onContextGaugeTap: () =>
-                                    _scaffoldKey.currentState?.openDrawer(),
-                                onTitleTap: _showSessionConfiguration,
-                                onWorkspaceTap: _handleTopBarWorkspace,
-                                onModeTap: _showChatModeSheet,
+                                ValueListenableBuilder<bool>(
+                                  valueListenable: _attachmentPanelExpanded,
+                                  builder: (context, expanded, _) =>
+                                      NexusExpandSection(
+                                    expanded: expanded,
+                                    duration: NexusMotion.durationBase(context),
+                                    reverseDuration:
+                                        NexusMotion.durationFast(context),
+                                    child: expanded
+                                        ? AttachmentDrawerPanel(
+                                            attachments: _attachments,
+                                            onCamera: () async {
+                                              _attachmentPanelExpanded.value =
+                                                  false;
+                                              await _pickImage(
+                                                  ImageSource.camera);
+                                            },
+                                            onGallery: () async {
+                                              _attachmentPanelExpanded.value =
+                                                  false;
+                                              await _pickMultiImage();
+                                            },
+                                            onFile: () async {
+                                              _attachmentPanelExpanded.value =
+                                                  false;
+                                              await _pickFiles();
+                                            },
+                                          )
+                                        : const SizedBox.shrink(),
+                                  ),
+                                ),
+                                // 键盘弹出时占位有效键盘高度，把输入区顶到键盘
+                                // 上方；收起时占位底部安全区。
+                                const KeyboardSpacer(),
+                              ]);
+                              if (wide) {
+                                column = Align(
+                                  alignment: Alignment.topCenter,
+                                  child: ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                        maxWidth:
+                                            _embeddedDesktop ? 1120 : 700),
+                                    child: column,
+                                  ),
+                                );
+                              }
+                              return KeyboardInsetScope(child: column);
+                            }),
+                          ),
+                          if (!_embeddedDesktop)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              height: MediaQuery.paddingOf(context).top +
+                                  capsuleTopBarHeight(context) +
+                                  18,
+                              child: IgnorePointer(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topCenter,
+                                      end: Alignment.bottomCenter,
+                                      stops: const [0, 0.82, 1],
+                                      colors: [
+                                        Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? AppPalette.darkCanvas
+                                            : Colors.white,
+                                        (Theme.of(context).brightness ==
+                                                Brightness.dark
+                                            ? AppPalette.darkCanvas
+                                            : Colors.white),
+                                        (Theme.of(context).brightness ==
+                                                    Brightness.dark
+                                                ? AppPalette.darkCanvas
+                                                : Colors.white)
+                                            .withValues(alpha: 0),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
-                      ], // Stack children
-                    ), // Stack
-                  );
-                },
-              ), // ValueListenableBuilder
-            ), // Semantics
-          ), // Scaffold
+                          if (!_embeddedDesktop)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: SafeArea(
+                                bottom: false,
+                                child: Padding(
+                                  padding: DesktopTheme.maybeOf(context) != null
+                                      ? EdgeInsets.zero
+                                      : const EdgeInsets.fromLTRB(14, 4, 14, 6),
+                                  child: CapsuleTopBar(
+                                    glassIntensity: glassIntensity,
+                                    maxContextTokens: contextTokens,
+                                    workspaceLabel: (currentWorkspacePath ==
+                                                null ||
+                                            currentWorkspacePath.isEmpty ||
+                                            currentWorkspacePath == '未选择项目')
+                                        ? null
+                                        : (ref
+                                                .read(chatControllerProvider)
+                                                .currentProjectName ??
+                                            p.basename(currentWorkspacePath)),
+                                    modelLabel: activeModel.isNotEmpty
+                                        ? activeModel
+                                        : (activeProviderName.isEmpty
+                                            ? '未配置模型'
+                                            : activeProviderName),
+                                    modeLabel: chatMode.label,
+                                    sessionTitle: messages.isEmpty
+                                        ? null
+                                        : conversationTitle,
+                                    runningStage: executionStage?.label,
+                                    runningStageKind: executionStage?.stage,
+                                    statusActive: running,
+                                    currentContextTokens: liveContextTokens > 0
+                                        ? liveContextTokens
+                                        : messages.reversed
+                                                .where((m) => m.usage != null)
+                                                .map((m) =>
+                                                    m.usage!.promptTokens +
+                                                    m.usage!.completionTokens)
+                                                .firstOrNull ??
+                                            0,
+                                    onMenu: () {
+                                      final navigation =
+                                          MobileNavigationScope.maybeOf(
+                                              context);
+                                      if (navigation != null) {
+                                        navigation.openDrawer();
+                                      } else {
+                                        _scaffoldKey.currentState?.openDrawer();
+                                      }
+                                    },
+                                    onNewChat: () => _startNewConversation(),
+                                    onContextGaugeTap: () =>
+                                        _scaffoldKey.currentState?.openDrawer(),
+                                    onTitleTap: _showSessionConfiguration,
+                                    onWorkspaceTap: _handleTopBarWorkspace,
+                                    onModeTap: _showChatModeSheet,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ], // Stack children
+                      ), // Stack
+                    );
+                  },
+                ), // ValueListenableBuilder
+              ), // Semantics
+            ), // Scaffold
+          ), // _DrawerBackGuard
         ); // AnnotatedRegion
       },
     );
   }
+}
+
+/// Back closes the conversation drawer or attachment panel before leaving chat.
+///
+/// 框架不会自动用返回键关闭 Scaffold 抽屉；本应用使用普通 `MaterialApp`
+/// （树里没有 `Router`），`BackButtonListener` 不可用，因此自行实现
+/// [PopEntry] 注册到当前 [ModalRoute]：抽屉打开时 `canPop` 为 false 挡住
+/// 返回，并在 [onPopInvokedWithResult] 里关闭抽屉。
+///
+/// 抽屉开合的三种路径（按钮、边缘拖拽、点击遮罩）最终都会走到
+/// [Scaffold.onDrawerChanged]，因此状态由该回调驱动，不再每帧轮询。
+///
+/// 2026-10-17 修复：此前这里用 `addPersistentFrameCallback` 在回调里重新注册
+/// 自己，等于持续请求新帧并让每帧都同步一次状态。结果渲染管线永远不静止
+/// （`pumpAndSettle` 永不返回），模拟器实测出现输入分发超时 ANR
+/// （`Input dispatching timed out ... Waited 5001ms for MotionEvent`）。改为
+/// [Scaffold.onDrawerChanged] 后帧循环恢复静止。
+class _DrawerBackGuard extends StatefulWidget {
+  const _DrawerBackGuard({
+    super.key,
+    required this.scaffoldKey,
+    required this.attachmentPanelExpanded,
+    required this.child,
+  });
+
+  final GlobalKey<ScaffoldState> scaffoldKey;
+  final ValueNotifier<bool> attachmentPanelExpanded;
+  final Widget child;
+
+  @override
+  State<_DrawerBackGuard> createState() => _DrawerBackGuardState();
+}
+
+class _DrawerBackGuardState extends State<_DrawerBackGuard>
+    implements PopEntry {
+  ModalRoute<dynamic>? _route;
+  ModalRoute<dynamic>? _parentRoute;
+  bool _active = true;
+  final ValueNotifier<bool> _canPop = ValueNotifier<bool>(true);
+
+  @override
+  void initState() {
+    super.initState();
+    widget.attachmentPanelExpanded.addListener(_syncDrawerState);
+  }
+
+  @override
+  void didUpdateWidget(covariant _DrawerBackGuard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachmentPanelExpanded != widget.attachmentPanelExpanded) {
+      oldWidget.attachmentPanelExpanded.removeListener(_syncDrawerState);
+      widget.attachmentPanelExpanded.addListener(_syncDrawerState);
+    }
+    _syncDrawerState();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final ModalRoute<dynamic>? nextRoute = ModalRoute.of(context);
+    if (nextRoute != _route) {
+      _route?.unregisterPopEntry(this);
+      _route = nextRoute;
+      _route?.registerPopEntry(this);
+    }
+    final entry =
+        context.dependOnInheritedWidgetOfExactType<AssistantEntrySurface>();
+    _active = (entry?.notifier?.value ?? true) &&
+        (ModalRoute.isCurrentOf(context) ?? true);
+    // The phone shell owns a parent route above its nested tab navigators.
+    // A local inline panel must also block that route's platform back action.
+    final parent = entry?.parentRoute;
+    final nextParent = parent == _route ? null : parent;
+    if (_parentRoute != nextParent) {
+      _parentRoute?.unregisterPopEntry(this);
+      _parentRoute = nextParent;
+      _parentRoute?.registerPopEntry(this);
+    }
+    _syncDrawerState();
+  }
+
+  /// 由 [Scaffold.onDrawerChanged] 调用：抽屉的开合（按钮、边缘拖拽、遮罩
+  /// 点击）都会走到这里，因此不需要每帧轮询。
+  void syncDrawerState(bool drawerOpen) {
+    _canPop.value =
+        !_active || !(drawerOpen || widget.attachmentPanelExpanded.value);
+  }
+
+  void _syncDrawerState() {
+    final bool drawerOpen =
+        widget.scaffoldKey.currentState?.isDrawerOpen ?? false;
+    syncDrawerState(drawerOpen);
+  }
+
+  /// 已废弃的空实现：`PopEntry` 的抽象成员，框架只调用
+  /// [onPopInvokedWithResult]。这里委托给它，而不是抛异常——抛异常会在
+  /// 依赖旧入口的框架版本上直接把返回键变成崩溃。
+  @override
+  // ignore: deprecated_member_use
+  void onPopInvoked(bool didPop) => onPopInvokedWithResult(didPop, null);
+
+  @override
+  void onPopInvokedWithResult(bool didPop, Object? result) {
+    if (didPop || !_active || _canPop.value) {
+      return;
+    }
+    final ScaffoldState? scaffoldState = widget.scaffoldKey.currentState;
+    if (scaffoldState != null && scaffoldState.isDrawerOpen) {
+      scaffoldState.closeDrawer();
+    } else if (widget.attachmentPanelExpanded.value) {
+      widget.attachmentPanelExpanded.value = false;
+    }
+    _syncDrawerState();
+  }
+
+  @override
+  ValueListenable<bool> get canPopNotifier => _canPop;
+
+  @override
+  void dispose() {
+    widget.attachmentPanelExpanded.removeListener(_syncDrawerState);
+    _route?.unregisterPopEntry(this);
+    _parentRoute?.unregisterPopEntry(this);
+    _canPop.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _InstalledSkill {
@@ -1584,14 +2091,14 @@ class _RecoverableTaskDialog extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppPalette.brand.withValues(alpha: 0.12),
+              color: MobileTheme.brand(context).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               isPaused
                   ? Icons.pause_circle_outline_rounded
                   : Icons.replay_rounded,
-              color: AppPalette.brand,
+              color: MobileTheme.brand(context),
               size: 22,
             ),
           ),
@@ -1630,12 +2137,14 @@ class _RecoverableTaskDialog extends StatelessWidget {
           if (info.prompt.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
             _infoRow(
+              context,
               icon: Icons.subject_rounded,
               text: info.prompt,
             ),
           ],
           const SizedBox(height: 8),
           _infoRow(
+            context,
             icon: Icons.folder_outlined,
             text: info.workspacePath ?? '未绑定项目',
           ),
@@ -1666,6 +2175,7 @@ class _RecoverableTaskDialog extends StatelessWidget {
           if (info.executedSteps.isNotEmpty) ...[
             const SizedBox(height: 8),
             _infoRow(
+              context,
               icon: Icons.checklist_rounded,
               text: '已执行步骤：${info.executedSteps.join('、')}',
             ),
@@ -1673,6 +2183,7 @@ class _RecoverableTaskDialog extends StatelessWidget {
           if (info.pauseReason != null && info.pauseReason!.isNotEmpty) ...[
             const SizedBox(height: 8),
             _infoRow(
+              context,
               icon: Icons.info_outline_rounded,
               text: '暂停原因：${info.pauseReason}',
               forceHighlight: true,
@@ -1707,7 +2218,8 @@ class _RecoverableTaskDialog extends StatelessWidget {
     );
   }
 
-  Widget _infoRow({
+  Widget _infoRow(
+    BuildContext context, {
     required IconData icon,
     required String text,
     bool forceHighlight = false,
@@ -1718,7 +2230,8 @@ class _RecoverableTaskDialog extends StatelessWidget {
         Icon(
           icon,
           size: 16,
-          color: forceHighlight ? AppPalette.warning : AppPalette.brand,
+          color:
+              forceHighlight ? AppPalette.warning : MobileTheme.brand(context),
         ),
         const SizedBox(width: 8),
         Expanded(

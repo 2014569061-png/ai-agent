@@ -2,6 +2,25 @@ part of 'chat_page.dart';
 
 /// 附件：文件与图片选择、分享图片解码。
 extension _ChatAttachments on _ChatPageState {
+  Future<void> _attachDesktopPaths(List<String> paths) async {
+    final candidates = <_PickedAttachment>[];
+    for (final path in paths) {
+      final file = File(path);
+      try {
+        if (!await file.exists()) continue;
+        candidates.add(_PickedAttachment(
+            name: p.basename(path),
+            knownSize: await file.length(),
+            readBytes: file.readAsBytes));
+      } catch (error) {
+        if (mounted) {
+          FloatingToast.error(context, '无法读取拖入文件', rawDetail: '$error');
+        }
+      }
+    }
+    await _attachPickedFiles(candidates);
+  }
+
   /// 解码分享进来的 `data:image/...;base64,...`。
   ///
   /// 单张解码失败（base64 被截断等）只提示并丢弃该张，不影响同批其他内容。
@@ -74,7 +93,8 @@ extension _ChatAttachments on _ChatPageState {
     var rejectedRead = 0;
 
     for (final file in picked) {
-      if (_attachments.length + accepted.length >= _ChatPageState._maxAttachmentCount) {
+      if (_attachments.length + accepted.length >=
+          _ChatPageState._maxAttachmentCount) {
         rejectedCount++;
         continue;
       }
@@ -121,7 +141,8 @@ extension _ChatAttachments on _ChatPageState {
     final problems = <String>[
       if (rejectedSize > 0)
         '$rejectedSize 个超过单文件 $perFileMb MB 或总预算 $totalMb MB',
-      if (rejectedCount > 0) '$rejectedCount 个超过 $_ChatPageState._maxAttachmentCount 个上限',
+      if (rejectedCount > 0)
+        '$rejectedCount 个超过 $_ChatPageState._maxAttachmentCount 个上限',
       if (rejectedRead > 0) '$rejectedRead 个无法读取',
     ];
     if (problems.isNotEmpty) {
@@ -140,9 +161,11 @@ extension _ChatAttachments on _ChatPageState {
           maxWidth: 1280, maxHeight: 1280, imageQuality: 80);
       if (files.isEmpty || !mounted) return;
       // 先按剩余配额截断再读字节：多选 50 张时不该先把 50 张全解码进内存。
-      final remaining = _ChatPageState._maxAttachmentCount - _attachments.length;
+      final remaining =
+          _ChatPageState._maxAttachmentCount - _attachments.length;
       if (remaining <= 0) {
-        FloatingToast.show(context, '最多添加 $_ChatPageState._maxAttachmentCount 个附件',
+        FloatingToast.show(
+            context, '最多添加 $_ChatPageState._maxAttachmentCount 个附件',
             tone: ToastTone.warning);
         return;
       }

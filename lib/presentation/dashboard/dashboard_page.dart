@@ -1,6 +1,8 @@
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -13,10 +15,10 @@ import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../motion/nexus_motion.dart';
 import '../motion/nexus_staggered_entrance.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
-import '../widgets/glass_surface.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/desktop_page_summary.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/glass_scroll_edge.dart';
 import '../widgets/nexus_page_header.dart';
@@ -37,9 +39,11 @@ import 'widgets/token_usage_hero.dart';
 /// 使运行中任务/待办数处于流动状态；离开页面即停止，无后台开销。
 /// （事件驱动方案：后续 SQL 聚合下沉后可切换为 StreamProvider 监听任务表。）
 class DashboardPage extends ConsumerStatefulWidget {
-  const DashboardPage({super.key, this.onConversationSelected});
+  const DashboardPage(
+      {super.key, this.onConversationSelected, this.initialDeveloperMode});
 
-  final ValueChanged<Conversation>? onConversationSelected;
+  final ValueChanged<String>? onConversationSelected;
+  final bool? initialDeveloperMode;
 
   static const Duration refreshInterval = Duration(seconds: 15);
 
@@ -62,6 +66,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
   }
 
   Future<void> _loadPresentationMode() async {
+    if (widget.initialDeveloperMode != null) {
+      if (mounted) {
+        setState(() => _developerMode = widget.initialDeveloperMode!);
+      }
+      return;
+    }
     // 可忽略：读不到偏好时保持默认「简化视图」，这是更保守的呈现方式，
     // 不影响任何数据正确性。经由 application 层的 NexusGuard 记录，
     // 避免 presentation 直接依赖 infrastructure（见 layering_test）。
@@ -142,16 +152,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
     final summaryAsync = ref.watch(dashboardSummaryProvider);
 
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    final desktop = DesktopTheme.maybeOf(context);
 
     return Scaffold(
-      backgroundColor: isFlat ? canvas : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: NexusPageHeader(
         title: AppStrings.dashboard,
         subtitle: AppStrings.dashboardSubtitle,
@@ -170,20 +176,16 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
             );
           }),
           IconButton(
-            tooltip: AppStrings.refreshDashboard,
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            onPressed: _refresh,
-          ),
-          IconButton(
             tooltip: _developerMode ? '切换到简洁模式' : '切换到开发者模式',
             icon: Icon(_developerMode
                 ? Icons.visibility_outlined
-                : Icons.terminal_rounded),
+                : Icons.analytics_outlined),
             onPressed: _togglePresentationMode,
           ),
         ],
       ),
-      body: summaryAsync.when(
+      body: NexusPageLayout(
+          child: summaryAsync.when(
         loading: () => const _DashboardSkeleton(),
         error: (err, stack) {
           final humanized = humanizeError(err.toString());
@@ -202,20 +204,61 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                 physics: NexusMotion.listPhysics,
                 // U1 节奏：分区之间统一 24、同组（性能卡 + KPI）之间 12。
                 // NexusSection 自带 bottom 16（待办条目另有 8），这里只补差值。
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 children: [
-                  // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
-                  NexusStaggeredItem(
-                    index: 0,
-                    child: TodoSection(
-                      todos: summary.todos,
-                      onConversationSelected: widget.onConversationSelected,
+                  if (desktop != null)
+                    DesktopPageSummary(items: [
+                      (
+                        icon: Icons.checklist_outlined,
+                        label: '待办事项',
+                        value: '${summary.todos.length}'
+                      ),
+                      (
+                        icon: Icons.forum_outlined,
+                        label: '近期会话',
+                        value: '${summary.recentConversations.length}'
+                      ),
+                      (
+                        icon: Icons.bolt_outlined,
+                        label: '近期运行',
+                        value: '${summary.recentRuns.length}'
+                      ),
+                    ]),
+                  if (summary.todos.isEmpty &&
+                      summary.recentRuns.isEmpty &&
+                      summary.recentConversations.isEmpty)
+                    const EmptyStateView.compact(
+                      icon: Icons.insights_outlined,
+                      title: '还没有运行记录',
+                      message: '从助手开始对话，运行记录和用量会显示在这里。',
                     ),
-                  ),
+                  // 默认只突出待处理事项与最近会话；技术指标收进开发者模式。
+                  if (summary.todos.isNotEmpty)
+                    NexusStaggeredItem(
+                      index: 0,
+                      child: TodoSection(
+                        todos: summary.todos,
+                        onConversationSelected: widget.onConversationSelected,
+                      ),
+                    ),
+                  if (!_developerMode && summary.recentRuns.isNotEmpty) ...[
+                    NexusStaggeredItem(
+                      index: 1,
+                      child: RunStatusList(
+                        runs: summary.recentRuns,
+                        onConversationSelected: widget.onConversationSelected,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
                   if (_developerMode) ...[
                     NexusStaggeredItem(
                       index: 1,
-                      child: TokenUsageHero(days: summary.weeklyUsage),
+                      child: TokenUsageHero(
+                          days: summary.weeklyUsage,
+                          costBudget: summary.costBudget,
+                          onBudgetChanged: () =>
+                              ref.invalidate(dashboardSummaryProvider)),
                     ),
                     const SizedBox(height: 12),
                     NexusStaggeredItem(
@@ -238,11 +281,21 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                     const SizedBox(height: 24),
                   ] else
                     NexusStaggeredItem(
-                      index: 1,
+                      index: 2,
                       child: SectionCard(
                         child: ListTile(
-                          leading: const Icon(Icons.insights_rounded,
-                              color: AppPalette.brand),
+                          leading: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: MobileTheme.brand(context)
+                                  .withValues(alpha: 0.10),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Icon(Icons.insights_rounded,
+                                size: 18, color: MobileTheme.brand(context)),
+                          ),
                           title: const Text('性能详情'),
                           subtitle: const Text('Token、费用、运行指标与趋势'),
                           trailing: const Icon(Icons.chevron_right_rounded),
@@ -251,19 +304,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage>
                       ),
                     ),
                   if (!_developerMode) const SizedBox(height: 24),
-                  NexusStaggeredItem(
-                    index: _developerMode ? 5 : 2,
-                    child: _RecentConversationsSection(
-                      conversations: summary.recentConversations,
-                      onConversationSelected: widget.onConversationSelected,
+                  if (summary.recentConversations.isNotEmpty)
+                    NexusStaggeredItem(
+                      index: _developerMode ? 5 : 3,
+                      child: _RecentConversationsSection(
+                        conversations: summary.recentConversations,
+                        onConversationSelected: widget.onConversationSelected,
+                      ),
                     ),
-                  ),
                 ],
               ),
             ),
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -330,7 +384,7 @@ class _SkeletonCard extends StatelessWidget {
       height: height,
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+        borderRadius: BorderRadius.circular(MobileTheme.cardRadius(context)),
       ),
     );
   }
@@ -343,7 +397,7 @@ class _RecentConversationsSection extends StatelessWidget {
   });
 
   final List<Conversation> conversations;
-  final ValueChanged<Conversation>? onConversationSelected;
+  final ValueChanged<String>? onConversationSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -374,7 +428,8 @@ class _RecentConversationsSection extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(AppStrings.viewAll,
-                style: TextStyle(fontSize: 12, color: textMuted)),
+                style: TextStyle(
+                    fontSize: AppTokens.fontSizeFootnote, color: textMuted)),
             const SizedBox(width: 2),
             Icon(Icons.chevron_right_rounded, size: 16, color: textMuted),
           ],
@@ -408,14 +463,20 @@ class _RecentConversationsSection extends StatelessWidget {
                   return ListTile(
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    leading: CircleAvatar(
-                      radius: 16,
-                      backgroundColor: surface,
+                    leading: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: surface,
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: hairline, width: 1.0),
+                      ),
+                      alignment: Alignment.center,
                       child: Icon(
                         conv.isPinned
                             ? Icons.push_pin_rounded
                             : Icons.chat_bubble_outline_rounded,
-                        size: 16,
+                        size: 15,
                         color: textMuted,
                       ),
                     ),
@@ -425,15 +486,16 @@ class _RecentConversationsSection extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontWeight: FontWeight.w500,
-                        fontSize: 14,
+                        fontSize: AppTokens.fontSizeSubhead,
                         color: textColor,
                       ),
                     ),
                     subtitle: Text(
                       timeStr,
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: AppTokens.fontSizeBadge,
                         color: textFaint,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                     trailing: Icon(
@@ -443,7 +505,7 @@ class _RecentConversationsSection extends StatelessWidget {
                     ),
                     onTap: () {
                       Navigator.of(context).pop();
-                      onConversationSelected?.call(conv);
+                      onConversationSelected?.call(conv.id);
                     },
                   );
                 },

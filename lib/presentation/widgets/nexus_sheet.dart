@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_strings.dart';
 import '../motion/motion_preferences.dart';
+import '../motion/mobile_motion.dart';
 import '../motion/nexus_haptics.dart';
 import '../motion/nexus_motion.dart';
 import '../motion/nexus_spring.dart';
@@ -9,6 +10,7 @@ import '../motion/tap_origin.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import 'glass_surface.dart';
 import 'nexus_surface.dart';
 
@@ -28,27 +30,42 @@ Future<T?> showNexusSheet<T>({
   // L6：内容自己按 viewInsets 垫底时置 true，避免与抽屉上抬重复。
   bool removeInnerViewInsets = false,
 }) {
+  final phone = DesktopTheme.maybeOf(context) == null;
   final effectiveBarrierColor = barrierColor ??
       Colors.black.withValues(
         alpha: Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.06,
       );
-  return showGeneralDialog<T>(
-    context: context,
+  // The phone route owns a single modal barrier; the desktop transition keeps
+  // its existing drag-aware overlay.
+  return Navigator.of(context).push<T>(_NexusSheetRoute<T>(
     barrierDismissible: barrierDismissible,
     barrierLabel: barrierLabel ?? AppStrings.closeDialog,
     barrierColor: effectiveBarrierColor,
-    transitionDuration: MotionPreferences.adjustDuration(
-        context, NexusMotion.sheet,
-        listen: false),
+    transitionDuration: phone
+        ? MobileMotion.duration(context, MobileMotion.panelEnter, listen: false)
+        : MotionPreferences.adjustDuration(context, NexusMotion.sheet,
+            listen: false),
+    exitDuration: phone
+        ? MobileMotion.duration(context, MobileMotion.panelExit, listen: false)
+        : MotionPreferences.adjustDuration(context, NexusMotion.sheet,
+            listen: false),
     pageBuilder: (dialogContext, animation, secondaryAnimation) {
       final media = MediaQuery.sizeOf(dialogContext);
       final insetsBottom = MediaQuery.viewInsetsOf(dialogContext).bottom;
       final baseTheme = Theme.of(dialogContext);
       final isDark = baseTheme.brightness == Brightness.dark;
+      final desktop = DesktopTheme.maybeOf(dialogContext);
+      final availableHeight = (media.height -
+              insetsBottom -
+              MediaQuery.paddingOf(dialogContext).top -
+              24)
+          .clamp(0.0, media.height);
       final maxSheetHeight =
-          media.height * (maxHeightRatio ?? (isBottomDocked ? 0.72 : 0.82));
-      final sheetRadius = BorderRadius.circular(AppTokens.radiusModal);
-      final intensity = AppAppearanceController.resolvedGlassIntensity;
+          (media.height * (maxHeightRatio ?? (isBottomDocked ? 0.72 : 0.82)))
+              .clamp(0.0, availableHeight)
+              .toDouble();
+      final sheetRadius =
+          BorderRadius.circular(desktop == null ? 28 : AppTokens.radiusModal);
 
       final innerContent = Theme(
         data: baseTheme.copyWith(
@@ -85,13 +102,18 @@ Future<T?> showNexusSheet<T>({
                     ),
                   ),
                 Flexible(
-                  child: removeInnerViewInsets
-                      ? MediaQuery.removeViewInsets(
-                          context: dialogContext,
-                          removeBottom: true,
-                          child: Builder(builder: builder),
-                        )
-                      : builder(dialogContext),
+                  child: MediaQuery.removePadding(
+                    context: dialogContext,
+                    removeTop: true,
+                    removeBottom: isBottomDocked,
+                    child: removeInnerViewInsets
+                        ? MediaQuery.removeViewInsets(
+                            context: dialogContext,
+                            removeBottom: true,
+                            child: Builder(builder: builder),
+                          )
+                        : Builder(builder: builder),
+                  ),
                 ),
               ],
             ),
@@ -99,32 +121,28 @@ Future<T?> showNexusSheet<T>({
         ),
       );
 
-      final surfaceWidget = intensity == GlassIntensity.flat
-          ? NexusSurface(
+      // Phone overlays are opaque reading surfaces. Blurring and refracting
+      // a moving backdrop adds raster work with almost no visible benefit
+      // underneath the former 96%-white tint.
+      final surfaceWidget = desktop == null
+          ? Material(
+              color: baseTheme.colorScheme.surface,
+              surfaceTintColor: Colors.transparent,
+              borderRadius: sheetRadius,
+              clipBehavior: Clip.antiAlias,
+              child: innerContent,
+            )
+          : NexusSurface(
               level: SurfaceLevel.ultraThick,
               borderRadius: sheetRadius,
               margin: EdgeInsets.zero,
               padding: EdgeInsets.zero,
               child: innerContent,
-            )
-          : GlassSurface(
-              role: GlassRole.overlay,
-              variant: GlassVariant.regular,
-              intensity: intensity,
-              borderRadius: sheetRadius,
-              tint: isDark
-                  ? AppPalette.darkSurface.withValues(alpha: 0.65)
-                  : Colors.white.withValues(alpha: 0.78),
-              blurSigma: 26,
-              refraction: 18,
-              edgeWidth: 24,
-              gloss: 0.65,
-              child: innerContent,
             );
 
-      final sheetWidget = ConstrainedBox(
+      final sheetContent = ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: 480,
+          maxWidth: desktop != null ? 640 : 560,
           maxHeight: maxSheetHeight,
         ),
         child: Material(
@@ -132,6 +150,10 @@ Future<T?> showNexusSheet<T>({
           child: surfaceWidget,
         ),
       );
+      // Cache the sheet, not the full-screen Align: translation should only
+      // move its composited layer, without repainting the list on each tick.
+      final sheetWidget =
+          desktop == null ? RepaintBoundary(child: sheetContent) : sheetContent;
 
       if (isBottomDocked) {
         return Align(
@@ -163,11 +185,29 @@ Future<T?> showNexusSheet<T>({
         animation: anim,
         isBottomDocked: isBottomDocked,
         barrierColor: effectiveBarrierColor,
-        barrierLabel: AppStrings.closeApprovalSheet,
+        barrierLabel: barrierLabel ?? AppStrings.closeDialog,
+        barrierDismissible: barrierDismissible,
         child: child,
       );
     },
-  );
+  ));
+}
+
+class _NexusSheetRoute<T> extends RawDialogRoute<T> {
+  _NexusSheetRoute({
+    required super.pageBuilder,
+    required super.barrierDismissible,
+    required super.barrierLabel,
+    required super.barrierColor,
+    required super.transitionDuration,
+    required super.transitionBuilder,
+    required this.exitDuration,
+  });
+
+  final Duration exitDuration;
+
+  @override
+  Duration get reverseTransitionDuration => exitDuration;
 }
 
 class _SheetDragNotification extends Notification {
@@ -208,6 +248,7 @@ class _NexusSheetMotion extends StatefulWidget {
     required this.isBottomDocked,
     required this.barrierColor,
     required this.barrierLabel,
+    required this.barrierDismissible,
     required this.child,
   });
 
@@ -215,6 +256,7 @@ class _NexusSheetMotion extends StatefulWidget {
   final bool isBottomDocked;
   final Color barrierColor;
   final String barrierLabel;
+  final bool barrierDismissible;
   final Widget child;
 
   @override
@@ -232,6 +274,7 @@ class _NexusSheetMotionState extends State<_NexusSheetMotion>
 
   /// 拖动位移（占屏高比例；负值 = 向上的橡皮筋区）。弹簧驱动，松手保留速度。
   late final SpringController _drag = SpringController(vsync: this);
+  CurvedAnimation? _transition;
 
   /// 手指累计位移（px，未经橡皮筋换算）。
   double _rawDrag = 0;
@@ -241,6 +284,7 @@ class _NexusSheetMotionState extends State<_NexusSheetMotion>
 
   @override
   void dispose() {
+    _transition?.dispose();
     _drag.dispose();
     super.dispose();
   }
@@ -274,8 +318,8 @@ class _NexusSheetMotionState extends State<_NexusSheetMotion>
     final height = _screenHeight();
     _rawDrag = 0;
     _pastThreshold = false;
-    final shouldDismiss =
-        _dragFraction > dismissFraction || velocity > dismissVelocity;
+    final shouldDismiss = widget.barrierDismissible &&
+        (_dragFraction > dismissFraction || velocity > dismissVelocity);
     if (shouldDismiss) {
       Navigator.of(context).maybePop();
       return;
@@ -285,10 +329,15 @@ class _NexusSheetMotionState extends State<_NexusSheetMotion>
       return;
     }
     NexusHaptics.light(context);
-    // 带着手指速度弹回静止位：bouncy 允许一次轻回弹（reduced / off 已降级）。
+    // Keep release velocity. Phone uses critical damping; desktop retains its
+    // bouncy release. Reduced / off still follows the shared motion policy.
     _drag.animateTo(
       0,
-      spring: NexusSpringPolicy.resolve(context, NexusSprings.bouncy,
+      spring: NexusSpringPolicy.resolve(
+          context,
+          DesktopTheme.maybeOf(context) == null
+              ? NexusSprings.critical(NexusSprings.snappy)
+              : NexusSprings.bouncy,
           listen: false),
       velocity: velocity / height,
     );
@@ -326,15 +375,27 @@ class _NexusSheetMotionState extends State<_NexusSheetMotion>
 
   @override
   Widget build(BuildContext context) {
-    final spring = NexusSpringPolicy.resolve(context, NexusSprings.bouncy);
-    final entering = CurvedAnimation(
-      parent: widget.animation,
-      // L4：入场按 bouncy 弹簧曲线，落位时带一次轻回弹。
-      curve: spring == null
-          ? NexusMotion.curveSheetEnter
-          : NexusSprings.curveOf(spring, allowOvershoot: true),
-      reverseCurve: NexusMotion.curveExit,
-    );
+    final phone = DesktopTheme.maybeOf(context) == null;
+    final spring =
+        phone ? null : NexusSpringPolicy.resolve(context, NexusSprings.bouncy);
+    // Reuse the curve across frames instead of adding a status listener on
+    // every route build. CurvedAnimation also preserves continuity if reversed
+    // before the entrance finishes.
+    final curve = spring == null
+        ? (phone ? MobileMotion.curve : NexusMotion.curveSheetEnter)
+        : NexusSprings.curveOf(spring, allowOvershoot: true);
+    final reverseCurve = phone ? Curves.easeInCubic : NexusMotion.curveExit;
+    if (_transition?.parent != widget.animation ||
+        _transition?.curve != curve ||
+        _transition?.reverseCurve != reverseCurve) {
+      _transition?.dispose();
+      _transition = CurvedAnimation(
+        parent: widget.animation,
+        curve: curve,
+        reverseCurve: reverseCurve,
+      );
+    }
+    final entering = _transition!;
     return NotificationListener<ScrollNotification>(
       onNotification: _onScroll,
       child: NotificationListener<_SheetDragNotification>(
@@ -349,29 +410,33 @@ class _NexusSheetMotionState extends State<_NexusSheetMotion>
                 : 0.0;
             final barrierOpacity =
                 (enter * (1.0 - dismissalProgress)).clamp(0.0, 1.0);
-            final sheetScale = 1.0 - dismissalProgress * 0.015;
-            final barrier = Semantics(
-              button: true,
-              label: widget.barrierLabel,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => Navigator.of(context).maybePop(),
-                child: ColoredBox(
-                  color: widget.barrierColor.withValues(alpha: 0),
-                  child: Opacity(
-                    opacity: barrierOpacity,
-                    child: ColoredBox(color: widget.barrierColor),
-                  ),
-                ),
-              ),
-            );
+            final sheetScale = phone ? 1.0 : 1.0 - dismissalProgress * 0.015;
+            final barrier = phone
+                ? const SizedBox.shrink()
+                : Semantics(
+                    button: true,
+                    label: widget.barrierLabel,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: widget.barrierDismissible
+                          ? () => Navigator.of(context).maybePop()
+                          : null,
+                      child: ColoredBox(
+                        color: widget.barrierColor.withValues(alpha: 0),
+                        child: Opacity(
+                          opacity: barrierOpacity,
+                          child: ColoredBox(color: widget.barrierColor),
+                        ),
+                      ),
+                    ),
+                  );
             if (!widget.isBottomDocked) {
               return Stack(
                 fit: StackFit.expand,
                 children: [
                   barrier,
                   Transform.scale(
-                    scale: 0.95 + 0.05 * enter,
+                    scale: phone ? 1 : 0.95 + 0.05 * enter,
                     child: child,
                   ),
                 ],
@@ -379,7 +444,7 @@ class _NexusSheetMotionState extends State<_NexusSheetMotion>
             }
             // Keep the glass surface outside Opacity so BackdropFilter samples
             // the scene directly. Only the separate barrier fades with drag.
-            final offset = (1 - enter) * 0.18 + _dragFraction;
+            final offset = (1 - enter) * (phone ? 1.0 : 0.18) + _dragFraction;
             return Stack(
               fit: StackFit.expand,
               children: [
@@ -429,6 +494,7 @@ Future<T?> showNexusDialog<T>({
   final origin = NexusTapOrigin.recent();
   return showGeneralDialog<T>(
     context: context,
+    useRootNavigator: false,
     barrierDismissible: barrierDismissible,
     barrierLabel: AppStrings.closeDialog,
     barrierColor: barrierColor ??
@@ -443,7 +509,8 @@ Future<T?> showNexusDialog<T>({
       final isDark = baseTheme.brightness == Brightness.dark;
       final highContrast = MediaQuery.highContrastOf(dialogContext);
       final intensity = AppAppearanceController.resolvedGlassIntensity;
-      final useGlass = intensity != GlassIntensity.flat;
+      final useGlass = DesktopTheme.maybeOf(dialogContext) != null &&
+          intensity != GlassIntensity.flat;
       final dialogRadius = BorderRadius.circular(AppTokens.radiusModal);
       final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
 

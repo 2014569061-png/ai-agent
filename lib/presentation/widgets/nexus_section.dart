@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 
 /// 统一的分段容器组件 (NexusSection)
 /// 规范模块标题、说明文字、右侧动作与内容间距，避免各页面零散重复实现。
@@ -32,7 +33,9 @@ class NexusSection extends StatelessWidget {
     return Padding(
       padding: margin,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: DesktopTheme.maybeOf(context) == null
+            ? CrossAxisAlignment.stretch
+            : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           if (hasHeader)

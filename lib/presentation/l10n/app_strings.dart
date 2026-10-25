@@ -175,7 +175,7 @@ abstract final class AppStrings {
   static const mcpServerAdded = '已添加 MCP 服务器';
   static const mcpServerSaved = '已保存修改';
   static const mcpServerDeleted = '已删除服务器';
-  static const addFirstMcpServerHint = '点击右下角按钮添加你的第一个 MCP 服务。';
+  static const addFirstMcpServerHint = '点击下方按钮添加你的第一个 MCP 服务。';
   static String mcpConnectionFoundTools(int count) => '连接成功：发现 $count 个工具';
   static String mcpConnectionFailed(String? error) => '连接失败：${error ?? '未知错误'}';
   static String confirmDeleteMcpServer(String name) =>
@@ -229,7 +229,7 @@ abstract final class AppStrings {
   // --- 记忆 ---
   static const memory = '记忆';
   static const memoryEntry = '记忆管理';
-  static const memoryHint = '长期记忆会跨会话注入，让 Agent 记住关于你的事实；数据仅存本机。';
+  static const memoryHint = '记录在本地管理；启用自动注入后，选中的记忆会随请求发送给当前模型服务。关闭注入不会删除历史或撤销显式读取权限。';
   static const noMemories = '还没有记忆。可在对话中让 Agent「记住」某件事，或点击下方按钮手动添加。';
   static const addMemory = '添加记忆';
   static const editMemory = '编辑记忆';

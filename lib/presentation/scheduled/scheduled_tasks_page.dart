@@ -1,18 +1,21 @@
+import '../theme/mobile_theme.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
+import '../../application/reminder_service.dart';
 import '../../application/scheduled_task_service.dart';
+import '../../domain/reminder.dart';
 import '../../infrastructure/database/app_database.dart';
-import '../theme/app_appearance_controller.dart';
+import '../../infrastructure/notifications/notification_service.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_dropdown.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
@@ -23,21 +26,37 @@ import '../widgets/nexus_switch.dart';
 
 /// 定时任务管理页（C5）：新建「每天/每周某时刻」执行指定提示词的 Agent 任务。
 class ScheduledTasksPage extends ConsumerStatefulWidget {
-  const ScheduledTasksPage({super.key});
+  const ScheduledTasksPage({super.key, this.initialReminderId});
+  final String? initialReminderId;
 
   @override
   ConsumerState<ScheduledTasksPage> createState() => _ScheduledTasksPageState();
 }
 
-class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
+class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage>
+    with WidgetsBindingObserver {
   bool _loading = true;
   Object? _error;
   List<ScheduledTask> _tasks = [];
+  List<ReminderItem> _reminders = [];
+  ExactAlarmCapability? _currentReminderCapability;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_loading) _load();
   }
 
   Future<void> _load() async {
@@ -50,9 +69,19 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
     try {
       final db = await ref.read(databaseProvider.future);
       final tasks = await db.allScheduledTasks();
+      final reminders = await ReminderService(db).list();
+      final capability =
+          await NotificationService.instance.reminderCapability();
+      reminders.sort((a, b) => a.id == widget.initialReminderId
+          ? -1
+          : b.id == widget.initialReminderId
+              ? 1
+              : a.effectiveTriggerUtc.compareTo(b.effectiveTriggerUtc));
       if (!mounted) return;
       setState(() {
         _tasks = tasks;
+        _reminders = reminders;
+        _currentReminderCapability = capability;
         _loading = false;
       });
     } catch (error) {
@@ -376,7 +405,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
                             style: FilledButton.styleFrom(
                               minimumSize: const Size.fromHeight(
                                   AppTokens.kMinTouchTarget),
-                              backgroundColor: AppPalette.brandAction,
+                              backgroundColor: MobileTheme.brand(context),
                               foregroundColor: Colors.white,
                             ),
                             onPressed: () {
@@ -412,198 +441,374 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage> {
     if (mounted) FloatingToast.show(context, '已创建（约每 15 分钟检查一次，实际执行时间可能略有偏差）');
   }
 
+  Future<void> _createQuickReminder() async {
+    final title = TextEditingController();
+    final notes = TextEditingController();
+    var due = DateTime.now().add(const Duration(hours: 1));
+    bool? accepted;
+    try {
+      accepted = await showNexusDialog<bool>(
+          context: context,
+          builder: (dialogContext) => StatefulBuilder(
+              builder: (context, update) => AlertDialog(
+                    title: const Text('新建提醒'),
+                    content: SingleChildScrollView(
+                        child:
+                            Column(mainAxisSize: MainAxisSize.min, children: [
+                      TextField(
+                          controller: title,
+                          autofocus: true,
+                          decoration: const InputDecoration(labelText: '提醒事项')),
+                      TextField(
+                          controller: notes,
+                          decoration:
+                              const InputDecoration(labelText: '备注（可选）')),
+                      const SizedBox(height: 12),
+                      Text(
+                          '设备时区：${due.timeZoneName} · ${due.toString().substring(0, 16)}'),
+                      TextButton(
+                          onPressed: () async {
+                            final day = await showDatePicker(
+                                context: dialogContext,
+                                initialDate: due,
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now()
+                                    .add(const Duration(days: 3650)));
+                            if (day == null || !dialogContext.mounted) return;
+                            final time = await showTimePicker(
+                                context: dialogContext,
+                                initialTime: TimeOfDay.fromDateTime(due));
+                            if (time != null && dialogContext.mounted) {
+                              update(() => due = DateTime(day.year, day.month,
+                                  day.day, time.hour, time.minute));
+                            }
+                          },
+                          child: const Text('选择日期与时间')),
+                    ])),
+                    actions: [
+                      TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: const Text('取消')),
+                      FilledButton(
+                          onPressed: () {
+                            if (title.text.trim().isEmpty ||
+                                !due.isAfter(DateTime.now())) {
+                              FloatingToast.show(context, '请输入提醒事项并选择未来时间');
+                              return;
+                            }
+                            Navigator.pop(dialogContext, true);
+                          },
+                          child: const Text('创建')),
+                    ],
+                  )));
+      if (accepted != true || !mounted) return;
+      await NotificationService.instance.ensurePermissionOnce();
+      if (!mounted) return;
+      final db = await ref.read(databaseProvider.future);
+      final item = await ReminderService(db).create(
+        title: title.text,
+        notes: notes.text,
+        scheduledAtUtc: due.toUtc(),
+        timezoneId: due.timeZoneName,
+        utcOffsetMinutes: due.timeZoneOffset.inMinutes,
+      );
+      await _load();
+      if (mounted) {
+        FloatingToast.show(
+            context,
+            item.exactAlarmCapability == ExactAlarmCapability.denied
+                ? '提醒已保存；通知不可用，请检查系统权限'
+                : '提醒已创建 · ${item.exactAlarmCapability.label}');
+      }
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '创建提醒失败：$error');
+    } finally {
+      title.dispose();
+      notes.dispose();
+    }
+  }
+
+  Future<void> _cancelReminder(ReminderItem item) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await ReminderService(db).cancel(item.id);
+      await _load();
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '取消提醒失败：$error');
+    }
+  }
+
+  Future<void> _snoozeReminder(ReminderItem item) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await ReminderService(db).snooze(item.id);
+      await _load();
+      if (mounted) FloatingToast.show(context, '已延后 10 分钟提醒');
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '延后失败：$error');
+    }
+  }
+
+  Future<void> _completeReminder(ReminderItem item) async {
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await ReminderService(db).complete(item.id);
+      await _load();
+      if (mounted) FloatingToast.show(context, '提醒已标记完成');
+    } catch (error) {
+      if (mounted) FloatingToast.show(context, '操作失败：$error');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: const NexusPageHeader(
         title: '定时任务',
         subtitle: '自动化循环计划与后台执行',
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         error: _error,
         onRetry: _load,
-        child: _tasks.isEmpty
-            ? const EmptyStateView(
-                icon: Icons.schedule_outlined,
-                title: '无定时任务',
-                message: '还没有定时任务，点击右下角新建')
-            : ListView.separated(
-                padding: const EdgeInsets.all(16),
-                itemCount: _tasks.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (context, index) {
-                  final task = _tasks[index];
-                  final spec = ScheduleSpec.fromCron(task.cron);
-                  final daysLabel = spec.days.isEmpty
-                      ? AppStrings.everyDay
-                      : spec.days
-                          .map((day) =>
-                              AppStrings.weekdays[day] ??
-                              AppStrings.weekday(day))
-                          .join('/');
-                  final timeLabel =
-                      '${spec.hour.toString().padLeft(2, '0')}:${spec.minute.toString().padLeft(2, '0')}';
-                  final nextRun = _formatNextRun(spec, task.enabled);
-                  final tz = DateTime.now().timeZoneName;
-
-                  return SectionCard(
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      leading: SizedBox(
-                        width: 48,
-                        height: 48,
-                        child: Center(
-                          child: NexusSwitch(
-                            value: task.enabled,
-                            onChanged: (v) => _toggle(task, v),
+        child: Column(
+          children: [
+            Flexible(
+                child: SingleChildScrollView(
+                    child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: SectionCard(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.notifications_active_outlined,
+                            size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '主动提醒 (${_reminders.length})',
+                            style: const TextStyle(
+                              fontSize: AppTokens.fontSizeBody,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      title: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              task.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: task.enabled
-                                  ? (isDark
-                                      ? AppPalette.brandSoftDark
-                                      : AppPalette.brandSoftLight)
-                                  : (isDark
-                                      ? AppPalette.darkCanvas
-                                      : AppPalette.lightCanvas),
-                              borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusControl),
-                            ),
-                            child: Text(
-                              task.enabled ? '已启用' : '已暂停',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                                color: task.enabled
-                                    ? AppPalette.brandAction
-                                    : (isDark
-                                        ? AppPalette.darkTextMuted
-                                        : AppPalette.lightTextMuted),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      subtitle: Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '$daysLabel $timeLabel · 下次：$nextRun · 时区：$tz',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: task.enabled
-                                    ? (isDark ? Colors.white70 : Colors.black87)
-                                    : (isDark
-                                        ? AppPalette.darkTextMuted
-                                        : AppPalette.lightTextMuted),
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              task.prompt,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: isDark
-                                    ? AppPalette.darkTextMuted
-                                    : AppPalette.lightTextMuted,
-                              ),
-                            ),
-                          ],
+                        TextButton.icon(
+                          key: const ValueKey('create-quick-reminder'),
+                          onPressed: _createQuickReminder,
+                          icon: const Icon(Icons.add_alarm_rounded, size: 16),
+                          label: const Text('新建提醒'),
                         ),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.history_outlined),
-                            tooltip: '查看执行记录',
-                            constraints: const BoxConstraints(
-                              minWidth: AppTokens.kMinTouchTarget,
-                              minHeight: AppTokens.kMinTouchTarget,
-                            ),
-                            onPressed: () => _showHistory(task),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline),
-                            tooltip: '删除任务',
-                            constraints: const BoxConstraints(
-                              minWidth: AppTokens.kMinTouchTarget,
-                              minHeight: AppTokens.kMinTouchTarget,
-                            ),
-                            onPressed: () => _delete(task),
-                          ),
-                        ],
-                      ),
+                      ],
                     ),
-                  );
-                },
+                    Text(
+                        '当前系统能力：${_currentReminderCapability?.label ?? "尚未确认"}',
+                        style: const TextStyle(
+                            fontSize: AppTokens.fontSizeCaption)),
+                    if (_reminders.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text(
+                          '按选择的日期与时间通知；精确闹钟未授权时会显示降级状态。',
+                          style: TextStyle(fontSize: AppTokens.fontSizeCaption),
+                        ),
+                      )
+                    else
+                      for (final rem in _reminders)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${rem.title} · ${rem.status.label}\n${rem.effectiveTriggerUtc.toLocal().toString().substring(0, 16)} · ${rem.exactAlarmCapability.label}',
+                                style: const TextStyle(
+                                    fontSize: AppTokens.fontSizeFootnote),
+                              ),
+                              if (rem.status == ReminderStatus.scheduled ||
+                                  rem.status == ReminderStatus.snoozed ||
+                                  rem.status == ReminderStatus.paused)
+                                Wrap(children: [
+                                  TextButton(
+                                    onPressed: () => _snoozeReminder(rem),
+                                    child: const Text('+10m'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _completeReminder(rem),
+                                    child: const Text('完成'),
+                                  ),
+                                  TextButton(
+                                      onPressed: () => _cancelReminder(rem),
+                                      child: const Text('取消')),
+                                ]),
+                            ],
+                          ),
+                        ),
+                  ],
+                ),
               ),
-      ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF388BFD),
-              Color(0xFF1F6FEB),
-            ],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppPalette.brand.withValues(alpha: 0.35),
-              blurRadius: 16,
-              offset: const Offset(0, 6),
+            ))),
+            Expanded(
+              child: _tasks.isEmpty
+                  ? const EmptyStateView(
+                      icon: Icons.schedule_outlined,
+                      title: '无定时任务',
+                      message: '还没有定时任务，点击右下角新建')
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                      itemCount: _tasks.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final task = _tasks[index];
+                        final spec = ScheduleSpec.fromCron(task.cron);
+                        final daysLabel = spec.days.isEmpty
+                            ? AppStrings.everyDay
+                            : spec.days
+                                .map((day) =>
+                                    AppStrings.weekdays[day] ??
+                                    AppStrings.weekday(day))
+                                .join('/');
+                        final timeLabel =
+                            '${spec.hour.toString().padLeft(2, '0')}:${spec.minute.toString().padLeft(2, '0')}';
+                        final nextRun = _formatNextRun(spec, task.enabled);
+                        final tz = DateTime.now().timeZoneName;
+
+                        return SectionCard(
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 4),
+                            leading: SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: NexusSwitch(
+                                  value: task.enabled,
+                                  onChanged: (v) => _toggle(task, v),
+                                ),
+                              ),
+                            ),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    task.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: AppTokens.fontSizeBody,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: task.enabled
+                                        ? (isDark
+                                            ? AppPalette.brandSoftDark
+                                            : AppPalette.brandSoftLight)
+                                        : (isDark
+                                            ? AppPalette.darkCanvas
+                                            : AppPalette.lightCanvas),
+                                    borderRadius: BorderRadius.circular(
+                                        MobileTheme.controlRadius(context)),
+                                  ),
+                                  child: Text(
+                                    task.enabled ? '已启用' : '已暂停',
+                                    style: TextStyle(
+                                      fontSize: AppTokens.fontSizeBadge,
+                                      fontWeight: FontWeight.w600,
+                                      color: task.enabled
+                                          ? MobileTheme.brand(context)
+                                          : (isDark
+                                              ? AppPalette.darkTextMuted
+                                              : AppPalette.lightTextMuted),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            subtitle: Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '$daysLabel $timeLabel · 下次：$nextRun · 时区：$tz',
+                                    style: TextStyle(
+                                      fontSize: AppTokens.fontSizeFootnote,
+                                      fontWeight: FontWeight.w500,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                      color: task.enabled
+                                          ? (isDark
+                                              ? Colors.white70
+                                              : Colors.black87)
+                                          : (isDark
+                                              ? AppPalette.darkTextMuted
+                                              : AppPalette.lightTextMuted),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    task.prompt,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: AppTokens.fontSizeCaption,
+                                      color: isDark
+                                          ? AppPalette.darkTextMuted
+                                          : AppPalette.lightTextMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.history_outlined),
+                                  tooltip: '查看执行记录',
+                                  constraints: const BoxConstraints(
+                                    minWidth: AppTokens.kMinTouchTarget,
+                                    minHeight: AppTokens.kMinTouchTarget,
+                                  ),
+                                  onPressed: () => _showHistory(task),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline),
+                                  tooltip: '删除任务',
+                                  constraints: const BoxConstraints(
+                                    minWidth: AppTokens.kMinTouchTarget,
+                                    minHeight: AppTokens.kMinTouchTarget,
+                                  ),
+                                  onPressed: () => _delete(task),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
-        child: FloatingActionButton(
-          onPressed: _create,
-          tooltip: '新建定时任务',
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          focusElevation: 0,
-          hoverElevation: 0,
-          highlightElevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-          ),
-          child: const Icon(Icons.add),
-        ),
+      )),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _create,
+        tooltip: '新建定时任务',
+        child: const Icon(Icons.add),
       ),
     );
   }

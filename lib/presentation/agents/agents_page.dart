@@ -1,5 +1,9 @@
+import '../theme/mobile_theme.dart';
 import '../l10n/app_strings.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/desktop_resource_view.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/agent_draft_service.dart';
 import '../../application/agent_tool_catalog.dart';
@@ -12,11 +16,9 @@ import '../motion/nexus_page_route_factory.dart';
 import '../motion/nexus_motion.dart';
 import '../motion/nexus_staggered_entrance.dart';
 import 'agent_editor_page.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/empty_state_view.dart';
-import '../widgets/liquid_glass.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_sheet.dart';
@@ -87,187 +89,211 @@ class _AgentsPageState extends ConsumerState<AgentsPage> {
     await _openAgentEditor(draft: draft);
   }
 
+  Future<void> _chooseCreation() async {
+    final choice = await showNexusSheet<String>(
+      context: context,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.auto_awesome_outlined),
+            title: const Text('描述目标，生成草稿'),
+            subtitle: const Text('生成后核对角色与工具权限，再保存'),
+            onTap: () => Navigator.pop(context, 'describe'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('手动配置'),
+            onTap: () => Navigator.pop(context, 'manual'),
+          ),
+        ]),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'describe') {
+      await _createFromDescription();
+    } else {
+      await _openAgentEditor();
+    }
+  }
+
+  Widget _desktopAgents() => FutureBuilder<List<Agent>>(
+      future: _agents,
+      builder: (context, snapshot) => DesktopResourceView<Agent>(
+            title: 'Agent 管理',
+            icon: Icons.smart_toy_outlined,
+            description: '将角色、指令与工具范围组织成可复用的 Agent。生成草稿后仍需确认保存。',
+            items: snapshot.data ?? const [],
+            loading: snapshot.connectionState != ConnectionState.done,
+            error: snapshot.error,
+            onReload: () => setState(_reload),
+            searchHint: '搜索 Agent 名称或系统指令',
+            searchText: (agent) => '${agent.name} ${agent.systemPrompt}',
+            sorts: [
+              DesktopResourceSort(
+                  '名称 A–Z',
+                  (a, b) =>
+                      a.name.toLowerCase().compareTo(b.name.toLowerCase())),
+              DesktopResourceSort(
+                  '执行步数：少到多', (a, b) => a.maxSteps.compareTo(b.maxSteps))
+            ],
+            actions: [
+              FilledButton.icon(
+                  onPressed: _createFromDescription,
+                  icon: const Icon(Icons.auto_awesome_outlined),
+                  label: const Text('描述目标，生成草稿')),
+              OutlinedButton.icon(
+                  onPressed: () => _openAgentEditor(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('手动创建 Agent')),
+            ],
+            emptyTitle: '建立你的第一个 Agent',
+            emptyMessage: '从描述目标开始，或手动定义角色、参数与工具范围。',
+            itemBuilder: (context, agent) => DesktopResourceCard(
+              key: ValueKey('desktop-agent-${agent.id}'),
+              title: agent.name,
+              icon: Icons.smart_toy_outlined,
+              description: agent.systemPrompt,
+              metadata: [
+                '最多 ${agent.maxSteps} 步',
+                '温度 ${agent.temperature}',
+                '工具权限在编辑器中管理'
+              ],
+              onTap: () => _openAgentEditor(agent: agent),
+              actions: [
+                OutlinedButton.icon(
+                    onPressed: () => _openAgentEditor(agent: agent),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('编辑角色与权限'))
+              ],
+            ),
+          ));
+
   @override
   Widget build(BuildContext context) {
+    if (DesktopTheme.maybeOf(context) != null) return _desktopAgents();
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: const NexusPageHeader(
         title: AppStrings.agentManagement,
         subtitle: '管理智能体配置与专属工具',
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF335CFF), Color(0xFF1D4ED8)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppPalette.brand.withValues(alpha: isDark ? 0.40 : 0.28),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
-          onPressed: () => _openAgentEditor(),
-          tooltip: '手动创建 Agent',
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          elevation: 0,
-          focusElevation: 0,
-          hoverElevation: 0,
-          highlightElevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-          ),
-          icon: const Icon(Icons.add_rounded, size: 20),
-          label:
-              const Text('手动创建', style: TextStyle(fontWeight: FontWeight.w600)),
-        ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _chooseCreation,
+        tooltip: '创建 Agent',
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('创建 Agent'),
       ),
-      body: FutureBuilder<List<Agent>>(
-          future: _agents,
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const NexusCardSkeleton(count: 3);
-            }
-            final agents = snapshot.data!;
-            if (agents.isEmpty) {
-              return EmptyStateView(
-                icon: Icons.smart_toy_outlined,
-                title: '还没有 Agent',
-                message: '说一句你要它做什么，AI 会生成角色、指令与工具范围，你确认后即可用',
-                actionLabel: '描述目标，让 AI 生成',
-                onAction: _createFromDescription,
-              );
-            }
-            return NexusStaggeredEntrance(
-                child: ListView.separated(
-                    physics: NexusMotion.listPhysics,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                    // 首项是「描述生成」入口，其余是已有 Agent。
-                    itemCount: agents.length + 1,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppTokens.sp3),
-                    itemBuilder: NexusStaggeredItem.wrap((context, index) {
-                      if (index == 0) {
-                        return _DescribeEntryCard(
-                            onTap: _createFromDescription);
-                      }
-                      final agent = agents[index - 1];
-                      return SectionCard(
-                          glass: true,
-                          child: ListTile(
-                              leading: Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? AppPalette.brandSoftDark
-                                      : AppPalette.brandSoftLight,
-                                  borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusControl),
-                                  border: Border.all(
-                                    color: isDark
-                                        ? Colors.white.withValues(alpha: 0.12)
-                                        : AppPalette.brand
-                                            .withValues(alpha: 0.15),
-                                    width: 0.8,
+      body: NexusPageLayout(
+          child: FutureBuilder<List<Agent>>(
+              future: _agents,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return EmptyStateView(
+                      icon: Icons.error_outline,
+                      title: 'Agent 读取失败',
+                      actionLabel: '重试',
+                      onAction: () => setState(_reload));
+                }
+                if (!snapshot.hasData) {
+                  return const NexusCardSkeleton(count: 3);
+                }
+                final agents = snapshot.data!;
+                if (agents.isEmpty) {
+                  return const EmptyStateView(
+                    icon: Icons.smart_toy_outlined,
+                    title: '还没有 Agent',
+                    message: '说一句你要它做什么，AI 会生成角色、指令与工具范围，你确认后即可用',
+                  );
+                }
+                return NexusStaggeredEntrance(
+                    child: ListView.separated(
+                        physics: NexusMotion.listPhysics,
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+                        // 创建方式统一收纳在添加面板。
+                        itemCount: agents.length,
+                        separatorBuilder: (_, __) =>
+                            const SizedBox(height: AppTokens.sp3),
+                        itemBuilder: NexusStaggeredItem.wrap((context, index) {
+                          final agent = agents[index];
+                          return SectionCard(
+                              glass: false,
+                              child: ListTile(
+                                  leading: Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: isDark
+                                          ? AppPalette.brandSoftDark
+                                          : AppPalette.brandSoftLight,
+                                      borderRadius: BorderRadius.circular(
+                                          MobileTheme.controlRadius(context)),
+                                      border: Border.all(
+                                        color: isDark
+                                            ? Colors.white
+                                                .withValues(alpha: 0.12)
+                                            : MobileTheme.brand(context)
+                                                .withValues(alpha: 0.15),
+                                        width: 0.8,
+                                      ),
+                                    ),
+                                    child: Icon(Icons.smart_toy_outlined,
+                                        size: 20,
+                                        color: MobileTheme.brand(context)),
                                   ),
-                                ),
-                                child: const Icon(Icons.smart_toy_outlined,
-                                    size: 20, color: AppPalette.brand),
-                              ),
-                              title: Text(
-                                agent.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: AppTokens.fontSizeBody,
-                                ),
-                              ),
-                              subtitle: Text(
-                                agent.systemPrompt,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: AppTokens.fontSizeCaption,
-                                  color: isDark
-                                      ? AppPalette.darkTextMuted
-                                      : AppPalette.lightTextMuted,
-                                ),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.edit_outlined),
-                                tooltip: AppStrings.editAgent,
-                                constraints: const BoxConstraints(
-                                  minWidth: AppTokens.kMinTouchTarget,
-                                  minHeight: AppTokens.kMinTouchTarget,
-                                ),
-                                onPressed: () => _openAgentEditor(agent: agent),
-                              ),
-                              onTap: () => _openAgentEditor(agent: agent)));
-                    })));
-          }),
-    );
-  }
-}
-
-/// 首页首项：「说目标 → 自动生成角色、系统指令与工具范围」入口卡片。
-///
-/// 放在已有 Agent 列表之前，因为它才是这个页面的默认动作——手填表单应当是备选，
-/// 而不是让用户自己想清楚角色、系统指令与工具白名单。
-class _DescribeEntryCard extends StatelessWidget {
-  const _DescribeEntryCard({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-
-    return SectionCard(
-      glass: true,
-      child: ListTile(
-        onTap: onTap,
-        leading: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color:
-                isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight,
-            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.12)
-                  : AppPalette.brand.withValues(alpha: 0.15),
-              width: 0.8,
-            ),
-          ),
-          child: const Icon(Icons.auto_awesome_outlined,
-              size: 20, color: AppPalette.brand),
-        ),
-        title: const Text(
-          '用一句话描述，让 AI 生成',
-          style: TextStyle(
-              fontWeight: FontWeight.w600, fontSize: AppTokens.fontSizeBody),
-        ),
-        subtitle: Text(
-          '生成角色、系统指令与工具范围，你确认后再保存',
-          style:
-              TextStyle(fontSize: AppTokens.fontSizeCaption, color: textMuted),
-        ),
-      ),
+                                  title: Text(
+                                    agent.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: AppTokens.fontSizeBody,
+                                    ),
+                                  ),
+                                  subtitle: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        agent.systemPrompt,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: AppTokens.fontSizeCaption,
+                                          color: isDark
+                                              ? AppPalette.darkTextMuted
+                                              : AppPalette.lightTextMuted,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        '最大 ${agent.maxSteps} 步 · 温度 ${agent.temperature}',
+                                        style: TextStyle(
+                                          fontSize: AppTokens.fontSizeBadge,
+                                          fontWeight: FontWeight.w500,
+                                          fontFeatures: const [
+                                            FontFeature.tabularFigures()
+                                          ],
+                                          color: isDark
+                                              ? AppPalette.darkTextFaint
+                                              : AppPalette.lightTextMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.edit_outlined),
+                                    tooltip: AppStrings.editAgent,
+                                    constraints: const BoxConstraints(
+                                      minWidth: AppTokens.kMinTouchTarget,
+                                      minHeight: AppTokens.kMinTouchTarget,
+                                    ),
+                                    onPressed: () =>
+                                        _openAgentEditor(agent: agent),
+                                  ),
+                                  onTap: () => _openAgentEditor(agent: agent)));
+                        })));
+              })),
     );
   }
 }
@@ -369,7 +395,8 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
               hintStyle: TextStyle(
                   fontSize: AppTokens.fontSizeCaption, color: textMuted),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.controlRadius(context)),
               ),
               contentPadding: const EdgeInsets.all(14),
             ),
@@ -390,8 +417,8 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
                     minimumSize:
                         const Size.fromHeight(AppTokens.kControlHeight),
                     shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppTokens.radiusControl),
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.controlRadius(context)),
                     ),
                   ),
                   onPressed: _busy ? null : () => Navigator.of(context).pop(),
@@ -404,11 +431,11 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
                   style: FilledButton.styleFrom(
                     minimumSize:
                         const Size.fromHeight(AppTokens.kControlHeight),
-                    backgroundColor: AppPalette.brand,
+                    backgroundColor: MobileTheme.brand(context),
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppTokens.radiusControl),
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.controlRadius(context)),
                     ),
                   ),
                   onPressed: _busy ? null : _generate,

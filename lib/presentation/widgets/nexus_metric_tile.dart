@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_status_colors.dart';
+import '../theme/desktop_theme.dart';
+import 'section_card.dart';
 import '../theme/app_tokens.dart';
 import 'glass_surface.dart';
 import '../motion/press_squash.dart';
@@ -56,7 +59,15 @@ class NexusMetricTile extends StatelessWidget {
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    final valueColor = color ?? textColor;
+    final tone = switch (color) {
+      AppPalette.success => AppStatusTone.success,
+      AppPalette.warning => AppStatusTone.warning,
+      AppPalette.danger => AppStatusTone.danger,
+      _ => null,
+    };
+    final valueColor = tone == null
+        ? (color ?? textColor)
+        : AppStatusColors.resolve(context, tone).foreground;
     final intensity = AppAppearanceController.resolvedGlassIntensity;
     final isGlass = intensity != GlassIntensity.flat;
     final cardRadius = BorderRadius.circular(AppTokens.radiusCard);
@@ -71,17 +82,20 @@ class NexusMetricTile extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 13, color: color ?? textMuted),
+                Icon(icon,
+                    size: 13, color: color == null ? textMuted : valueColor),
                 const SizedBox(width: 4),
               ],
-              Text(
+              Flexible(
+                  child: Text(
                 label,
                 style: TextStyle(
                   color: textMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
+                  fontSize: AppTokens.fontSizeBadge,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.25,
                 ),
-              ),
+              )),
               if (explanation != null) ...[
                 const SizedBox(width: 4),
                 Tooltip(
@@ -97,37 +111,74 @@ class NexusMetricTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              RollingText(
-                value,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: valueColor,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              if (unit != null && unit!.isNotEmpty) ...[
-                const SizedBox(width: 3),
-                Text(
-                  unit!,
+          if (DesktopTheme.maybeOf(context) == null)
+            Wrap(
+              spacing: 3,
+              runSpacing: 2,
+              crossAxisAlignment: WrapCrossAlignment.end,
+              children: [
+                RollingText(
+                  value,
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
-                    color: textMuted,
+                    fontSize: AppTokens.fontSizeBodyLarge,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
+                if (unit != null && unit!.isNotEmpty) ...[
+                  Text(
+                    unit!,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeBadge,
+                      fontWeight: FontWeight.w500,
+                      color: textMuted,
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ),
+            )
+          else
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                RollingText(
+                  value,
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeBodyLarge,
+                    fontWeight: FontWeight.w600,
+                    color: valueColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (unit != null && unit!.isNotEmpty) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    unit!,
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeBadge,
+                      fontWeight: FontWeight.w500,
+                      color: textMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
         ],
       ),
     );
 
+    if (DesktopTheme.maybeOf(context) == null) {
+      return SectionCard(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: cardBody,
+        ),
+      );
+    }
     if (isGlass) {
       return GlassSurface(
         role: GlassRole.content,
@@ -162,4 +213,26 @@ class NexusMetricTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Intrinsic-height metrics: no fixed aspect ratio that clips enlarged text.
+class NexusMetricGrid extends StatelessWidget {
+  const NexusMetricGrid({super.key, required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+        final minTileWidth =
+            constraints.maxWidth >= 320 && scale <= 1.35 ? 140.0 : 160.0;
+        final columns = ((constraints.maxWidth + 10) /
+                (minTileWidth * scale.clamp(1, 2) + 10))
+            .floor()
+            .clamp(1, 4);
+        final width = (constraints.maxWidth - 10 * (columns - 1)) / columns;
+        return Wrap(spacing: 10, runSpacing: 10, children: [
+          for (final child in children) SizedBox(width: width, child: child),
+        ]);
+      });
 }

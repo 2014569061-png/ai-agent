@@ -1,3 +1,5 @@
+import '../../theme/mobile_theme.dart';
+import '../../theme/desktop_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -52,12 +54,12 @@ class InputToolGridSheet extends StatelessWidget {
     HapticFeedback.mediumImpact();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return showNexusSheet(
-context: context,
-barrierColor: isDark
+      context: context,
+      barrierColor: isDark
           ? Colors.black.withValues(alpha: 0.35)
           : Colors.black.withValues(alpha: 0.06),
-isScrollControlled: true,
-builder: (_) => InputToolGridSheet(
+      isScrollControlled: true,
+      builder: (_) => InputToolGridSheet(
         onCommandMenu: onCommandMenu,
         onMcpMenu: onMcpMenu,
         onTerminalPreview: onTerminalPreview,
@@ -69,7 +71,7 @@ builder: (_) => InputToolGridSheet(
         approvalMode: approvalMode,
         onApprovalModeTap: onApprovalModeTap,
       ),
-);
+    );
   }
 
   String _approvalLabel(ApprovalMode mode) => switch (mode) {
@@ -89,7 +91,7 @@ builder: (_) => InputToolGridSheet(
         icon: Icons.keyboard_command_key_rounded,
         title: '提示词库',
         subtitle: '预设任务指令',
-        color: AppPalette.brand,
+        color: MobileTheme.brand(context),
         onTap: onCommandMenu,
       ),
       _ToolDefinition(
@@ -127,7 +129,8 @@ builder: (_) => InputToolGridSheet(
             : Icons.pan_tool_alt_rounded,
         title: '计划模式',
         subtitle: planModeEnabled ? '已开启 · 需确认' : '已关闭 · 自动执行',
-        color: planModeEnabled ? AppPalette.brand : semantic.textMuted,
+        color:
+            planModeEnabled ? MobileTheme.brand(context) : semantic.textMuted,
         isActive: planModeEnabled,
         onTap: onPlanModeToggle,
       ),
@@ -179,18 +182,21 @@ builder: (_) => InputToolGridSheet(
               // 标题栏
               Row(
                 children: [
-                  const Icon(Icons.apps_rounded,
-                      size: 18, color: AppPalette.brand),
+                  Icon(Icons.apps_rounded,
+                      size: 18, color: MobileTheme.brand(context)),
                   const SizedBox(width: 8),
-                  Text(
+                  Expanded(
+                      child: Text(
                     '工作台工具箱',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w500,
+                      fontSize: AppTokens.fontSizeBody,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                  const Spacer(),
+                  )),
                   IconButton(
+                    tooltip: '关闭工具箱',
                     icon: const Icon(Icons.close_rounded, size: 18),
                     visualDensity: VisualDensity.compact,
                     onPressed: () => Navigator.pop(context),
@@ -199,29 +205,74 @@ builder: (_) => InputToolGridSheet(
               ),
               const SizedBox(height: 12),
 
-              // 工具网格：固定 4 列，整洁对称
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: tools.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 0.78,
-                ),
-                itemBuilder: (context, index) {
-                  final tool = tools[index];
-                  return _ToolGridCard(
-                    tool: tool,
-                    onPressed: () {
-                      HapticFeedback.selectionClick();
-                      Navigator.pop(context);
-                      tool.onTap();
+              // Keep the header fixed and let tools scroll when height is tight.
+              Flexible(child: LayoutBuilder(builder: (context, constraints) {
+                if (DesktopTheme.maybeOf(context) == null) {
+                  return ListView.separated(
+                    shrinkWrap: true,
+                    primary: false,
+                    padding: const EdgeInsets.only(bottom: 32),
+                    itemCount: tools.length,
+                    separatorBuilder: (_, __) => const Divider(indent: 64),
+                    itemBuilder: (context, index) {
+                      final tool = tools[index];
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 6),
+                        leading: Container(
+                            width: 42,
+                            height: 42,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primaryContainer,
+                                borderRadius: BorderRadius.circular(14)),
+                            child: Icon(tool.icon,
+                                size: 22,
+                                color: Theme.of(context).colorScheme.primary)),
+                        title: Text(tool.title),
+                        subtitle: Text(tool.subtitle),
+                        trailing: Icon(
+                            tool.isActive
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.chevron_right_rounded,
+                            size: 20),
+                        onTap: () {
+                          Navigator.pop(context);
+                          tool.onTap();
+                        },
+                      );
                     },
                   );
-                },
-              ),
+                }
+                final scale = MediaQuery.textScalerOf(context).scale(13) / 13;
+                final columns = ((constraints.maxWidth + 8) /
+                        (112 * scale.clamp(1, 1.8) + 8))
+                    .floor()
+                    .clamp(1, 4);
+                return GridView.builder(
+                  shrinkWrap: true,
+                  primary: false,
+                  itemCount: tools.length,
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: columns,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 8,
+                    mainAxisExtent: 112 + 48 * (scale - 1).clamp(0, 3),
+                  ),
+                  itemBuilder: (context, index) {
+                    final tool = tools[index];
+                    return _ToolGridCard(
+                        tool: tool,
+                        onPressed: () {
+                          HapticFeedback.selectionClick();
+                          Navigator.pop(context);
+                          tool.onTap();
+                        });
+                  },
+                );
+              })),
             ],
           ),
         ),
@@ -266,7 +317,7 @@ class _ToolGridCard extends StatelessWidget {
       message: tool.title,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
           child: Column(
@@ -278,15 +329,16 @@ class _ToolGridCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: tool.isActive
                       ? (isDark
-                          ? AppPalette.brandAction.withValues(alpha: 0.22)
-                          : AppPalette.brandAction.withValues(alpha: 0.12))
+                          ? MobileTheme.brand(context).withValues(alpha: 0.22)
+                          : MobileTheme.brand(context).withValues(alpha: 0.12))
                       : (isDark
                           ? Colors.white.withValues(alpha: 0.05)
                           : Colors.black.withValues(alpha: 0.03)),
-                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                  borderRadius:
+                      BorderRadius.circular(MobileTheme.controlRadius(context)),
                   border: Border.all(
                     color: tool.isActive
-                        ? AppPalette.brandAction
+                        ? MobileTheme.brand(context)
                             .withValues(alpha: isDark ? 0.6 : 0.4)
                         : (isDark
                             ? Colors.white.withValues(alpha: 0.08)
@@ -296,7 +348,7 @@ class _ToolGridCard extends StatelessWidget {
                   boxShadow: tool.isActive
                       ? [
                           BoxShadow(
-                            color: AppPalette.brandAction
+                            color: MobileTheme.brand(context)
                                 .withValues(alpha: isDark ? 0.25 : 0.12),
                             blurRadius: 8,
                           )
@@ -308,7 +360,7 @@ class _ToolGridCard extends StatelessWidget {
                     color: tool.isActive
                         ? (isDark
                             ? const Color(0xFF64D2FF)
-                            : AppPalette.brandAction)
+                            : MobileTheme.brand(context))
                         : (isDark
                             ? AppPalette.darkText
                             : AppPalette.lightText)),
@@ -329,7 +381,7 @@ class _ToolGridCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: AppTokens.fontSizeBadge,
                   color: isDark
                       ? AppPalette.darkTextMuted
                       : AppPalette.lightTextMuted,

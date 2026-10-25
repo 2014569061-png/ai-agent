@@ -106,7 +106,16 @@ extension _ChatConversation on _ChatPageState {
     ));
   }
 
-  Future<void> _restoreDraft(String? conversationId) async {
+  Future<void> _restoreDraft(String? conversationId,
+      {bool Function()? canCommit}) async {
+    final input = _controller.value;
+    final attachmentsRevision = _attachmentsRevision.value;
+    bool current() =>
+        mounted &&
+        ref.read(chatControllerProvider).conversationId == conversationId &&
+        _controller.value == input &&
+        _attachmentsRevision.value == attachmentsRevision &&
+        (canCommit?.call() ?? true);
     var draft = conversationId == null
         ? ''
         : (_draftsByConversation[conversationId] ?? '');
@@ -118,6 +127,7 @@ extension _ChatConversation on _ChatPageState {
           projectId: ref.read(chatControllerProvider).currentProjectId,
         );
         final stored = await _draftService.load(db, key);
+        if (!current()) return;
         draft = stored?.text ?? '';
         if (draft.isNotEmpty) {
           _draftsByConversation[conversationId] = draft;
@@ -134,7 +144,9 @@ extension _ChatConversation on _ChatPageState {
       }
     }
     if (!mounted ||
-        ref.read(chatControllerProvider).conversationId != conversationId) {
+        ref.read(chatControllerProvider).conversationId != conversationId ||
+        _controller.value != input ||
+        (canCommit != null && !canCommit())) {
       return;
     }
     _controller.value = TextEditingValue(
@@ -148,16 +160,18 @@ extension _ChatConversation on _ChatPageState {
     }
   }
 
-  Future<void> _startNewConversation({String? initialText}) async {
+  Future<void> _startNewConversation(
+      {String? initialText, bool Function()? canCommit}) async {
     _rememberCurrentDraft();
-    await _chat.newConversation();
-    if (!mounted) return;
+    await _chat.newConversation(canCommit: canCommit);
+    if (!mounted || (canCommit != null && !canCommit())) return;
     _attachments.clear();
     _notifyAttachmentsChanged();
     final conversationId = ref.read(chatControllerProvider).conversationId;
-    await _restoreDraft(conversationId);
+    await _restoreDraft(conversationId, canCommit: canCommit);
     if (!mounted ||
-        ref.read(chatControllerProvider).conversationId != conversationId) {
+        ref.read(chatControllerProvider).conversationId != conversationId ||
+        (canCommit != null && !canCommit())) {
       return;
     }
     if (initialText != null) {
@@ -169,16 +183,22 @@ extension _ChatConversation on _ChatPageState {
     _resetSessionSkills();
   }
 
-  Future<void> _switchConversation(Conversation conversation) async {
+  Future<void> _switchConversation(Conversation conversation,
+          {bool Function()? canCommit}) =>
+      _switchConversationId(conversation.id, canCommit: canCommit);
+
+  Future<void> _switchConversationId(String conversationId,
+      {bool Function()? canCommit}) async {
     _rememberCurrentDraft();
-    await _chat.switchConversation(conversation);
+    await _chat.switchConversationById(conversationId, canCommit: canCommit);
     if (!mounted ||
-        ref.read(chatControllerProvider).conversationId != conversation.id) {
+        ref.read(chatControllerProvider).conversationId != conversationId ||
+        (canCommit != null && !canCommit())) {
       return;
     }
     _attachments.clear();
     _notifyAttachmentsChanged();
-    await _restoreDraft(conversation.id);
+    await _restoreDraft(conversationId, canCommit: canCommit);
     _resetSessionSkills();
   }
 

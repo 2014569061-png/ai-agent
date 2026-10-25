@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../application/dashboard_service.dart';
 import '../../../application/providers.dart';
 import '../../../application/task_service.dart';
-import '../../../infrastructure/database/app_database.dart';
 import '../../l10n/app_strings.dart';
 import '../../motion/nexus_page_route_factory.dart';
 import '../../tasks/development_tasks_page.dart';
@@ -25,7 +24,7 @@ class RunStatusList extends ConsumerWidget {
   });
 
   final List<DashboardRunItem> runs;
-  final ValueChanged<Conversation>? onConversationSelected;
+  final ValueChanged<String>? onConversationSelected;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

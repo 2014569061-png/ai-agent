@@ -1,7 +1,9 @@
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 import '../motion/nexus_haptics.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import '../widgets/floating_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -284,15 +286,16 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
-    // S1：去描边后浅色模式的白底会融进页面，改用极浅的文字色罩底。
-    final background = dark
-        ? AppPalette.darkSurface
-        : AppPalette.lightText.withValues(alpha: 0.035);
-    final headerBackground =
-        dark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover;
-    final headerText =
-        dark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted;
-    final codeColor = dark ? AppPalette.darkText : AppPalette.lightText;
+    final desktop = DesktopTheme.maybeOf(context);
+    // S1：使用不透明实色浅底（AppTheme.light 的 scaffoldBackgroundColor 为透明），避免浅底代码块出现深色边缘。
+    final background = desktop?.sidebar ??
+        (dark ? AppPalette.darkSurface : const Color(0xFFF6F8FB));
+    final headerBackground = desktop?.hover ??
+        (dark ? AppPalette.darkSurfaceHover : const Color(0xFFEEF2F7));
+    final headerText = desktop?.muted ??
+        (dark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted);
+    final codeColor =
+        desktop?.text ?? (dark ? AppPalette.darkText : AppPalette.lightText);
     final trimmed = widget.code.trimRight();
     final longFallback = widget.code.length > _maxHighlightChars;
 
@@ -308,8 +311,14 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: background,
-        // S1：代码卡 12 圆角、无描边，靠浅底与标题栏色阶区分层级。
-        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+        border: Border.all(
+          color: desktop != null
+              ? desktop.border
+              : theme.colorScheme.outlineVariant
+                  .withValues(alpha: dark ? 0.28 : 0.55),
+        ),
+        borderRadius:
+            BorderRadius.circular(desktop != null ? 10 : 14),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -317,13 +326,18 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            color: headerBackground,
+            decoration: BoxDecoration(
+              color: headerBackground,
+              border: desktop != null
+                  ? Border(bottom: BorderSide(color: desktop.border))
+                  : null,
+            ),
             child: Row(
               children: [
                 Icon(
                   isDiff ? Icons.compare_arrows_rounded : Icons.code_rounded,
                   size: 14,
-                  color: isDiff ? AppPalette.brand : headerText,
+                  color: isDiff ? MobileTheme.brand(context) : headerText,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -341,8 +355,8 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
                 Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    borderRadius:
-                        BorderRadius.circular(AppTokens.radiusControl),
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
                     onTap: () {
                       NexusHaptics.light(context);
                       Clipboard.setData(ClipboardData(text: trimmed));
@@ -384,40 +398,16 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
           ),
           isDiff
               ? _buildDiffView(trimmed, codeColor, dark)
-              : Stack(
-                  children: [
-                    Scrollbar(
-                      thumbVisibility: false,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.all(12),
-                        child: _highlighted
-                            ? _buildHighlighted(
-                                highlighter, trimmed, codeColor, longFallback)
-                            : _buildPlain(trimmed, codeColor),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      bottom: 0,
-                      right: 0,
-                      width: 16,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                              colors: [
-                                background.withValues(alpha: 0.0),
-                                background.withValues(alpha: 0.65),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+              : Scrollbar(
+                  thumbVisibility: false,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.all(12),
+                    child: _highlighted
+                        ? _buildHighlighted(
+                            highlighter, trimmed, codeColor, longFallback)
+                        : _buildPlain(trimmed, codeColor),
+                  ),
                 ),
         ],
       ),
@@ -458,7 +448,9 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
               : isRemove
                   ? AppPalette.diffRemovedText
                   : isHeader
-                      ? (isDark ? AppPalette.darkBrandHover : AppPalette.brand)
+                      ? (isDark
+                          ? AppPalette.darkBrandHover
+                          : MobileTheme.brand(context))
                       : codeColor;
 
           return Container(

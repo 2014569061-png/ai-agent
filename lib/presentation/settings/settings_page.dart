@@ -1,10 +1,14 @@
+import '../theme/mobile_theme.dart';
 import 'dart:async';
+import 'default_assistant_page.dart';
+import '../search/global_search_page.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../infrastructure/providers/provider_config.dart';
+import '../../domain/provider_config.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
 import '../../infrastructure/update/update_service.dart';
 import '../feedback/feedback_page.dart';
@@ -14,11 +18,13 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_appearance_controller.dart';
 import '../theme/app_theme_controller.dart';
+import '../theme/desktop_theme.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/liquid_glass.dart' show GlassIntensity;
 import '../widgets/nexus_async_content.dart';
 import '../widgets/nexus_content_box.dart';
+import '../widgets/nexus_page_header.dart';
+import '../widgets/nexus_search_field.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/section_card.dart';
 import '../widgets/confirm_action.dart';
@@ -27,10 +33,12 @@ import 'data_management_page.dart';
 import 'device_automation_page.dart';
 import 'device_backups_page.dart';
 import 'device_capabilities_page.dart';
+import 'system_editors_page.dart';
 import 'extensions_page.dart';
 import 'language_page.dart';
 import 'provider_list_page.dart';
 import 'update_sheet.dart';
+import 'desktop_settings_page.dart';
 
 typedef SettingsLoader = Future<SettingsSnapshot> Function();
 
@@ -248,7 +256,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ListTile(
               title: const Text('较小 (Small)'),
               trailing: _fontSizeLabel == '较小'
-                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  ? Icon(Icons.check, color: MobileTheme.brand(context))
                   : null,
               onTap: () async {
                 await AppAppearanceController.setFontScale(0.88);
@@ -259,7 +267,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ListTile(
               title: const Text('标准 (Standard)'),
               trailing: _fontSizeLabel == '标准'
-                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  ? Icon(Icons.check, color: MobileTheme.brand(context))
                   : null,
               onTap: () async {
                 await AppAppearanceController.setFontScale(1.0);
@@ -270,7 +278,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ListTile(
               title: const Text('较大 (Large)'),
               trailing: _fontSizeLabel == '较大'
-                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  ? Icon(Icons.check, color: MobileTheme.brand(context))
                   : null,
               onTap: () async {
                 await AppAppearanceController.setFontScale(1.15);
@@ -281,7 +289,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ListTile(
               title: const Text('特大 (Extra Large)'),
               trailing: _fontSizeLabel == '特大'
-                  ? const Icon(Icons.check, color: AppPalette.brand)
+                  ? Icon(Icons.check, color: MobileTheme.brand(context))
                   : null,
               onTap: () async {
                 await AppAppearanceController.setFontScale(1.28);
@@ -339,8 +347,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (DesktopTheme.maybeOf(context) != null &&
+        MediaQuery.sizeOf(context).width >= 800) {
+      return DesktopSettingsPage(
+          onUpdate: _checkUpdate, onFontSize: _selectFontSize);
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
     final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
     final textMuted =
         isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
@@ -352,63 +364,85 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ThemeMode.system => '系统',
     };
 
-    final providerText =
-        (_activeProvider != null && _activeProvider!.name.isNotEmpty)
-            ? _activeProvider!.name
-            : '未配置';
+    final providerName = _activeProvider?.name.trim() ?? '';
+    final providerModel = _activeProvider?.model.trim() ?? '';
+    final providerText = providerModel.isEmpty
+        ? (providerName.isEmpty ? '未配置' : providerName)
+        : (providerName.isEmpty
+            ? providerModel
+            : '$providerName · $providerModel');
 
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    final desktop = DesktopTheme.maybeOf(context);
 
     return Scaffold(
-      backgroundColor: isFlat ? canvas : Colors.transparent,
-      body: SafeArea(
+      backgroundColor: desktop?.canvas ?? MobileTheme.pageBackground(context),
+      appBar: desktop == null
+          ? NexusPageHeader(
+              title: (ModalRoute.of(context)?.canPop ?? false) ? '设置' : '我的',
+              largeTitle: !(ModalRoute.of(context)?.canPop ?? false),
+            )
+          : null,
+      body: NexusPageLayout(
+          child: SafeArea(
+        top: desktop != null,
         child: NexusContentBox(
           child: Column(
             children: [
-              // 顶栏：微圆角后退键 + 居中标题「设置」
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppPalette.darkSurface
-                            : AppPalette.lightSurfaceHover,
-                        shape: BoxShape.circle,
-                      ),
-                      child: IconButton(
-                        tooltip: '返回',
-                        icon: Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          size: 16,
-                          color: textColor,
-                        ),
-                        onPressed: () => Navigator.maybePop(context),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-                    Expanded(
-                      child: Semantics(
-                        header: true,
-                        child: Text(
-                          '设置',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: textColor,
+              if (desktop != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: IconButton(
+                          tooltip: '返回',
+                          onPressed: () => Navigator.maybePop(context),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 36,
+                            height: 36,
+                          ),
+                          icon: Container(
+                            width: 36,
+                            height: 36,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? AppPalette.darkSurface
+                                  : Colors.white,
+                              borderRadius: BorderRadius.circular(
+                                  MobileTheme.controlRadius(context)),
+                              border: Border.all(
+                                color: isDark
+                                    ? AppPalette.darkHairline
+                                    : AppPalette.lightHairline,
+                              ),
+                            ),
+                            child: Icon(Icons.arrow_back_ios_new_rounded,
+                                size: 16, color: textColor),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 36), // 保持居中对称
-                  ],
+                      Expanded(
+                        child: Semantics(
+                          header: true,
+                          child: Text(
+                            '设置',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: AppTokens.fontSizeTitle,
+                              fontWeight: FontWeight.w700,
+                              color: textColor,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 36),
+                    ],
+                  ),
                 ),
-              ),
               Expanded(
                 child: NexusAsyncContent(
                   loading: _loadState == _SettingsLoadState.loading,
@@ -419,80 +453,169 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   child: RefreshIndicator(
                     onRefresh: _loadAll,
                     child: ListView(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
                       children: [
                         // 0. 搜索栏
                         Padding(
                           padding: const EdgeInsets.only(bottom: 14),
-                          child: TextField(
+                          child: NexusSearchField(
                             controller: _searchController,
+                            hintText: AppStrings.searchSettingsPlaceholder,
                             onChanged: (val) =>
                                 setState(() => _searchQuery = val.trim()),
-                            style: TextStyle(
-                              fontSize: AppTokens.fontSizeBody,
-                              color: textColor,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: AppStrings.searchSettingsPlaceholder,
-                              hintStyle: TextStyle(
-                                fontSize: AppTokens.fontSizeBody,
-                                color: textMuted,
-                              ),
-                              prefixIcon: Icon(
-                                Icons.search_rounded,
-                                size: 20,
-                                color: textMuted,
-                              ),
-                              suffixIcon: _searchQuery.isNotEmpty
-                                  ? IconButton(
-                                      icon: const Icon(Icons.clear_rounded,
-                                          size: 18),
-                                      tooltip: '清空搜索',
-                                      onPressed: () {
-                                        _searchController.clear();
-                                        setState(() => _searchQuery = '');
-                                      },
-                                    )
-                                  : null,
-                              filled: true,
-                              // T2：搜索做成无描边浅底胶囊；聚焦时才出现品牌色细描边。
-                              fillColor: textColor.withValues(
-                                  alpha: isDark ? 0.08 : 0.05),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 10),
-                              border: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AppTokens.radiusPill),
-                                borderSide: BorderSide.none,
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AppTokens.radiusPill),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AppTokens.radiusPill),
-                                borderSide: BorderSide(
-                                  color: AppPalette.brandTextFor(isDark),
-                                  width: 1.2,
-                                ),
-                              ),
-                            ),
+                            onClear: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
                           ),
                         ),
+                        if (desktop != null &&
+                            _loadState == _SettingsLoadState.ready &&
+                            _searchQuery.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: _buildCard(
+                              children: [
+                                IntrinsicHeight(
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => _openPage(
+                                              const ProviderListPage()),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 10),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '模型服务',
+                                                  style: TextStyle(
+                                                    fontSize:
+                                                        AppTokens.fontSizeBadge,
+                                                    fontFamily: AppTokens
+                                                        .fontFamilyMono,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: textMuted,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  providerText,
+                                                  maxLines: 2,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: AppTokens
+                                                        .fontSizeSubhead,
+                                                    fontFamily: AppTokens
+                                                        .fontFamilyMono,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: textColor,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      VerticalDivider(
+                                        width: 1,
+                                        thickness: 1,
+                                        color: isDark
+                                            ? AppPalette.darkHairline
+                                            : AppPalette.lightHairline,
+                                      ),
+                                      Expanded(
+                                        child: InkWell(
+                                          onTap: () => _openPage(
+                                              const AppearanceThemePage()),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 10),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  '外观',
+                                                  style: TextStyle(
+                                                    fontSize:
+                                                        AppTokens.fontSizeBadge,
+                                                    fontFamily: AppTokens
+                                                        .fontFamilyMono,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: textMuted,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  themeLabel,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: AppTokens
+                                                        .fontSizeSubhead,
+                                                    fontWeight: FontWeight.w700,
+                                                    color:
+                                                        AppPalette.brandTextFor(
+                                                            isDark),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
 
                         if (_loadState == _SettingsLoadState.empty &&
                             _searchQuery.isEmpty)
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 18),
-                            child: EmptyStateView.compact(
-                              icon: Icons.settings_outlined,
-                              title: '尚未配置服务商',
-                              message: '可以先配置一个服务商，其他设置仍可继续使用。',
-                              actionLabel: '配置服务商',
-                              onAction: () =>
-                                  _openPage(const ProviderListPage()),
+                            padding: const EdgeInsets.only(bottom: 14),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppPalette.brandSoftDark
+                                    : AppPalette.brandSoftLight,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline_rounded,
+                                      size: 18,
+                                      color: MobileTheme.brand(context)),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      '尚未配置服务商，基础功能可正常使用',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        _openPage(const ProviderListPage()),
+                                    style: TextButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8),
+                                    ),
+                                    child: const Text('去配置'),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
 
@@ -510,16 +633,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                             ),
                           ),
 
-                        // 1. 账户组
-                        if (_matchesSearch('账号管理', providerText) ||
+                        // 1. 服务与数据
+                        if (_matchesSearch('模型服务', providerText) ||
                             _matchesSearch('数据管理')) ...[
-                          _buildSectionHeader('账户', textMuted),
+                          _buildSectionHeader('服务与数据', textMuted),
                           _buildCard(
                             children: _joinWithDividers([
-                              if (_matchesSearch('账号管理', providerText))
+                              if (_matchesSearch('模型服务', providerText))
                                 _buildRow(
-                                  icon: Icons.person_outline_rounded,
-                                  title: '账号管理',
+                                  icon: Icons.model_training_outlined,
+                                  title: '模型服务',
                                   trailing: providerText,
                                   textColor: textColor,
                                   textMuted: textMuted,
@@ -541,13 +664,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           const SizedBox(height: AppTokens.sp4),
                         ],
 
-                        // 2. 应用组
+                        // 外观偏好与设备能力分组，入口保持可搜索。
                         if (_matchesSearch('语言', _currentLanguage) ||
                             _matchesSearch('外观', themeLabel) ||
-                            _matchesSearch('字体大小', _fontSizeLabel) ||
-                            _matchesSearch('扩展与环境', 'MCP / 技能 / 工具') ||
-                            _matchesSearch('设备能力',
-                                'Root / Magisk / KernelSU / Termux / Linux Runtime / SAF')) ...[
+                            _matchesSearch('字体大小', _fontSizeLabel)) ...[
                           _buildSectionHeader('应用', textMuted),
                           _buildCard(
                             children: _joinWithDividers([
@@ -579,6 +699,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   textMuted: textMuted,
                                   onTap: _selectFontSize,
                                 ),
+                            ], isDark),
+                          ),
+                          const SizedBox(height: AppTokens.sp4),
+                        ],
+                        if (_matchesSearch('扩展与环境', 'MCP / 技能 / 工具') ||
+                            _matchesSearch('全量搜索', '会话 / 任务 / 成果 / 资料') ||
+                            _matchesSearch('系统编辑器连接', '日历 / 联系人') ||
+                            _matchesSearch('默认系统助手', '语音 / 系统手势 / 撤销') ||
+                            _matchesSearch('设备能力',
+                                'Root / Magisk / KernelSU / Termux / Linux Runtime / SAF') ||
+                            _matchesSearch('设备自动化', '定时 / Wi-Fi / 电量触发') ||
+                            _matchesSearch('备份与恢复', '通讯录 / 短信 / 应用数据')) ...[
+                          _buildSectionHeader('能力与工具', textMuted),
+                          _buildCard(
+                            children: _joinWithDividers([
                               if (_matchesSearch('扩展与环境', 'MCP / 技能 / 工具'))
                                 _buildRow(
                                   icon: Icons.extension_outlined,
@@ -599,6 +734,35 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                                   textMuted: textMuted,
                                   onTap: () =>
                                       _openPage(const DeviceCapabilitiesPage()),
+                                ),
+                              if (_matchesSearch('全量搜索', '会话 / 任务 / 成果 / 资料'))
+                                _buildRow(
+                                    icon: Icons.search,
+                                    title: '全量搜索',
+                                    trailing: '会话 / 任务 / 成果 / 资料',
+                                    textColor: textColor,
+                                    textMuted: textMuted,
+                                    onTap: () =>
+                                        _openPage(const GlobalSearchPage())),
+                              if (_matchesSearch('系统编辑器连接', '日历 / 联系人'))
+                                _buildRow(
+                                  icon: Icons.event_note_outlined,
+                                  title: '系统编辑器连接',
+                                  trailing: '日历 / 联系人',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const SystemEditorsPage()),
+                                ),
+                              if (_matchesSearch('默认系统助手', '语音 / 系统手势 / 撤销'))
+                                _buildRow(
+                                  icon: Icons.assistant_outlined,
+                                  title: '默认系统助手',
+                                  trailing: '语音 / 系统手势',
+                                  textColor: textColor,
+                                  textMuted: textMuted,
+                                  onTap: () =>
+                                      _openPage(const DefaultAssistantPage()),
                                 ),
                               if (_matchesSearch('设备自动化', '定时 / Wi-Fi / 电量触发'))
                                 _buildRow(
@@ -700,7 +864,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 
@@ -718,14 +882,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     required String providerText,
     required String themeLabel,
   }) {
-    return _matchesSearch('账号管理', providerText) ||
+    return _matchesSearch('模型服务', providerText) ||
         _matchesSearch('数据管理') ||
         _matchesSearch('语言', _currentLanguage) ||
         _matchesSearch('外观', themeLabel) ||
         _matchesSearch('字体大小', _fontSizeLabel) ||
         _matchesSearch('扩展与环境', 'MCP / 技能 / 工具') ||
+        _matchesSearch('全量搜索', '会话 / 任务 / 成果 / 资料') ||
+        _matchesSearch('系统编辑器连接', '日历 / 联系人') ||
+        _matchesSearch('默认系统助手', '语音 / 系统手势 / 撤销') ||
         _matchesSearch('设备能力',
             'Root / Magisk / KernelSU / Termux / Linux Runtime / SAF') ||
+        _matchesSearch('设备自动化', '定时 / Wi-Fi / 电量触发') ||
+        _matchesSearch('备份与恢复', '通讯录 / 短信 / 应用数据') ||
         _matchesSearch('检查更新', _appVersion) ||
         _matchesSearch('服务协议') ||
         _matchesSearch('帮助与反馈') ||
@@ -743,17 +912,49 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Widget _buildSectionHeader(String title, Color color) {
+    if (DesktopTheme.maybeOf(context) == null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(4, 20, 4, 10),
+        child: Text(title,
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w400, color: color)),
+      );
+    }
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       // T4：标题与卡片内图标对齐（卡片内边距 16），上方多留 8，
       // 分组间距 16 + 8 = 24，组内标题到卡片 8，层级更清楚。
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-          color: color,
-        ),
+      padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 12,
+            decoration: BoxDecoration(
+              color: MobileTheme.brand(context),
+              borderRadius: BorderRadius.circular(1.5),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: AppTokens.fontSizeCaption,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: color,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Divider(
+              height: 1,
+              thickness: 0.8,
+              color:
+                  isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -762,23 +963,20 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     required List<Widget> children,
   }) {
     return SectionCard(
-      // T3：分组卡片与消息区卡片统一 16 圆角（只传参，不改 SectionCard）。
-      borderRadius: BorderRadius.circular(16),
+      // Linear Pro：二级页设置分组卡统一 12px 工程圆角。
+      borderRadius: BorderRadius.circular(
+          DesktopTheme.maybeOf(context) == null ? 24 : AppTokens.radiusCard),
       child: Column(mainAxisSize: MainAxisSize.min, children: children),
     );
   }
 
   Widget _buildDivider(bool isDark) {
-    final isGlass =
-        AppAppearanceController.resolvedGlassIntensity != GlassIntensity.flat;
     return Divider(
       height: 0.8,
       thickness: 0.8,
       indent: 48,
       endIndent: 0,
-      color: isGlass
-          ? (isDark ? const Color(0x1AFFFFFF) : const Color(0x22000000))
-          : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline),
+      color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
     );
   }
 
@@ -795,7 +993,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final stackedValue = trailing != null &&
         trailing.isNotEmpty &&
         (MediaQuery.sizeOf(context).width <= 360 ||
-            MediaQuery.textScalerOf(context).scale(14) >= 22);
+            MediaQuery.textScalerOf(context).scale(14) >= 22 ||
+            trailing.runes.length > 22);
     return Material(
       color: Colors.transparent,
       child: Semantics(
@@ -807,11 +1006,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Row(
               children: [
-                Icon(icon,
-                    size: 20, color: danger ? AppPalette.danger : textColor),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: (danger
+                            ? AppPalette.danger
+                            : MobileTheme.brand(context))
+                        .withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(icon,
+                      size: 20,
+                      color: danger
+                          ? AppPalette.danger
+                          : MobileTheme.brand(context)),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -823,8 +1037,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
+                          fontSize: AppTokens.fontSizeBody,
+                          fontWeight: FontWeight.w500,
                           color: danger ? AppPalette.danger : textColor,
                         ),
                       ),
@@ -852,15 +1066,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.sizeOf(context).width * 0.42,
                     ),
-                    child: Text(
-                      trailing,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
-                      style: TextStyle(
-                        fontSize: AppTokens.fontSizeSubhead,
-                        fontWeight: FontWeight.w400,
-                        color: textMuted,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        trailing,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: TextStyle(
+                          fontSize: AppTokens.fontSizeCaption,
+                          fontWeight: FontWeight.w400,
+                          color: textMuted,
+                        ),
                       ),
                     ),
                   ),

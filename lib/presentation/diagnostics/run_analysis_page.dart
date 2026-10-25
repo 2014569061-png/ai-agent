@@ -1,7 +1,11 @@
+import '../theme/desktop_theme.dart';
+import '../widgets/nexus_disclosure.dart';
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,10 +14,8 @@ import '../../application/run_audit_report.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
-import '../widgets/liquid_glass.dart';
 import '../markdown/markdown_render_metrics.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
@@ -25,6 +27,7 @@ import '../widgets/nexus_status_pill.dart';
 import '../widgets/section_card.dart';
 import '../motion/nexus_page_route_factory.dart';
 import 'log_viewer_page.dart';
+import 'operational_metrics_page.dart';
 
 /// 运行分析与 Token 可观测性页面 (RunAnalysisPage)
 /// 严格依据 NEXUS UI 设计优化规范重构：
@@ -95,16 +98,10 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final chatState = ref.watch(chatControllerProvider);
 
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
-
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: NexusPageHeader(
         title: '运行分析与观测',
         bottom: TabBar(
@@ -116,6 +113,16 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: '链路指标与参考SLO',
+            icon: const Icon(Icons.insights_outlined),
+            onPressed: () {
+              final database = ref.read(databaseProvider.future);
+              Navigator.of(context).push(NexusPageRoute.detail(
+                  builder: (_) =>
+                      OperationalMetricsPage(database: () => database)));
+            },
+          ),
           IconButton(
             tooltip: '全部诊断日志',
             icon: const Icon(Icons.receipt_long_outlined),
@@ -130,7 +137,8 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
           ),
         ],
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         error: _error,
         onRetry: _load,
@@ -144,7 +152,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
             _buildHistoryRunsView(),
           ],
         ),
-      ),
+      )),
     );
   }
 
@@ -178,7 +186,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
         .firstOrNull;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       children: [
         // 运行状态卡
         SectionCard(
@@ -213,13 +221,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
         NexusSection(
           title: '会话 Token 核心指标',
           subtitle: '点击问号可查看各指标含义与优化建议',
-          child: GridView.count(
-            crossAxisCount: 2,
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 2.1,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+          child: NexusMetricGrid(
             children: [
               NexusMetricTile(
                 label: '输入 Token',
@@ -234,7 +236,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
                 value: NexusMetricTile.formatTokens(outputTokens),
                 unit: 'tok',
                 icon: Icons.output_rounded,
-                color: AppPalette.brand,
+                color: MobileTheme.brand(context),
                 explanation: '模型思考过程与最终输出文本所生成的 Token 总量。',
               ),
               NexusMetricTile(
@@ -285,7 +287,8 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
                 ),
                 const SizedBox(height: 6),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                  borderRadius:
+                      BorderRadius.circular(MobileTheme.controlRadius(context)),
                   child: LinearProgressIndicator(
                     value: chatState.contextTokens <= 0
                         ? 0.01
@@ -416,7 +419,7 @@ class _RunAnalysisPageState extends ConsumerState<RunAnalysisPage>
           color: isFailed ? AppPalette.danger : AppPalette.success,
         ),
         title: Text(
-          run.model,
+          run.model.isEmpty || run.model == 'unknown' ? '未记录模型' : run.model,
           style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
         ),
         subtitle: Text(
@@ -682,21 +685,17 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final total = _run.inputTokens + _run.outputTokens;
     final cacheRate = _run.inputTokens == 0
         ? '暂无数据'
         : '${(_run.cachedTokens / _run.inputTokens * 100).toStringAsFixed(1)}%';
     final savedCost = _savedCostCents();
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: NexusPageHeader(
-        title: '任务详情',
-        subtitle: 'Run: ${_run.runId}',
+        title: DesktopTheme.maybeOf(context) == null ? '运行详情' : '任务详情',
+        subtitle:
+            DesktopTheme.maybeOf(context) == null ? null : 'Run: ${_run.runId}',
         actions: [
           IconButton(
             tooltip: '复制运行报告',
@@ -734,7 +733,8 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
           ),
         ],
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         error: _error,
         onRetry: _load,
@@ -751,42 +751,124 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
                     spacing: 20,
                     runSpacing: 14,
                     children: [
-                      _metric('状态', _run.status),
-                      _metric('总 Token', '$total'),
-                      _metric('输入 Token', '${_run.inputTokens}'),
-                      _metric('输出 Token', '${_run.outputTokens}'),
-                      _metric(
-                          '缓存 Token',
-                          _run.cachedTokens == 0
-                              ? '暂无数据'
-                              : '${_run.cachedTokens}'),
-                      _metric('缓存命中率', cacheRate),
-                      _metric(
-                          '预计费用',
-                          _run.estimatedCostCents == null
-                              ? '暂无数据'
-                              : '${_run.estimatedCostCents} 分'),
-                      _metric(
-                          '缓存节省', savedCost == null ? '暂无数据' : '$savedCost 分'),
-                      _metric(
-                          '总耗时',
-                          _run.totalDurationMs == null
-                              ? '暂无数据'
-                              : '${_run.totalDurationMs} ms'),
-                      _metric(
-                          '首字节',
-                          _run.firstTokenDurationMs == null
-                              ? '暂无数据'
-                              : '${_run.firstTokenDurationMs} ms'),
-                      _metric('输出速率', '${_formatRate()} Token/s'),
-                      _metric('最大停顿', '${_run.maxStallDurationMs ?? 0} ms'),
-                      _metric('停顿次数', '${_run.stallCount ?? 0}'),
-                      _metric(
-                          '取消耗时',
-                          _run.cancelDurationMs == null
-                              ? '暂无数据'
-                              : '${_run.cancelDurationMs} ms'),
-                      _metric('重试次数', '${_run.retryCount}'),
+                      if (DesktopTheme.maybeOf(context) != null) ...[
+                        _metric('状态', _run.status),
+                        _metric('总 Token', '$total'),
+                        _metric('输入 Token', '${_run.inputTokens}'),
+                        _metric('输出 Token', '${_run.outputTokens}'),
+                        _metric(
+                            '缓存 Token',
+                            _run.cachedTokens == 0
+                                ? '暂无数据'
+                                : '${_run.cachedTokens}'),
+                        _metric('缓存命中率', cacheRate),
+                        _metric(
+                            '预计费用',
+                            _run.estimatedCostCents == null
+                                ? '暂无数据'
+                                : '${_run.estimatedCostCents} 分'),
+                        _metric('缓存节省',
+                            savedCost == null ? '暂无数据' : '$savedCost 分'),
+                        _metric(
+                            '总耗时',
+                            _run.totalDurationMs == null
+                                ? '暂无数据'
+                                : '${_run.totalDurationMs} ms'),
+                        _metric(
+                            '首字节',
+                            _run.firstTokenDurationMs == null
+                                ? '暂无数据'
+                                : '${_run.firstTokenDurationMs} ms'),
+                        _metric('输出速率', '${_formatRate()} Token/s'),
+                        _metric('最大停顿', '${_run.maxStallDurationMs ?? 0} ms'),
+                        _metric('停顿次数', '${_run.stallCount ?? 0}'),
+                        _metric(
+                            '取消耗时',
+                            _run.cancelDurationMs == null
+                                ? '暂无数据'
+                                : '${_run.cancelDurationMs} ms'),
+                        _metric('重试次数', '${_run.retryCount}'),
+                      ] else ...[
+                        _metric('状态', _runStatusLabel(_run.status)),
+                        _metric('总 Token', '$total'),
+                        _metric(
+                            '总耗时',
+                            _run.totalDurationMs == null
+                                ? '未记录'
+                                : '${_run.totalDurationMs} ms'),
+                        _metric(
+                            '预计费用',
+                            _run.estimatedCostCents == null
+                                ? '未知'
+                                : '${_run.estimatedCostCents} 分'),
+                        SizedBox(
+                            width: double.infinity,
+                            child: NexusDisclosure(
+                              title: const Text('用量与性能明细',
+                                  style: TextStyle(fontSize: 14)),
+                              headerPadding:
+                                  const EdgeInsets.symmetric(vertical: 12),
+                              contentPadding: EdgeInsets.zero,
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Wrap(
+                                        spacing: 20,
+                                        runSpacing: 14,
+                                        children: [
+                                          _metric('状态', _run.status),
+                                          _metric('总 Token', '$total'),
+                                          _metric('输入 Token',
+                                              '${_run.inputTokens}'),
+                                          _metric('输出 Token',
+                                              '${_run.outputTokens}'),
+                                          _metric(
+                                              '缓存 Token',
+                                              _run.cachedTokens == 0
+                                                  ? '暂无数据'
+                                                  : '${_run.cachedTokens}'),
+                                          _metric('缓存命中率', cacheRate),
+                                          _metric(
+                                              '预计费用',
+                                              _run.estimatedCostCents == null
+                                                  ? '暂无数据'
+                                                  : '${_run.estimatedCostCents} 分'),
+                                          _metric(
+                                              '缓存节省',
+                                              savedCost == null
+                                                  ? '暂无数据'
+                                                  : '$savedCost 分'),
+                                          _metric(
+                                              '总耗时',
+                                              _run.totalDurationMs == null
+                                                  ? '暂无数据'
+                                                  : '${_run.totalDurationMs} ms'),
+                                          _metric(
+                                              '首字节',
+                                              _run.firstTokenDurationMs == null
+                                                  ? '暂无数据'
+                                                  : '${_run.firstTokenDurationMs} ms'),
+                                          _metric('输出速率',
+                                              '${_formatRate()} Token/s'),
+                                          _metric('最大停顿',
+                                              '${_run.maxStallDurationMs ?? 0} ms'),
+                                          _metric('停顿次数',
+                                              '${_run.stallCount ?? 0}'),
+                                          _metric(
+                                              '取消耗时',
+                                              _run.cancelDurationMs == null
+                                                  ? '暂无数据'
+                                                  : '${_run.cancelDurationMs} ms'),
+                                          _metric('重试次数', '${_run.retryCount}'),
+                                        ]),
+                                    const SizedBox(height: 12),
+                                    SelectableText('运行标识：${_run.runId}',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall),
+                                  ]),
+                            )),
+                      ],
                     ],
                   ),
                 ),
@@ -799,7 +881,8 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
               if (_events.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(24),
-                  child: Center(child: Text('暂无事件详情')),
+                  child: EmptyStateView.compact(
+                      icon: Icons.notes_rounded, title: '暂无事件详情'),
                 )
               else
                 ..._events.map((event) => Card(
@@ -840,9 +923,23 @@ class _RunDetailPageState extends ConsumerState<RunDetailPage> {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
+
+  String _runStatusLabel(String value) =>
+      const {
+        'success': '已完成',
+        'completed': '已完成',
+        'failed': '失败',
+        'running': '执行中',
+        'paused': '已暂停',
+        'cancelled': '已取消',
+        'interrupted': '已中断',
+        'partial': '部分完成',
+        'unknown': '状态待核实',
+      }[value] ??
+      value;
 
   Widget _metric(String label, String value) => SizedBox(
         width: 110,

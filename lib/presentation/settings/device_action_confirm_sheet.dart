@@ -16,17 +16,17 @@ Future<bool?> showDeviceActionConfirmSheet(
   String confirmLabel = '确认执行',
 }) {
   return showNexusSheet<bool>(
-context: context,
-isScrollControlled: true,
-useSafeArea: true,
-showDragHandle: true,
-builder: (context) => DeviceActionConfirmSheet(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (context) => DeviceActionConfirmSheet(
       title: title,
       subtitle: subtitle,
       actions: actions,
       confirmLabel: confirmLabel,
     ),
-);
+  );
 }
 
 class DeviceActionConfirmSheet extends StatefulWidget {
@@ -51,6 +51,14 @@ class DeviceActionConfirmSheet extends StatefulWidget {
 class _DeviceActionConfirmSheetState extends State<DeviceActionConfirmSheet> {
   bool _acknowledged = false;
 
+  @override
+  void didUpdateWidget(covariant DeviceActionConfirmSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // An acknowledgement belongs to the displayed batch, not to the sheet.
+    // A replacement preview/plan must be reviewed again.
+    if (!identical(oldWidget.actions, widget.actions)) _acknowledged = false;
+  }
+
   bool get _hasDanger => widget.actions.any(
         (action) =>
             action.executable &&
@@ -73,44 +81,45 @@ class _DeviceActionConfirmSheetState extends State<DeviceActionConfirmSheet> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Text(widget.title,
+                style: theme.textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+          ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
               children: [
-                Text(widget.title,
-                    style: theme.textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w600)),
                 if (widget.subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(widget.subtitle!,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
+                  Padding(
+                    padding:
+                        const EdgeInsets.only(left: 4, right: 4, bottom: 8),
+                    child: Text(widget.subtitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
+                  ),
+                ],
+                for (var index = 0; index < widget.actions.length; index++) ...[
+                  if (index > 0) const SizedBox(height: 10),
+                  _ActionCard(index: index, action: widget.actions[index]),
+                ],
+                if (_hasDanger) ...[
+                  const SizedBox(height: 8),
+                  CheckboxListTile(
+                    key: const Key('device-action-ack'),
+                    contentPadding: EdgeInsets.zero,
+                    value: _acknowledged,
+                    onChanged: (value) =>
+                        setState(() => _acknowledged = value ?? false),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    title: const Text(
+                        '我已查看命令、路径和影响范围，了解其中可能包含 Root、不可撤销或恢复能力未知的操作'),
+                  ),
                 ],
               ],
             ),
           ),
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-              itemCount: widget.actions.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, index) =>
-                  _ActionCard(index: index, action: widget.actions[index]),
-            ),
-          ),
-          if (_hasDanger)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: CheckboxListTile(
-                key: const Key('device-action-ack'),
-                value: _acknowledged,
-                onChanged: (value) =>
-                    setState(() => _acknowledged = value ?? false),
-                controlAffinity: ListTileControlAffinity.leading,
-                dense: true,
-                title: const Text('我已查看上面的命令、路径和影响范围，了解其中包含 Root 或不可撤销的操作'),
-              ),
-            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
             child: Row(
@@ -133,7 +142,8 @@ class _DeviceActionConfirmSheetState extends State<DeviceActionConfirmSheet> {
                     onPressed: canConfirm
                         ? () => Navigator.of(context).pop(true)
                         : null,
-                    child: Text(_hasExecutable ? widget.confirmLabel : '没有可执行项'),
+                    child:
+                        Text(_hasExecutable ? widget.confirmLabel : '没有可执行项'),
                   ),
                 ),
               ],
@@ -178,7 +188,7 @@ class _ActionCard extends StatelessWidget {
     final preview = action.preview ?? const <String, dynamic>{};
     final danger = action.riskClass == 'dangerous';
     final color = !action.executable
-        ? theme.colorScheme.outline
+        ? theme.colorScheme.onSurfaceVariant
         : danger
             ? AppPalette.danger
             : AppPalette.warning;
@@ -198,11 +208,14 @@ class _ActionCard extends StatelessWidget {
               '${(preview['remainingFiles'] ?? 0) is num && (preview['remainingFiles'] as num) > 0 ? '（仅列出前 20 个，另有 ${preview['remainingFiles']} 个）' : ''}',
         ),
       if (preview['files'] is List)
-        ('清单', _text((preview['files'] as List).take(20).map(
-              (file) => file is Map
-                  ? '${file['path'] ?? file['name']}  ${_size(file['bytes'] ?? file['size'])}'
-                  : file,
-            ))),
+        (
+          '清单',
+          _text((preview['files'] as List).take(20).map(
+                (file) => file is Map
+                    ? '${file['path'] ?? file['name']}  ${_size(file['bytes'] ?? file['size'])}'
+                    : file,
+              ))
+        ),
       if (action.extra['fileCount'] != null)
         (
           '将删除',
@@ -253,11 +266,16 @@ class _ActionCard extends StatelessWidget {
                   danger ? '危险 · 需二次确认' : '需确认',
                   color,
                 ),
-              if (action.executable && !action.reversible)
+              if (action.executable && !action.recoveryKnown)
+                const _Chip('恢复能力未知', AppPalette.warning),
+              if (action.executable &&
+                  action.recoveryKnown &&
+                  !action.reversible)
                 const _Chip('不可撤销', AppPalette.danger),
               if (action.executable && action.reversible)
                 const _Chip('可恢复', AppPalette.success),
-              if (!action.executable) _Chip('不会执行', theme.colorScheme.outline),
+              if (!action.executable)
+                _Chip('不会执行', theme.colorScheme.onSurfaceVariant),
             ],
           ),
           if (action.error != null) ...[
@@ -276,8 +294,8 @@ class _ActionCard extends StatelessWidget {
                     SizedBox(
                       width: 64,
                       child: Text(label,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: theme.colorScheme.outline)),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant)),
                     ),
                     Expanded(
                       child: SelectableText(
@@ -312,7 +330,8 @@ class _Chip extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(label,
-          style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          style: TextStyle(
+              fontSize: 11, color: color, fontWeight: FontWeight.w600)),
     );
   }
 }

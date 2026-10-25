@@ -1,16 +1,17 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../application/onboarding_service.dart';
 import '../../infrastructure/observability/sentry_service.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
-import '../chat/chat_page.dart';
+import 'package:flutter/foundation.dart';
+import '../navigation/app_shell.dart';
+import '../navigation/mobile_shell.dart';
 import '../l10n/app_strings.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../settings/settings_page.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/section_card.dart';
 import '../widgets/nexus_switch.dart';
 
@@ -85,8 +86,10 @@ class _OnboardingPageState extends State<OnboardingPage> {
     await SentryService.setEnabled(_crashReport);
     await OnboardingService.markDone();
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-        NexusPageRoute.workspace(builder: (_) => const ChatPage()));
+    Navigator.of(context).pushReplacement(NexusPageRoute.workspace(
+        builder: (_) => usesMobileShell(defaultTargetPlatform)
+            ? const MobileShell()
+            : const DesktopShell()));
   }
 
   void _next() {
@@ -108,20 +111,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    final isCompactHeight = MediaQuery.sizeOf(context).height < 480;
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
-      body: SafeArea(
+      backgroundColor: MobileTheme.pageBackground(context),
+      body: MobileCanvas(
+          child: SafeArea(
         child: Column(children: [
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               style: TextButton.styleFrom(
-                minimumSize: const Size(48, AppTokens.kMinTouchTarget),
+                minimumSize: Size(
+                  48,
+                  isCompactHeight ? 36 : AppTokens.kMinTouchTarget,
+                ),
               ),
               onPressed: _finish,
               child: const Text(AppStrings.skip),
@@ -134,130 +138,154 @@ class _OnboardingPageState extends State<OnboardingPage> {
               onPageChanged: (i) => setState(() => _index = i),
               itemBuilder: (context, i) {
                 final (ic, t, d) = _steps[i];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 96,
-                          height: 96,
-                          decoration: BoxDecoration(
-                              color: AppPalette.brand,
-                              borderRadius:
-                                  BorderRadius.circular(AppTokens.radiusModal)),
-                          child: Icon(ic, color: Colors.white, size: 44),
-                        ),
-                        const SizedBox(height: 28),
-                        Text(t,
-                            style: theme.textTheme.headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.w500)),
-                        const SizedBox(height: 12),
-                        Text(d,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                                color: isDark
-                                    ? AppPalette.darkTextMuted
-                                    : AppPalette.lightTextMuted,
-                                height: 1.5)),
-                        if (i == 0) ...[
-                          const SizedBox(height: 20),
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize:
-                                  const Size(140, AppTokens.kMinTouchTarget),
-                              foregroundColor: isDark
-                                  ? AppPalette.darkText
-                                  : AppPalette.lightText,
-                              side: BorderSide(
-                                color: isDark
-                                    ? AppPalette.darkHairline
-                                    : AppPalette.lightHairline,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
-                                    AppTokens.radiusControl),
-                              ),
-                            ),
-                            onPressed: _configureProvider,
-                            child: const Text('去配置模型'),
-                          ),
-                          const SizedBox(height: 12),
-                          SectionCard(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _providerConfigured
-                                      ? Icons.check_circle_outline
-                                      : Icons.info_outline,
-                                  color: _providerConfigured
-                                      ? AppPalette.success
-                                      : (isDark
-                                          ? AppPalette.darkTextMuted
-                                          : AppPalette.lightTextMuted),
-                                  size: 20,
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final compactStep = constraints.maxHeight < 280;
+                    final minH = constraints.maxHeight > 16
+                        ? constraints.maxHeight - 16
+                        : 0.0;
+                    return SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 8),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: minH),
+                        child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: compactStep ? 52 : 96,
+                                height: compactStep ? 52 : 96,
+                                decoration: BoxDecoration(
+                                    color: MobileTheme.brand(context),
+                                    borderRadius: BorderRadius.circular(
+                                        MobileTheme.modalRadius(context))),
+                                child: Icon(
+                                  ic,
+                                  color: Colors.white,
+                                  size: compactStep ? 26 : 44,
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    _providerStatus,
-                                    style: theme.textTheme.bodySmall?.copyWith(
+                              ),
+                              SizedBox(height: compactStep ? 10 : 28),
+                              Text(t,
+                                  style: theme.textTheme.headlineSmall
+                                      ?.copyWith(fontWeight: FontWeight.w500)),
+                              SizedBox(height: compactStep ? 6 : 12),
+                              Text(d,
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
                                       color: isDark
                                           ? AppPalette.darkTextMuted
                                           : AppPalette.lightTextMuted,
+                                      height: 1.5)),
+                              if (i == 0) ...[
+                                const SizedBox(height: 20),
+                                OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(
+                                        140, AppTokens.kMinTouchTarget),
+                                    foregroundColor: isDark
+                                        ? AppPalette.darkText
+                                        : AppPalette.lightText,
+                                    side: BorderSide(
+                                      color: isDark
+                                          ? AppPalette.darkHairline
+                                          : AppPalette.lightHairline,
                                     ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(
+                                          MobileTheme.controlRadius(context)),
+                                    ),
+                                  ),
+                                  onPressed: _configureProvider,
+                                  child: const Text('去配置模型'),
+                                ),
+                                const SizedBox(height: 12),
+                                SectionCard(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        _providerConfigured
+                                            ? Icons.check_circle_outline
+                                            : Icons.info_outline,
+                                        color: _providerConfigured
+                                            ? AppPalette.success
+                                            : (isDark
+                                                ? AppPalette.darkTextMuted
+                                                : AppPalette.lightTextMuted),
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _providerStatus,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                            color: isDark
+                                                ? AppPalette.darkTextMuted
+                                                : AppPalette.lightTextMuted,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-                        ],
-                        if (i == _steps.length - 1) ...[
-                          const SizedBox(height: 24),
-                          SectionCard(
-                            child: NexusSwitchListTile(
-                              secondary: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? AppPalette.brandSoftDark
-                                      : AppPalette.brandSoftLight,
-                                  borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusControl),
+                              if (i == _steps.length - 1) ...[
+                                const SizedBox(height: 24),
+                                SectionCard(
+                                  child: NexusSwitchListTile(
+                                    secondary: Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: isDark
+                                            ? AppPalette.brandSoftDark
+                                            : AppPalette.brandSoftLight,
+                                        borderRadius: BorderRadius.circular(
+                                            MobileTheme.controlRadius(context)),
+                                      ),
+                                      child: Icon(Icons.bug_report_outlined,
+                                          size: 20,
+                                          color: MobileTheme.brand(context)),
+                                    ),
+                                    title: const Text(
+                                      AppStrings.crashReport,
+                                      style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                    subtitle: Text(
+                                      '默认关闭。开启后仅匿名上报程序崩溃堆栈用于优化稳定性，绝不包含任何对话内容或密钥。',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: isDark
+                                            ? AppPalette.darkTextMuted
+                                            : AppPalette.lightTextMuted,
+                                      ),
+                                    ),
+                                    value: _crashReport,
+                                    onChanged: (v) =>
+                                        setState(() => _crashReport = v),
+                                  ),
                                 ),
-                                child: const Icon(Icons.bug_report_outlined,
-                                    size: 20, color: AppPalette.brand),
-                              ),
-                              title: const Text(
-                                AppStrings.crashReport,
-                                style: TextStyle(
-                                    fontSize: 15, fontWeight: FontWeight.w500),
-                              ),
-                              subtitle: Text(
-                                '默认关闭。开启后仅匿名上报程序崩溃堆栈用于优化稳定性，绝不包含任何对话内容或密钥。',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: isDark
-                                      ? AppPalette.darkTextMuted
-                                      : AppPalette.lightTextMuted,
-                                ),
-                              ),
-                              value: _crashReport,
-                              onChanged: (v) =>
-                                  setState(() => _crashReport = v),
-                            ),
-                          ),
-                        ],
-                      ]),
+                              ],
+                            ]),
+                      ),
+                    );
+                  },
                 );
               },
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            padding: EdgeInsets.fromLTRB(
+              24,
+              isCompactHeight ? 4 : 8,
+              24,
+              isCompactHeight ? 10 : 24,
+            ),
             child: Column(children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -270,25 +298,25 @@ class _OnboardingPageState extends State<OnboardingPage> {
                           decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: i == _index
-                                  ? AppPalette.brand
+                                  ? MobileTheme.brand(context)
                                   : (isDark
                                       ? AppPalette.darkHairline
                                       : AppPalette.lightHairline)),
                         )),
               ),
-              const SizedBox(height: 20),
+              SizedBox(height: isCompactHeight ? 8 : 20),
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
                     elevation: 0,
-                    backgroundColor: AppPalette.brandAction,
+                    backgroundColor: MobileTheme.brand(context),
                     foregroundColor: Colors.white,
                     minimumSize:
                         const Size.fromHeight(AppTokens.kMinTouchTarget),
                     shape: RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(AppTokens.radiusControl),
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.controlRadius(context)),
                     ),
                   ),
                   onPressed: _next,
@@ -300,7 +328,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
             ]),
           ),
         ]),
-      ),
+      )),
     );
   }
 }

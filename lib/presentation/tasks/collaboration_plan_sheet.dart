@@ -1,9 +1,9 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/orchestration_module.dart';
 import '../../domain/collaboration_models.dart';
-import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/empty_state_view.dart';
@@ -134,27 +134,30 @@ class _CollaborationPlanSheetState
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppPalette.brand.withValues(alpha: 0.08),
-                            borderRadius:
-                                BorderRadius.circular(AppTokens.radiusCard),
+                            color: MobileTheme.brand(context)
+                                .withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(
+                                MobileTheme.cardRadius(context)),
                             border: Border.all(
-                              color: AppPalette.brand.withValues(alpha: 0.2),
+                              color: MobileTheme.brand(context)
+                                  .withValues(alpha: 0.2),
                             ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
                                   Icon(Icons.shield_outlined,
-                                      size: 16, color: AppPalette.brand),
-                                  SizedBox(width: 6),
+                                      size: 16,
+                                      color: MobileTheme.brand(context)),
+                                  const SizedBox(width: 6),
                                   Text(
                                     '只读安全协同',
                                     style: TextStyle(
                                       fontSize: AppTokens.fontSizeFootnote,
                                       fontWeight: FontWeight.w500,
-                                      color: AppPalette.brand,
+                                      color: MobileTheme.brand(context),
                                     ),
                                   ),
                                 ],
@@ -164,7 +167,8 @@ class _CollaborationPlanSheetState
                                 '任务目标：${widget.task.prompt.isEmpty ? "分析当前工程上下文并制定方案" : widget.task.prompt}',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: AppTokens.fontSizeCaption),
+                                style: const TextStyle(
+                                    fontSize: AppTokens.fontSizeCaption),
                               ),
                               const SizedBox(height: 4),
                               Text(
@@ -211,14 +215,16 @@ class _CollaborationPlanSheetState
                                           Text(
                                             agent.role.label,
                                             style: const TextStyle(
-                                                fontSize: AppTokens.fontSizeCaption,
+                                                fontSize:
+                                                    AppTokens.fontSizeCaption,
                                                 fontWeight: FontWeight.w500),
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
                                             agent.role.responsibility,
                                             style: TextStyle(
-                                                fontSize: AppTokens.fontSizeFootnote,
+                                                fontSize:
+                                                    AppTokens.fontSizeFootnote,
                                                 color: theme.colorScheme
                                                     .onSurfaceVariant),
                                           ),
@@ -226,7 +232,8 @@ class _CollaborationPlanSheetState
                                           Text(
                                             '允许工具：${agent.allowedTools.join("、")}',
                                             style: TextStyle(
-                                                fontSize: AppTokens.fontSizeBadge,
+                                                fontSize:
+                                                    AppTokens.fontSizeBadge,
                                                 color: theme.colorScheme
                                                     .onSurfaceVariant
                                                     .withValues(alpha: 0.8)),
@@ -324,7 +331,7 @@ class _CollaborationPlanSheetState
                                     minimumSize: const Size(0, 46),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(
-                                          AppTokens.radiusControl),
+                                          MobileTheme.controlRadius(context)),
                                     ),
                                   ),
                                   onPressed: _starting ? null : _start,
@@ -357,7 +364,9 @@ class _CollaborationPlanSheetState
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(title,
-            style: const TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
+            style: const TextStyle(
+                fontSize: AppTokens.fontSizeCaption,
+                fontWeight: FontWeight.w500)),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -415,6 +424,8 @@ class _CollaborationPlanSheetState
   Widget _sectionTitle(String title) => Padding(
         padding: const EdgeInsets.only(top: 8, bottom: 6),
         child: Text(title,
-            style: const TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
+            style: const TextStyle(
+                fontSize: AppTokens.fontSizeCaption,
+                fontWeight: FontWeight.w500)),
       );
 }

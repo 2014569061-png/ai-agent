@@ -11,9 +11,9 @@ extension _ChatSheets on _ChatPageState {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = await showNexusSheet<ChatMode>(
       context: context,
-      maxHeightRatio: 0.32,
+      isScrollControlled: true,
       builder: (sheetContext) {
-        final activeColor = AppPalette.brand;
+        final activeColor = MobileTheme.brand(context);
         final surface =
             isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
         final hairline =
@@ -22,120 +22,127 @@ extension _ChatSheets on _ChatPageState {
         final textMuted =
             isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '切换模式 (Mode)',
-                    style: TextStyle(
-                      fontSize: AppTokens.fontSizeBody,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        '切换模式 (Mode)',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: AppTokens.fontSizeBody,
+                          fontWeight: FontWeight.w600,
+                          color: textColor,
+                        ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: activeColor,
-                      shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: activeColor,
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    state.mode.label,
-                    style: TextStyle(
-                      fontSize: AppTokens.fontSizeFootnote,
-                      fontWeight: FontWeight.w500,
-                      color: activeColor,
+                    const SizedBox(width: 4),
+                    Text(
+                      state.mode.label,
+                      style: TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote,
+                        fontWeight: FontWeight.w500,
+                        color: activeColor,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '关闭',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: AppTokens.kMinTouchTarget,
-                      minHeight: AppTokens.kMinTouchTarget,
+                    const Spacer(),
+                    IconButton(
+                      tooltip: '关闭',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: AppTokens.kMinTouchTarget,
+                        minHeight: AppTokens.kMinTouchTarget,
+                      ),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: textMuted,
+                      ),
+                      onPressed: () => Navigator.pop(sheetContext),
                     ),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: textMuted,
-                    ),
-                    onPressed: () => Navigator.pop(sheetContext),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  for (final mode in ChatMode.values) ...[
-                    Expanded(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () => Navigator.pop(sheetContext, mode),
-                        child: AnimatedContainer(
-                          duration: NexusMotion.durationFast(sheetContext),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 10, horizontal: 8),
-                          decoration: BoxDecoration(
-                            color: mode == state.mode
-                                ? activeColor.withValues(
-                                    alpha: isDark ? 0.2 : 0.12)
-                                : surface,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color:
-                                  mode == state.mode ? activeColor : hairline,
-                              width: mode == state.mode ? 1.5 : 1.0,
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _ChatPageState._chatModeIcon(mode),
-                                size: 20,
-                                color: mode == state.mode
-                                    ? activeColor
-                                    : textColor,
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    for (final mode in ChatMode.values) ...[
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.pop(sheetContext, mode),
+                          child: AnimatedContainer(
+                            duration: NexusMotion.durationFast(sheetContext),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: mode == state.mode
+                                  ? activeColor.withValues(
+                                      alpha: isDark ? 0.2 : 0.12)
+                                  : surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color:
+                                    mode == state.mode ? activeColor : hairline,
+                                width: mode == state.mode ? 1.5 : 1.0,
                               ),
-                              const SizedBox(height: 5),
-                              Text(
-                                mode.label,
-                                style: TextStyle(
-                                  fontSize: AppTokens.fontSizeCaption,
-                                  fontWeight: mode == state.mode
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _ChatPageState._chatModeIcon(mode),
+                                  size: 20,
                                   color: mode == state.mode
                                       ? activeColor
                                       : textColor,
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 5),
+                                Text(
+                                  mode.label,
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeCaption,
+                                    fontWeight: mode == state.mode
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: mode == state.mode
+                                        ? activeColor
+                                        : textColor,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (mode != ChatMode.values.last) const SizedBox(width: 8),
+                      if (mode != ChatMode.values.last)
+                        const SizedBox(width: 8),
+                    ],
                   ],
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         );
       },
     );
     if (!mounted || selected == null || selected == state.mode) return;
+
     _chat.setMode(selected);
     unawaited(HapticFeedback.selectionClick());
     FloatingToast.show(context, '已切换到${selected.label}模式');
@@ -378,10 +385,21 @@ extension _ChatSheets on _ChatPageState {
     final state = ref.read(chatControllerProvider);
     showNexusActionSheet<void>(
       context: context,
-      title: '更多操作',
+      title: '会话与开发工具',
       scrollable: true,
       items: [
         const ActionSheetItem.section('当前会话'),
+        if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+          ActionSheetItem(
+            icon: Icons.public,
+            title: '内置浏览器',
+            subtitle: '查看网页，逐次确认助手操作，随时接管',
+            enabled: state.conversationId != null && !state.running,
+            onTap: () => Navigator.of(context, rootNavigator: true).push(
+                NexusPageRoute.detail(
+                    builder: (_) =>
+                        BrowserPage(conversationId: state.conversationId!))),
+          ),
         ActionSheetItem(
           icon: Icons.tune_rounded,
           title: '会话上下文',
@@ -455,18 +473,12 @@ extension _ChatSheets on _ChatPageState {
                 builder: (_) => DevelopmentTasksPage(
                   onConversationSelected: (conversation) async {
                     Navigator.of(context).pop();
-                    await _switchConversation(conversation);
+                    await _switchConversationId(conversation);
                   },
                 ),
               ),
             );
           },
-        ),
-        ActionSheetItem(
-          icon: Icons.account_tree_outlined,
-          title: '项目',
-          subtitle: '新建、导入或打开开发项目',
-          onTap: _openProjectPicker,
         ),
         ActionSheetItem(
           icon: Icons.build_circle_outlined,
@@ -489,16 +501,6 @@ extension _ChatSheets on _ChatPageState {
             ));
           },
         ),
-        ActionSheetItem(
-          icon: Icons.dashboard_outlined,
-          title: '仪表盘',
-          subtitle: 'Token 消耗、费用指标与运行态',
-          onTap: () {
-            Navigator.of(context).push(
-              NexusPageRoute.detail(builder: (_) => const DashboardPage()),
-            );
-          },
-        ),
       ],
     );
   }
@@ -508,9 +510,9 @@ extension _ChatSheets on _ChatPageState {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = await showNexusSheet<ApprovalMode>(
       context: context,
-      maxHeightRatio: 0.32,
+      isScrollControlled: true,
       builder: (sheetContext) {
-        final activeColor = AppPalette.brand;
+        final activeColor = MobileTheme.brand(context);
         final surface =
             isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
         final hairline =
@@ -519,118 +521,121 @@ extension _ChatSheets on _ChatPageState {
         final textMuted =
             isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.shield_outlined, size: 18, color: activeColor),
-                  const SizedBox(width: 6),
-                  Text(
-                    '操作权限与安全',
-                    style: TextStyle(
-                      fontSize: AppTokens.fontSizeBody,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
+        return SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.shield_outlined, size: 18, color: activeColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      '操作权限与安全',
+                      style: TextStyle(
+                        fontSize: AppTokens.fontSizeBody,
+                        fontWeight: FontWeight.w600,
+                        color: textColor,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: '关闭',
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: AppTokens.kMinTouchTarget,
-                      minHeight: AppTokens.kMinTouchTarget,
+                    const Spacer(),
+                    IconButton(
+                      tooltip: '关闭',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: AppTokens.kMinTouchTarget,
+                        minHeight: AppTokens.kMinTouchTarget,
+                      ),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 18,
+                        color: textMuted,
+                      ),
+                      onPressed: () => Navigator.pop(sheetContext),
                     ),
-                    icon: Icon(
-                      Icons.close_rounded,
-                      size: 18,
-                      color: textMuted,
-                    ),
-                    onPressed: () => Navigator.pop(sheetContext),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  for (final mode in ApprovalMode.values) ...[
-                    Expanded(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () => Navigator.pop(sheetContext, mode),
-                        child: AnimatedContainer(
-                          duration: NexusMotion.durationFast(sheetContext),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 10, horizontal: 6),
-                          decoration: BoxDecoration(
-                            color: mode == currentMode
-                                ? activeColor.withValues(
-                                    alpha: isDark ? 0.2 : 0.12)
-                                : surface,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color:
-                                  mode == currentMode ? activeColor : hairline,
-                              width: mode == currentMode ? 1.5 : 1.0,
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                mode == ApprovalMode.fullAccess
-                                    ? Icons.shield_rounded
-                                    : (mode == ApprovalMode.autoSafe
-                                        ? Icons.verified_user_rounded
-                                        : Icons.help_outline_rounded),
-                                size: 20,
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    for (final mode in ApprovalMode.values) ...[
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(14),
+                          onTap: () => Navigator.pop(sheetContext, mode),
+                          child: AnimatedContainer(
+                            duration: NexusMotion.durationFast(sheetContext),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 10, horizontal: 6),
+                            decoration: BoxDecoration(
+                              color: mode == currentMode
+                                  ? activeColor.withValues(
+                                      alpha: isDark ? 0.2 : 0.12)
+                                  : surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
                                 color: mode == currentMode
                                     ? activeColor
-                                    : (mode == ApprovalMode.autoSafe
-                                        ? AppPalette.success
-                                        : textColor),
+                                    : hairline,
+                                width: mode == currentMode ? 1.5 : 1.0,
                               ),
-                              const SizedBox(height: 5),
-                              Text(
-                                _approvalModeTitle(mode),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: AppTokens.fontSizeFootnote,
-                                  fontWeight: mode == currentMode
-                                      ? FontWeight.w600
-                                      : FontWeight.w500,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  mode == ApprovalMode.fullAccess
+                                      ? Icons.shield_rounded
+                                      : (mode == ApprovalMode.autoSafe
+                                          ? Icons.verified_user_rounded
+                                          : Icons.help_outline_rounded),
+                                  size: 20,
                                   color: mode == currentMode
                                       ? activeColor
-                                      : textColor,
+                                      : (mode == ApprovalMode.autoSafe
+                                          ? AppPalette.success
+                                          : textColor),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 5),
+                                Text(
+                                  _approvalModeTitle(mode),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeFootnote,
+                                    fontWeight: mode == currentMode
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                    color: mode == currentMode
+                                        ? activeColor
+                                        : textColor,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    if (mode != ApprovalMode.values.last)
-                      const SizedBox(width: 8),
+                      if (mode != ApprovalMode.values.last)
+                        const SizedBox(width: 8),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  _approvalModeDescription(currentMode),
-                  style: TextStyle(
-                    fontSize: AppTokens.fontSizeBadge,
-                    color: textMuted,
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    _approvalModeDescription(currentMode),
+                    style: TextStyle(
+                      fontSize: AppTokens.fontSizeBadge,
+                      color: textMuted,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

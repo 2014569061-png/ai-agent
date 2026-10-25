@@ -190,52 +190,11 @@ class _LiquidGlassState extends State<LiquidGlass> {
 
   /// 优先返回折射滤镜；任何一环不满足即退回高斯模糊。
   ui.ImageFilter _resolveFilter(Size? size) {
-    final shader = _shader;
-    if (_effectiveIntensity == GlassIntensity.liquid &&
-        shader != null &&
-        size != null &&
-        size.width > 0 &&
-        size.height > 0) {
-      try {
-        shader
-          ..setFloat(0, size.width)
-          ..setFloat(1, size.height)
-          ..setFloat(2, _shaderRadius(size))
-          ..setFloat(3, widget.refraction)
-          ..setFloat(4, widget.edgeWidth)
-          ..setFloat(5, widget.gloss)
-          ..setFloat(6, widget.chromaticAberration);
-        // Keep the same ordering as a physical glass pipeline:
-        // backdrop blur first, then the lens displacement/color split. The
-        // shader alone only displaces samples and otherwise leaves a sharp
-        // backdrop, which is why the previous implementation read as a
-        // translucent tint on detailed content.
-        return ui.ImageFilter.compose(
-          outer: ui.ImageFilter.shader(shader),
-          inner: ui.ImageFilter.blur(
-            sigmaX: _effectiveBlur,
-            sigmaY: _effectiveBlur,
-            tileMode: ui.TileMode.clamp,
-          ),
-        );
-      } catch (_) {
-        // uniform 数量不匹配或后端拒绝：静默降级，不让玻璃把页面拖垮。
-      }
-    }
     return ui.ImageFilter.blur(
       sigmaX: _effectiveBlur,
       sigmaY: _effectiveBlur,
       tileMode: ui.TileMode.clamp,
     );
-  }
-
-  /// 着色器只支持统一圆角，取左上角并在短边内钳制。
-  double _shaderRadius(Size size) {
-    final raw =
-        (widget.borderRadius ?? BorderRadius.circular(AppTokens.radiusModal))
-            .topLeft
-            .x;
-    return raw.clamp(0.0, size.shortestSide / 2);
   }
 
   Widget _buildShell(
@@ -261,8 +220,6 @@ class _LiquidGlassState extends State<LiquidGlass> {
             : widget.tint ?? _defaultTint(isDark),
         borderRadius: radius,
         border: border,
-        boxShadow:
-            _motionLevel == MotionLevel.off ? const [] : widget.boxShadow,
       ),
       child: widget.padding == null
           ? widget.child
@@ -303,6 +260,23 @@ class _LiquidGlassState extends State<LiquidGlass> {
 
     return Container(
       margin: widget.margin,
+      decoration: (_motionLevel == MotionLevel.off ||
+              widget.boxShadow == null ||
+              widget.boxShadow!.isEmpty)
+          ? null
+          : BoxDecoration(
+              borderRadius: radius,
+              boxShadow: [
+                for (final s in widget.boxShadow!)
+                  BoxShadow(
+                    color: s.color,
+                    offset: Offset.zero,
+                    blurRadius: s.blurRadius,
+                    spreadRadius: s.spreadRadius,
+                    blurStyle: BlurStyle.outer,
+                  ),
+              ],
+            ),
       child: content,
     );
   }
@@ -310,8 +284,8 @@ class _LiquidGlassState extends State<LiquidGlass> {
   Color _defaultTint(bool isDark) {
     // 玻璃膜层留足透明度，让底层极光背景与毛玻璃内容清晰透出
     return isDark
-        ? AppPalette.darkSurface.withValues(alpha: 0.38)
-        : AppPalette.lightCanvas.withValues(alpha: 0.34);
+        ? AppPalette.darkSurface.withValues(alpha: 0.82)
+        : Colors.white.withValues(alpha: 0.95);
   }
 
   Color _borderColor(bool isDark) {
@@ -365,29 +339,31 @@ class _GlassOpticalPainter extends CustomPainter {
             : [
                 Colors.white.withValues(alpha: 0.16 + normalizedGloss * 0.14),
                 Colors.white.withValues(alpha: 0.03),
-                Colors.black.withValues(alpha: liquid ? 0.04 : 0.02),
+                Colors.white.withValues(alpha: 0.0),
               ],
         stops: const [0.0, 0.45, 1.0],
       ).createShader(rect);
     canvas.drawRect(rect, surfaceSheen);
 
     // 2. 左上透镜漫反射光斑 (Lens Specular Sweep)
-    final sheenRect = Rect.fromLTWH(
-      -size.width * 0.15,
-      -size.height * 0.35,
-      size.width * 1.25,
-      size.height * 0.85,
-    );
-    final specular = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          Colors.white.withValues(alpha: 0.14 + normalizedGloss * 0.20),
-          Colors.white.withValues(alpha: 0.025 + normalizedGloss * 0.03),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.38, 1.0],
-      ).createShader(sheenRect);
-    canvas.drawRect(rect, specular);
+    if (isDark) {
+      final sheenRect = Rect.fromLTWH(
+        -size.width * 0.15,
+        -size.height * 0.35,
+        size.width * 1.25,
+        size.height * 0.85,
+      );
+      final specular = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            Colors.white.withValues(alpha: 0.10 + normalizedGloss * 0.12),
+            Colors.white.withValues(alpha: 0.02),
+            Colors.transparent,
+          ],
+          stops: const [0.0, 0.38, 1.0],
+        ).createShader(sheenRect);
+      canvas.drawRect(rect, specular);
+    }
     canvas.restore();
 
     if (!outlined) return;
@@ -418,20 +394,22 @@ class _GlassOpticalPainter extends CustomPainter {
     canvas.drawRRect(shape, highlight);
 
     // 4. 底部微弱内倒角阴影 (Lower Bevel Shadow) 增强厚度立体感
-    final lowerEdge = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = liquid ? 1.1 : 0.8
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.transparent,
-          Colors.black.withValues(alpha: isDark ? 0.18 : 0.04),
-          Colors.black.withValues(alpha: isDark ? 0.38 : 0.10),
-        ],
-        stops: const [0.45, 0.80, 1.0],
-      ).createShader(rect);
-    canvas.drawRRect(shape.deflate(0.4), lowerEdge);
+    if (isDark) {
+      final lowerEdge = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = liquid ? 1.1 : 0.8
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.transparent,
+            Colors.black.withValues(alpha: 0.18),
+            Colors.black.withValues(alpha: 0.38),
+          ],
+          stops: const [0.45, 0.80, 1.0],
+        ).createShader(rect);
+      canvas.drawRRect(shape.deflate(0.4), lowerEdge);
+    }
   }
 
   @override

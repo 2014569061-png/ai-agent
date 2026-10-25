@@ -1,6 +1,7 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
-import '../../theme/app_tokens.dart';
+import '../../theme/desktop_theme.dart';
 
 /// 聊天输入区上方的 Provider 配置引导。
 ///
@@ -40,6 +41,7 @@ class _ProviderSetupHintState extends State<ProviderSetupHint> {
 
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final desktop = DesktopTheme.maybeOf(context);
     final titleStyle = theme.textTheme.labelLarge?.copyWith(
       color: scheme.onSurface,
       fontWeight: FontWeight.w600,
@@ -55,14 +57,17 @@ class _ProviderSetupHintState extends State<ProviderSetupHint> {
         container: true,
         label: '尚未配置模型服务',
         child: Material(
-          color: scheme.primaryContainer.withValues(alpha: .48),
-          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          color:
+              desktop?.panel ?? scheme.primaryContainer.withValues(alpha: .48),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           child: Container(
             padding: const EdgeInsets.fromLTRB(10, 8, 4, 8),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+              borderRadius:
+                  BorderRadius.circular(MobileTheme.controlRadius(context)),
               border: Border.all(
-                color: scheme.primary.withValues(alpha: .22),
+                color: desktop?.border ?? scheme.primary.withValues(alpha: .22),
               ),
             ),
             child: Row(
@@ -71,7 +76,7 @@ class _ProviderSetupHintState extends State<ProviderSetupHint> {
                 Icon(
                   Icons.cloud_off_outlined,
                   size: 20,
-                  color: scheme.primary,
+                  color: desktop?.muted ?? scheme.primary,
                 ),
                 const SizedBox(width: 8),
                 Expanded(

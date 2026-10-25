@@ -1,17 +1,18 @@
+import '../theme/mobile_theme.dart';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
+import '../../application/data_maintenance_actions.dart';
 import '../../infrastructure/files/vault_exporter.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
@@ -89,11 +90,19 @@ class _VaultPageState extends ConsumerState<VaultPage> {
     );
     if (!confirmed || !mounted) return;
     try {
-      final db = await ref.read(databaseProvider.future);
-      final summary = await importVaultBytes(db, bytes, password);
+      final summary = await ref
+          .read(dataMaintenanceActionsProvider)
+          .importEncrypted(bytes, password);
       if (mounted) FloatingToast.show(context, summary);
-    } catch (_) {
-      if (mounted) FloatingToast.show(context, '导入失败：密码错误或文件损坏');
+    } catch (error) {
+      if (mounted) {
+        FloatingToast.show(
+            context,
+            error is RuntimeDataRevoked ||
+                    error is DataMaintenanceRefreshFailure
+                ? error.toString()
+                : '导入失败：密码错误、文件损坏或维护未完成');
+      }
     }
   }
 
@@ -113,10 +122,11 @@ class _VaultPageState extends ConsumerState<VaultPage> {
           FilledButton(
               style: FilledButton.styleFrom(
                 elevation: 0,
-                backgroundColor: AppPalette.brandAction,
+                backgroundColor: MobileTheme.brand(context),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                  borderRadius:
+                      BorderRadius.circular(MobileTheme.controlRadius(context)),
                 ),
               ),
               onPressed: () {
@@ -134,89 +144,93 @@ class _VaultPageState extends ConsumerState<VaultPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: const NexusPageHeader(
         title: '隐私保险箱',
         subtitle: '全量加密导出与备份恢复',
       ),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        SectionCard(
-          child: ListTile(
-            leading: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppPalette.brandSoftDark
-                    : AppPalette.brandSoftLight,
-                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-              ),
-              child: const Icon(Icons.upload_file_outlined,
-                  size: 20, color: AppPalette.brand),
-            ),
-            title: const Text(
-              '加密导出',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              '默认不包含 API Key；可在导出时手动选择',
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark
-                    ? AppPalette.darkTextMuted
-                    : AppPalette.lightTextMuted,
-              ),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _export,
-          ),
-        ),
-        const SizedBox(height: 12),
-        SectionCard(
-          child: ListTile(
-            leading: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppPalette.brandSoftDark
-                    : AppPalette.brandSoftLight,
-                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-              ),
-              child: const Icon(Icons.download_outlined,
-                  size: 20, color: AppPalette.brand),
-            ),
-            title: const Text(
-              '密码导入',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              '从 .nexusvault 恢复（将覆盖本地数据）',
-              style: TextStyle(
-                fontSize: 13,
-                color: isDark
-                    ? AppPalette.darkTextMuted
-                    : AppPalette.lightTextMuted,
+      body: NexusPageLayout(
+          desktopMaxWidth: 920,
+          child: ListView(padding: const EdgeInsets.all(16), children: [
+            SectionCard(
+              child: ListTile(
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppPalette.brandSoftDark
+                        : AppPalette.brandSoftLight,
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
+                  ),
+                  child: Icon(Icons.upload_file_outlined,
+                      size: 20, color: MobileTheme.brand(context)),
+                ),
+                title: const Text(
+                  '加密导出',
+                  style: TextStyle(
+                      fontSize: AppTokens.fontSizeBody,
+                      fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '默认不包含 API Key；可在导出时手动选择',
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeCaption,
+                    color: isDark
+                        ? AppPalette.darkTextMuted
+                        : AppPalette.lightTextMuted,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _export,
               ),
             ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _import,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text('注意：忘记密码将无法找回，密码永不存储。',
-            style: TextStyle(
-                fontSize: 12,
-                color: isDark
-                    ? AppPalette.darkTextMuted
-                    : AppPalette.lightTextMuted)),
-      ]),
+            const SizedBox(height: 12),
+            SectionCard(
+              child: ListTile(
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppPalette.brandSoftDark
+                        : AppPalette.brandSoftLight,
+                    borderRadius: BorderRadius.circular(
+                        MobileTheme.controlRadius(context)),
+                  ),
+                  child: Icon(Icons.download_outlined,
+                      size: 20, color: MobileTheme.brand(context)),
+                ),
+                title: const Text(
+                  '密码导入',
+                  style: TextStyle(
+                      fontSize: AppTokens.fontSizeBody,
+                      fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  '从 .nexusvault 恢复（将覆盖本地数据）',
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeCaption,
+                    color: isDark
+                        ? AppPalette.darkTextMuted
+                        : AppPalette.lightTextMuted,
+                  ),
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _import,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('注意：忘记密码将无法找回，密码永不存储。',
+                style: TextStyle(
+                    fontSize: AppTokens.fontSizeFootnote,
+                    color: isDark
+                        ? AppPalette.darkTextMuted
+                        : AppPalette.lightTextMuted)),
+          ])),
     );
   }
 }

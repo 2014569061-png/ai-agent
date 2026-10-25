@@ -1,19 +1,21 @@
+import '../theme/mobile_theme.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/audit_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/desktop_page_summary.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import '../widgets/nexus_switch.dart';
@@ -246,13 +248,10 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    final desktop = DesktopTheme.maybeOf(context);
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: NexusPageHeader(
         title: '审计日志',
         subtitle: '工具调用与审批追踪记录',
@@ -268,7 +267,31 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
           ),
         ],
       ),
-      body: Column(children: [
+      body: NexusPageLayout(
+          child: Column(children: [
+        if (desktop != null)
+          DesktopPageSummary(items: [
+            (
+              icon: Icons.receipt_long_outlined,
+              label: '近期记录',
+              value: _loading
+                  ? '读取中'
+                  : _error != null
+                      ? '读取失败'
+                      : '${_logs.length}'
+            ),
+            (
+              icon: Icons.policy_outlined,
+              label: '普通工具审计',
+              value: _loading
+                  ? '读取中'
+                  : _error != null
+                      ? '未知'
+                      : _enabled
+                          ? '已启用'
+                          : '已关闭'
+            ),
+          ]),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: SectionCard(
@@ -280,19 +303,22 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                   color: isDark
                       ? AppPalette.brandSoftDark
                       : AppPalette.brandSoftLight,
-                  borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                  borderRadius:
+                      BorderRadius.circular(MobileTheme.controlRadius(context)),
                 ),
-                child: const Icon(Icons.security_outlined,
-                    size: 20, color: AppPalette.brand),
+                child: Icon(Icons.security_outlined,
+                    size: 20, color: MobileTheme.brand(context)),
               ),
               title: const Text(
                 '启用审计',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                    fontSize: AppTokens.fontSizeBody,
+                    fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
                 '普通工具日志按此开关记录；安全审批和手机操作请求、目标及结果始终保存在本机',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: AppTokens.fontSizeCaption,
                   color: isDark
                       ? AppPalette.darkTextMuted
                       : AppPalette.lightTextMuted,
@@ -331,7 +357,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                                   ? AppPalette.darkSurface
                                   : AppPalette.lightSurface,
                               borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusControl),
+                                  MobileTheme.controlRadius(context)),
                               border: Border.all(
                                 color: isDark
                                     ? AppPalette.darkHairline
@@ -357,15 +383,19 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
+                              fontSize: AppTokens.fontSizeBody,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           subtitle: Text(
                             '${log.createdAt.toLocal().toString().substring(0, 19)}'
                             '${log.decision != null ? ' · ${log.decision}' : ''}',
                             style: TextStyle(
-                              fontSize: 13,
+                              fontSize: AppTokens.fontSizeCaption,
+                              fontFamily: AppTokens.fontFamilyMono,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
                               color: isDark
                                   ? AppPalette.darkTextMuted
                                   : AppPalette.lightTextMuted,
@@ -378,7 +408,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
                   ),
           ),
         ),
-      ]),
+      ])),
     );
   }
 }

@@ -4,7 +4,7 @@ import '../../theme/app_theme.dart';
 
 import '../../../application/chat_controller.dart';
 import '../../../domain/models.dart';
-import '../../../infrastructure/tools/tool_humanizer.dart';
+import '../tool_humanizer.dart';
 import '../../widgets/nexus_switch.dart';
 
 /// 统一「会话配置」面板：一次看清并修改模型/服务、Agent、工作区、
@@ -71,118 +71,121 @@ class SessionConfigurationSheet extends StatelessWidget {
     }
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              const Icon(Icons.tune_rounded),
-              const SizedBox(width: 8),
-              Text('会话配置',
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w500)),
-            ]),
-            const SizedBox(height: 8),
-            if (onSelectMode != null)
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                const Icon(Icons.tune_rounded),
+                const SizedBox(width: 8),
+                Text('会话配置',
+                    style: theme.textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.w500)),
+              ]),
+              const SizedBox(height: 8),
+              if (onSelectMode != null)
+                tile(
+                  icon: _modeIcon(state.mode),
+                  label: '当前模式',
+                  value: '${state.mode.label} · ${state.mode.description}',
+                  onTap: onSelectMode,
+                ),
               tile(
-                icon: _modeIcon(state.mode),
-                label: '当前模式',
-                value: '${state.mode.label} · ${state.mode.description}',
-                onTap: onSelectMode,
+                icon: Icons.model_training_rounded,
+                label: '模型 / 服务',
+                value: state.activeModel.isEmpty
+                    ? '未配置'
+                    : '${state.activeProviderName} · ${state.activeModel}',
+                onTap: onSelectModel,
               ),
-            tile(
-              icon: Icons.model_training_rounded,
-              label: '模型 / 服务',
-              value: state.activeModel.isEmpty
-                  ? '未配置'
-                  : '${state.activeProviderName} · ${state.activeModel}',
-              onTap: onSelectModel,
-            ),
-            tile(
-              icon: Icons.smart_toy_outlined,
-              label: 'Agent',
-              value: state.agentName,
-              onTap: onSelectAgent,
-            ),
-            tile(
-              icon: Icons.psychology_outlined,
-              label: '思考模式',
-              value:
-                  '${state.reasoningMode.label} · ${state.reasoningMode.description}',
-              onTap: onSelectReasoningMode,
-            ),
-            NexusSwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              secondary: Icon(Icons.language_rounded,
-                  color: state.webSearchEnabled
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.outline),
-              title: const Text('智能搜索',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-              subtitle: const Text('仅在 Agent / 计划模式下向模型提供联网工具',
-                  style: TextStyle(fontSize: 12)),
-              value: state.webSearchEnabled,
-              onChanged: onToggleWebSearch,
-            ),
-            tile(
-              icon: Icons.folder_open_outlined,
-              label: '项目工作区',
-              value: folder ?? '未绑定本地文件夹',
-              onTap: onPickWorkspace,
-              trailing: folder != null
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.link_off_rounded, size: 20),
-                          tooltip: '解绑工作区',
-                          visualDensity: VisualDensity.compact,
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            onClearWorkspace();
-                          },
-                        ),
-                        const Icon(Icons.chevron_right_rounded, size: 20),
-                      ],
-                    )
-                  : const Icon(Icons.chevron_right_rounded, size: 20),
-            ),
-            if (state.sessionSkillInstructions.isNotEmpty)
               tile(
-                icon: Icons.extension_rounded,
-                label: '本轮已加载 Skill',
-                value: state.sessionSkillInstructions
-                    .map((skill) => skill.name)
-                    .join('、'),
+                icon: Icons.smart_toy_outlined,
+                label: 'Agent',
+                value: state.agentName,
+                onTap: onSelectAgent,
               ),
-            if (state.toolActivities.isNotEmpty)
               tile(
-                icon: Icons.handyman_outlined,
-                label: '本轮工具',
-                value: state.toolActivities
-                    .map((activity) =>
-                        const ToolHumanizer().summaryOf(activity.call) ??
-                        activity.call.name)
-                    .join('、'),
+                icon: Icons.psychology_outlined,
+                label: '思考模式',
+                value:
+                    '${state.reasoningMode.label} · ${state.reasoningMode.description}',
+                onTap: onSelectReasoningMode,
               ),
-            if (onSelectMode == null)
               NexusSwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                secondary: Icon(Icons.checklist_rounded,
-                    color: state.planMode
-                        ? AppTheme.warning
-                        : theme.colorScheme.outline),
-                title: const Text('计划审批模式',
+                secondary: Icon(Icons.language_rounded,
+                    color: state.webSearchEnabled
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant),
+                title: const Text('智能搜索',
                     style:
                         TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                subtitle: const Text('开启后首轮先生成分步计划，确认后才执行',
+                subtitle: const Text('仅在 Agent / 计划模式下向模型提供联网工具',
                     style: TextStyle(fontSize: 12)),
-                value: state.planMode,
-                onChanged: (_) => onTogglePlanMode(),
+                value: state.webSearchEnabled,
+                onChanged: onToggleWebSearch,
               ),
-          ],
+              tile(
+                icon: Icons.folder_open_outlined,
+                label: '项目工作区',
+                value: folder ?? '未绑定本地文件夹',
+                onTap: onPickWorkspace,
+                trailing: folder != null
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.link_off_rounded, size: 20),
+                            tooltip: '解绑工作区',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              onClearWorkspace();
+                            },
+                          ),
+                          const Icon(Icons.chevron_right_rounded, size: 20),
+                        ],
+                      )
+                    : const Icon(Icons.chevron_right_rounded, size: 20),
+              ),
+              if (state.sessionSkillInstructions.isNotEmpty)
+                tile(
+                  icon: Icons.extension_rounded,
+                  label: '本轮已加载 Skill',
+                  value: state.sessionSkillInstructions
+                      .map((skill) => skill.name)
+                      .join('、'),
+                ),
+              if (state.toolActivities.isNotEmpty)
+                tile(
+                  icon: Icons.handyman_outlined,
+                  label: '本轮工具',
+                  value: state.toolActivities
+                      .map((activity) =>
+                          const ToolHumanizer().summaryOf(activity.call) ??
+                          activity.call.name)
+                      .join('、'),
+                ),
+              if (onSelectMode == null)
+                NexusSwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: Icon(Icons.checklist_rounded,
+                      color: state.planMode
+                          ? AppTheme.warning
+                          : theme.colorScheme.onSurfaceVariant),
+                  title: const Text('计划审批模式',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  subtitle: const Text('开启后首轮先生成分步计划，确认后才执行',
+                      style: TextStyle(fontSize: 12)),
+                  value: state.planMode,
+                  onChanged: (_) => onTogglePlanMode(),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,8 +1,10 @@
+import '../../theme/mobile_theme.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../../application/plan_markdown.dart';
 import '../../motion/nexus_motion.dart';
 import '../../theme/app_appearance_controller.dart';
 import '../../theme/app_palette.dart';
@@ -15,6 +17,7 @@ import '../../widgets/nexus_surface.dart';
 import '../../widgets/nexus_status_pill.dart';
 import '../../widgets/nexus_status_badge.dart';
 import '../../motion/morph_icon.dart';
+import '../transcript_view_policy.dart';
 
 /// 执行计划浮层卡片 (PlanPanel)
 /// 严格依据 NEXUS UI 设计优化规范重构：
@@ -29,6 +32,8 @@ class PlanPanel extends StatefulWidget {
   final VoidCallback onCancel;
   final VoidCallback? onRetry;
   final VoidCallback? onResume;
+  final ValueChanged<String>? onApproveEdited;
+  final VoidCallback? onOpenResults;
 
   const PlanPanel({
     super.key,
@@ -38,6 +43,8 @@ class PlanPanel extends StatefulWidget {
     required this.onCancel,
     this.onRetry,
     this.onResume,
+    this.onApproveEdited,
+    this.onOpenResults,
   });
 
   @override
@@ -46,16 +53,23 @@ class PlanPanel extends StatefulWidget {
 
 class _PlanPanelState extends State<PlanPanel> {
   late bool _expanded;
+  bool _editing = false;
+  final TextEditingController _editController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     // 未确认时展开方便审核；执行完成后默认紧凑收起，避免遮挡消息；
     // 暂停态默认展开以展示“继续执行”入口。
-    _expanded = !widget.plan.isConfirmed &&
-            widget.plan.status != 'completed' &&
-            widget.plan.status != 'paused' ||
-        widget.plan.status == 'paused';
+    _expanded = TranscriptViewPolicy.forPlan(
+            confirmed: widget.plan.isConfirmed, status: widget.plan.status)
+        .planExpanded;
+  }
+
+  @override
+  void dispose() {
+    _editController.dispose();
+    super.dispose();
   }
 
   @override
@@ -63,6 +77,12 @@ class _PlanPanelState extends State<PlanPanel> {
     super.didUpdateWidget(oldWidget);
     if (!widget.plan.isConfirmed && oldWidget.plan.isConfirmed) {
       _expanded = true;
+    }
+    if (widget.plan.status != oldWidget.plan.status) {
+      _editing = false;
+      _expanded = TranscriptViewPolicy.forPlan(
+              confirmed: widget.plan.isConfirmed, status: widget.plan.status)
+          .planExpanded;
     }
   }
 
@@ -106,24 +126,28 @@ class _PlanPanelState extends State<PlanPanel> {
             ? _buildCompletedCompact(muted)
             : (_expanded
                 // Z5：高度随内容收缩（上限不变），步骤少时不再留出空白。
-                ? ConstrainedBox(
-                    key: const ValueKey('plan_expanded'),
-                    constraints: BoxConstraints(
-                      maxHeight: math.min(
-                          410.0, MediaQuery.sizeOf(context).height * 0.58),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: SingleChildScrollView(
-                            child: _buildExpanded(muted, includeActions: false),
-                          ),
+                ? (_editing
+                    // 编辑态：把步骤列表替换为可编辑的 Markdown 面板。
+                    ? _buildEditPane(muted)
+                    : ConstrainedBox(
+                        key: const ValueKey('plan_expanded'),
+                        constraints: BoxConstraints(
+                          maxHeight: math.min(
+                              410.0, MediaQuery.sizeOf(context).height * 0.58),
                         ),
-                        _buildPlanActions(),
-                      ],
-                    ),
-                  )
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: SingleChildScrollView(
+                                child: _buildExpanded(muted,
+                                    includeActions: false),
+                              ),
+                            ),
+                            _buildPlanActions(),
+                          ],
+                        ),
+                      ))
                 : KeyedSubtree(
                     key: const ValueKey('plan_collapsed'),
                     child: _buildCollapsed(muted),
@@ -157,6 +181,11 @@ class _PlanPanelState extends State<PlanPanel> {
   }
 
   // --- 执行完成时的紧凑条 ---
+  Widget _resultsButton() => IconButton(
+      tooltip: '查看本轮结果',
+      onPressed: widget.onOpenResults,
+      icon: const Icon(Icons.inventory_2_outlined, size: 18));
+
   Widget _buildCompletedCompact(Color muted) {
     final total = widget.plan.steps.length;
     return InkWell(
@@ -182,6 +211,7 @@ class _PlanPanelState extends State<PlanPanel> {
               ),
             ),
             const SizedBox(width: 4),
+            if (widget.onOpenResults != null) _resultsButton(),
             Text('查看',
                 style: TextStyle(
                     fontSize: AppTokens.fontSizeFootnote,
@@ -202,13 +232,22 @@ class _PlanPanelState extends State<PlanPanel> {
 
     return InkWell(
       onTap: () => setState(() => _expanded = true),
-      borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+      borderRadius: BorderRadius.circular(MobileTheme.cardRadius(context)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
         child: Row(
           children: [
-            const Icon(Icons.checklist_rounded,
-                size: 18, color: AppPalette.brand),
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: MobileTheme.brand(context).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              alignment: Alignment.center,
+              child: Icon(Icons.checklist_rounded,
+                  size: 15, color: MobileTheme.brand(context)),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -221,8 +260,9 @@ class _PlanPanelState extends State<PlanPanel> {
                         '进度 $done/$total',
                         style: TextStyle(
                           fontSize: AppTokens.fontSizeBadge,
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                           color: muted,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -245,6 +285,7 @@ class _PlanPanelState extends State<PlanPanel> {
                 ],
               ),
             ),
+            if (widget.onOpenResults != null) _resultsButton(),
             IconButton(
               tooltip: '展开计划',
               icon: SpringTurns(
@@ -278,8 +319,17 @@ class _PlanPanelState extends State<PlanPanel> {
           padding: const EdgeInsets.fromLTRB(14, 10, 8, 6),
           child: Row(
             children: [
-              const Icon(Icons.checklist_rounded,
-                  size: 18, color: AppPalette.brand),
+              Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  color: MobileTheme.brand(context).withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                alignment: Alignment.center,
+                child: Icon(Icons.checklist_rounded,
+                    size: 15, color: MobileTheme.brand(context)),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Row(
@@ -290,7 +340,7 @@ class _PlanPanelState extends State<PlanPanel> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w500,
+                          fontWeight: FontWeight.w600,
                           fontSize: AppTokens.fontSizeBody,
                         ),
                       ),
@@ -305,6 +355,7 @@ class _PlanPanelState extends State<PlanPanel> {
                   ],
                 ),
               ),
+              if (widget.onOpenResults != null) _resultsButton(),
               _threeDotMenu(muted),
               IconButton(
                 tooltip: '收起计划',
@@ -330,7 +381,8 @@ class _PlanPanelState extends State<PlanPanel> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppTheme.brandBright.withValues(alpha: 0.06),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.controlRadius(context)),
                 border: Border.all(
                   color: AppTheme.brandBright.withValues(alpha: 0.15),
                 ),
@@ -338,11 +390,11 @@ class _PlanPanelState extends State<PlanPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('执行目标',
+                  Text('执行目标',
                       style: TextStyle(
                           fontSize: AppTokens.fontSizeBadge,
                           fontWeight: FontWeight.w500,
-                          color: AppPalette.brand)),
+                          color: MobileTheme.brand(context))),
                   const SizedBox(height: 3),
                   Text(
                     widget.goal!,
@@ -511,12 +563,110 @@ class _PlanPanelState extends State<PlanPanel> {
     );
   }
 
+  void _startEdit() {
+    _editController.text =
+        planStepsToMarkdown(goal: widget.goal, steps: widget.plan.steps);
+    setState(() => _editing = true);
+  }
+
+  void _confirmEdit() {
+    final text = _editController.text.trim();
+    setState(() => _editing = false);
+    if (text.isEmpty || widget.onApproveEdited == null) {
+      // 空内容或未接编辑回调：按原计划执行，避免吞掉用户确认。
+      widget.onApprove();
+      return;
+    }
+    widget.onApproveEdited!(text);
+  }
+
+  /// 编辑态：可编辑的计划 Markdown + 保存执行。
+  Widget _buildEditPane(Color muted) {
+    final theme = Theme.of(context);
+    return ConstrainedBox(
+      key: const ValueKey('plan_edit'),
+      constraints: BoxConstraints(
+        maxHeight: math.min(410.0, MediaQuery.sizeOf(context).height * 0.58),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 6, 0),
+            child: Row(children: [
+              Icon(Icons.edit_note_rounded,
+                  size: 16, color: theme.colorScheme.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('编辑执行计划', style: theme.textTheme.titleSmall),
+              ),
+              TextButton(
+                key: const ValueKey('plan_edit_cancel'),
+                onPressed: () => setState(() => _editing = false),
+                child: const Text('取消'),
+              ),
+            ]),
+          ),
+          Flexible(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+              child: TextField(
+                key: const ValueKey('plan_edit_field'),
+                controller: _editController,
+                maxLines: null,
+                expands: true,
+                keyboardType: TextInputType.multiline,
+                style: theme.textTheme.bodySmall,
+                decoration: InputDecoration(
+                  hintText: '每行一个步骤，如：1. 修改登录页',
+                  hintStyle: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.all(10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+            child: Row(children: [
+              Expanded(
+                child: Text('确认后将按计划继续执行',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted)),
+              ),
+              FilledButton.icon(
+                key: const ValueKey('plan_edit_confirm'),
+                onPressed: _confirmEdit,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: const Text('保存并执行'),
+              ),
+            ]),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPlanActions() {
     if (!widget.plan.isConfirmed) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(12, 6, 12, 10),
         child: Row(
           children: [
+            if (widget.onApproveEdited != null) ...[
+              IconButton(
+                key: const ValueKey('plan_edit_button'),
+                tooltip: '编辑计划',
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.edit_note_rounded, size: 20),
+                onPressed: _startEdit,
+              ),
+              const SizedBox(width: 4),
+            ],
             Expanded(
               child: OutlinedButton(
                 onPressed: widget.onCancel,

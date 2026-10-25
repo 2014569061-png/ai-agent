@@ -1,11 +1,14 @@
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 import '../theme/app_palette.dart';
 import '../theme/app_theme.dart';
+import '../theme/app_tokens.dart';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -137,8 +140,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
     final confirmed = await showConfirmAction(
       context,
       title: '清理临时缓存文件？',
-      message:
-          '此操作将清理应用下载缓存、临时渲染图与临时转换文件。不会影响你的工作区文件与会话记录。\n\n确定清理吗？',
+      message: '此操作将清理应用下载缓存、临时渲染图与临时转换文件。不会影响你的工作区文件与会话记录。\n\n确定清理吗？',
       confirmLabel: '确定清理',
       isDanger: true,
     );
@@ -179,141 +181,149 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
         title: '工作区与文件',
         subtitle: '沙箱环境 · 目录访问与存储管理',
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         child: ListView(
           padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+          children: [
+            const SettingsSectionTitle('当前工作区'),
+            SettingsGroupCard(
               children: [
-                const SettingsSectionTitle('当前工作区'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      icon: Icons.folder_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '工作区路径',
-                      subtitle: currentWs,
-                      onTap: _pickWorkspace,
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.shield_rounded,
-                      iconColor: AppPalette.success,
-                      title: '工作区权限',
-                      subtitle: '受控沙箱：文件读写严格限制在工作区内部',
-                      showChevron: false,
-                      trailingWidget: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppTheme.semanticOf(context)
-                              .success
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '受控安全',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.semanticOf(context).success,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                SettingsTile(
+                  icon: Icons.folder_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '工作区路径',
+                  subtitle: currentWs,
+                  onTap: _pickWorkspace,
+                ),
+                const SettingsDivider(),
+                SettingsTile(
+                  icon: Icons.shield_rounded,
+                  iconColor: AppPalette.success,
+                  title: '工作区权限',
+                  subtitle: '受控沙箱：文件读写严格限制在工作区内部',
+                  showChevron: false,
+                  trailingWidget: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.semanticOf(context)
+                          .success
+                          .withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(
+                          MobileTheme.controlRadius(context)),
+                      border: Border.all(
+                        color: AppTheme.semanticOf(context)
+                            .success
+                            .withValues(alpha: 0.28),
+                        width: 1.0,
                       ),
                     ),
-                  ],
-                ),
-                const SettingsSectionTitle('文件传输与授权'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      icon: Icons.file_upload_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '导入文件',
-                      subtitle: '选取外部文件或文档导入到 Agent 工作区',
-                      onTap: _importFile,
+                    child: Text(
+                      '受控安全',
+                      style: TextStyle(
+                        fontSize: AppTokens.fontSizeFootnote,
+                        color: AppTheme.semanticOf(context).success,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      // X6：导出为普通操作，去掉装饰琥珀色。
-                      icon: Icons.file_download_rounded,
-                      title: '导出会话与文件',
-                      subtitle: '以 Markdown 或加密形式备份项目与对话',
-                      onTap: _exportConversation,
-                    ),
-                    const SettingsDivider(),
-                    SettingsTile(
-                      icon: Icons.lock_clock_rounded,
-                      iconColor: settingsMutedColor(context),
-                      title: '文件访问授权策略',
-                      subtitle: '删除文件与关键代码编辑始终经过弹窗确认',
-                      onTap: () {
-                        showNexusDialog<void>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('文件授权说明'),
-                            content: const Text(
-                              'NEXUS Agent 对文件系统遵循零信任原则：\n\n'
-                              '1. 仅允许访问选定工作区内的文件，严禁越界逃逸；\n'
-                              '2. 写文件与编辑文件受用户审批策略控制；\n'
-                              '3. 删除文件强制逐次确认，不可绕过。',
-                            ),
-                            actions: [
-                              FilledButton(
-                                onPressed: () => Navigator.pop(ctx),
-                                child: const Text('了解'),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                if (_recentDirs.isNotEmpty) ...[
-                  const SettingsSectionTitle('最近访问目录'),
-                  SettingsGroupCard(
-                    children: [
-                      for (var i = 0; i < _recentDirs.length; i++) ...[
-                        SettingsTile(
-                          icon: Icons.history_rounded,
-                          iconColor: settingsMutedColor(context),
-                          title: _recentDirs[i],
-                          trailingWidget: const Icon(
-                            Icons.arrow_forward_rounded,
-                            size: 16,
-                            color: AppPalette.lightTextMuted,
-                          ),
-                          onTap: () {
-                            ref
-                                .read(chatControllerProvider.notifier)
-                                .setWorkspace(_recentDirs[i]);
-                            FloatingToast.show(
-                              context,
-                              '已切换工作区: ${_recentDirs[i]}',
-                            );
-                          },
-                        ),
-                        if (i < _recentDirs.length - 1) const SettingsDivider(),
-                      ],
-                    ],
                   ),
-                ],
-                const SettingsSectionTitle('存储维护'),
-                SettingsGroupCard(
-                  children: [
-                    SettingsTile(
-                      icon: Icons.cleaning_services_rounded,
-                      iconColor: AppPalette.danger,
-                      title: '清理临时缓存文件',
-                      titleColor: AppTheme.semanticOf(context).danger,
-                      subtitle: '清理临时预览、生成草稿与图片缓存（二次确认）',
-                      onTap: _cleanTempFiles,
-                    ),
-                  ],
                 ),
               ],
             ),
-      ),
+            const SettingsSectionTitle('文件传输与授权'),
+            SettingsGroupCard(
+              children: [
+                SettingsTile(
+                  icon: Icons.file_upload_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '导入文件',
+                  subtitle: '选取外部文件或文档导入到 Agent 工作区',
+                  onTap: _importFile,
+                ),
+                const SettingsDivider(),
+                SettingsTile(
+                  // X6：导出为普通操作，去掉装饰琥珀色。
+                  icon: Icons.file_download_rounded,
+                  title: '导出会话与文件',
+                  subtitle: '以 Markdown 或加密形式备份项目与对话',
+                  onTap: _exportConversation,
+                ),
+                const SettingsDivider(),
+                SettingsTile(
+                  icon: Icons.lock_clock_rounded,
+                  iconColor: settingsMutedColor(context),
+                  title: '文件访问授权策略',
+                  subtitle: '删除文件与关键代码编辑始终经过弹窗确认',
+                  onTap: () {
+                    showNexusDialog<void>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('文件授权说明'),
+                        content: const Text(
+                          'NEXUS Agent 对文件系统遵循零信任原则：\n\n'
+                          '1. 仅允许访问选定工作区内的文件，严禁越界逃逸；\n'
+                          '2. 写文件与编辑文件受用户审批策略控制；\n'
+                          '3. 删除文件强制逐次确认，不可绕过。',
+                        ),
+                        actions: [
+                          FilledButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('了解'),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            if (_recentDirs.isNotEmpty) ...[
+              const SettingsSectionTitle('最近访问目录'),
+              SettingsGroupCard(
+                children: [
+                  for (var i = 0; i < _recentDirs.length; i++) ...[
+                    SettingsTile(
+                      icon: Icons.history_rounded,
+                      iconColor: settingsMutedColor(context),
+                      title: _recentDirs[i],
+                      trailingWidget: const Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 16,
+                        color: AppPalette.lightTextMuted,
+                      ),
+                      onTap: () {
+                        ref
+                            .read(chatControllerProvider.notifier)
+                            .setWorkspace(_recentDirs[i]);
+                        FloatingToast.show(
+                          context,
+                          '已切换工作区: ${_recentDirs[i]}',
+                        );
+                      },
+                    ),
+                    if (i < _recentDirs.length - 1) const SettingsDivider(),
+                  ],
+                ],
+              ),
+            ],
+            const SettingsSectionTitle('存储维护'),
+            SettingsGroupCard(
+              children: [
+                SettingsTile(
+                  icon: Icons.cleaning_services_rounded,
+                  iconColor: AppPalette.danger,
+                  title: '清理临时缓存文件',
+                  titleColor: AppTheme.semanticOf(context).danger,
+                  subtitle: '清理临时预览、生成草稿与图片缓存（二次确认）',
+                  onTap: _cleanTempFiles,
+                ),
+              ],
+            ),
+          ],
+        ),
+      )),
     );
   }
 }

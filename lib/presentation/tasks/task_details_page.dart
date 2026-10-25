@@ -1,6 +1,9 @@
+import '../theme/mobile_theme.dart';
+import '../artifacts/artifact_center_page.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -11,12 +14,13 @@ import '../../application/providers.dart';
 import '../../application/run_audit_report.dart';
 import '../../application/task_feedback_service.dart';
 import '../../application/task_service.dart';
+import '../../application/run_recovery_safety.dart';
 import '../../application/workspace_service.dart';
 import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/files/conversation_exporter.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
+import '../theme/desktop_theme.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
 import '../l10n/app_strings.dart';
@@ -24,7 +28,6 @@ import '../diagnostics/run_analysis_page.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_disclosure.dart';
 import '../widgets/nexus_execution_status.dart';
 import '../widgets/nexus_loading_skeleton.dart';
@@ -35,8 +38,7 @@ import '../widgets/section_card.dart';
 import 'collaboration_plan_sheet.dart';
 import '../widgets/nexus_sheet.dart';
 
-/// Y5：本页卡片与其他已改页面统一 16 圆角（只给 SectionCard 传参）。
-const _kCardRadius = BorderRadius.all(Radius.circular(16));
+/// Phone details use the shared blue-white SectionCard appearance.
 
 /// 完整开发任务详情页 (TaskDetailsPage)
 /// 严格依据 NEXUS UI 设计优化规范重构，替代旧版紧凑底部弹层：
@@ -53,7 +55,7 @@ class TaskDetailsPage extends ConsumerStatefulWidget {
   });
 
   final DevelopmentTaskInfo task;
-  final ValueChanged<Conversation>? onConversationSelected;
+  final ValueChanged<String>? onConversationSelected;
 
   @override
   ConsumerState<TaskDetailsPage> createState() => _TaskDetailsPageState();
@@ -71,6 +73,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
   bool? _helpful;
   bool _feedbackLoading = false;
   bool? _workspaceAccessible;
+  String? _recoveryWarning;
 
   @override
   void initState() {
@@ -80,11 +83,25 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     _loadArtifacts();
     _loadFeedback();
     _checkWorkspace();
+    _loadRecoverySafety();
+  }
+
+  Future<void> _loadRecoverySafety() async {
+    String? warning;
+    try {
+      final db = await ref.read(databaseProvider.future);
+      await const RunRecoverySafety()
+          .requireSafe(db, _task.id, inspectPersisted: true);
+    } on RunRecoveryNeedsReview catch (error) {
+      warning = error.toString();
+    } catch (_) {
+      warning = '暂时无法核实执行记录，请勿直接重试。';
+    }
+    if (mounted) setState(() => _recoveryWarning = warning);
   }
 
   Future<void> _loadArtifacts() async {
     final projectId = _task.projectId;
-    if (projectId == null || projectId.isEmpty) return;
     setState(() {
       _artifactsLoading = true;
       _artifactsError = null;
@@ -345,7 +362,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
     if (!mounted) return;
     if (conv != null) {
       Navigator.pop(context);
-      widget.onConversationSelected?.call(conv);
+      widget.onConversationSelected?.call(conv.id);
     } else {
       FloatingToast.show(context, '未找到关联的历史会话');
     }
@@ -353,10 +370,10 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
 
   Future<void> _startCollaboration() async {
     await showNexusSheet<void>(
-context: context,
-isScrollControlled: true,
-showDragHandle: true,
-builder: (_) => CollaborationPlanSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => CollaborationPlanSheet(
         task: DevelopmentTaskInput(
           taskId: _task.id,
           prompt: _task.prompt,
@@ -365,7 +382,7 @@ builder: (_) => CollaborationPlanSheet(
           model: _task.model,
         ),
       ),
-);
+    );
   }
 
   bool get _needsImmediateAction =>
@@ -377,8 +394,6 @@ builder: (_) => CollaborationPlanSheet(
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
     final taskModel = _task.model;
     final workspacePath = _task.workspacePath;
     final summary = _task.summary;
@@ -386,9 +401,7 @@ builder: (_) => CollaborationPlanSheet(
     final runId = _task.runId;
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
+      backgroundColor: MobileTheme.pageBackground(context),
       appBar: NexusPageHeader(
         title: _task.title,
         statusPill: NexusStatusPill.fromString(_task.status, isCompact: true),
@@ -404,14 +417,38 @@ builder: (_) => CollaborationPlanSheet(
           ),
         ],
       ),
-      body: SafeArea(
+      body: NexusPageLayout(
+          child: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                 children: [
-                  if (_needsImmediateAction) ...[
+                  if (_recoveryWarning != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('恢复前需要核实',
+                                  style: theme.textTheme.titleSmall),
+                              const SizedBox(height: 8),
+                              SelectableText(_recoveryWarning!),
+                              TextButton.icon(
+                                onPressed: _loadRecoverySafety,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('重新核实执行记录'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (_needsImmediateAction && _recoveryWarning == null) ...[
                     Padding(
                       padding: const EdgeInsets.only(bottom: 12),
                       child: NexusExecutionStatus(
@@ -433,173 +470,159 @@ builder: (_) => CollaborationPlanSheet(
                   // ==========================================
                   NexusSection(
                     title: '任务总览',
-                    child: SectionCard(
-                      borderRadius: _kCardRadius,
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.primary
-                                      .withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusPill),
-                                ),
-                                child: Text(
-                                  '类型：${TaskService.taskTypeLabel(_task.type)}',
-                                  style: TextStyle(
-                                    fontSize: AppTokens.fontSizeFootnote,
-                                    fontWeight: FontWeight.w500,
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: theme
-                                      .colorScheme.surfaceContainerHighest
-                                      .withValues(alpha: 0.6),
-                                  borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusPill),
-                                ),
-                                child: Text(
-                                  '来源：${_sourceLabel(_task.sourceType)}',
-                                  style: TextStyle(
-                                    fontSize: AppTokens.fontSizeFootnote,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 10,
-                            children: [
-                              _OverviewStat(
-                                label: '执行状态',
-                                value: _statusLabel(_task.status),
-                                icon: Icons.sync_rounded,
-                              ),
-                              _OverviewStat(
-                                label: '指定模型',
-                                value: taskModel != null && taskModel.isNotEmpty
-                                    ? taskModel
-                                    : '默认配置',
-                                icon: Icons.psychology_outlined,
-                              ),
-                              if (_task.resumeCount > 0)
-                                _OverviewStat(
-                                  label: '恢复执行',
-                                  value: '${_task.resumeCount}',
-                                  unit: '次',
-                                  icon: Icons.replay_rounded,
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          const Divider(height: 1),
-                          const SizedBox(height: 10),
-                          if (workspacePath != null &&
-                              workspacePath.isNotEmpty) ...[
-                            Row(
+                    child: DesktopTheme.maybeOf(context) == null
+                        ? _mobileOverview(taskModel, workspacePath)
+                        : SectionCard(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Y4：次要文字用主题色，深色模式下也清晰。
-                                Icon(Icons.folder_outlined,
-                                    size: 15,
-                                    color: theme.colorScheme.onSurfaceVariant),
-                                const SizedBox(width: 6),
-                                const Text('工作区：',
-                                    style: TextStyle(
-                                        fontSize: AppTokens.fontSizeFootnote,
-                                        fontWeight: FontWeight.w500)),
-                                Expanded(
-                                  child: SelectableText(
-                                    workspacePath,
-                                    style: TextStyle(
-                                        fontSize: AppTokens.fontSizeFootnote,
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.primary
+                                            .withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(
+                                            MobileTheme.controlRadius(context)),
+                                        border: Border.all(
+                                          color: theme.colorScheme.primary
+                                              .withValues(alpha: 0.22),
+                                          width: 1.0,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '类型：${TaskService.taskTypeLabel(_task.type)}',
+                                        style: TextStyle(
+                                          fontSize: AppTokens.fontSizeFootnote,
+                                          fontWeight: FontWeight.w600,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: theme
+                                            .colorScheme.surfaceContainerHighest
+                                            .withValues(alpha: 0.6),
+                                        borderRadius: BorderRadius.circular(
+                                            MobileTheme.controlRadius(context)),
+                                      ),
+                                      child: Text(
+                                        '来源：${_sourceLabel(_task.sourceType)}',
+                                        style: TextStyle(
+                                          fontSize: AppTokens.fontSizeFootnote,
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 10,
+                                  children: [
+                                    _OverviewStat(
+                                      label: '执行状态',
+                                      value: _statusLabel(_task.status),
+                                      icon: Icons.sync_rounded,
+                                    ),
+                                    _OverviewStat(
+                                      label: '指定模型',
+                                      value: taskModel != null &&
+                                              taskModel.isNotEmpty
+                                          ? taskModel
+                                          : '默认配置',
+                                      icon: Icons.psychology_outlined,
+                                    ),
+                                    if (_task.resumeCount > 0)
+                                      _OverviewStat(
+                                        label: '恢复执行',
+                                        value: '${_task.resumeCount}',
+                                        unit: '次',
+                                        icon: Icons.replay_rounded,
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                const Divider(height: 1),
+                                const SizedBox(height: 10),
+                                if (workspacePath != null &&
+                                    workspacePath.isNotEmpty) ...[
+                                  Row(
+                                    children: [
+                                      // Y4：次要文字用主题色，深色模式下也清晰。
+                                      Icon(Icons.folder_outlined,
+                                          size: 15,
+                                          color: theme
+                                              .colorScheme.onSurfaceVariant),
+                                      const SizedBox(width: 6),
+                                      const Text('工作区：',
+                                          style: TextStyle(
+                                              fontSize:
+                                                  AppTokens.fontSizeFootnote,
+                                              fontWeight: FontWeight.w500)),
+                                      Expanded(
+                                        child: SelectableText(
+                                          workspacePath,
+                                          style: TextStyle(
+                                              fontSize:
+                                                  AppTokens.fontSizeFootnote,
+                                              fontFamily:
+                                                  AppTokens.fontFamilyMono,
+                                              color: theme.colorScheme
+                                                  .onSurfaceVariant),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_workspaceAccessible == false)
+                                    const Padding(
+                                      padding: EdgeInsets.only(top: 6),
+                                      child: Text(
+                                        '项目目录已不可访问，请重新绑定工作区后再恢复任务。',
+                                        style: TextStyle(
+                                            fontSize:
+                                                AppTokens.fontSizeFootnote,
+                                            color: AppPalette.warning),
+                                      ),
+                                    ),
+                                  const SizedBox(height: 6),
+                                ],
+                                Row(
+                                  children: [
+                                    Icon(Icons.schedule_rounded,
+                                        size: 15,
                                         color:
                                             theme.colorScheme.onSurfaceVariant),
-                                  ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        '更新时间：${_formatDate(_task.updatedAt)}',
+                                        style: TextStyle(
+                                            fontSize:
+                                                AppTokens.fontSizeFootnote,
+                                            fontFeatures: const [
+                                              FontFeature.tabularFigures()
+                                            ],
+                                            color: theme
+                                                .colorScheme.onSurfaceVariant),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                            if (_workspaceAccessible == false)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 6),
-                                child: Text(
-                                  '项目目录已不可访问，请重新绑定工作区后再恢复任务。',
-                                  style: TextStyle(
-                                      fontSize: AppTokens.fontSizeFootnote,
-                                      color: AppPalette.warning),
-                                ),
-                              ),
-                            const SizedBox(height: 6),
-                          ],
-                          Row(
-                            children: [
-                              Icon(Icons.schedule_rounded,
-                                  size: 15,
-                                  color: theme.colorScheme.onSurfaceVariant),
-                              const SizedBox(width: 6),
-                              Text(
-                                '更新时间：${_formatDate(_task.updatedAt)}',
-                                style: TextStyle(
-                                    fontSize: AppTokens.fontSizeFootnote,
-                                    color: theme.colorScheme.onSurfaceVariant),
-                              ),
-                            ],
                           ),
-                        ],
-                      ),
-                    ),
                   ),
-
-                  // ==========================================
-                  // 2. 任务输入卡 (Prompt Card)
-                  // ==========================================
-                  NexusSection(
-                    title: '任务输入指令',
-                    child: SectionCard(
-                      borderRadius: _kCardRadius,
-                      padding: const EdgeInsets.all(16),
-                      child: SelectableText(
-                        _task.prompt.isEmpty ? '（无文本输入）' : _task.prompt,
-                        style: const TextStyle(
-                            fontSize: AppTokens.fontSizeSubhead, height: 1.45),
-                      ),
-                    ),
-                  ),
-
-                  // ==========================================
-                  // 2.1 执行流水线与代码 Diff (Pipeline & Diff)
-                  // ==========================================
-                  NexusSection(
-                    title: '执行流水线与变更',
-                    child: _PipelineTimelineCard(
-                      task: _task,
-                      auditReport: _auditReport,
-                      onRollback: _rollbackAuditEntry,
-                    ),
-                  ),
-                  if (_task.changeReview != null ||
-                      _task.verificationPlan != null)
-                    NexusSection(
-                      title: '改动审查与验证',
-                      child: _ChangeReviewCard(
-                        review: _task.changeReview,
-                        plan: _task.verificationPlan,
-                      ),
-                    ),
 
                   // ==========================================
                   // 3. 执行结果与结构化产物卡 (Results Card)
@@ -608,7 +631,6 @@ builder: (_) => CollaborationPlanSheet(
                     NexusSection(
                       title: '结果摘要',
                       child: SectionCard(
-                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: SelectableText(
                           summary,
@@ -626,7 +648,6 @@ builder: (_) => CollaborationPlanSheet(
                     NexusSection(
                       title: '交付产物',
                       child: SectionCard(
-                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: _artifactsLoading
                             ? const Center(
@@ -676,14 +697,27 @@ builder: (_) => CollaborationPlanSheet(
                                                   ),
                                                   const SizedBox(height: 4),
                                                   SelectableText(
-                                                    'SHA-256  ${artifact.hash}',
-                                                    style: TextStyle(
-                                                      fontSize: AppTokens
-                                                          .fontSizeFootnote,
-                                                      color: theme.colorScheme
-                                                          .onSurfaceVariant,
-                                                    ),
-                                                  ),
+                                                      'SHA-256  ${artifact.hash}',
+                                                      style: TextStyle(
+                                                          fontSize: AppTokens
+                                                              .fontSizeFootnote,
+                                                          color: theme
+                                                              .colorScheme
+                                                              .onSurfaceVariant)),
+                                                  TextButton.icon(
+                                                      icon: const Icon(
+                                                          Icons.open_in_new),
+                                                      label: const Text(
+                                                          '检查副本与使用成果'),
+                                                      onPressed: () => Navigator
+                                                              .of(context)
+                                                          .push(MaterialPageRoute<
+                                                                  void>(
+                                                              builder: (_) =>
+                                                                  ArtifactCenterPage(
+                                                                      initialArtifactId:
+                                                                          artifact
+                                                                              .id)))),
                                                 ],
                                               ),
                                             ),
@@ -701,7 +735,6 @@ builder: (_) => CollaborationPlanSheet(
                     NexusSection(
                       title: '结构化产物',
                       child: SectionCard(
-                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -779,12 +812,13 @@ builder: (_) => CollaborationPlanSheet(
                               const SizedBox(height: 12),
                             ],
                             if (structured.nextSteps.isNotEmpty) ...[
-                              const Row(
+                              Row(
                                 children: [
                                   Icon(Icons.arrow_forward_rounded,
-                                      size: 16, color: AppPalette.brand),
-                                  SizedBox(width: 6),
-                                  Text('下一步实施计划',
+                                      size: 16,
+                                      color: MobileTheme.brand(context)),
+                                  const SizedBox(width: 6),
+                                  const Text('下一步实施计划',
                                       style: TextStyle(
                                           fontSize: AppTokens.fontSizeCaption,
                                           fontWeight: FontWeight.w500)),
@@ -816,11 +850,85 @@ builder: (_) => CollaborationPlanSheet(
                     ),
                   ],
 
+                  // ==========================================
+                  // 2. 任务输入卡 (Prompt Card)
+                  // ==========================================
+                  if (_task.prompt.isNotEmpty)
+                    NexusSection(
+                      title: '任务输入指令',
+                      child: SectionCard(
+                        padding: const EdgeInsets.all(16),
+                        child: SelectableText(
+                          _task.prompt,
+                          style: const TextStyle(
+                              fontSize: AppTokens.fontSizeSubhead,
+                              height: 1.45),
+                        ),
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 4),
+                      child: Text('无初始文本指令',
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: theme.colorScheme.onSurfaceVariant)),
+                    ),
+
+                  // ==========================================
+                  // 2.1 执行流水线与代码 Diff (Pipeline & Diff)
+                  // ==========================================
+                  if (DesktopTheme.maybeOf(context) == null &&
+                      _task.status.toLowerCase() == 'completed')
+                    SectionCard(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 6),
+                      child: NexusDisclosure(
+                        headerPadding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 8),
+                        contentPadding:
+                            const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                        leading: Icon(
+                          Icons.timeline_rounded,
+                          size: 18,
+                          color: theme.colorScheme.primary,
+                        ),
+                        title: const Text(
+                          '执行过程与变更',
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                        child: _PipelineTimelineCard(
+                          task: _task,
+                          auditReport: _auditReport,
+                          onRollback: _rollbackAuditEntry,
+                        ),
+                      ),
+                    )
+                  else
+                    NexusSection(
+                      title: '执行流水线与变更',
+                      child: _PipelineTimelineCard(
+                        task: _task,
+                        auditReport: _auditReport,
+                        onRollback: _rollbackAuditEntry,
+                      ),
+                    ),
+                  if (_task.changeReview != null ||
+                      _task.verificationPlan != null)
+                    NexusSection(
+                      title: '改动审查与验证',
+                      child: _ChangeReviewCard(
+                        review: _task.changeReview,
+                        plan: _task.verificationPlan,
+                      ),
+                    ),
+
                   if (_feedbackEligible) ...[
                     NexusSection(
                       title: AppStrings.taskFeedbackTitle,
                       child: SectionCard(
-                        borderRadius: _kCardRadius,
                         padding: const EdgeInsets.all(16),
                         child: Row(
                           children: [
@@ -865,150 +973,144 @@ builder: (_) => CollaborationPlanSheet(
             // ==========================================
             // 底部固定操作栏 (Scheme A Liquid Crystal)
             // ==========================================
-            isFlat
-                ? Container(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppPalette.darkSurface
-                          : AppPalette.lightSurface,
-                      border: Border(
-                        top: BorderSide(
-                          color: isDark
-                              ? AppPalette.darkHairline
-                              : AppPalette.lightHairline,
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                border: Border(
+                  top: BorderSide(
+                    color: isDark
+                        ? AppPalette.darkHairline
+                        : AppPalette.lightHairline,
+                  ),
+                ),
+              ),
+              child: Column(
+                children: [
+                  if (_needsImmediateAction) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                                MobileTheme.controlRadius(context)),
+                          ),
                         ),
+                        onPressed: _openConversation,
+                        icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                        label: const Text('立即处理'),
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        if (_needsImmediateAction) ...[
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size(0, 44),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusControl),
-                                ),
-                              ),
-                              onPressed: _openConversation,
-                              icon: const Icon(Icons.play_arrow_rounded,
-                                  size: 18),
-                              label: const Text('立即处理'),
+                    const SizedBox(height: 10),
+                  ],
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                  MobileTheme.controlRadius(context)),
                             ),
                           ),
-                          const SizedBox(height: 10),
-                        ],
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  minimumSize: const Size(0, 44),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        AppTokens.radiusControl),
-                                  ),
-                                ),
-                                onPressed: _startCollaboration,
-                                icon: const Icon(Icons.hub_outlined, size: 18),
-                                label: const Text('发起协作分析'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  minimumSize: const Size(0, 44),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        AppTokens.radiusControl),
-                                  ),
-                                ),
-                                onPressed: _task.conversationId.isEmpty
-                                    ? null
-                                    : _openConversation,
-                                icon:
-                                    const Icon(Icons.forum_outlined, size: 18),
-                                label: const Text('打开关联会话'),
-                              ),
-                            ),
-                          ],
+                          onPressed: _startCollaboration,
+                          icon: const Icon(Icons.hub_outlined, size: 18),
+                          label: const Text('发起协作分析'),
                         ),
-                      ],
-                    ),
-                  )
-                : GlassSurface(
-                    role: GlassRole.overlay,
-                    variant: GlassVariant.regular,
-                    intensity: AppAppearanceController.resolvedGlassIntensity,
-                    borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(AppTokens.radiusModal)),
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-                    child: Column(
-                      children: [
-                        if (_needsImmediateAction) ...[
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size(0, 44),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
-                                      AppTokens.radiusControl),
-                                ),
-                              ),
-                              onPressed: _openConversation,
-                              icon: const Icon(Icons.play_arrow_rounded,
-                                  size: 18),
-                              label: const Text('立即处理'),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(0, 48),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(
+                                  MobileTheme.controlRadius(context)),
                             ),
                           ),
-                          const SizedBox(height: 10),
-                        ],
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  minimumSize: const Size(0, 44),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        AppTokens.radiusControl),
-                                  ),
-                                ),
-                                onPressed: _startCollaboration,
-                                icon: const Icon(Icons.hub_outlined, size: 18),
-                                label: const Text('发起协作分析'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  minimumSize: const Size(0, 44),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(
-                                        AppTokens.radiusControl),
-                                  ),
-                                ),
-                                onPressed: _task.conversationId.isEmpty
-                                    ? null
-                                    : _openConversation,
-                                icon:
-                                    const Icon(Icons.forum_outlined, size: 18),
-                                label: const Text('打开关联会话'),
-                              ),
-                            ),
-                          ],
+                          onPressed: _task.conversationId.isEmpty
+                              ? null
+                              : _openConversation,
+                          icon: const Icon(Icons.forum_outlined, size: 18),
+                          label: const Text('打开关联会话'),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ],
+              ),
+            ),
           ],
         ),
+      )),
+    );
+  }
+
+  Widget _mobileOverview(String? model, String? workspacePath) {
+    final theme = Theme.of(context);
+    final semantic = AppTheme.semanticOf(context);
+    return SectionCard(
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: semantic.brandSoft,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  TaskService.taskTypeLabel(_task.type),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: semantic.brand,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '${_sourceLabel(_task.sourceType)} · 更新于 ${_formatDate(_task.updatedAt)}',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+          if (_task.resumeCount > 0)
+            Text('已恢复执行 ${_task.resumeCount} 次',
+                style: theme.textTheme.bodySmall),
+          if (_workspaceAccessible == false)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text('项目目录已不可访问，请重新绑定工作区后再恢复任务。',
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.error)),
+            ),
+          NexusDisclosure(
+            title: const Text('模型与工作区'),
+            headerPadding: const EdgeInsets.symmetric(vertical: 8),
+            contentPadding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SelectableText(
+                    '指定模型：${model == null || model.isEmpty ? "默认配置" : model}'),
+                if (workspacePath != null && workspacePath.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  SelectableText('工作区：$workspacePath'),
+                ],
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1016,7 +1118,6 @@ builder: (_) => CollaborationPlanSheet(
   Widget _buildAuditSection() {
     if (_auditLoading) {
       return const SectionCard(
-        borderRadius: _kCardRadius,
         child: Padding(
           padding: EdgeInsets.all(16),
           child: NexusCardSkeleton(),
@@ -1025,7 +1126,6 @@ builder: (_) => CollaborationPlanSheet(
     }
     if (_auditError != null) {
       return SectionCard(
-        borderRadius: _kCardRadius,
         child: ListTile(
           leading: const Icon(Icons.warning_amber_outlined),
           title: const Text('副作用审计暂不可用'),
@@ -1042,7 +1142,6 @@ builder: (_) => CollaborationPlanSheet(
     if (report == null) return const SizedBox.shrink();
     final metrics = report.metrics;
     return SectionCard(
-      borderRadius: _kCardRadius,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: NexusDisclosure(
         leading: const Icon(Icons.fact_check_outlined, size: 18),
@@ -1240,7 +1339,6 @@ class _PipelineTimelineCard extends StatelessWidget {
         const [];
 
     return SectionCard(
-      borderRadius: _kCardRadius,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1354,7 +1452,7 @@ class _PipelineTimelineCard extends StatelessWidget {
         lineColor = doneColor;
       case _StepStatus.active:
         final activeColor =
-            isDark ? AppPalette.darkBrandHover : AppPalette.brandAction;
+            isDark ? AppPalette.darkBrandHover : MobileTheme.brand(context);
         final activeHalo =
             isDark ? AppPalette.darkBrandSoft : AppPalette.lightBrandSoft;
         nodeIcon = Container(
@@ -1444,7 +1542,7 @@ class _PipelineTimelineCard extends StatelessWidget {
                       color: status == _StepStatus.active
                           ? (isDark
                               ? AppPalette.darkBrandHover
-                              : AppPalette.brandAction)
+                              : MobileTheme.brand(context))
                           : muted,
                     ),
                   ),
@@ -1497,7 +1595,7 @@ class _CodeDiffCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       decoration: BoxDecoration(
         color: isDark ? AppPalette.darkSurface : AppPalette.lightSurface,
-        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         border: Border.all(
           color: isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
         ),
@@ -1533,28 +1631,43 @@ class _CodeDiffCard extends StatelessWidget {
                   ),
                 ),
                 if (onRollback != null)
-                  GestureDetector(
-                    onTap: onRollback,
-                    behavior: HitTestBehavior.opaque,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 4),
-                      child: Row(
-                        children: [
-                          Icon(Icons.undo_rounded,
-                              size: 14, color: AppPalette.brand),
-                          SizedBox(width: 2),
-                          Text(
-                            '回滚',
-                            style: TextStyle(
-                              fontSize: AppTokens.fontSizeBadge,
-                              fontWeight: FontWeight.w500,
-                              color: AppPalette.brand,
+                  (DesktopTheme.maybeOf(context) != null
+                      ? GestureDetector(
+                          onTap: onRollback,
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Row(
+                              children: [
+                                Icon(Icons.undo_rounded,
+                                    size: 14,
+                                    color: MobileTheme.brand(context)),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '回滚',
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeBadge,
+                                    fontWeight: FontWeight.w500,
+                                    color: MobileTheme.brand(context),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
+                        )
+                      : TextButton.icon(
+                          onPressed: onRollback,
+                          style: TextButton.styleFrom(
+                            minimumSize: const Size(48, 48),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            foregroundColor: AppPalette.brandText(context),
+                          ),
+                          icon: const Icon(Icons.undo_rounded, size: 14),
+                          label: const Text('回滚',
+                              style: TextStyle(
+                                  fontSize: AppTokens.fontSizeBadge,
+                                  fontWeight: FontWeight.w500)),
+                        )),
               ],
             ),
           ),
@@ -1612,7 +1725,6 @@ class _ChangeReviewCard extends StatelessWidget {
     final review = this.review;
     final plan = this.plan;
     return SectionCard(
-      borderRadius: _kCardRadius,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1718,13 +1830,15 @@ class _OverviewStat extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: AppTokens.fontSizeBody,
-                  fontWeight: FontWeight.w500,
-                  color: textColor,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              Flexible(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: AppTokens.fontSizeBody,
+                    fontWeight: FontWeight.w500,
+                    color: textColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
               if (unit != null && unit!.isNotEmpty) ...[

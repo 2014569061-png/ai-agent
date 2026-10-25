@@ -1,3 +1,4 @@
+import '../theme/mobile_theme.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -10,6 +11,7 @@ import '../../domain/collaboration_models.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../l10n/app_strings.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_status_colors.dart';
 import '../theme/app_tokens.dart';
 import '../theme/app_theme.dart';
 import '../widgets/empty_state_view.dart';
@@ -131,6 +133,8 @@ class _CollaborationTimelinePageState
   @override
   Widget build(BuildContext context) {
     final run = _run;
+    final warningColors =
+        AppStatusColors.resolve(context, AppStatusTone.warning);
     final isAwaitingApproval =
         run?.status == CollaborationStatus.awaitingExecutionApproval;
     final isRunning = run != null &&
@@ -167,28 +171,29 @@ class _CollaborationTimelinePageState
                 // 1. 等待执行审批时置顶固定提示条
                 if (isAwaitingApproval)
                   Container(
+                    key: const ValueKey('collaboration-approval-banner'),
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 10),
                     decoration: BoxDecoration(
-                      color: AppPalette.warning.withValues(alpha: 0.14),
-                      border: const Border(
-                        bottom:
-                            BorderSide(color: AppPalette.warning, width: 0.8),
+                      color: warningColors.background,
+                      border: Border(
+                        bottom: BorderSide(
+                            color: warningColors.foreground, width: 0.8),
                       ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.verified_user_rounded,
-                            size: 18, color: AppPalette.warning),
+                        Icon(Icons.verified_user_rounded,
+                            size: 18, color: warningColors.foreground),
                         const SizedBox(width: 8),
-                        const Expanded(
+                        Expanded(
                           child: Text(
                             '协作分析完成，已形成汇总决策，等待执行授权',
                             style: TextStyle(
                               fontSize: AppTokens.fontSizeMeta,
                               fontWeight: FontWeight.w500,
-                              color: AppPalette.warning,
+                              color: warningColors.foreground,
                             ),
                           ),
                         ),
@@ -198,7 +203,7 @@ class _CollaborationTimelinePageState
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(
-                                  AppTokens.radiusControl),
+                                  MobileTheme.controlRadius(context)),
                             ),
                             visualDensity: VisualDensity.compact,
                           ),
@@ -303,14 +308,23 @@ class _CollaborationTimelinePageState
         ? 0.0
         : (run.consumedTokens / run.budgetTokens).clamp(0.0, 1.0);
     final percent = (ratio * 100).toStringAsFixed(0);
+    final budgetColors = AppStatusColors.resolve(
+        context,
+        ratio > .8
+            ? AppStatusTone.danger
+            : ratio > .6
+                ? AppStatusTone.warning
+                : AppStatusTone.success);
 
     return SectionCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
             children: [
               Text(
                 '${run.mode.label} · 第 ${run.currentRound}/${run.maxRounds} 轮',
@@ -324,9 +338,7 @@ class _CollaborationTimelinePageState
                 style: TextStyle(
                   fontSize: AppTokens.fontSizeFootnote,
                   fontWeight: FontWeight.w500,
-                  color: ratio > 0.8
-                      ? AppPalette.danger
-                      : (ratio > 0.6 ? AppPalette.warning : AppPalette.success),
+                  color: budgetColors.foreground,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
@@ -334,12 +346,15 @@ class _CollaborationTimelinePageState
           ),
           const SizedBox(height: 8),
           ClipRRect(
-            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            borderRadius:
+                BorderRadius.circular(MobileTheme.controlRadius(context)),
             child: LinearProgressIndicator(
               value: ratio == 0 ? 0.01 : ratio,
               minHeight: 6,
               valueColor: AlwaysStoppedAnimation<Color>(
-                ratio > 0.8 ? AppPalette.danger : AppPalette.brand,
+                ratio > 0.8
+                    ? budgetColors.foreground
+                    : MobileTheme.brand(context),
               ),
             ),
           ),
@@ -374,6 +389,13 @@ class _CollaborationTimelinePageState
     final role = CollaborationAgentRoleX.parse(agent.role);
     final isDone = agent.status == 'completed';
     final isFailed = agent.status == 'failed';
+    final statusColors = AppStatusColors.resolve(
+        context,
+        isDone
+            ? AppStatusTone.success
+            : isFailed
+                ? AppStatusTone.danger
+                : AppStatusTone.brand);
 
     return SectionCard(
       padding: const EdgeInsets.all(12),
@@ -383,13 +405,10 @@ class _CollaborationTimelinePageState
           Row(
             children: [
               Container(
+                key: ValueKey('collaboration-agent-status-${agent.id}'),
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: isDone
-                      ? AppPalette.success.withValues(alpha: 0.12)
-                      : (isFailed
-                          ? AppPalette.danger.withValues(alpha: 0.12)
-                          : AppPalette.brand.withValues(alpha: 0.12)),
+                  color: statusColors.background,
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -399,9 +418,7 @@ class _CollaborationTimelinePageState
                           ? Icons.error_outline_rounded
                           : Icons.smart_toy_outlined),
                   size: 16,
-                  color: isDone
-                      ? AppPalette.success
-                      : (isFailed ? AppPalette.danger : AppPalette.brand),
+                  color: statusColors.foreground,
                 ),
               ),
               const SizedBox(width: 8),
@@ -409,7 +426,8 @@ class _CollaborationTimelinePageState
                 child: Text(
                   role.label,
                   style: const TextStyle(
-                      fontSize: AppTokens.fontSizeBodySmall, fontWeight: FontWeight.w500),
+                      fontSize: AppTokens.fontSizeBodySmall,
+                      fontWeight: FontWeight.w500),
                 ),
               ),
               NexusStatusPill.fromString(agent.status, isCompact: true),
@@ -418,7 +436,8 @@ class _CollaborationTimelinePageState
           const SizedBox(height: 6),
           Text(
             agent.outputSummary ?? agent.failureReason ?? '正在阅读工作区执行分析…',
-            style: const TextStyle(fontSize: AppTokens.fontSizeMeta, height: 1.35),
+            style:
+                const TextStyle(fontSize: AppTokens.fontSizeMeta, height: 1.35),
           ),
           const SizedBox(height: 6),
           Text(
@@ -442,17 +461,21 @@ class _CollaborationTimelinePageState
         tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: const Icon(Icons.inventory_2_outlined, size: 20),
         title: Text(artifact.type,
-            style:
-                const TextStyle(fontSize: AppTokens.fontSizeBodySmall, fontWeight: FontWeight.w500)),
+            style: const TextStyle(
+                fontSize: AppTokens.fontSizeBodySmall,
+                fontWeight: FontWeight.w500)),
         subtitle: Text('置信度：$confidence%',
-            style:
-                const TextStyle(fontSize: AppTokens.fontSizeSubcaption, color: AppTheme.textSecondary)),
+            style: const TextStyle(
+                fontSize: AppTokens.fontSizeSubcaption,
+                color: AppTheme.textSecondary)),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
             child: SelectableText(
               const JsonEncoder.withIndent('  ').convert(payload),
-              style: const TextStyle(fontSize: AppTokens.fontSizeFootnote, fontFamily: 'monospace'),
+              style: const TextStyle(
+                  fontSize: AppTokens.fontSizeFootnote,
+                  fontFamily: 'monospace'),
             ),
           ),
         ],
@@ -476,7 +499,7 @@ class _CollaborationTimelinePageState
                     : Icons.forum_outlined,
                 size: 15,
                 color: isSynthesizer
-                    ? AppPalette.brand
+                    ? MobileTheme.brand(context)
                     : Theme.of(context).colorScheme.primary,
               ),
               const SizedBox(width: 6),
@@ -494,7 +517,8 @@ class _CollaborationTimelinePageState
           const SizedBox(height: 6),
           SelectableText(
             message.content,
-            style: const TextStyle(fontSize: AppTokens.fontSizeCaption, height: 1.35),
+            style: const TextStyle(
+                fontSize: AppTokens.fontSizeCaption, height: 1.35),
           ),
         ],
       ),
@@ -502,6 +526,8 @@ class _CollaborationTimelinePageState
   }
 
   Widget _buildResultCard(CollaborationResult result) {
+    final warningColor =
+        AppStatusColors.resolve(context, AppStatusTone.warning).foreground;
     return SectionCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -509,12 +535,15 @@ class _CollaborationTimelinePageState
         children: [
           SelectableText(
             result.summary,
-            style: const TextStyle(fontSize: AppTokens.fontSizeBodySmall, height: 1.4),
+            style: const TextStyle(
+                fontSize: AppTokens.fontSizeBodySmall, height: 1.4),
           ),
           if (result.findings.isNotEmpty) ...[
             const SizedBox(height: 12),
             const Text('关键发现',
-                style: TextStyle(fontSize: AppTokens.fontSizeCaption, fontWeight: FontWeight.w500)),
+                style: TextStyle(
+                    fontSize: AppTokens.fontSizeCaption,
+                    fontWeight: FontWeight.w500)),
             const SizedBox(height: 4),
             ...result.findings.map((f) => Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 4),
@@ -528,18 +557,19 @@ class _CollaborationTimelinePageState
                               f.detail.isEmpty
                                   ? f.title
                                   : '${f.title}：${f.detail}',
-                              style: const TextStyle(fontSize: AppTokens.fontSizeMeta))),
+                              style: const TextStyle(
+                                  fontSize: AppTokens.fontSizeMeta))),
                     ],
                   ),
                 )),
           ],
           if (result.disagreements.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('分歧与权衡取舍',
+            Text('分歧与权衡取舍',
                 style: TextStyle(
                     fontSize: AppTokens.fontSizeCaption,
                     fontWeight: FontWeight.w500,
-                    color: AppPalette.warning)),
+                    color: warningColor)),
             const SizedBox(height: 4),
             ...result.disagreements.map((d) => Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 4),
@@ -550,18 +580,19 @@ class _CollaborationTimelinePageState
                           style: TextStyle(fontWeight: FontWeight.w500)),
                       Expanded(
                           child: SelectableText(d,
-                              style: const TextStyle(fontSize: AppTokens.fontSizeMeta))),
+                              style: const TextStyle(
+                                  fontSize: AppTokens.fontSizeMeta))),
                     ],
                   ),
                 )),
           ],
           if (result.risks.isNotEmpty) ...[
             const SizedBox(height: 12),
-            const Text('风险与证据缺口',
+            Text('风险与证据缺口',
                 style: TextStyle(
                     fontSize: AppTokens.fontSizeCaption,
                     fontWeight: FontWeight.w500,
-                    color: AppPalette.warning)),
+                    color: warningColor)),
             const SizedBox(height: 4),
             ...result.risks.map((risk) => Padding(
                   padding: const EdgeInsets.only(left: 8, bottom: 4),
@@ -572,7 +603,8 @@ class _CollaborationTimelinePageState
                           style: TextStyle(fontWeight: FontWeight.w500)),
                       Expanded(
                           child: SelectableText(risk,
-                              style: const TextStyle(fontSize: AppTokens.fontSizeMeta))),
+                              style: const TextStyle(
+                                  fontSize: AppTokens.fontSizeMeta))),
                     ],
                   ),
                 )),

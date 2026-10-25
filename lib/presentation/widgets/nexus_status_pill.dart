@@ -1,7 +1,9 @@
+import '../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
-import '../theme/app_palette.dart';
+import '../theme/app_status_colors.dart';
 import '../theme/app_tokens.dart';
+import '../motion/motion_preferences.dart';
 
 /// 统一的状态类型枚举，用于保证全应用状态在视觉、文案与图标上的一致性。
 enum NexusStatusType {
@@ -66,70 +68,74 @@ class NexusStatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textMuted =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
 
-    final (label, icon, color) = switch (status) {
+    final (label, icon, tone) = switch (status) {
       NexusStatusType.draft => (
           '待确认',
           Icons.pending_outlined,
-          AppPalette.brandTextFor(isDark),
+          AppStatusTone.brand,
         ),
       NexusStatusType.running => (
           '执行中',
           Icons.play_circle_outline_rounded,
-          AppPalette.brandTextFor(isDark),
+          AppStatusTone.brand,
         ),
       NexusStatusType.paused => (
           '已暂停',
           Icons.pause_circle_outline_rounded,
-          textMuted,
+          AppStatusTone.neutral,
         ),
       NexusStatusType.waitingApproval => (
           '等待审批',
           Icons.pending_actions_rounded,
-          AppPalette.warning,
+          AppStatusTone.warning,
         ),
       NexusStatusType.completed => (
           '已完成',
           Icons.check_circle_rounded,
-          AppPalette.success,
+          AppStatusTone.success,
         ),
       NexusStatusType.failed => (
           '执行失败',
           Icons.error_outline_rounded,
-          AppPalette.danger,
+          AppStatusTone.danger,
         ),
       NexusStatusType.cancelled => (
           '已取消',
           Icons.cancel_outlined,
-          textMuted,
+          AppStatusTone.neutral,
         ),
       NexusStatusType.offline => (
           '离线',
           Icons.cloud_off_rounded,
-          textMuted,
+          AppStatusTone.neutral,
         ),
       NexusStatusType.synced => (
           '已同步',
           Icons.cloud_done_rounded,
-          AppPalette.success,
+          AppStatusTone.success,
         ),
     };
 
+    final colors = AppStatusColors.resolve(context, tone);
+    final color = colors.foreground;
+    final highContrast = MediaQuery.maybeHighContrastOf(context) ?? false;
     final displayText = customLabel ?? label;
-    final fontSize = isCompact ? 11.0 : 12.0;
-    final iconSize = isCompact ? 12.0 : 14.0;
-    final hPadding = isCompact ? 8.0 : 10.0;
-    final vPadding = isCompact ? 2.0 : 4.0;
+    final pillFontSize =
+        isCompact ? AppTokens.fontSizeBadge : AppTokens.fontSizeFootnote;
+    final iconSize = isCompact ? 12.0 : 13.5;
+    final hPadding = isCompact ? 7.0 : 9.0;
+    final vPadding = isCompact ? 2.0 : 3.5;
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: vPadding),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: isDark ? 0.14 : 0.08),
-        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+        color: colors.background,
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
         border: Border.all(
-          color: color.withValues(alpha: isDark ? 0.30 : 0.20),
+          color: highContrast
+              ? color
+              : color.withValues(alpha: isDark ? 0.34 : 0.22),
           width: 1.0,
         ),
       ),
@@ -138,7 +144,8 @@ class NexusStatusPill extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (showIcon) ...[
-            if (status == NexusStatusType.running)
+            if (status == NexusStatusType.running &&
+                !MotionPreferences.shouldReduceMotion(context))
               SizedBox(
                 width: iconSize,
                 height: iconSize,
@@ -159,8 +166,10 @@ class NexusStatusPill extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               softWrap: false,
               style: TextStyle(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w500,
+                fontSize: pillFontSize,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+                fontFeatures: const [FontFeature.tabularFigures()],
                 color: color,
                 height: 1.2,
               ),

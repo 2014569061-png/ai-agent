@@ -1,21 +1,22 @@
+import '../theme/desktop_theme.dart';
+import '../theme/mobile_theme.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/plugins/plugin_store.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import 'skill_market_page.dart';
@@ -33,38 +34,36 @@ class _PluginsPageState extends ConsumerState<PluginsPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
 
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: isFlat
-            ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-            : Colors.transparent,
+        backgroundColor: MobileTheme.pageBackground(context),
         appBar: NexusPageHeader(
           title: 'Skills 与插件',
           subtitle: '声明式工具包与 GitHub Skill 市场',
           bottom: TabBar(
-            indicatorColor: AppPalette.brand,
-            labelColor: isDark ? AppPalette.darkText : AppPalette.lightText,
+            indicatorColor: MobileTheme.brand(context),
+            labelColor: Theme.of(context).colorScheme.primary,
             unselectedLabelColor:
                 isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
-            indicatorSize: TabBarIndicatorSize.label,
-            dividerColor:
-                isDark ? AppPalette.darkHairline : AppPalette.lightHairline,
+            indicatorSize: TabBarIndicatorSize.tab,
+            indicatorPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            dividerColor: Colors.transparent,
             tabs: const [
               Tab(text: '声明式插件'),
               Tab(text: 'Skill 市场'),
             ],
           ),
         ),
-        body: const TabBarView(
+        body: const NexusPageLayout(
+            child: TabBarView(
           children: [
             _DeclarativePluginsView(),
             SkillMarketPage(),
           ],
-        ),
+        )),
       ),
     );
   }
@@ -211,8 +210,9 @@ class _DeclarativePluginsViewState
                   onAction: _import,
                 )
               : ListView.separated(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: DesktopTheme.maybeOf(context) == null
+                      ? const EdgeInsets.fromLTRB(20, 8, 20, 104)
+                      : const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   itemCount: _plugins.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (context, index) {
@@ -237,17 +237,18 @@ class _DeclarativePluginsViewState
                                             ? AppPalette.darkSurface
                                             : AppPalette.lightSurface),
                                     borderRadius: BorderRadius.circular(
-                                        AppTokens.radiusControl),
+                                        MobileTheme.controlRadius(context)),
                                     border: Border.all(
                                       color: plugin.enabled
-                                          ? AppPalette.brand
+                                          ? MobileTheme.brand(context)
                                           : (isDark
                                               ? AppPalette.darkHairline
                                               : AppPalette.lightHairline),
                                     ),
                                   ),
-                                  child: const Icon(Icons.extension_outlined,
-                                      size: 20, color: AppPalette.brandAction),
+                                  child: Icon(Icons.extension_outlined,
+                                      size: 20,
+                                      color: MobileTheme.brand(context)),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -258,8 +259,8 @@ class _DeclarativePluginsViewState
                                       Text(
                                         plugin.name,
                                         style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w500,
+                                          fontSize: AppTokens.fontSizeBody,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -280,13 +281,15 @@ class _DeclarativePluginsViewState
                                                           .lightSurface),
                                               borderRadius:
                                                   BorderRadius.circular(
-                                                      AppTokens.radiusPill),
+                                                      MobileTheme.controlRadius(
+                                                          context)),
                                             ),
                                             child: Text(
                                               plugin.enabled ? '已启用' : '已停用',
                                               style: TextStyle(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w500,
+                                                fontSize: AppTokens
+                                                    .fontSizeMetricSmall,
+                                                fontWeight: FontWeight.w600,
                                                 color: plugin.enabled
                                                     ? AppPalette.success
                                                     : (isDark
@@ -306,7 +309,8 @@ class _DeclarativePluginsViewState
                                                   : AppPalette.lightSurface,
                                               borderRadius:
                                                   BorderRadius.circular(
-                                                      AppTokens.radiusPill),
+                                                      MobileTheme.controlRadius(
+                                                          context)),
                                               border: Border.all(
                                                 color: isDark
                                                     ? AppPalette.darkHairline
@@ -316,8 +320,9 @@ class _DeclarativePluginsViewState
                                             child: Text(
                                               'JSON 声明式',
                                               style: TextStyle(
-                                                  fontSize: 10.5,
-                                                  fontWeight: FontWeight.w500,
+                                                  fontSize: AppTokens
+                                                      .fontSizeMetricSmall,
+                                                  fontWeight: FontWeight.w600,
                                                   color: isDark
                                                       ? AppPalette.darkTextMuted
                                                       : AppPalette
@@ -328,20 +333,23 @@ class _DeclarativePluginsViewState
                                             padding: const EdgeInsets.symmetric(
                                                 horizontal: 6, vertical: 1.5),
                                             decoration: BoxDecoration(
-                                              color: AppPalette.brand
+                                              color: MobileTheme.brand(context)
                                                   .withValues(alpha: 0.1),
                                               borderRadius:
                                                   BorderRadius.circular(
-                                                      AppTokens.radiusPill),
+                                                      MobileTheme.controlRadius(
+                                                          context)),
                                             ),
                                             child: Text(
                                               plugin.kind == 'tool'
                                                   ? '受控工具'
                                                   : 'Agent 预设',
-                                              style: const TextStyle(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w500,
-                                                color: AppPalette.brand,
+                                              style: TextStyle(
+                                                fontSize: AppTokens
+                                                    .fontSizeMetricSmall,
+                                                fontWeight: FontWeight.w600,
+                                                color:
+                                                    MobileTheme.brand(context),
                                               ),
                                             ),
                                           ),
@@ -368,7 +376,11 @@ class _DeclarativePluginsViewState
                             Text(
                               '版本 v${plugin.version} · 类型 ${plugin.kind}',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: AppTokens.fontSizeFootnote,
+                                fontFamily: AppTokens.fontFamilyMono,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
                                 color: isDark
                                     ? AppPalette.darkTextMuted
                                     : AppPalette.lightTextMuted,
@@ -381,24 +393,29 @@ class _DeclarativePluginsViewState
                   },
                 ),
         ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton.extended(
-            onPressed: _import,
-            backgroundColor: AppPalette.brandAction,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            focusElevation: 0,
-            hoverElevation: 0,
-            highlightElevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        if (DesktopTheme.maybeOf(context) != null ||
+            _loading ||
+            _error != null ||
+            _plugins.isNotEmpty)
+          Positioned(
+            right: DesktopTheme.maybeOf(context) == null ? 20 : 16,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: _import,
+              backgroundColor: MobileTheme.brand(context),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              focusElevation: 0,
+              hoverElevation: 0,
+              highlightElevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.circular(MobileTheme.controlRadius(context)),
+              ),
+              icon: const Icon(Icons.upload_file),
+              label: const Text('导入插件'),
             ),
-            icon: const Icon(Icons.upload_file),
-            label: const Text('导入插件'),
           ),
-        ),
       ],
     );
   }

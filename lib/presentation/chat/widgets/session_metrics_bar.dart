@@ -1,3 +1,4 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../../domain/context_insights.dart';
@@ -7,6 +8,8 @@ import '../../../infrastructure/background_service.dart';
 import '../../dashboard/widgets/token_numbers.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
+import '../../theme/desktop_theme.dart';
+import '../../widgets/desktop_reading_column.dart';
 import '../../../application/chat_controller.dart' show ToolActivity;
 import 'context_budget_bar.dart';
 
@@ -20,6 +23,7 @@ class SessionMetricsHud extends StatelessWidget {
     required this.onTap,
     this.onCompress,
     this.contextSnapshot,
+    this.inline = false,
   });
 
   final List<ChatMessage> messages;
@@ -31,6 +35,7 @@ class SessionMetricsHud extends StatelessWidget {
   /// 上下文接近上限时的快捷压缩入口。为 null 时条上不出现该操作。
   final VoidCallback? onCompress;
   final ContextSnapshot? contextSnapshot;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
@@ -43,22 +48,27 @@ class SessionMetricsHud extends StatelessWidget {
       ),
     );
     if (metrics.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: ValueListenableBuilder<BackgroundConfig>(
-        valueListenable: BackgroundService.bgNotifier,
-        builder: (context, background, _) => SessionMetricsBar(
-          metrics: metrics,
-          onImageBackground: background.mode != 'default',
-          summaryLabel:
-              running ? '运行详情 · 第 $totalSteps 步' : '会话详情 · ${metrics.rounds} 轮',
-          maxGroups: 1,
-          onTap: onTap,
-          onCompress: onCompress,
-          contextSnapshot: contextSnapshot,
-        ),
+    final bar = ValueListenableBuilder<BackgroundConfig>(
+      valueListenable: BackgroundService.bgNotifier,
+      builder: (context, background, _) => SessionMetricsBar(
+        metrics: metrics,
+        onImageBackground: background.mode != 'default',
+        summaryLabel:
+            running ? '运行详情 · 第 $totalSteps 步' : '会话详情 · ${metrics.rounds} 轮',
+        maxGroups: 1,
+        onTap: onTap,
+        onCompress: onCompress,
+        contextSnapshot: contextSnapshot,
+        inline: inline,
       ),
     );
+    if (inline) return bar;
+    return DesktopReadingColumn(
+        child: Padding(
+      padding: EdgeInsets.symmetric(
+          horizontal: DesktopTheme.maybeOf(context) != null ? 16 : 12),
+      child: bar,
+    ));
   }
 }
 
@@ -82,6 +92,7 @@ class SessionMetricsBar extends StatelessWidget {
     this.maxGroups,
     this.summaryLabel,
     this.contextSnapshot,
+    this.inline = false,
   });
 
   final SessionMetrics metrics;
@@ -97,6 +108,7 @@ class SessionMetricsBar extends StatelessWidget {
   final int? maxGroups;
   final String? summaryLabel;
   final ContextSnapshot? contextSnapshot;
+  final bool inline;
 
   /// 分组优先级顺序固定，裁切时从尾部丢弃。
   List<_Group> _buildGroups() {
@@ -193,24 +205,75 @@ class SessionMetricsBar extends StatelessWidget {
     if (metrics.isEmpty) return const SizedBox.shrink();
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final desktop = DesktopTheme.maybeOf(context);
     final onImage = onImageBackground;
 
-    final bg = onImage
-        ? AppPalette.darkCanvas.withValues(alpha: 0.72)
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.06)
-            : Colors.white.withValues(alpha: 0.65));
-    final border = onImage
-        ? Colors.transparent
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.10)
-            : Colors.white.withValues(alpha: 0.75));
-    final labelColor = onImage
-        ? AppPalette.darkTextFaint
-        : (isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted);
-    final valueColor = onImage
-        ? AppPalette.darkText
-        : (isDark ? AppPalette.darkText : AppPalette.lightText);
+    final bg = desktop?.sidebar ??
+        (onImage
+            ? AppPalette.darkCanvas.withValues(alpha: 0.72)
+            : (isDark ? AppPalette.darkSurface : Colors.white));
+    final border = desktop?.border ??
+        (onImage
+            ? Colors.transparent
+            : (isDark ? AppPalette.darkHairline : AppPalette.lightHairline));
+    final labelColor = desktop?.muted ??
+        (onImage
+            ? AppPalette.darkTextFaint
+            : (isDark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted));
+    final valueColor = desktop?.text ??
+        (onImage
+            ? AppPalette.darkText
+            : (isDark ? AppPalette.darkText : AppPalette.lightText));
+    final compressLevel = _compressLevel();
+    final barRadius =
+        BorderRadius.circular(desktop != null ? 8 : AppTokens.radiusPill);
+
+    if (summaryLabel != null) {
+      final pill = Container(
+        margin: inline ? EdgeInsets.zero : const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: barRadius,
+          border: Border.all(color: border, width: 1.0),
+        ),
+        constraints: const BoxConstraints(minHeight: 30),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: MobileTheme.brand(context),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                summaryLabel!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: AppTokens.fontSizeCaption,
+                  fontWeight: FontWeight.w500,
+                  color: desktop != null ? labelColor : valueColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.chevron_right_rounded, size: 15, color: labelColor),
+          ],
+        ),
+      );
+      if (onTap == null) return pill;
+      return InkWell(
+        onTap: onTap,
+        borderRadius: barRadius,
+        child: pill,
+      );
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -218,35 +281,42 @@ class SessionMetricsBar extends StatelessWidget {
         final limit = _limitFor(constraints.maxWidth);
         final visible = groups.take(limit).toList();
         final hidden = groups.length - visible.length;
-        final compressLevel = _compressLevel();
 
         final content = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          margin: inline ? EdgeInsets.zero : const EdgeInsets.only(bottom: 6),
+          padding: EdgeInsets.symmetric(
+              horizontal: 10, vertical: desktop != null ? 5 : 5),
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+            borderRadius: barRadius,
             border: Border.all(color: border, width: 1.0),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: isDark ? 0.20 : 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
           ),
-          constraints: const BoxConstraints(minHeight: 48),
+          constraints: const BoxConstraints(minHeight: 30),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (summaryLabel != null)
-                Row(children: [
-                  const Icon(Icons.insights_outlined, size: 16),
-                  const SizedBox(width: 8),
-                  Expanded(
-                      child: Text(summaryLabel!,
-                          style: TextStyle(fontSize: 12, color: valueColor))),
-                  const Icon(Icons.chevron_right_rounded, size: 18),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: MobileTheme.brand(context),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(summaryLabel!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: AppTokens.fontSizeCaption,
+                          fontWeight: FontWeight.w500,
+                          color: desktop != null ? labelColor : valueColor)),
+                  const SizedBox(width: 2),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 15, color: labelColor),
                 ])
               else
                 Wrap(
@@ -306,7 +376,7 @@ class SessionMetricsBar extends StatelessWidget {
         if (onTap == null) return content;
         return InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+          borderRadius: barRadius,
           child: content,
         );
       },

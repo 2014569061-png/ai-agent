@@ -1,20 +1,24 @@
+import '../widgets/nexus_search_field.dart';
+import '../theme/mobile_theme.dart';
 import 'dart:async';
+import '../search/global_search_page.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter/services.dart';
 
 import '../../domain/unique_id.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../../infrastructure/database/database_provider.dart';
 import '../../application/mojibake_repair.dart';
-import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/desktop_page_summary.dart';
 import '../motion/nexus_motion.dart';
 import '../motion/nexus_staggered_entrance.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_action_sheet.dart';
 import '../widgets/nexus_page_header.dart';
@@ -29,15 +33,17 @@ typedef HistoryConversationsPageLoader = Future<List<Conversation>> Function({
 /// 历史会话管理页'///
 /// Conversation history management.
 class HistoryPage extends StatefulWidget {
-  final ValueChanged<Conversation>? onConversationSelected;
+  final ValueChanged<String>? onConversationSelected;
   final HistoryConversationsLoader? loadConversations;
   final HistoryConversationsPageLoader? loadConversationPage;
+  final Future<AppDatabase> Function()? loadDatabase;
 
   const HistoryPage({
     super.key,
     this.onConversationSelected,
     this.loadConversations,
     this.loadConversationPage,
+    this.loadDatabase,
   });
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -98,7 +104,7 @@ class _HistoryPageState extends State<HistoryPage> {
   Future<List<Conversation>> _loadAll() async {
     final loader = widget.loadConversations;
     if (loader != null) return loader();
-    return (await DatabaseProvider.instance.database).recentConversations();
+    return (await _db()).recentConversations();
   }
 
   Future<List<Conversation>> _loadPage({required int offset}) async {
@@ -106,7 +112,7 @@ class _HistoryPageState extends State<HistoryPage> {
     if (loader != null) {
       return loader(limit: _pageSize, offset: offset);
     }
-    return (await DatabaseProvider.instance.database).searchConversations(
+    return (await _db()).searchConversations(
       query: _query,
       filter: _filterType,
       limit: _pageSize,
@@ -158,7 +164,7 @@ class _HistoryPageState extends State<HistoryPage> {
       list = list.where((c) => c.isPinned).toList();
     }
     final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return list;
+    if (query.isEmpty || _usesDatabasePages) return list;
     return list.where((c) => c.title.toLowerCase().contains(query)).toList();
   }
 
@@ -207,7 +213,8 @@ class _HistoryPageState extends State<HistoryPage> {
     return rows;
   }
 
-  Future<AppDatabase> _db() => DatabaseProvider.instance.database;
+  Future<AppDatabase> _db() =>
+      widget.loadDatabase?.call() ?? DatabaseProvider.instance.database;
 
   Future<void> _rename(Conversation conversation) async {
     final controller = TextEditingController(text: conversation.title);
@@ -268,7 +275,7 @@ class _HistoryPageState extends State<HistoryPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('已删除“${conversation.title}”'),
-          duration: const Duration(seconds: 4),
+          duration: AppTokens.durationToast,
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
             label: '撤销',
@@ -324,17 +331,23 @@ class _HistoryPageState extends State<HistoryPage> {
         setState(() => _filterType = value);
         unawaited(_reload());
       },
-      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+      borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
       child: AnimatedContainer(
         duration: NexusMotion.durationFast(context),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        // V4：筛选胶囊去描边，靠填充区分——选中品牌浅底，未选中浅灰底。
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
           color: selected
               ? (isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight)
               : (isDark ? AppPalette.darkText : AppPalette.lightText)
                   .withValues(alpha: isDark ? 0.08 : 0.05),
-          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
+          border: Border.all(
+            color: selected
+                ? MobileTheme.brand(context).withValues(alpha: 0.35)
+                : Colors.transparent,
+            width: 1.0,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -343,7 +356,7 @@ class _HistoryPageState extends State<HistoryPage> {
               icon,
               size: 14,
               color: selected
-                  ? AppPalette.brand
+                  ? MobileTheme.brand(context)
                   : (isDark
                       ? AppPalette.darkTextMuted
                       : AppPalette.lightTextMuted),
@@ -352,10 +365,10 @@ class _HistoryPageState extends State<HistoryPage> {
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+                fontSize: AppTokens.fontSizeFootnote,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: selected
-                    ? AppPalette.brand
+                    ? MobileTheme.brand(context)
                     : (isDark
                         ? AppPalette.darkTextMuted
                         : AppPalette.lightTextMuted),
@@ -373,64 +386,61 @@ class _HistoryPageState extends State<HistoryPage> {
     final grouped = _groupConversations(filtered);
     final rows = _rowsFor(grouped);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isFlat =
-        AppAppearanceController.resolvedGlassIntensity == GlassIntensity.flat;
+    final desktop = DesktopTheme.maybeOf(context);
 
     return Scaffold(
-      backgroundColor: isFlat
-          ? (isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas)
-          : Colors.transparent,
-      appBar: const NexusPageHeader(
+      backgroundColor: MobileTheme.pageBackground(context),
+      appBar: NexusPageHeader(
         title: '历史会话',
-        subtitle: '搜索、置顶与管理历史记录',
+        subtitle: '搜索本页会话',
+        actions: [
+          IconButton(
+              tooltip: '全量搜索',
+              icon: const Icon(Icons.search),
+              onPressed: () async {
+                final selected = await Navigator.of(context).push<Conversation>(
+                    MaterialPageRoute(
+                        builder: (_) =>
+                            const GlobalSearchPage(returnConversation: true)));
+                if (!mounted || selected == null) return;
+                if (widget.onConversationSelected case final callback?) {
+                  callback(selected.id);
+                } else {
+                  if (context.mounted) Navigator.of(context).pop(selected);
+                }
+              })
+        ],
       ),
-      body: Column(
+      body: NexusPageLayout(
+          child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            // V3：与设置页一致的无描边浅底胶囊搜索；聚焦时才出现品牌色细描边。
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onQueryChanged,
-              decoration: InputDecoration(
-                hintText: '搜索会话标题',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                suffixIcon: _query.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        tooltip: '清空',
-                        onPressed: () {
-                          _searchController.clear();
-                          _onQueryChanged('');
-                        },
-                      )
-                    : null,
-                isDense: true,
-                filled: true,
-                fillColor: (isDark ? AppPalette.darkText : AppPalette.lightText)
-                    .withValues(alpha: isDark ? 0.08 : 0.05),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-                  borderSide: BorderSide(
-                    color: AppPalette.brandTextFor(isDark),
-                    width: 1.2,
-                  ),
-                ),
+          if (desktop != null)
+            DesktopPageSummary(items: [
+              (
+                icon: Icons.forum_outlined,
+                label: '当前筛选',
+                value: '${filtered.length}'
               ),
+              (
+                icon: Icons.calendar_today_outlined,
+                label: '时间分组',
+                value: '${grouped.length}'
+              ),
+            ]),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: NexusSearchField(
+              controller: _searchController,
+              hintText: '搜索会话标题',
+              onChanged: _onQueryChanged,
+              onClear: () {
+                _searchController.clear();
+                _onQueryChanged('');
+              },
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
                 _filterChip('全部', 'all', Icons.forum_outlined),
@@ -463,7 +473,7 @@ class _HistoryPageState extends State<HistoryPage> {
               child: NexusStaggeredEntrance(
                 child: ListView.builder(
                   physics: NexusMotion.listPhysics,
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 88),
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 88),
                   itemCount: rows.length +
                       (_pagedMode && (_hasMore || _loadingMore) ? 1 : 0),
                   itemBuilder: NexusStaggeredItem.wrap((context, index) {
@@ -502,24 +512,28 @@ class _HistoryPageState extends State<HistoryPage> {
             ),
           ),
         ],
-      ),
+      )),
     );
   }
 
   Widget _conversationTile(_HistoryConversationRow item) {
     final conversation = item.conversation;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    const cardRadius = Radius.circular(16);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final cardRadius = Radius.circular(MobileTheme.cardRadius(context));
     final radius = BorderRadius.vertical(
       top: item.isFirst ? cardRadius : Radius.zero,
       bottom: item.isLast ? cardRadius : Radius.zero,
     );
     final muted = isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-    // V2：分组卡片用浅填充代替描边；前导图标放进浅色圆底，置顶用品牌浅底。
     return Container(
       decoration: BoxDecoration(
-        color: isDark ? AppPalette.darkSurface : AppPalette.lightCanvas,
+        color: isDark ? AppPalette.darkSurface : theme.colorScheme.surface,
         borderRadius: radius,
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant.withValues(alpha: .45),
+          width: .7,
+        ),
       ),
       child: Material(
         type: MaterialType.transparency,
@@ -560,7 +574,8 @@ class _HistoryPageState extends State<HistoryPage> {
         height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          shape: BoxShape.circle,
+          borderRadius:
+              BorderRadius.circular(MobileTheme.controlRadius(context)),
           color: conversation.isPinned
               ? (isDark ? AppPalette.brandSoftDark : AppPalette.brandSoftLight)
               : muted.withValues(alpha: 0.1),
@@ -570,7 +585,7 @@ class _HistoryPageState extends State<HistoryPage> {
               ? Icons.push_pin_rounded
               : Icons.chat_bubble_outline_rounded,
           size: 18,
-          color: conversation.isPinned ? AppPalette.brand : muted,
+          color: conversation.isPinned ? MobileTheme.brand(context) : muted,
         ),
       ),
       title: Row(
@@ -585,8 +600,8 @@ class _HistoryPageState extends State<HistoryPage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
+                fontSize: AppTokens.fontSizeBody,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -595,7 +610,8 @@ class _HistoryPageState extends State<HistoryPage> {
       subtitle: Text(
         _relativeTime(conversation.updatedAt),
         style: TextStyle(
-          fontSize: 12,
+          fontSize: AppTokens.fontSizeFootnote,
+          fontFeatures: const [FontFeature.tabularFigures()],
           color: muted,
         ),
       ),
@@ -607,7 +623,7 @@ class _HistoryPageState extends State<HistoryPage> {
       onTap: () {
         final callback = widget.onConversationSelected;
         if (callback != null) {
-          callback(conversation);
+          callback(conversation.id);
         } else {
           Navigator.pop(context, conversation);
         }
@@ -623,8 +639,8 @@ class _HistoryPageState extends State<HistoryPage> {
           Text(
             row.title,
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+              fontSize: AppTokens.fontSizeCaption,
+              fontWeight: FontWeight.w600,
               color:
                   isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted,
               letterSpacing: 0.2,
@@ -637,13 +653,15 @@ class _HistoryPageState extends State<HistoryPage> {
               // V4：计数徽标去描边，只留浅填充。
               color: (isDark ? AppPalette.darkText : AppPalette.lightText)
                   .withValues(alpha: isDark ? 0.08 : 0.05),
-              borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+              borderRadius:
+                  BorderRadius.circular(MobileTheme.controlRadius(context)),
             ),
             child: Text(
               '${row.count}',
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+                fontSize: AppTokens.fontSizeBadge,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
                 color: isDark
                     ? AppPalette.darkTextMuted
                     : AppPalette.lightTextMuted,

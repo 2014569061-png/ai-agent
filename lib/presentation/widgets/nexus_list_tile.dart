@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import 'nexus_touch_light.dart';
 import '../motion/press_squash.dart';
 import 'nexus_switch.dart';
@@ -40,19 +41,32 @@ class NexusListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.semanticOf(context);
     final theme = Theme.of(context);
+    final mobile = DesktopTheme.maybeOf(context) == null;
     final titleColor = danger
         ? colors.danger
         : (enabled ? colors.textPrimary : colors.textMuted);
+    final stackTrailing =
+        trailing != null && MediaQuery.textScalerOf(context).scale(1) >= 1.4;
 
     Widget content = Container(
       padding: padding,
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(
-              icon,
-              size: 22,
-              color: danger ? colors.danger : theme.colorScheme.primary,
+            Container(
+              width: mobile ? 36 : 28,
+              height: mobile ? 36 : 28,
+              decoration: BoxDecoration(
+                color: (danger ? colors.danger : theme.colorScheme.primary)
+                    .withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(mobile ? 10 : 7),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                icon,
+                size: mobile ? 20 : 16,
+                color: danger ? colors.danger : theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(width: AppTokens.spacingMd),
           ],
@@ -76,13 +90,20 @@ class NexusListTile extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (stackTrailing) ...[
+                  const SizedBox(height: 8),
+                  Align(alignment: Alignment.centerRight, child: trailing!),
+                ],
               ],
             ),
           ),
           if (switchValue != null) ...[
             _Switch(
-                value: switchValue!, enabled: enabled, onChanged: onChanged),
-          ] else if (trailing != null) ...[
+                value: switchValue!,
+                enabled: enabled,
+                onChanged: onChanged,
+                semanticLabel: title),
+          ] else if (trailing != null && !stackTrailing) ...[
             const SizedBox(width: 8),
             trailing!,
           ],
@@ -121,23 +142,26 @@ class NexusListTile extends StatelessWidget {
 }
 
 class _Switch extends StatelessWidget {
-  const _Switch({required this.value, required this.enabled, this.onChanged});
+  const _Switch(
+      {required this.value,
+      required this.enabled,
+      this.onChanged,
+      required this.semanticLabel});
 
   final bool value;
   final bool enabled;
   final ValueChanged<bool>? onChanged;
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 32,
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: NexusSwitch(
-          value: value,
-          onChanged: enabled ? onChanged : null,
-        ),
-      ),
+    final control = NexusSwitch(
+      value: value,
+      onChanged: enabled ? onChanged : null,
+      semanticLabel: semanticLabel,
     );
+    if (DesktopTheme.maybeOf(context) == null) return control;
+    return SizedBox(
+        height: 32, child: FittedBox(fit: BoxFit.scaleDown, child: control));
   }
 }

@@ -45,7 +45,8 @@ class _RunPresetsSheetState extends ConsumerState<RunPresetsSheet> {
       await action();
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '操作失败', detail: '$error', tone: ToastTone.danger);
+        FloatingToast.show(context, '操作失败',
+            detail: '$error', tone: ToastTone.danger);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -58,7 +59,9 @@ class _RunPresetsSheetState extends ConsumerState<RunPresetsSheet> {
     await _guard(() async {
       await _service.saveCurrent(name);
       await _reload();
-      if (mounted) FloatingToast.show(context, '已保存预设「$name」', tone: ToastTone.success);
+      if (mounted) {
+        FloatingToast.show(context, '已保存预设「$name」', tone: ToastTone.success);
+      }
     });
   }
 
@@ -67,7 +70,8 @@ class _RunPresetsSheetState extends ConsumerState<RunPresetsSheet> {
       final issues = await _service.check(preset);
       if (!mounted) return;
       if (issues.isNotEmpty) {
-        final hasWarning = issues.any((i) => i.level == PresetIssueLevel.warning);
+        final hasWarning =
+            issues.any((i) => i.level == PresetIssueLevel.warning);
         final confirmed = await showConfirmAction(
           context,
           title: '应用「${preset.name}」？',
@@ -81,14 +85,16 @@ class _RunPresetsSheetState extends ConsumerState<RunPresetsSheet> {
       final report = await _service.apply(preset);
       if (!mounted) return;
       if (report.blocked) {
-        FloatingToast.show(context, report.skipped.first, tone: ToastTone.warning);
+        FloatingToast.show(context, report.skipped.first,
+            tone: ToastTone.warning);
         return;
       }
       FloatingToast.show(
         context,
         '已应用「${preset.name}」',
         tone: report.skipped.isEmpty ? ToastTone.success : ToastTone.warning,
-        detail: report.skipped.isEmpty ? null : '未能恢复：${report.skipped.join('、')}',
+        detail:
+            report.skipped.isEmpty ? null : '未能恢复：${report.skipped.join('、')}',
       );
       setState(() {});
     });
@@ -123,7 +129,8 @@ class _RunPresetsSheetState extends ConsumerState<RunPresetsSheet> {
     });
   }
 
-  Future<String?> _askName({required String title, required String initial}) async {
+  Future<String?> _askName(
+      {required String title, required String initial}) async {
     final result = await showDialog<String>(
       context: context,
       builder: (_) => _PresetNameDialog(title: title, initial: initial),
@@ -143,35 +150,37 @@ class _RunPresetsSheetState extends ConsumerState<RunPresetsSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('运行预设', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text('保存模型、思考、模式、审批、联网与 Agent 的组合，一键切换',
-              style: theme.textTheme.bodySmall),
-          const SizedBox(height: 12),
-          FilledButton.tonalIcon(
-            onPressed: _busy ? null : _saveCurrent,
-            icon: const Icon(Icons.bookmark_add_outlined, size: 18),
-            label: const Text('保存当前设置为预设'),
-          ),
           const SizedBox(height: 8),
-          if (presets == null)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (presets.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Text('还没有预设',
-                  textAlign: TextAlign.center, style: theme.textTheme.bodyMedium),
-            )
-          else
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: presets.length,
-                itemBuilder: (context, index) => _tile(presets[index]),
-              ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Text('保存模型、思考、模式、审批、联网与 Agent 的组合，一键切换',
+                    style: theme.textTheme.bodySmall),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: _busy ? null : _saveCurrent,
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                  label: const Text('保存当前设置为预设'),
+                ),
+                const SizedBox(height: 8),
+                if (presets == null)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (presets.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Text('还没有预设',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium),
+                  )
+                else
+                  for (final preset in presets) _tile(preset),
+              ],
             ),
+          ),
         ],
       ),
     );

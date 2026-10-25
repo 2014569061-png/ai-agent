@@ -1,3 +1,4 @@
+import '../theme/desktop_theme.dart';
 import '../theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -27,8 +28,27 @@ class NexusSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final desktop = DesktopTheme.maybeOf(context);
+    if (desktop != null) {
+      final radius = borderRadius ?? BorderRadius.circular(DesktopTheme.radius);
+      final fill = switch (level) {
+        SurfaceLevel.ultraThin || SurfaceLevel.thin => desktop.hover,
+        SurfaceLevel.regular => desktop.panel,
+        SurfaceLevel.thick || SurfaceLevel.ultraThick => desktop.panel,
+      };
+      return Container(
+        margin: margin,
+        padding: padding,
+        decoration: BoxDecoration(
+          color: fill,
+          borderRadius: radius,
+          border: Border.all(color: desktop.border, width: 1.0),
+        ),
+        child: child,
+      );
+    }
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final radius = borderRadius ?? BorderRadius.circular(AppTokens.radiusCard);
+    final radius = borderRadius ?? BorderRadius.circular(24);
     final hairline =
         isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 
@@ -42,12 +62,15 @@ class NexusSurface extends StatelessWidget {
       case SurfaceLevel.ultraThin:
       case SurfaceLevel.thin:
         // 内嵌的次要面：L1 色阶填充、无描边（聊天页输入区、工具活动条）
-        fill = isDark ? AppPalette.darkCanvas : AppPalette.lightSurface;
+        fill = Theme.of(context)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: isDark ? .35 : .45);
         outlined = false;
         shadows = const [];
       case SurfaceLevel.regular:
         // 卡片：L1 色阶填充、无描边、零阴影（靠表面色阶与画布自然分层）
-        fill = isDark ? AppPalette.darkSurface : AppPalette.lightSurface;
+        fill = Theme.of(context).colorScheme.surface;
         outlined = false;
         shadows = const [];
       case SurfaceLevel.thick:
@@ -67,7 +90,12 @@ class NexusSurface extends StatelessWidget {
         border: outlined ? Border.all(color: hairline, width: 1.0) : null,
         boxShadow: shadows,
       ),
-      child: child,
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      ),
     );
   }
 }

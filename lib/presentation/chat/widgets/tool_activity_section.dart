@@ -1,18 +1,21 @@
+import '../../theme/mobile_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../application/chat_controller.dart';
 import '../../../domain/tool_result.dart';
-import '../../../infrastructure/tools/tool_humanizer.dart';
+import '../tool_humanizer.dart';
 import '../../theme/app_palette.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_tokens.dart';
+import '../../theme/desktop_theme.dart';
 import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_execution_status.dart';
 import '../../widgets/nexus_sheet.dart';
 import '../../widgets/nexus_status_badge.dart';
-import '../../widgets/nexus_surface.dart';
+import '../../widgets/section_card.dart';
 import '../../motion/morph_icon.dart';
+import '../transcript_view_policy.dart';
 
 /// 工具执行内联时间线：直接出现在消息流尾部（Agent 正在工作的位置），
 /// 无需点击即可看到每一步工具调用的状态与结果；行内可展开技术详情。
@@ -27,6 +30,7 @@ class ToolActivityTimeline extends StatefulWidget {
     this.onReject,
     this.onReview,
     this.onRetry,
+    this.onOpenResults,
     this.compact = false,
   });
 
@@ -40,6 +44,7 @@ class ToolActivityTimeline extends StatefulWidget {
   final void Function(ToolActivity activity)? onReject;
   final void Function(ToolActivity activity)? onReview;
   final void Function(ToolActivity activity)? onRetry;
+  final VoidCallback? onOpenResults;
 
   @override
   State<ToolActivityTimeline> createState() => _ToolActivityTimelineState();
@@ -48,7 +53,6 @@ class ToolActivityTimeline extends StatefulWidget {
 class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
   /// 完成后条目较多时默认收起明细，避免长轨迹在消息流里占满一屏；
   /// 运行中始终完整展示，用户能实时看到最新一步。
-  static const int _collapsedThreshold = 8;
 
   /// 展开时的最大高度：内联位置不能无限增高，超出部分内部滚动。
   static const double _expandedMaxHeight = 280;
@@ -68,8 +72,6 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
     if (widget.running && !oldWidget.running) _expandedOverride = null;
   }
 
-  bool get _collapsible => widget.activities.length > _collapsedThreshold;
-
   /// compact 模式下直接展示的条目：最近 [_compactVisibleCount] 条，外加所有
   /// 「等待确认」的条目（需要用户操作，不能被折叠进「查看全部」）。
   List<ToolActivity> get _compactRows {
@@ -84,44 +86,58 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
 
   @override
   Widget build(BuildContext context) {
-    final collapsible = widget.compact || _collapsible;
-    final expanded = widget.compact
-        ? (_expandedOverride ??
-            (widget.running ||
-                widget.activities.any((activity) => activity.status == '等待确认')))
-        : (_expandedOverride ?? (!collapsible || widget.running));
-    return NexusSurface(
-      level: SurfaceLevel.thin,
-      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _header(context, collapsible: collapsible, expanded: expanded),
-            NexusExpandSection(
-              expanded: expanded,
-              child: widget.compact
-                  ? _compactList(context)
-                  : ConstrainedBox(
-                      constraints:
-                          const BoxConstraints(maxHeight: _expandedMaxHeight),
-                      child: SingleChildScrollView(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            for (final activity in widget.activities)
-                              _row(context, activity),
-                          ],
-                        ),
+    final desktop = DesktopTheme.maybeOf(context);
+    final policy = TranscriptViewPolicy.forTimeline(
+        running: widget.running,
+        compact: widget.compact,
+        count: widget.activities.length,
+        needsApproval:
+            widget.activities.any((activity) => activity.status == '等待确认'));
+    final collapsible = policy.toolsCollapsible;
+    final expanded =
+        policy.forceToolsOpen || (_expandedOverride ?? policy.toolsExpanded);
+    final inner = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _header(context, collapsible: collapsible, expanded: expanded),
+          NexusExpandSection(
+            expanded: expanded,
+            child: widget.compact
+                ? _compactList(context)
+                : ConstrainedBox(
+                    constraints:
+                        const BoxConstraints(maxHeight: _expandedMaxHeight),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final activity in widget.activities)
+                            _row(context, activity),
+                        ],
                       ),
                     ),
-            ),
-          ],
-        ),
+                  ),
+          ),
+        ],
       ),
+    );
+    if (desktop != null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: desktop.sidebar,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: desktop.border),
+        ),
+        child: inner,
+      );
+    }
+    return SectionCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: inner,
     );
   }
 
@@ -224,7 +240,7 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
               setState(() => _expandedOverride = !expanded);
             }
           : null,
-      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+      borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
         child: Row(children: [
@@ -247,10 +263,21 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
               collapsible && !expanded ? '$text（点击展开）' : text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall
-                  ?.copyWith(color: theme.colorScheme.onSurface),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurface,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
+          if (widget.onOpenResults != null)
+            IconButton(
+              tooltip: '查看执行结果',
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+              onPressed: widget.onOpenResults,
+              icon: const Icon(Icons.inventory_2_outlined, size: 15),
+            ),
           if (collapsible)
             SpringTurns(
               turns: expanded ? 0.5 : 0.0,
@@ -367,7 +394,7 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
     }
 
     final (IconData leadIcon, Color leadColor) = running
-        ? (Icons.sync_rounded, AppPalette.brand)
+        ? (Icons.sync_rounded, MobileTheme.brand(context))
         : done
             ? (Icons.check_circle_outline, semantic.success)
             : failed
@@ -379,7 +406,16 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
     return NexusDisclosure(
       headerPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      leading: Icon(leadIcon, size: 18, color: leadColor),
+      leading: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: leadColor.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        alignment: Alignment.center,
+        child: Icon(leadIcon, size: 15, color: leadColor),
+      ),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -512,7 +548,7 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
                     final statusColor = running
                         ? (isDark
                             ? AppPalette.darkBrandHover
-                            : AppPalette.brand)
+                            : MobileTheme.brand(context))
                         : (done
                             ? (isDark
                                 ? AppPalette.darkSuccess
@@ -563,11 +599,13 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
   }) {
     final retryable =
         failed || activity.ok == false || activity.effect == ToolEffect.unknown;
+    final completed = activity.status == '已完成' || activity.ok == true;
     return (pending &&
             (widget.onConfirm != null ||
                 widget.onReject != null ||
                 widget.onReview != null)) ||
-        (retryable && widget.onRetry != null);
+        (retryable && widget.onRetry != null) ||
+        (completed && widget.onOpenResults != null);
   }
 
   Widget _inlineActions(
@@ -578,6 +616,7 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
   }) {
     final retryable =
         failed || activity.ok == false || activity.effect == ToolEffect.unknown;
+    final completed = activity.status == '已完成' || activity.ok == true;
     return Align(
       alignment: Alignment.centerLeft,
       child: Wrap(
@@ -607,6 +646,18 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
               onPressed: () => widget.onRetry!(activity),
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('重试'),
+            ),
+          if (completed && widget.onOpenResults != null)
+            TextButton.icon(
+              key: ValueKey('tool-activity-open-results-${activity.call.id}'),
+              onPressed: widget.onOpenResults,
+              icon: const Icon(Icons.inventory_2_outlined, size: 16),
+              label: const Text('查看产出结果'),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                visualDensity: VisualDensity.compact,
+              ),
             ),
         ],
       ),

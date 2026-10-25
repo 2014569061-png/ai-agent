@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -15,6 +16,7 @@ import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../theme/app_tokens.dart';
+import '../theme/desktop_theme.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
@@ -25,9 +27,11 @@ import '../widgets/confirm_action.dart';
 import '../widgets/nexus_sheet.dart';
 import 'project_home_page.dart';
 import 'storage_access_flow.dart';
+import '../artifacts/artifact_center_page.dart';
 
 class ProjectPickerPage extends ConsumerStatefulWidget {
-  const ProjectPickerPage({super.key});
+  const ProjectPickerPage({super.key, this.onProjectSelected});
+  final VoidCallback? onProjectSelected;
 
   @override
   ConsumerState<ProjectPickerPage> createState() => _ProjectPickerPageState();
@@ -36,6 +40,7 @@ class ProjectPickerPage extends ConsumerStatefulWidget {
 class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
   List<Project> _projects = const [];
   bool _loading = true;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -69,7 +74,11 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
     try {
       await ref.read(chatControllerProvider.notifier).openProject(project);
       if (!mounted) return;
-      Navigator.of(context).pop(project);
+      if (widget.onProjectSelected != null) {
+        widget.onProjectSelected!();
+      } else {
+        Navigator.of(context).pop(project);
+      }
     } catch (error) {
       if (mounted) {
         FloatingToast.show(context, '$error', tone: ToastTone.danger);
@@ -79,26 +88,81 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
 
   Future<void> _createFromTemplate() async {
     final template = await showNexusSheet<ProjectTemplate>(
-context: context,
-showDragHandle: true,
-builder: (context) {
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
         final templates = const ProjectTemplateService().all();
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              const ListTile(title: Text('选择模板')),
-              for (final template in templates)
-                ListTile(
-                  title: Text(template.label),
-                  subtitle: Text(template.summary),
-                  onTap: () => Navigator.pop(context, template),
-                ),
-            ],
-          ),
+        final scheme = Theme.of(context).colorScheme;
+        return ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          children: [
+            Text(
+              '选择项目模板',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '创建后会自动生成基础文件和推荐的运行配置。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 14),
+            SectionCard(
+              padding: EdgeInsets.zero,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (index, template) in templates.indexed) ...[
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: scheme.primary.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          _templateIcon(template.kind),
+                          size: 20,
+                          color: scheme.primary,
+                        ),
+                      ),
+                      title: Text(
+                        template.label,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        template.summary,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing:
+                          const Icon(Icons.chevron_right_rounded, size: 20),
+                      onTap: () => Navigator.pop(context, template),
+                    ),
+                    if (index != templates.length - 1)
+                      Divider(
+                        height: 1,
+                        indent: 66,
+                        color: scheme.outlineVariant,
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         );
       },
-);
+    );
     if (template == null || !mounted) return;
     final name = await _askName('新建 ${template.label}', template.label);
     if (name == null || name.trim().isEmpty) return;
@@ -120,13 +184,30 @@ builder: (context) {
           appName: appName,
         ),
       );
-      await _open(project);
+      await _reload();
+      if (!mounted) return;
+      await Navigator.of(context).push(NexusPageRoute.workspace(
+        builder: (_) => ProjectHomePage(
+            projectId: project.id, onContinueInChat: widget.onProjectSelected),
+      ));
+      if (mounted) await _reload();
     } catch (error) {
       if (mounted) {
         FloatingToast.show(context, '$error', tone: ToastTone.danger);
       }
     }
   }
+
+  static IconData _templateIcon(ProjectKind kind) => switch (kind) {
+        ProjectKind.staticWeb => Icons.language_rounded,
+        ProjectKind.node => Icons.javascript_rounded,
+        ProjectKind.python => Icons.code_rounded,
+        ProjectKind.javaApk => Icons.android_rounded,
+        ProjectKind.flutter => Icons.flutter_dash_rounded,
+        ProjectKind.androidGradle => Icons.build_outlined,
+        ProjectKind.go => Icons.terminal_rounded,
+        ProjectKind.unknown => Icons.description_outlined,
+      };
 
   Future<void> _importDirectory() async {
     if (kIsWeb) {
@@ -148,7 +229,11 @@ builder: (context) {
       if (!mounted || path == null || path.isEmpty) return;
       await _offerWriteAccess();
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      if (widget.onProjectSelected != null) {
+        widget.onProjectSelected!();
+      } else {
+        Navigator.of(context).pop(true);
+      }
     } catch (error) {
       if (mounted) {
         FloatingToast.show(context, '$error', tone: ToastTone.danger);
@@ -285,39 +370,198 @@ builder: (context) {
     final controller = TextEditingController(text: initial);
     final result = await showNexusDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: '项目名称'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('创建'),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final canCreate = controller.text.trim().isNotEmpty;
+          void submit() {
+            if (canCreate) Navigator.pop(context, controller.text.trim());
+          }
+
+          return AlertDialog(
+            title: Text(title),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onChanged: (_) => setDialogState(() {}),
+              onSubmitted: (_) => submit(),
+              decoration: const InputDecoration(labelText: '项目名称'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: canCreate ? submit : null,
+                child: const Text('创建'),
+              ),
+            ],
+          );
+        },
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     return result;
   }
 
+  Future<void> _showProjectActions() async {
+    final action = await showNexusSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+          top: false,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('添加项目',
+                        style: Theme.of(context).textTheme.titleLarge))),
+            ListTile(
+                leading: const Icon(Icons.add_box_outlined),
+                title: const Text('从模板新建'),
+                onTap: () => Navigator.pop(sheetContext, 'template')),
+            ListTile(
+                leading: const Icon(Icons.folder_open_outlined),
+                title: const Text('导入目录'),
+                onTap: () => Navigator.pop(sheetContext, 'directory')),
+            ListTile(
+                leading: const Icon(Icons.unarchive_outlined),
+                title: const Text('导入 ZIP'),
+                onTap: () => Navigator.pop(sheetContext, 'zip')),
+            const SizedBox(height: 12),
+          ])),
+    );
+    if (!mounted) return;
+    switch (action) {
+      case 'template':
+        await _createFromTemplate();
+      case 'directory':
+        await _importDirectory();
+      case 'zip':
+        await _importZip();
+    }
+  }
+
+  Widget _mobilePage(BuildContext context, String? currentId) {
+    final theme = Theme.of(context);
+    final visible = _projects
+        .where((project) =>
+            project.name.toLowerCase().contains(_searchQuery.toLowerCase()))
+        .toList();
+    return Scaffold(
+      appBar: NexusPageHeader(
+        title: '工作区',
+        largeTitle: !(ModalRoute.of(context)?.canPop ?? false),
+        actions: [
+          Padding(
+              padding: const EdgeInsets.only(right: 14),
+              child: IconButton.filled(
+                  tooltip: '添加项目',
+                  onPressed: _showProjectActions,
+                  style: IconButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: theme.colorScheme.onPrimary),
+                  icon: const Icon(Icons.add_rounded, size: 27))),
+        ],
+      ),
+      body: NexusPageLayout(
+          child: AsyncStateView(
+        loading: _loading,
+        onRetry: _reload,
+        child: RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+            children: [
+              TextField(
+                onChanged: (value) =>
+                    setState(() => _searchQuery = value.trim()),
+                decoration: const InputDecoration(
+                    hintText: '搜索项目', prefixIcon: Icon(Icons.search_rounded)),
+              ),
+              const SizedBox(height: 26),
+              Text(_searchQuery.isEmpty ? '最近项目' : '搜索结果',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 12),
+              if (visible.isEmpty)
+                EmptyStateView(
+                    icon: Icons.folder_open_outlined,
+                    title: _searchQuery.isEmpty ? '还没有项目' : '没有找到项目',
+                    message:
+                        _searchQuery.isEmpty ? '创建一个项目，开始把想法变成作品' : '试试其他项目名称')
+              else
+                SectionCard(
+                    child: Column(children: [
+                  for (var i = 0; i < visible.length; i++) ...[
+                    if (i > 0) const Divider(indent: 18, endIndent: 18),
+                    NexusListTile(
+                      icon: Icons.folder_outlined,
+                      title: visible[i].name,
+                      subtitle:
+                          ProjectKindX.parse(visible[i].projectKind).label,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 18),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        if (currentId == visible[i].id)
+                          Icon(Icons.check_circle_outline,
+                              size: 18, color: theme.colorScheme.primary),
+                        IconButton(
+                            tooltip: '打开项目主页',
+                            icon: const Icon(Icons.chevron_right_rounded),
+                            onPressed: () => Navigator.of(context).push(
+                                NexusPageRoute.workspace(
+                                    builder: (_) => ProjectHomePage(
+                                        projectId: visible[i].id,
+                                        onContinueInChat:
+                                            widget.onProjectSelected)))),
+                      ]),
+                      onTap: () => _open(visible[i]),
+                    ),
+                  ],
+                ])),
+              if (_projects.isEmpty && _searchQuery.isEmpty)
+                Center(
+                    child: TextButton.icon(
+                        onPressed: _showProjectActions,
+                        icon: const Icon(Icons.add_rounded),
+                        label: const Text('添加项目'))),
+              const SizedBox(height: 18),
+              SectionCard(
+                  child: NexusListTile(
+                icon: Icons.description_outlined,
+                title: '成果中心',
+                subtitle: '查看已保存的文件与交付成果',
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                trailing: const Icon(Icons.chevron_right_rounded, size: 22),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => const ArtifactCenterPage())),
+              )),
+            ],
+          ),
+        ),
+      )),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentId = ref.watch(
         chatControllerProvider.select((state) => state.currentProjectId));
+    if (DesktopTheme.maybeOf(context) == null) {
+      return _mobilePage(context, currentId);
+    }
     return Scaffold(
       appBar: const NexusPageHeader(
-        title: '项目',
-        subtitle: '选择、新建或导入开发项目',
+        title: '工作区',
+        subtitle: '项目开发与成果交付',
       ),
-      body: AsyncStateView(
+      body: NexusPageLayout(
+          child: AsyncStateView(
         loading: _loading,
         onRetry: _reload,
         child: ListView(
@@ -326,6 +570,14 @@ builder: (context) {
             SectionCard(
               child: Column(
                 children: [
+                  NexusListTile(
+                    icon: Icons.inventory_2_outlined,
+                    title: '成果中心',
+                    subtitle: '全部项目与非项目成果，检查副本、预览和导出',
+                    onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                            builder: (_) => const ArtifactCenterPage())),
+                  ),
                   NexusListTile(
                     icon: Icons.add_box_outlined,
                     title: '从模板新建',
@@ -376,14 +628,16 @@ builder: (context) {
                                       const Icon(Icons.check_rounded, size: 18),
                                 ),
                               ),
-                            IconButton(
-                              tooltip: '打开项目主页',
-                              icon: const Icon(Icons.chevron_right_rounded),
+                            TextButton.icon(
+                              icon: const Icon(Icons.home_outlined, size: 17),
+                              label: const Text('主页'),
                               onPressed: () {
                                 Navigator.of(context).push(
                                   NexusPageRoute.workspace(
                                     builder: (_) => ProjectHomePage(
                                       projectId: project.id,
+                                      onContinueInChat:
+                                          widget.onProjectSelected,
                                     ),
                                   ),
                                 );
@@ -398,7 +652,7 @@ builder: (context) {
               ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

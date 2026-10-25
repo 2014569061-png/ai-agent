@@ -1,13 +1,16 @@
-import '../theme/app_palette.dart';
+import '../theme/mobile_theme.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'package:flutter/material.dart';
+import '../widgets/nexus_page_layout.dart';
+import '../theme/desktop_theme.dart';
+import '../widgets/desktop_editor_layout.dart';
 
 import '../../domain/models.dart';
 import '../../infrastructure/providers/anthropic_provider.dart';
 import '../../infrastructure/providers/gemini_provider.dart';
 import '../../infrastructure/providers/openai_compatible_provider.dart';
-import '../../infrastructure/providers/provider_config.dart';
+import '../../domain/provider_config.dart';
 import '../../infrastructure/providers/provider_config_store.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
@@ -52,7 +55,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     final config = widget.config;
     final preset = widget.preset;
     _name =
-        TextEditingController(text: config?.name ?? preset?.name ?? 'Provider');
+        TextEditingController(text: config?.name ?? preset?.name ?? '自定义服务商');
     _baseUrl =
         TextEditingController(text: config?.baseUrl ?? preset?.baseUrl ?? '');
     _model = TextEditingController(
@@ -120,9 +123,8 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
     }
     if (effective != ProviderConfig.defaultContextTokens) {
       final known = ModelContextWindows.knownFor(probe.model) ?? effective;
-      final capped = known > effective
-          ? '（模型支持 ${_formatTokens(known)}，自动值封顶以控制费用）'
-          : '';
+      final capped =
+          known > effective ? '（模型支持 ${_formatTokens(known)}，自动值封顶以控制费用）' : '';
       return '$prefix按模型推断为 ${_formatTokens(effective)}$capped';
     }
     return '$prefix未识别该模型，使用 ${_formatTokens(effective)}；可手动填写';
@@ -274,223 +276,271 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
           subtitle: preset?.description,
           onBack: _handlePop,
         ),
-        body: ListView(
-          padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
-          children: [
-            const SettingsSectionTitle('基础配置'),
-            SettingsGroupCard(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              children: [
-                // Q1：玻璃卡片在内边距以内裁切，浮动标签需要内容区自己留出空间。
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _name,
-                  decoration: InputDecoration(
-                    labelText: '服务商名称 *',
-                    helperText: '自定义名称，用于列表中标识该服务商',
-                    errorText: (_submitted && _name.text.trim().isEmpty)
-                        ? '服务商名称不能为空'
-                        : null,
+        body: NexusPageLayout(
+            child: DesktopEditorLayout(
+                title: '连接配置摘要',
+                icon: Icons.hub_outlined,
+                status: _saving
+                    ? '正在保存…'
+                    : _hasChanges
+                        ? '有尚未保存的更改'
+                        : widget.config == null
+                            ? '新配置 · 尚未保存'
+                            : '配置未修改',
+                facts: [
+                  (
+                    label: '协议',
+                    value: switch (_type) {
+                      ProviderType.openaiCompatible => 'OpenAI 兼容',
+                      ProviderType.anthropic => 'Anthropic',
+                      ProviderType.gemini => 'Gemini',
+                      ProviderType.proxy => '代理'
+                    }
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<ProviderType>(
-                  initialValue: _type,
-                  decoration: const InputDecoration(labelText: '协议类型'),
-                  items: const [
-                    DropdownMenuItem(
-                      value: ProviderType.openaiCompatible,
-                      child: Text('OpenAI 兼容'),
-                    ),
-                    DropdownMenuItem(
-                      value: ProviderType.anthropic,
-                      child: Text('Anthropic'),
-                    ),
-                    DropdownMenuItem(
-                      value: ProviderType.gemini,
-                      child: Text('Gemini'),
-                    ),
-                  ],
-                  onChanged: (value) => setState(() => _type = value ?? _type),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _baseUrl,
-                  decoration: InputDecoration(
-                    labelText: 'Base URL *',
-                    helperText: 'API 端点地址，如 https://api.openai.com/v1',
-                    errorText: (_submitted && _baseUrl.text.trim().isEmpty)
-                        ? 'Base URL 不能为空'
-                        : null,
+                  (
+                    label: '当前模型',
+                    value:
+                        _model.text.trim().isEmpty ? '尚未选择' : _model.text.trim()
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _apiKey,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    labelText: 'API Key *',
-                    helperText: _apiKey.text.trim().isNotEmpty
-                        ? '已安全保存（本地存储）'
-                        : '未填写，需要填写才能调用服务',
-                    suffixIcon: SizedBox(
-                      width: 48,
-                      height: 48,
-                      child: IconButton(
-                        icon: Icon(_obscure
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined),
-                        tooltip: _obscure ? '显示密钥' : '隐藏密钥',
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                      ),
-                    ),
+                  (
+                    label: '密钥输入',
+                    value: _apiKey.text.trim().isEmpty ? '尚未填写' : '已填写 · 不在摘要展示'
                   ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ],
-            ),
-            const SettingsSectionTitle('模型选择'),
-            SettingsGroupCard(
-              children: [
-                SettingsTile(
-                  icon: Icons.view_list_rounded,
-                  iconColor: settingsMutedColor(context),
-                  title: _model.text.isEmpty ? '选择模型' : _model.text,
-                  subtitle: '查看预设模型、远端模型或添加自定义模型',
-                  onTap: _chooseModel,
-                ),
-              ],
-            ),
-            if (_status != null) ...[
-              const SizedBox(height: 12),
-              SettingsGroupCard(
-                children: [
-                  ProviderConnectionStatus(status: _status!, testing: _testing),
                 ],
-              ),
-            ],
-            const SettingsSectionTitle('高级设置'),
-            SettingsGroupCard(
-              children: [
-                SettingsTile(
-                  icon: Icons.tune_rounded,
-                  iconColor: settingsMutedColor(context),
-                  title: '高级参数',
-                  subtitle: _advanced ? '点击收起' : '调整思考程度与上下文窗口',
-                  showChevron: false,
-                  trailingWidget: Icon(
-                    _advanced ? Icons.expand_less : Icons.expand_more,
-                    color: settingsMutedColor(context),
-                  ),
-                  onTap: () => setState(() => _advanced = !_advanced),
-                ),
-                if (_advanced) ...[
-                  const SettingsDivider(indent: 16),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                notes: const [
+                  '测试连接会向所配置的服务发送请求，请先确认 API 地址可信。',
+                  '保存并启用会更新默认服务商；输入字段不会因为连接测试而自动保存。',
+                  '离开页面前仍会检查未保存修改。'
+                ],
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 36),
+                  children: [
+                    const SettingsSectionTitle('基础配置'),
+                    SettingsGroupCard(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 12),
                       children: [
-                        Text(
-                          '思考程度',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: settingsMutedColor(context),
-                          ),
-                        ),
+                        // Q1：玻璃卡片在内边距以内裁切，浮动标签需要内容区自己留出空间。
                         const SizedBox(height: 8),
-                        NexusSegmentedButton<ReasoningEffort>(
-                          segments: const [
-                            ButtonSegment(
-                              value: ReasoningEffort.auto,
-                              label: Text('自动'),
+                        TextField(
+                          controller: _name,
+                          decoration: InputDecoration(
+                            labelText: '服务商名称 *',
+                            helperText: '自定义名称，用于列表中标识该服务商',
+                            errorText: (_submitted && _name.text.trim().isEmpty)
+                                ? '服务商名称不能为空'
+                                : null,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 14),
+                        DropdownButtonFormField<ProviderType>(
+                          isExpanded: true,
+                          initialValue: _type,
+                          decoration: const InputDecoration(labelText: '协议类型'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: ProviderType.openaiCompatible,
+                              child: Text('OpenAI 兼容'),
                             ),
-                            ButtonSegment(
-                              value: ReasoningEffort.low,
-                              label: Text('低'),
+                            DropdownMenuItem(
+                              value: ProviderType.anthropic,
+                              child: Text('Anthropic'),
                             ),
-                            ButtonSegment(
-                              value: ReasoningEffort.medium,
-                              label: Text('中'),
-                            ),
-                            ButtonSegment(
-                              value: ReasoningEffort.high,
-                              label: Text('高'),
+                            DropdownMenuItem(
+                              value: ProviderType.gemini,
+                              child: Text('Gemini'),
                             ),
                           ],
-                          selected: {_reasoning},
-                          onSelectionChanged: (value) =>
-                              setState(() => _reasoning = value.first),
+                          onChanged: (value) =>
+                              setState(() => _type = value ?? _type),
                         ),
-                        const SizedBox(height: 16),
-                        ListenableBuilder(
-                          listenable: Listenable.merge(
-                              [_contextTokens, _model, _baseUrl]),
-                          builder: (context, _) => TextField(
-                            key: const ValueKey('provider-context-tokens'),
-                            controller: _contextTokens,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: '上下文窗口上限（Token）',
-                              hintText: '自动',
-                              helperText: _contextHelper(),
-                              helperMaxLines: 2,
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _baseUrl,
+                          decoration: InputDecoration(
+                            labelText: 'Base URL *',
+                            helperText: 'API 端点地址，如 https://api.openai.com/v1',
+                            errorText:
+                                (_submitted && _baseUrl.text.trim().isEmpty)
+                                    ? 'Base URL 不能为空'
+                                    : null,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                        const SizedBox(height: 14),
+                        TextField(
+                          controller: _apiKey,
+                          obscureText: _obscure,
+                          decoration: InputDecoration(
+                            labelText: 'API Key *',
+                            helperText: _apiKey.text.trim().isNotEmpty
+                                ? (widget.config != null &&
+                                        _apiKey.text == widget.config!.apiKey
+                                    ? '已保存的密钥；修改后需重新保存'
+                                    : '已填写；保存后才写入本地安全存储')
+                                : '未填写，需要填写才能调用服务',
+                            suffixIcon: SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: IconButton(
+                                icon: Icon(_obscure
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined),
+                                tooltip: _obscure ? '显示密钥' : '隐藏密钥',
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 18),
-                        Text(
-                          '费用价目（分 / 百万 Token）',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: settingsMutedColor(context),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '留空使用内置价目；缓存价格用于估算 prompt cache 节省。',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: settingsMutedColor(context),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _inputPrice,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: '输入 Token 价格',
-                            suffixText: '分 / 1M',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _outputPrice,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: '输出 Token 价格',
-                            suffixText: '分 / 1M',
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: _cachedPrice,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: '缓存 Token 价格',
-                            suffixText: '分 / 1M',
-                          ),
+                          onChanged: (_) => setState(() {}),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
+                    const SettingsSectionTitle('模型选择'),
+                    SettingsGroupCard(
+                      children: [
+                        SettingsTile(
+                          icon: Icons.view_list_rounded,
+                          iconColor: settingsMutedColor(context),
+                          title: _model.text.isEmpty ? '选择模型' : _model.text,
+                          subtitle: '查看预设模型、远端模型或添加自定义模型',
+                          onTap: _chooseModel,
+                        ),
+                      ],
+                    ),
+                    if (_status != null) ...[
+                      const SizedBox(height: 12),
+                      SettingsGroupCard(
+                        children: [
+                          ProviderConnectionStatus(
+                              status: _status!, testing: _testing),
+                        ],
+                      ),
+                    ],
+                    const SettingsSectionTitle('高级设置'),
+                    SettingsGroupCard(
+                      children: [
+                        SettingsTile(
+                          icon: Icons.tune_rounded,
+                          iconColor: settingsMutedColor(context),
+                          title: '高级参数',
+                          subtitle: _advanced ? '点击收起' : '调整思考程度与上下文窗口',
+                          showChevron: false,
+                          trailingWidget: Icon(
+                            _advanced ? Icons.expand_less : Icons.expand_more,
+                            color: settingsMutedColor(context),
+                          ),
+                          onTap: () => setState(() => _advanced = !_advanced),
+                        ),
+                        if (_advanced) ...[
+                          const SettingsDivider(indent: 16),
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '思考程度',
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeCaption,
+                                    fontWeight: FontWeight.w600,
+                                    color: settingsMutedColor(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                NexusSegmentedButton<ReasoningEffort>(
+                                  segments: const [
+                                    ButtonSegment(
+                                      value: ReasoningEffort.auto,
+                                      label: Text('自动'),
+                                    ),
+                                    ButtonSegment(
+                                      value: ReasoningEffort.low,
+                                      label: Text('低'),
+                                    ),
+                                    ButtonSegment(
+                                      value: ReasoningEffort.medium,
+                                      label: Text('中'),
+                                    ),
+                                    ButtonSegment(
+                                      value: ReasoningEffort.high,
+                                      label: Text('高'),
+                                    ),
+                                  ],
+                                  selected: {_reasoning},
+                                  onSelectionChanged: (value) =>
+                                      setState(() => _reasoning = value.first),
+                                ),
+                                const SizedBox(height: 16),
+                                ListenableBuilder(
+                                  listenable: Listenable.merge(
+                                      [_contextTokens, _model, _baseUrl]),
+                                  builder: (context, _) => TextField(
+                                    key: const ValueKey(
+                                        'provider-context-tokens'),
+                                    controller: _contextTokens,
+                                    keyboardType: TextInputType.number,
+                                    decoration: InputDecoration(
+                                      labelText: '上下文窗口上限（Token）',
+                                      hintText: '自动',
+                                      helperText: _contextHelper(),
+                                      helperMaxLines: 2,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 18),
+                                Text(
+                                  '费用价目（分 / 百万 Token）',
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeCaption,
+                                    fontWeight: FontWeight.w600,
+                                    color: settingsMutedColor(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '填写人民币单价后可启用费用硬停。留空仅用于历史估算；缓存价格用于估算节省。',
+                                  style: TextStyle(
+                                    fontSize: AppTokens.fontSizeFootnote,
+                                    color: settingsMutedColor(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                TextField(
+                                  controller: _inputPrice,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '输入 Token 价格',
+                                    suffixText: '分 / 1M',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _outputPrice,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '输出 Token 价格',
+                                    suffixText: '分 / 1M',
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _cachedPrice,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '缓存 Token 价格',
+                                    suffixText: '分 / 1M',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ))),
         bottomNavigationBar: SafeArea(
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -506,13 +556,16 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
             child: Row(
               children: [
                 Expanded(
-                  child: SizedBox(
-                    height: AppTokens.kControlHeight,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                        minHeight: DesktopTheme.maybeOf(context) == null
+                            ? AppTokens.kMinTouchTarget
+                            : AppTokens.kControlHeight),
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusControl),
+                          borderRadius: BorderRadius.circular(
+                              MobileTheme.controlRadius(context)),
                         ),
                       ),
                       onPressed: _testing ? null : _test,
@@ -528,15 +581,22 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: SizedBox(
-                    height: AppTokens.kControlHeight,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                        minHeight: DesktopTheme.maybeOf(context) == null
+                            ? AppTokens.kMinTouchTarget
+                            : AppTokens.kControlHeight),
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppPalette.brandAction,
-                        foregroundColor: Colors.white,
+                        backgroundColor:
+                            DesktopTheme.maybeOf(context)?.accent ??
+                                MobileTheme.brand(context),
+                        foregroundColor: DesktopTheme.maybeOf(context) != null
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Colors.white,
                         shape: RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppTokens.radiusControl),
+                          borderRadius: BorderRadius.circular(
+                              MobileTheme.controlRadius(context)),
                         ),
                       ),
                       onPressed: _saving ? null : _save,

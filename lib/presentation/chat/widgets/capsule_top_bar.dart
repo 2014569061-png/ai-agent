@@ -1,10 +1,10 @@
+import '../../navigation/mobile_navigation_scope.dart';
 import 'package:flutter/material.dart';
 import '../../../domain/model_failure.dart';
-import '../../motion/nexus_entrance.dart';
-import '../../theme/app_palette.dart';
 import '../../theme/app_tokens.dart';
-import '../../widgets/nexus_execution_status.dart';
+import '../../theme/desktop_theme.dart';
 import '../../widgets/glass_surface.dart';
+import '../../widgets/nexus_home_visuals.dart';
 import 'chat_execution_stage.dart';
 
 /// 顶栏统一高度常量 (56px)
@@ -12,17 +12,12 @@ const double kCapsuleTopBarHeight = AppTokens.kTopBarHeight;
 
 /// Reserve the same space in the overlay and message list at large text sizes.
 double capsuleTopBarHeight(BuildContext context) =>
-    kCapsuleTopBarHeight +
+    (DesktopTheme.maybeOf(context) != null ? 40 : kCapsuleTopBarHeight) +
     (MediaQuery.textScalerOf(context).scale(16) - 16).clamp(0.0, 48.0) * 2;
 
-/// 首页 / 对话页顶部栏（对标 DeepSeek App）。
-///
-/// 与 DeepSeek 一致的三点：
-///   1. **没有底部分隔线**，顶栏与页面融为一体；
-///   2. 左侧是自定义的两段式抽屉图标（长线 + 短线），不是通用汉堡图标；
-///   3. 右侧是「圆圈 + 加号」，不是裸加号。
-/// 新会话时中间**留空**（DeepSeek 首页不显示「新会话」这类标题），
-/// 进入具体会话后显示标题；模型、工作区和当前模式始终显示在标题下方。
+/// Phone toolbar: conversations, NEXUS/session title, and new conversation.
+/// Detailed execution settings remain available through the title selector.
+/// Desktop retains its model picker and context gauge.
 class CapsuleTopBar extends StatelessWidget {
   const CapsuleTopBar({
     super.key,
@@ -65,369 +60,251 @@ class CapsuleTopBar extends StatelessWidget {
   final bool statusActive;
   final GlassIntensity glassIntensity;
 
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? AppPalette.darkText : AppPalette.lightText;
-    final canvas = isDark ? AppPalette.darkCanvas : AppPalette.lightCanvas;
-
-    // 新会话不再回填「新会话」占位文案，保持首页中间留空。
-    final title = (sessionTitle ?? '').trim();
-    final model = (modelLabel ?? '').trim();
-    final rawWorkspace = (workspaceLabel ?? '').trim();
-    final workspace = rawWorkspace == '未选择项目' ? '' : rawWorkspace;
-    final mode = (modeLabel ?? '').trim();
-    final serviceStatusLabel = _serviceStatusLabel(modelServiceStatus);
-    final effectiveStage = runningStageKind == null ? serviceStatusLabel : null;
-    final contextUsage = maxContextTokens > 0
-        ? '上下文 ${_formatTokens(currentContextTokens)} / ${_formatTokens(maxContextTokens)}'
-        : '';
-    final metaParts = [
-      if (model.isNotEmpty) model,
-      if (maxContextTokens > 0 &&
-          currentContextTokens / maxContextTokens >= 0.85)
-        '上下文偏高',
-    ];
-    final contextLabel = metaParts.join(' · ');
-    final metaColor =
-        isDark ? AppPalette.darkTextMuted : AppPalette.lightTextMuted;
-
-    final tokenRatio = maxContextTokens > 0
-        ? (currentContextTokens / maxContextTokens).clamp(0.0, 1.0)
-        : 0.0;
-    final gaugeDotColor = tokenRatio >= 0.9
-        ? AppPalette.danger
-        : tokenRatio >= 0.7
-            ? AppPalette.warning
-            : (isDark ? AppPalette.brand : AppPalette.brandAction);
-
-    final content = SizedBox(
+  Widget _desktopBar(BuildContext context, DesktopTheme colors) {
+    final theme = Theme.of(context);
+    final isRunning = statusActive;
+    final offlineLabel = _serviceStatusLabel(modelServiceStatus);
+    return Container(
       height: capsuleTopBarHeight(context),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: colors.canvas,
+        border: Border(bottom: BorderSide(color: colors.border)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
           children: [
-            // 左侧：48x48 触控区，内部 36x36 微晶磨砂圆形抽屉按钮
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: Semantics(
-                label: '打开会话列表',
-                button: true,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: onMenu,
-                    borderRadius: BorderRadius.circular(24),
-                    child: Center(
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.white.withValues(alpha: 0.65),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.16)
-                                : Colors.white.withValues(alpha: 0.90),
-                            width: 1.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black
-                                  .withValues(alpha: isDark ? 0.15 : 0.04),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1.5),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: CustomPaint(
-                            size: const Size(18, 12),
-                            painter: _DrawerGlyphPainter(color: textColor),
+            IconButton(
+              tooltip: '打开会话列表',
+              onPressed: onMenu,
+              icon: const Icon(Icons.view_sidebar_outlined, size: 16),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: onTitleTap ?? onModelTap,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          (sessionTitle ?? '').trim().isEmpty
+                              ? '新会话'
+                              : sessionTitle!,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: (sessionTitle ?? '').trim().isEmpty
+                                ? FontWeight.w400
+                                : FontWeight.w600,
+                            color: (sessionTitle ?? '').trim().isEmpty
+                                ? colors.muted
+                                : colors.text,
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
             ),
-
-            // 中间：标题 + 始终可见的模型 / 模式微晶胶囊
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (title.isNotEmpty)
-                    GestureDetector(
-                      onTap: onTitleTap ?? onModelTap,
-                      behavior: HitTestBehavior.opaque,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (statusActive) ...[
-                            Container(
-                              width: 6,
-                              height: 6,
-                              margin: const EdgeInsets.only(right: 6),
-                              decoration: const BoxDecoration(
-                                color: AppPalette.brand,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ],
-                          Flexible(
-                            child: Text(
-                              title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w600,
-                                height: 1.25,
-                                color: textColor,
-                              ),
-                            ),
-                          ),
-                        ],
+            if (isRunning && constraints.maxWidth > 550) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: colors.selected,
+                  borderRadius: BorderRadius.circular(4),
+                  border:
+                      Border.all(color: colors.accent.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 8,
+                      height: 8,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: colors.accent,
                       ),
                     ),
-                  if (contextLabel.isNotEmpty ||
-                      mode.isNotEmpty ||
-                      (runningStage != null && runningStage!.isNotEmpty) ||
-                      effectiveStage != null) ...[
-                    if (title.isNotEmpty) const SizedBox(height: 2),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.06)
-                            : Colors.white.withValues(alpha: 0.45),
-                        borderRadius:
-                            BorderRadius.circular(AppTokens.radiusPill),
-                        border: Border.all(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.10)
-                              : Colors.white.withValues(alpha: 0.65),
-                          width: 0.8,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (runningStage != null &&
-                              runningStage!.isNotEmpty) ...[
-                            Flexible(
-                              child: NexusExecutionStatus(
-                                compact: true,
-                                state: _mapRunningStage(runningStageKind),
-                                label: runningStage!,
-                              ),
-                            ),
-                            if (contextLabel.isNotEmpty || mode.isNotEmpty)
-                              Text(
-                                ' · ',
-                                style:
-                                    TextStyle(fontSize: 11, color: metaColor),
-                              ),
-                          ] else if (effectiveStage != null) ...[
-                            Flexible(
-                              child: NexusExecutionStatus(
-                                compact: true,
-                                state: NexusExecutionState.failed,
-                                label: effectiveStage,
-                              ),
-                            ),
-                            if (contextLabel.isNotEmpty || mode.isNotEmpty)
-                              Text(
-                                ' · ',
-                                style:
-                                    TextStyle(fontSize: 11, color: metaColor),
-                              ),
-                          ],
-                          if (contextLabel.isNotEmpty)
-                            Flexible(
-                              child: Tooltip(
-                                message: [model, workspace, contextUsage]
-                                    .where((v) => v.isNotEmpty)
-                                    .join(' · '),
-                                child: GestureDetector(
-                                  onTap: onContextGaugeTap ??
-                                      onTitleTap ??
-                                      onModelTap ??
-                                      onWorkspaceTap,
-                                  behavior: HitTestBehavior.opaque,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      if (maxContextTokens > 0)
-                                        Container(
-                                          width: 5,
-                                          height: 5,
-                                          margin:
-                                              const EdgeInsets.only(right: 4),
-                                          decoration: BoxDecoration(
-                                            color: gaugeDotColor,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                      Flexible(
-                                        child: Text(
-                                          contextLabel,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w400,
-                                            height: 1.25,
-                                            color: metaColor,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (contextLabel.isNotEmpty && mode.isNotEmpty)
-                            Text(
-                              ' · ',
-                              style: TextStyle(fontSize: 11, color: metaColor),
-                            ),
-                          if (mode.isNotEmpty)
-                            Semantics(
-                              button: onModeTap != null,
-                              label: '当前模式：$mode',
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: onModeTap,
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 2),
-                                    child: Text(
-                                      mode,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        height: 1.25,
-                                        color: onModeTap == null
-                                            ? metaColor
-                                            : (isDark
-                                                ? AppPalette.brand
-                                                : AppPalette.brandAction),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
+                    const SizedBox(width: 6),
+                    Text(
+                      runningStage?.isNotEmpty == true ? runningStage! : '运行中',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.accent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],
-                ],
-              ),
-            ),
-
-            // 右侧：48x48 触控区，内部 36x36 微晶磨砂圆形加号按钮
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: Semantics(
-                label: '新建对话',
-                button: true,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: onNewChat,
-                    borderRadius: BorderRadius.circular(24),
-                    child: Center(
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.08)
-                              : Colors.white.withValues(alpha: 0.65),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.16)
-                                : Colors.white.withValues(alpha: 0.90),
-                            width: 1.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black
-                                  .withValues(alpha: isDark ? 0.15 : 0.04),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1.5),
-                            ),
-                          ],
-                        ),
-                        alignment: Alignment.center,
-                        child:
-                            Icon(Icons.add_rounded, size: 20, color: textColor),
-                      ),
-                    ),
-                  ),
                 ),
               ),
+            ],
+            if (offlineLabel != null && constraints.maxWidth > 500) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color:
+                      theme.colorScheme.errorContainer.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                      color: theme.colorScheme.error.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 12, color: theme.colorScheme.error),
+                    const SizedBox(width: 4),
+                    Text(
+                      offlineLabel,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(width: 8),
+            Tooltip(
+              message: '选择模型',
+              child: TextButton(
+                onPressed: onModelTap,
+                style: TextButton.styleFrom(
+                  foregroundColor: colors.muted,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    side: BorderSide(color: colors.border),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 140),
+                      child: Text(
+                        (modelLabel ?? '').isEmpty ? '选择模型' : modelLabel!,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontFamily: 'Consolas',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.expand_more, size: 14),
+                  ],
+                ),
+              ),
+            ),
+            if (onContextGaugeTap != null)
+              IconButton(
+                tooltip:
+                    '上下文 ${_formatTokens(currentContextTokens)} / ${_formatTokens(maxContextTokens)}',
+                onPressed: onContextGaugeTap,
+                icon: Icon(
+                  Icons.data_usage_outlined,
+                  size: 16,
+                  color: currentContextTokens /
+                              maxContextTokens.clamp(1, 1 << 30) >
+                          .85
+                      ? Theme.of(context).colorScheme.error
+                      : colors.muted,
+                ),
+              ),
+            IconButton(
+              tooltip: '新会话',
+              onPressed: onNewChat,
+              icon: const Icon(Icons.add, size: 18),
             ),
           ],
         ),
       ),
     );
+  }
 
-    if (glassIntensity == GlassIntensity.flat) {
-      return Container(
-        height: capsuleTopBarHeight(context),
-        decoration: BoxDecoration(
-          color: canvas,
-          borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-        ),
-        child: content,
-      );
-    }
+  @override
+  Widget build(BuildContext context) {
+    final desktop = DesktopTheme.maybeOf(context);
+    if (desktop != null) return _desktopBar(context, desktop);
+    final scheme = Theme.of(context).colorScheme;
+    final textColor = scheme.onSurface;
+    final iconColor = scheme.onSurfaceVariant;
 
-    // M2：首屏入场只位移不淡入（玻璃放进 Opacity 缓冲区会闪烁），每进程一次。
-    return NexusEntrance(
-      offset: const Offset(0, -8),
-      fade: false,
-      onceId: 'chat_top_bar',
-      child: GlassSurface(
-        role: GlassRole.navigation,
-        variant: GlassVariant.regular,
-        intensity: glassIntensity,
-        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-        blurSigma: 24,
-        refraction: 16,
-        edgeWidth: 16,
-        gloss: 0.42,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.22 : 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        child: content,
+    final title = (sessionTitle ?? '').trim();
+    final service = _serviceStatusLabel(modelServiceStatus);
+    return SizedBox(
+      height: capsuleTopBarHeight(context),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(children: [
+          if (MobileNavigationScope.maybeOf(context) != null)
+            const MobileNavigationMenuButton()
+          else
+            IconButton(
+                tooltip: '打开会话列表',
+                onPressed: onMenu,
+                icon: NexusHomeIcon(NexusHomeSymbol.menu, color: iconColor)),
+          Expanded(
+              child: InkWell(
+            onTap: onTitleTap ?? onModelTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Flexible(
+                      child: Tooltip(
+                          message: title.isEmpty ? '新对话' : title,
+                          child: Text(title.isEmpty ? '新对话' : title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w500,
+                                  color: textColor,
+                                  letterSpacing: 0)))),
+                  const SizedBox(width: 3),
+                  Icon(Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ]),
+                if (service != null)
+                  Text(service,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.error)),
+              ]),
+            ),
+          )),
+          IconButton(
+              tooltip: '新建对话',
+              onPressed: onNewChat,
+              icon: NexusHomeIcon(NexusHomeSymbol.compose, color: iconColor)),
+        ]),
       ),
     );
+  }
+
+  static String _formatTokens(int value) {
+    if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(value >= 10000 ? 0 : 1)}k';
+    }
+    return '$value';
   }
 
   static String? _serviceStatusLabel(ModelServiceStatus status) =>
@@ -439,51 +316,4 @@ class CapsuleTopBar extends StatelessWidget {
         ModelServiceStatus.billing => '模型额度不足',
         ModelServiceStatus.online || ModelServiceStatus.unknown => null,
       };
-
-  static NexusExecutionState _mapRunningStage(ChatExecutionStage? stage) {
-    return switch (stage) {
-      null => NexusExecutionState.idle,
-      ChatExecutionStage.waitingForUser => NexusExecutionState.waitingForUser,
-      ChatExecutionStage.preparing => NexusExecutionState.preparing,
-      ChatExecutionStage.running => NexusExecutionState.running,
-      ChatExecutionStage.succeeded => NexusExecutionState.succeeded,
-      ChatExecutionStage.failed => NexusExecutionState.failed,
-      ChatExecutionStage.cancelled => NexusExecutionState.cancelled,
-    };
-  }
-
-  static String _formatTokens(int value) {
-    if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M';
-    if (value >= 1000) {
-      return '${(value / 1000).toStringAsFixed(value >= 10000 ? 0 : 1)}k';
-    }
-    return '$value';
-  }
-}
-
-/// 两段式抽屉图标：上方长线 + 下方短线，左对齐。
-class _DrawerGlyphPainter extends CustomPainter {
-  const _DrawerGlyphPainter({required this.color});
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-
-    const gap = 6.0;
-    final top = (size.height - gap) / 2;
-    final bottom = top + gap;
-
-    canvas.drawLine(Offset(0, top), Offset(size.width, top), paint);
-    canvas.drawLine(
-        Offset(0, bottom), Offset(size.width * 0.62, bottom), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _DrawerGlyphPainter oldDelegate) =>
-      oldDelegate.color != color;
 }
