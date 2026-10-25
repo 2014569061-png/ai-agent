@@ -44,6 +44,14 @@ class _Config extends ProviderConfigStore {
   Future<List<ProviderConfig>> loadAll() async => [await load()];
 }
 
+Future<void> _closeCancelledResponse(HttpResponse response) async {
+  try {
+    await response.close();
+  } catch (_) {
+    // The real client has already cancelled this deliberately open SSE stream.
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
@@ -131,7 +139,10 @@ void main() {
       // create records in the restored/cleared database.
       try {
         response?.write('data: {"choices":[{"delta":{"content":"LATE"}}]}\n\n');
-        await response?.close();
+        // A disconnected peer need not drain the HTTP sink on every platform.
+        // The server teardown force-closes its sockets; only the real client
+        // cancellation above, not a server close, may finish `sending`.
+        if (response != null) unawaited(_closeCancelledResponse(response!));
       } catch (_) {/* disconnected by cancellation */}
       await pumpEventQueue();
       expect(container.read(chatControllerProvider).messages, isEmpty);
