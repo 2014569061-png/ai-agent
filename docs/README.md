@@ -10,6 +10,7 @@
 - [工作区整理执行记录](mcp-workspace-cleanup-executed-2026-09-22.md)
 - [工作区目录与归档约定](workspace-layout.md)
 - [workspace-organization-2026-10-25.html](workspace-organization-2026-10-25.html)
+- [工作区验证记录 · 2026-10-25](workspace-verification-2026-10-25.md)
 
 ## Android 与界面
 

@@ -4,9 +4,9 @@
 .gitignore,项目入口与配置,4006
 .metadata,项目入口与配置,998
 AGENTS.md,项目入口与配置,4827
-CHANGELOG.md,项目入口与配置,27983
-HANDOFF.MD,项目入口与配置,15088
-README.md,项目入口与配置,19015
+CHANGELOG.md,项目入口与配置,28551
+HANDOFF.MD,项目入口与配置,15843
+README.md,项目入口与配置,20742
 THIRD_PARTY_NOTICES.md,项目入口与配置,1162
 analysis_options.yaml,项目入口与配置,2216
 android-preview.bat,项目入口与配置,126
@@ -112,7 +112,7 @@ assets/skills/mobile-dev-basics/SKILL.md,运行资源,1352
 assets/skills/technical-writing/SKILL.md,运行资源,987
 assets/skills/testing/SKILL.md,运行资源,942
 build-apk.bat,项目入口与配置,22379
-docs/README.md,工程文档 / 工程、安全与运行时,13656
+docs/README.md,工程文档 / 工程、安全与运行时,13734
 docs/agent-comparison/README.md,工程文档 / 研究与对比,21360
 docs/agent-comparison/evidence-external.md,工程文档 / 研究与对比,187198
 docs/agent-comparison/evidence-gaps.md,工程文档 / 研究与对比,47177
@@ -400,9 +400,10 @@ docs/ui-complex-states-2026-10-16.md,工程文档 / Android 与界面,4140
 docs/ui-desktop-live-2026-10-16.md,工程文档 / Android 与界面,12699
 docs/ui-improvement-handoff.md,工程文档 / Android 与界面,31059
 docs/ui-runtime-repair-2026-10-16.md,工程文档 / Android 与界面,7341
-docs/workspace-file-index.csv,工程文档 / 工作区维护,101335
+docs/workspace-file-index.csv,工程文档 / 工作区维护,101487
 docs/workspace-layout.md,工程文档 / 工作区维护,7220
-docs/workspace-organization-2026-10-25.html,工程文档 / 工作区维护,173810
+docs/workspace-organization-2026-10-25.html,工程文档 / 工作区维护,174544
+docs/workspace-verification-2026-10-25.md,工程文档 / 工作区维护,12515
 lib/application/agent_draft_service.dart,产品源码,13616
 lib/application/agent_executor.dart,产品源码,38941
 lib/application/agent_loop/agent_loop_hooks.dart,产品源码,4333

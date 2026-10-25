@@ -2,7 +2,28 @@
 
 面向移动端与 Windows 桌面端的多模型 AI Agent 工作台，当前源码版本为 **v0.9.0+95**。
 
-工程导航：[工作区目录与归档约定](docs/workspace-layout.md) · [文档分类索引](docs/README.md) · [工具分类索引](tool/README.md) · [2026-10-25 整理报告](docs/workspace-organization-2026-10-25.html)。
+支持 Android 与 Windows，提供多模型对话、Agent 工具执行、项目工作区及审批记录。
+
+| 入口 | 内容 |
+|---|---|
+| [下载已发布版本](https://github.com/2014569061-png/ai-agent/releases) | APK、Windows 交付包与对应版本说明，以各 Release 实际附件为准。 |
+| [本地运行](#本地运行) / [Windows 桌面端](#windows-桌面端) | 开发环境、Android 模拟器预览与 Windows 构建。 |
+| [文档分类](docs/README.md) / [工具分类](tool/README.md) | 设计规范、验收记录、构建脚本与工程工具。 |
+| [工作区约定](docs/workspace-layout.md) / [整理报告](docs/workspace-organization-2026-10-25.html) | 目录职责、归档位置与本轮清理结果。 |
+
+## 当前验证状态
+
+2026-10-25 本机检查结果如下；当前源码仍在开发中，安装包发布按[发布审查门禁](#发布审查门禁)执行。
+
+| 检查 | 结果 |
+|---|---|
+| 静态分析 | `flutter analyze --no-pub` 无问题。 |
+| 静默异常门禁 | 未记录意图的空 catch 为 0，通过。 |
+| 全量测试 | 首轮 2,740 通过、69 失败；其中 64 项与整理前失败记录一致。 |
+| 定向复测 | 另 5 个环境 / 并发相关失败所在的 4 个测试文件，串行复测 56 项全部通过。 |
+| 手写代码覆盖率 | 59.55%，超过 55% 门槛。 |
+
+全量测试尚未全部通过。完整结果、复测方法和待处理清单见[验证记录](docs/workspace-verification-2026-10-25.md)。
 
 ## 核心能力
 
@@ -208,15 +229,18 @@ build/app/outputs/flutter-apk/app-release.apk
 ## 项目结构
 
 ```text
-lib/       应用源码
-assets/    图片与品牌资源
-android/   Android 工程
+lib/           应用源码、领域模型与界面
+test/          自动化回归与测试夹具
+assets/        字体、图片、内置技能与 Linux 运行资源
+shaders/       Flutter 着色器
+android/       Android 原生工程
+windows/       Windows 原生工程与安装器
+tool/          构建、预览、验收与质量门禁
+docs/          工程文档、设计预览与分类索引
+architecture/  架构决策记录
+.github/       CI 与发布工作流
 ```
 
 ## 发布版本
 
-GitHub Releases：
-
-https://github.com/2014569061-png/ai-agent/releases
-
-下载对应版本的 `app-release.apk`，即可在 Android 设备上安装。
+前往 [GitHub Releases](https://github.com/2014569061-png/ai-agent/releases) 查看已发布版本。Android 安装包与 Windows ZIP 的可用性以该版本附件为准，下载后核对对应 SHA-256 校验文件。
