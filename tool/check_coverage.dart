@@ -13,7 +13,7 @@ import 'dart:io';
 /// 生成文件不是人写的、也不该由人写测试，把它算进门槛只会让门槛失去意义。
 void main(List<String> args) {
   final path = args.isEmpty ? 'coverage/lcov.info' : args.first;
-  final minimum = args.length > 1 ? double.parse(args[1]) : 48.5;
+  final minimum = args.length > 1 ? double.parse(args[1]) : 55.0;
   final file = File(path);
   if (!file.existsSync()) {
     stderr.writeln('Coverage file not found: $path');

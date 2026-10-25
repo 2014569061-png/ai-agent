@@ -1,0 +1,122 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Browser DOM budget checks</title>
+<style>body{font:14px monospace}iframe{width:1100px;height:600px;border:1px solid #ccc}pre{white-space:pre-wrap}</style>
+<h1>Fixed local DOM budget checks — no model calls</h1><pre id="report">Running…</pre>
+<script>
+window.runBudgetChecks = async function(source) {
+  const cases = [];
+  const assert = (value, message) => { if (!value) throw new Error(message); };
+  async function check(name, build, verify) {
+    const iframe = document.createElement('iframe');
+    document.body.append(iframe);
+    const w = iframe.contentWindow, d = w.document;
+    d.open(); d.write('<!doctype html><html><head><title>Budget fixture</title></head><body></body></html>'); d.close();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const invoke = w.eval('(' + source + ')');
+    try {
+      await build(d, w);
+      const start = performance.now();
+      const snapshot = invoke({action: 'observe', snapshotId: 'budget-fixture'});
+      const elapsedMs = performance.now() - start;
+      assert(snapshot.ok, 'observation failed');
+      assert(snapshot.observationBudget.visitedNodes <= 8000, 'node budget exceeded');
+      assert(snapshot.observationBudget.scannedTextChars <= 24000, 'scan budget exceeded');
+      assert(snapshot.text.length <= 12000, 'text budget exceeded');
+      assert(snapshot.nodes.length <= 120, 'control budget exceeded');
+      assert(snapshot.truncated === (snapshot.truncationReasons.length > 0), 'inconsistent truncation');
+      await verify(snapshot, d, w, invoke);
+      cases.push({name, passed: true, elapsedMs: Math.round(elapsedMs * 100) / 100,
+        visitedNodes: snapshot.observationBudget.visitedNodes,
+        scannedTextChars: snapshot.observationBudget.scannedTextChars,
+        reasons: snapshot.truncationReasons});
+    } catch (e) { cases.push({name, passed: false, error: String(e.message)}); }
+    finally { iframe.remove(); }
+  }
+  const reason = (s, value) => assert(s.truncationReasons.includes(value), 'missing ' + value);
+  await check('normal_text_and_associated_label', d => {
+    d.body.innerHTML = '<h1>Ordinary page</h1><label for="q">Search phrase</label><input id="q"><button>Apply</button>';
+  }, s => {
+    assert(s.text.includes('Ordinary page'), 'body missing');
+    assert(s.nodes.some(n => n.label === 'Search phrase' && n.editable), 'associated label missing');
+    assert(s.nodes.some(n => n.label === 'Apply'), 'button label missing');
+    assert(!s.truncated, 'small page falsely truncated');
+  });
+  await check('large_sibling_list', d => {
+    const f = d.createDocumentFragment();
+    for (let i = 0; i < 15000; i++) f.append(d.createElement('span'));
+    d.body.append(f);
+  }, s => { reason(s, 'node_budget'); assert(s.observationBudget.visitedNodes === 8000, 'wrong node count'); });
+  await check('sparse_comments_count_toward_node_budget', d => {
+    const f = d.createDocumentFragment();
+    for (let i = 0; i < 10000; i++) f.append(d.createComment('empty'));
+    d.body.append(f, d.createTextNode('UNVISITED_TAIL'));
+  }, s => { reason(s, 'node_budget'); assert(!s.text.includes('UNVISITED_TAIL'), 'read beyond budget'); });
+  await check('many_open_roots_share_node_budget', d => {
+    for (let i = 0; i < 90; i++) {
+      const host = d.createElement('div'), root = host.attachShadow({mode: 'open'});
+      for (let j = 0; j < 150; j++) root.append(d.createComment('empty'));
+      d.body.append(host);
+    }
+  }, s => reason(s, 'node_budget'));
+  await check('deep_document', d => {
+    let parent = d.body;
+    for (let i = 0; i < 150; i++) { const el = d.createElement('div'); parent.append(el); parent = el; }
+    parent.append(d.createTextNode('DEEP_TAIL'));
+  }, s => { reason(s, 'depth_budget'); assert(!s.text.includes('DEEP_TAIL'), 'depth bypass'); });
+  await check('giant_text_node', d => d.body.append(d.createTextNode('中'.repeat(1000000))), s => {
+    reason(s, 'text_scan_budget'); reason(s, 'text_output_budget');
+    assert(s.observationBudget.scannedTextChars === 24000, 'wrong scan count');
+    assert(s.text.length === 12000, 'wrong output count');
+  });
+  await check('whitespace_scan_is_bounded', d => d.body.append(d.createTextNode(' '.repeat(1000000) + 'LATE')), s => {
+    reason(s, 'text_scan_budget'); assert(s.text === '', 'scanned unbounded suffix');
+  });
+  await check('many_text_nodes_share_scan_budget', d => {
+    for (let i = 0; i < 20; i++) d.body.append(d.createTextNode('x'.repeat(2000)));
+  }, s => { reason(s, 'text_scan_budget'); assert(s.observationBudget.scannedTextChars === 24000, 'per-node reset'); });
+  await check('emoji_prefix_preserves_surrogates', d => d.body.append(d.createTextNode('x' + '😀'.repeat(30000))), s => {
+    reason(s, 'text_output_budget');
+    assert(!/[\uD800-\uDBFF]$/.test(s.text), 'dangling surrogate');
+  });
+  await check('controls_do_not_stop_body_observation', d => {
+    for (let i = 0; i < 130; i++) {
+      const b = d.createElement('button'); b.style.cssText = 'width:6px;height:6px;padding:0;border:0'; d.body.append(b);
+    }
+    d.body.append(d.createTextNode('BODY_AFTER_CONTROLS'));
+  }, s => { reason(s, 'control_budget'); assert(s.nodes.length === 120, 'wrong count'); assert(s.text.includes('BODY_AFTER_CONTROLS'), 'body stopped early'); });
+  await check('hidden_and_editable_values_excluded', d => {
+    d.body.innerHTML = '<div hidden>HIDDEN_SENTINEL</div><textarea>EDIT_SENTINEL</textarea><input value="INPUT_SENTINEL"><p>Public text</p>';
+  }, s => {
+    const encoded = JSON.stringify(s);
+    for (const value of ['HIDDEN_SENTINEL', 'EDIT_SENTINEL', 'INPUT_SENTINEL']) assert(!encoded.includes(value), 'private value returned');
+    assert(s.text.includes('Public text'), 'public body missing');
+  });
+  await check('offscreen_prose_still_observed', d => {
+    d.body.innerHTML = '<div style="height:2000px"></div><p>Offscreen prose</p>';
+  }, s => assert(s.text.includes('Offscreen prose'), 'body scope changed to viewport only'));
+  await check('open_shadow_labels_actions_and_staleness', d => {
+    const host = d.createElement('div'); d.body.append(host);
+    host.attachShadow({mode:'open'}).innerHTML = '<label for="q">Shadow label</label><input id="q"><button>Apply shadow</button><p>Shadow prose</p>';
+  }, async (s, d, w, invoke) => {
+    assert(s.text.includes('Shadow prose'), 'shadow body missing');
+    const input = s.nodes.find(n => n.label === 'Shadow label');
+    assert(input, 'shadow associated label missing');
+    const result = invoke({action:'type', snapshotId:s.snapshotId, nodeId:input.id, text:'safe'});
+    assert(result.ok && d.body.firstChild.shadowRoot.getElementById('q').value === 'safe', 'shadow input failed');
+    assert(invoke({action:'click', snapshotId:s.snapshotId, nodeId:input.id}).code === 'REVISION_CONFLICT', 'old snapshot accepted');
+  });
+  await check('shadow_mutation_invalidates_snapshot', d => {
+    const host = d.createElement('div'); d.body.append(host);
+    host.attachShadow({mode:'open'}).innerHTML = '<button>Stable target</button>';
+  }, (s, d, w, invoke) => {
+    d.body.firstChild.shadowRoot.firstChild.textContent = 'Different action';
+    assert(invoke({action:'click',snapshotId:s.snapshotId,nodeId:s.nodes[0].id}).code === 'REVISION_CONFLICT', 'shadow mutation ignored');
+  });
+  return {type:'BrowserDomBudgetChecks', modelCalls:0, total:cases.length,
+    passed:cases.filter(c => c.passed).length, cases};
+};
+window.budgetChecksDone = fetch('../android/app/src/main/assets/browser_dom.js')
+  .then(r => { if (!r.ok) throw new Error('Source unavailable'); return r.text(); })
+  .then(window.runBudgetChecks)
+  .then(result => { window.budgetChecksResult = result; document.getElementById('report').textContent = JSON.stringify(result, null, 2); return result; })
+  .catch(error => { document.getElementById('report').textContent = String(error); throw error; });
+</script></html>
