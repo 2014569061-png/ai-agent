@@ -5,9 +5,9 @@ import 'package:mobile_agent/infrastructure/database/app_database.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('schemaVersion 已升至 27', () {
+  test('schemaVersion 已升至 32', () {
     final db = AppDatabase(NativeDatabase.memory());
-    expect(db.schemaVersion, 27);
+    expect(db.schemaVersion, 32);
     db.close();
   });
 
