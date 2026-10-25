@@ -178,18 +178,15 @@ void main() {
         greaterThanOrEqualTo(4.5));
   });
 
-  testWidgets('空状态页挂载了光晕，且在内容之下', (tester) async {
+  testWidgets('手机欢迎页保持纯白正文且不挂载装饰光晕', (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.light(),
       home: const Scaffold(body: ChatEmptyState()),
     ));
     await tester.pumpAndSettle();
-    expect(find.byType(AmbientGlow), findsOneWidget);
-    final stack = tester.widget<Stack>(find
-        .ancestor(of: find.byType(AmbientGlow), matching: find.byType(Stack))
-        .first);
-    final first = stack.children.first;
-    expect(first, isA<Positioned>());
-    expect((first as Positioned).child, isA<AmbientGlow>());
+    expect(find.byType(AmbientGlow), findsNothing);
+    expect(find.text('我是 NEXUS，很高兴见到你'), findsOneWidget);
+    expect(find.text('整理一份资料'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

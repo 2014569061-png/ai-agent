@@ -24,6 +24,8 @@ void main() {
 
     await tester.tap(find.text('打开工具箱'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('审批策略'), 180,
+        scrollable: find.byType(Scrollable).last);
     await tester.tap(find.text('审批策略'));
     await tester.pumpAndSettle();
 

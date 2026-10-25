@@ -24,7 +24,7 @@ void main() {
       databaseProvider.overrideWith((ref) async => db),
     ]);
     final controller = container.read(chatControllerProvider.notifier);
-    await pumpEventQueue();
+    await controller.initialized;
     return (db, container, controller);
   }
 

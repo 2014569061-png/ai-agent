@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_agent/presentation/theme/desktop_theme.dart';
 
 import 'package:mobile_agent/application/providers.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
@@ -14,7 +15,7 @@ import 'package:mobile_agent/presentation/navigation/desktop_jobs_strip.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final now = DateTime(2026, 10, 15, 12);
+  final now = DateTime.now();
 
   setUp(() {
     SharedPreferences.setMockInitialValues(const <String, Object>{});
@@ -52,6 +53,7 @@ void main() {
     await tester.pumpWidget(UncontrolledProviderScope(
       container: container,
       child: MaterialApp(
+        theme: DesktopTheme.apply(ThemeData.light()),
         home: Scaffold(
           body: const SizedBox.expand(),
           bottomNavigationBar: DesktopJobsStrip(

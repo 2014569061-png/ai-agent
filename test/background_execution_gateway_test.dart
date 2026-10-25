@@ -16,8 +16,28 @@ void main() {
 
   late AppDatabase db;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(NativeDatabase.memory());
+    final now = DateTime.now();
+    for (final id in [
+      'task-1',
+      'task-heartbeat',
+      'task-live',
+      'task-lost',
+      'task-other'
+    ]) {
+      await db.into(db.tasks).insert(Task(
+          id: id,
+          conversationId: '',
+          stateRevision: 0,
+          type: 'test',
+          status: 'pending',
+          requestJson: '{}',
+          progressJson: '{}',
+          resumeCount: 0,
+          createdAt: now,
+          updatedAt: now));
+    }
   });
 
   tearDown(() async {
@@ -101,7 +121,8 @@ void main() {
     );
   });
 
-  testWidgets('consecutive heartbeat failures cancel the live run', (tester) async {
+  testWidgets('consecutive heartbeat failures cancel the live run',
+      (tester) async {
     final gateway = BackgroundExecutionGateway(
       leases: _ThrowingLeases(),
       heartbeatInterval: const Duration(milliseconds: 40),
@@ -141,7 +162,8 @@ void main() {
     expect(result.status, RunStatus.cancelled);
   });
 
-  testWidgets('a lost workspace lease cancels the live run immediately', (tester) async {
+  testWidgets('a lost workspace lease cancels the live run immediately',
+      (tester) async {
     final gateway = BackgroundExecutionGateway(
       leases: _LostLeases(),
       heartbeatInterval: const Duration(milliseconds: 40),

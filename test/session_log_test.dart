@@ -51,8 +51,8 @@ List<UnifiedEvent> _text(String text) => [
 List<UnifiedEvent> _tool(String id) => [
       const TextDeltaEvent('computing'),
       const ReasoningDeltaEvent('need calc'),
-      ToolCallEvent(
-          ToolCall(id: id, name: 'calculator', arguments: const {'a': 1, 'b': 2})),
+      ToolCallEvent(ToolCall(
+          id: id, name: 'calculator', arguments: const {'a': 1, 'b': 2})),
       const CompletedEvent(stopReason: StopReason.toolUse),
     ];
 
@@ -109,7 +109,8 @@ void main() {
         role: MessageRole.assistant,
         parts: const [
           MessagePart.text('hello'),
-          MessagePart.image('data:image/png;base64,AAAA', mimeType: 'image/png'),
+          MessagePart.image('data:image/png;base64,AAAA',
+              mimeType: 'image/png'),
           MessagePart.file('/tmp/a.txt', mimeType: 'text/plain'),
         ],
         toolCalls: const [
@@ -118,15 +119,17 @@ void main() {
             name: 'calculator',
             arguments: {
               'a': 1,
-              'nested': {'z': 1, 'y': [1, 2]}
+              'nested': {
+                'z': 1,
+                'y': [1, 2]
+              }
             },
             providerMetadata: {'thoughtSignature': 'sig'},
           ),
         ],
         reasoning: 'because',
       );
-      final decoded =
-          ChatMessageCodec.decode(ChatMessageCodec.encode(message));
+      final decoded = ChatMessageCodec.decode(ChatMessageCodec.encode(message));
       expect(ChatMessageCodec.canonicalJson(decoded),
           ChatMessageCodec.canonicalJson(message));
       expect(decoded.toolCalls.single.thoughtSignature, 'sig');
@@ -135,7 +138,9 @@ void main() {
 
     test('content key ignores display metadata but not content', () {
       final a = ChatMessage(
-          id: 'x', role: MessageRole.user, parts: const [MessagePart.text('hi')]);
+          id: 'x',
+          role: MessageRole.user,
+          parts: const [MessagePart.text('hi')]);
       final b = ChatMessage(
         id: 'y',
         role: MessageRole.user,
@@ -172,7 +177,8 @@ void main() {
 
       expect(h.provider.sent, hasLength(3));
       final derived = log.requestsFor('run-1');
-      expect(derived.map(_canon).toList(), h.provider.sent.map(_canon).toList());
+      expect(
+          derived.map(_canon).toList(), h.provider.sent.map(_canon).toList());
       expect(log.lastTurnStatus, 'completed');
       expect(log.unsealedRuns, isEmpty);
 
@@ -186,12 +192,14 @@ void main() {
 
     test('steering and executor-injected messages are captured', () async {
       final controller = AgentRunController()..steer('prefer integers');
-      final h = _Harness([_text('first'), _tool('c1'), _text('done')]);
+      final h = _Harness([_tool('c1'), _text('done')]);
       final log = await h.run([_user('go')], controller: controller);
       expect(log.requestsFor('run-1').map(_canon).toList(),
           h.provider.sent.map(_canon).toList());
-      final second = log.requestsFor('run-1')[1];
-      expect(second.last.text, contains('用户补充指令：prefer integers'));
+      final requests = log.requestsFor('run-1');
+      expect(requests, hasLength(2));
+      expect(requests.first.last.text, contains('用户补充指令：prefer integers'));
+      expect(requests.last.any((m) => m.role == MessageRole.tool), isTrue);
     });
 
     test('a budget pause logs the resumable context', () async {
@@ -238,18 +246,18 @@ void main() {
       final store = InMemorySessionEventStore();
       final first = _Harness([_tool('c1'), _text('done')], store: store);
       final log1 = await first.run([_user('1+2')]);
-      final messagesAfterRun1 = log1.events
-          .where((e) => e.type == SessionEventType.message)
-          .length;
+      final messagesAfterRun1 =
+          log1.events.where((e) => e.type == SessionEventType.message).length;
       // user, assistant(tool call), tool result, final assistant
       expect(messagesAfterRun1, 4);
 
       // 第二次运行以日志推导的历史 + 新问题继续：旧消息不再重复写入。
       final second = _Harness([_text('again')], store: store);
-      final log2 = await second.run([...log1.deriveMessages()!, _user('more')],
-          runId: 'run-2');
+      final log2 = await second
+          .run([...log1.deriveMessages()!, _user('more')], runId: 'run-2');
       final newMessages = log2.events
-          .where((e) => e.type == SessionEventType.message && e.runId == 'run-2')
+          .where(
+              (e) => e.type == SessionEventType.message && e.runId == 'run-2')
           .length;
       expect(newMessages, 2, reason: '只有新问题和新回复');
       expect(log2.requestsFor('run-2').map(_canon).toList(),
@@ -262,13 +270,11 @@ void main() {
       await AgentExecutor(
         provider: provider,
         tools: ToolRegistry()..register(CalculatorTool()),
-      )
-          .run(
-            history: [_user('1+2')],
-            model: 'm',
-            onRequest: (step, request) => snapshots.add(request),
-          )
-          .drain<void>();
+      ).run(
+        history: [_user('1+2')],
+        model: 'm',
+        onRequest: (step, request) => snapshots.add(request),
+      ).drain<void>();
       expect(snapshots.map((r) => r.messages.length).toList(), [1, 3]);
       expect(() => snapshots.first.messages.add(_user('x')),
           throwsUnsupportedError);
@@ -290,7 +296,8 @@ void main() {
       await for (final event in AgentExecutor(
         provider: provider,
         tools: ToolRegistry()..register(CalculatorTool()),
-      ).run(history: [_user('1+2')], model: 'm', onRequest: recorder.onRequest)) {
+      ).run(
+          history: [_user('1+2')], model: 'm', onRequest: recorder.onRequest)) {
         events.add(event);
         recorder.observe(event);
       }
@@ -306,13 +313,11 @@ void main() {
       final events = await AgentExecutor(
         provider: provider,
         tools: ToolRegistry(),
-      )
-          .run(
-            history: [_user('hi')],
-            model: 'm',
-            onRequest: (_, __) => throw StateError('observer bug'),
-          )
-          .toList();
+      ).run(
+        history: [_user('hi')],
+        model: 'm',
+        onRequest: (_, __) => throw StateError('observer bug'),
+      ).toList();
       expect(events.whereType<AgentStatusEvent>().last.status,
           RunStatus.completed);
     });
@@ -326,9 +331,12 @@ void main() {
     test('sequences are per conversation and payloads round-trip', () async {
       final store = DriftSessionEventStore(db);
       final a1 = await store.append(
-          conversationId: 'a', type: 'message', payload: {'x': 1}, contentKey: 'k1');
-      final b1 = await store.append(
-          conversationId: 'b', type: 'message', payload: {'y': 2});
+          conversationId: 'a',
+          type: 'message',
+          payload: {'x': 1},
+          contentKey: 'k1');
+      final b1 = await store
+          .append(conversationId: 'b', type: 'message', payload: {'y': 2});
       final a2 = await store.append(
           conversationId: 'a',
           type: SessionEventType.requestSent,

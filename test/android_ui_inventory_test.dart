@@ -148,7 +148,8 @@ void main() {
             const MethodChannel('nexus/browser/events'), (_) async => null);
 
     FlutterSecureStoragePlatform.instance = _InMemorySecureStorage();
-    fixture = Directory('local/temp').createTempSync('android-ui-fixture-');
+    final fixtureRoot = Directory('local/temp')..createSync(recursive: true);
+    fixture = fixtureRoot.createTempSync('android-ui-fixture-');
     File('${fixture.path}/README.md')
         .writeAsStringSync('# 界面验收项目\n\n用于检查手机文件编辑器。');
     db = AppDatabase(NativeDatabase.memory());

@@ -49,19 +49,22 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.byType(MascotAvatar), findsNothing);
     expect(find.text('NEXUS AI'), findsNothing);
-    expect(find.text('deepseek-chat · 3.2s'), findsOneWidget);
+    expect(find.text('deepseek-chat · 3.2s'), findsNothing);
+    expect(find.byTooltip('deepseek-chat · 3.2s'), findsOneWidget);
     for (final tooltip in ['复制', '朗读', '分享', '重新生成']) {
       expect(find.byTooltip(tooltip), findsOneWidget, reason: tooltip);
     }
-    // 元信息在操作行右侧：占满分享与重新生成之间的空间并右对齐。
-    final meta = tester.getRect(find.byKey(const ValueKey('reply-meta')));
+    // 完整模型信息按需查看，信息按钮保持在分享与重新生成之间。
+    final meta = tester.getRect(find.byTooltip('deepseek-chat · 3.2s'));
     expect(meta.left,
         greaterThanOrEqualTo(tester.getRect(find.byTooltip('分享')).right));
     expect(meta.right,
         lessThanOrEqualTo(tester.getRect(find.byTooltip('重新生成')).left));
-    final metaText =
-        tester.widget<Text>(find.byKey(const ValueKey('reply-meta')));
-    expect(metaText.textAlign, TextAlign.end);
+    await tester.tap(find.byTooltip('deepseek-chat · 3.2s'));
+    await tester.pump();
+    expect(find.text('deepseek-chat · 3.2s'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('重新生成'));
     expect(regenerated, isTrue);

@@ -7,6 +7,7 @@ import 'package:mobile_agent/application/chat_controller.dart';
 import 'package:mobile_agent/domain/models.dart';
 import 'package:mobile_agent/presentation/chat/chat_page.dart';
 import 'package:mobile_agent/presentation/chat/composer_skill_slot.dart';
+import 'package:mobile_agent/presentation/chat/widgets/floating_capsule_input.dart';
 import 'package:mobile_agent/presentation/chat/widgets/session_metrics_bar.dart';
 import 'package:mobile_agent/presentation/chat/widgets/skill_suggestion_bar.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
@@ -176,14 +177,10 @@ void main() {
 
       await _pumpChatPage(tester, _RunningWithLoadedSkill.new);
 
-      expect(tester.widget<SessionMetricsBar>(find.byType(SessionMetricsBar)).summaryLabel, isNotNull);
-      expect(
-        tester
-            .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
-            .maxGroups,
-        1,
-        reason: '运行中输入区自带状态行，指标条应收窄避免叠加占高',
-      );
+      expect(find.byType(SessionMetricsBar), findsNothing);
+      expect(find.byType(FloatingCapsuleInput), findsOneWidget);
+      expect(find.byTooltip('停止任务'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('空闲时只显示会话详情摘要，完整信息按需展开', (tester) async {
@@ -193,13 +190,10 @@ void main() {
 
       await _pumpChatPage(tester, _IdleWithLoadedSkill.new);
 
-      expect(tester.widget<SessionMetricsBar>(find.byType(SessionMetricsBar)).summaryLabel, isNotNull);
-      expect(
-        tester
-            .widget<SessionMetricsBar>(find.byType(SessionMetricsBar))
-            .maxGroups,
-        1,
-      );
+      expect(find.byType(SessionMetricsBar), findsNothing);
+      expect(find.byType(FloatingCapsuleInput), findsOneWidget);
+      expect(find.byTooltip('更多输入工具'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

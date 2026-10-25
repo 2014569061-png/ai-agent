@@ -10,6 +10,19 @@ import 'package:mobile_agent/application/project_template_service.dart';
 import 'package:mobile_agent/infrastructure/terminal/host_process_runtime_adapter.dart';
 import 'package:mobile_agent/infrastructure/tools/command_tool.dart';
 
+Future<HttpServer> _bindFixturePort() async {
+  // Keep the occupied port and fallback range outside the ephemeral ports
+  // allocated concurrently to Flutter test VM services.
+  for (var port = 18000; port < 18100; port++) {
+    try {
+      return await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    } on SocketException {
+      // Another local service owns this port; try the next fixture port.
+    }
+  }
+  throw StateError('No preview fixture port available');
+}
+
 class _Terminal extends TerminalCommandService {
   _Terminal() : super(workspacePath: '.');
   int starts = 0;
@@ -344,7 +357,7 @@ void main() {
     });
     await File('test/fixtures/preview_http_worker.js')
         .copy('${root.path}/server.js');
-    final occupied = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final occupied = await _bindFixturePort();
     final subscription = occupied.listen((request) {
       request.response.statusCode = 200;
       unawaited(request.response.close());
@@ -442,7 +455,7 @@ void main() {
         .contents);
     await File('${root.path}/index.html')
         .writeAsString('owned Python HTTP preview');
-    final occupied = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final occupied = await _bindFixturePort();
     final subscription = occupied.listen((request) {
       unawaited(request.response.close());
     });

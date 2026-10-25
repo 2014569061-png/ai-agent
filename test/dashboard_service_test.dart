@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:mobile_agent/application/dashboard_service.dart';
 import 'package:mobile_agent/domain/models.dart';
@@ -13,6 +14,7 @@ void main() {
   late DashboardService service;
 
   setUp(() {
+    SharedPreferences.setMockInitialValues({});
     db = AppDatabase(NativeDatabase.memory());
     service = DashboardService();
   });

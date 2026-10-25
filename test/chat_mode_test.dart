@@ -99,11 +99,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 审批模式入口是圆形磁贴：可读名称只出现在语义标签里。
-    expect(find.bySemanticsLabel('完全访问'), findsOneWidget);
     expect(find.text('完全访问'), findsNothing);
     expect(find.text('@Workspace'), findsNothing);
-    await tester.tap(find.bySemanticsLabel('完全访问'));
+    await tester.tap(find.byTooltip('更多输入工具'));
+    await tester.pumpAndSettle();
+    expect(find.text('审批 · 完全访问'), findsOneWidget);
+    await tester.tap(find.text('审批 · 完全访问'));
+    await tester.pumpAndSettle();
     expect(approvalTapped, isTrue);
   });
 
@@ -125,20 +127,17 @@ void main() {
             sessionTitle: '当前会话',
             onMenu: _noop,
             onNewChat: _noop,
-            onModeTap: () => modeTapped++,
+            onTitleTap: () => modeTapped++,
           ),
         ),
       ),
     );
 
     expect(find.text('当前会话'), findsOneWidget);
-    expect(find.text('Claude Sonnet'), findsOneWidget);
+    expect(find.text('Claude Sonnet'), findsNothing);
     expect(find.textContaining('上下文 0 / 128k'), findsNothing);
-    expect(find.byTooltip('Claude Sonnet · mobile_agent · 上下文 0 / 128k'),
-        findsOneWidget);
-    expect(find.text('Agent'), findsOneWidget);
-
-    await tester.tap(find.text('Agent'));
+    expect(find.byTooltip('当前会话'), findsOneWidget);
+    await tester.tap(find.text('当前会话'));
     expect(modeTapped, 1);
     expect(tester.takeException(), isNull);
   });

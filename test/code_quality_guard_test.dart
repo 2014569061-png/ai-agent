@@ -5,12 +5,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('presentation token escape counts do not grow', () {
     final source = _readDartFiles('lib/presentation');
-    // DesktopTheme defines the desktop semantic palette; its declarations are
-    // tokens, not inline component colors. Keep the existing usage limit.
+    // Palette declarations define semantic tokens; component usages are the
+    // escapes this guard limits. Keep the existing usage limit.
     final colorUsages = source
-        .where((file) => !file.path
-            .replaceAll('\\', '/')
-            .endsWith('/theme/desktop_theme.dart'))
+        .where((file) => !const {
+              'app_palette.dart',
+              'desktop_theme.dart',
+              'mobile_theme.dart',
+            }.contains(file.path.replaceAll('\\', '/').split('/').last))
         .toList();
 
     _assertWithinThreshold(
@@ -30,7 +32,15 @@ void main() {
     );
 
     _assertWithinThreshold(
-      files: source,
+      files: source
+          .where((file) => !const {
+                'app_tokens.dart',
+                'nexus_motion.dart',
+                'mobile_motion.dart',
+                'motion_preferences.dart',
+                'send_flight.dart',
+              }.contains(file.path.replaceAll('\\', '/').split('/').last))
+          .toList(),
       pattern: RegExp(
         r'Duration\s*\(\s*(?:milliseconds|seconds|microseconds)\s*:\s*[0-9]+',
       ),

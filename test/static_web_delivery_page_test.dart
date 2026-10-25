@@ -11,6 +11,7 @@ import 'package:mobile_agent/application/providers.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/presentation/projects/static_web_delivery_page.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
+import 'package:mobile_agent/presentation/widgets/nexus_error_notice.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
@@ -114,7 +115,7 @@ void main() {
     await show(tester, scale: 1);
     await tester.ensureVisible(find.text('index.html'));
     await tester.tap(find.text('index.html'));
-    await waitFor(tester, () => find.byType(TextField).evaluate().length == 2);
+    await waitFor(tester, () => find.byType(TextField).evaluate().length == 1);
     await tester.enterText(find.byType(TextField).last, '<h1>手机修改完成</h1>');
     await tester.pump();
     await tester.tap(find.byTooltip('保存修改'));
@@ -142,6 +143,7 @@ void main() {
                     .onPressed !=
                 null);
     await tester.ensureVisible(find.byKey(const ValueKey('web-save-delivery')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('web-save-delivery')));
     await waitFor(
         tester, () => find.text('网页 ZIP 副本已保存到成果中心').evaluate().isNotEmpty);
@@ -169,23 +171,29 @@ void main() {
     File(p.join(workspace.path, 'styles.css'))
         .writeAsStringSync('changed after review');
     await tester.ensureVisible(find.byKey(const ValueKey('web-save-delivery')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('web-save-delivery')));
     await waitFor(
-        tester, () => find.textContaining('文件已变化').evaluate().isNotEmpty);
+        tester, () => find.byType(NexusErrorNotice).evaluate().isNotEmpty);
+    expect(
+        tester.widget<NexusErrorNotice>(find.byType(NexusErrorNotice)).details,
+        contains('文件已变化'));
     await tester
         .runAsync(() async => expect(await artifacts.list(db), isEmpty));
-    await tester.ensureVisible(find.text('刷新文件核对'));
-    await tester.tap(find.text('刷新文件核对'));
+    await tester.ensureVisible(find.text('重新核对文件'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('重新核对文件'));
     await waitFor(
         tester,
         () =>
-            find.textContaining('文件已变化').evaluate().isEmpty &&
+            find.byType(NexusErrorNotice).evaluate().isEmpty &&
             tester
                     .widget<FilledButton>(
                         find.byKey(const ValueKey('web-save-delivery')))
                     .onPressed !=
                 null);
     await tester.ensureVisible(find.byKey(const ValueKey('web-save-delivery')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('web-save-delivery')));
     await waitFor(
         tester, () => find.text('网页 ZIP 副本已保存到成果中心').evaluate().isNotEmpty);

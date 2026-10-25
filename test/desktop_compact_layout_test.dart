@@ -215,7 +215,7 @@ void main() {
     expect(find.text('计划模式已开启 · 首轮需要确认'), findsOneWidget);
     update(() => running = true);
     await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('chat-mode-code')));
+    await tester.tap(find.byKey(const ValueKey('chat-mode-agent')));
     expect(mode, ChatMode.plan);
     await tester.tap(find.byType(PopupMenuButton<String>));
     await tester.pumpAndSettle();
@@ -248,8 +248,8 @@ void main() {
     addTearDown(c.dispose);
     await tester
         .pumpWidget(app(input(c, mode: ChatMode.agent, changeMode: (_) {})));
-    expect(find.text('编码'), findsOneWidget);
-    expect(find.text('规划'), findsOneWidget);
+    expect(find.text('Agent'), findsOneWidget);
+    expect(find.text('计划'), findsOneWidget);
     expect(find.text('操作前询问'), findsOneWidget);
     const hint = ValueKey('desktop-composer-shortcut-hint');
     expect(find.byKey(hint), findsNothing);

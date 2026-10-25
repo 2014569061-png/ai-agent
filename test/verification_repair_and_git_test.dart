@@ -19,6 +19,7 @@ import 'package:mobile_agent/application/workspace_file_editor.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/infrastructure/tools/command_tool.dart';
 import 'package:drift/native.dart';
+import 'package:crypto/crypto.dart';
 
 void main() {
   test('failed verification becomes a repair prompt with attempt cap', () {
@@ -162,11 +163,11 @@ void main() {
       taskId: 't1',
       runId: 'r1',
       workspacePath: dir.path,
-      inspection: const ArtifactInspection(
+      inspection: ArtifactInspection(
         relativePath: 'app.apk',
         exists: true,
         bytes: 4,
-        sha256: 'hash',
+        sha256: sha256.convert([0x50, 0x4b, 0x03, 0x04]).toString(),
       ),
     );
     final listed = await const ArtifactService().list(db, projectId: 'p1');

@@ -70,8 +70,9 @@ final databaseProvider = FutureProvider<AppDatabase>((ref) async {
 
 /// Provider 配置存储注入点（可在测试中 override）。
 /// 模型路由能力；将来的远端路由（例如桌面端转发）在这里接入。
-final modelRouterProvider =
-    Provider<ModelRouter>((ref) => ModelRouter.standard);
+final modelRouterProvider = Provider<ModelRouter>((ref) => ModelRouter([
+      DirectModelRoute(database: () => ref.read(databaseProvider.future)),
+    ]));
 
 final providerConfigStoreProvider =
     Provider<ProviderConfigStore>((ref) => ProviderConfigStore());

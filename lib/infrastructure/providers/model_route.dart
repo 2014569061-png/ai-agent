@@ -1,6 +1,7 @@
 import 'llm_provider.dart';
 import 'provider_config.dart';
 import 'provider_factory.dart';
+import '../database/app_database.dart';
 
 /// 模型路由的能力 seam：决定一次运行用哪个 [LlmProvider]。
 ///
@@ -16,14 +17,17 @@ abstract interface class ModelRoute {
 
 /// 按配置直连厂商 API。
 class DirectModelRoute implements ModelRoute {
-  const DirectModelRoute();
+  const DirectModelRoute({this.database});
+
+  final Future<AppDatabase> Function()? database;
 
   @override
   String get id => 'direct';
 
   @override
-  LlmProvider? providerFor(ProviderConfig config) =>
-      config.isConfigured ? createLlmProvider(config) : null;
+  LlmProvider? providerFor(ProviderConfig config) => config.isConfigured
+      ? createLlmProvider(config, database: database)
+      : null;
 }
 
 /// 路由结果。

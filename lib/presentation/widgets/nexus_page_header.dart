@@ -66,6 +66,10 @@ class NexusPageHeader extends StatelessWidget implements PreferredSizeWidget {
             (canPop || onBack != null
                 ? IconButton(
                     tooltip: '返回',
+                    constraints:
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
+                    style: const ButtonStyle(
+                        minimumSize: WidgetStatePropertyAll(Size(48, 48))),
                     onPressed: onBack ?? () => Navigator.maybePop(context),
                     icon:
                         const Icon(Icons.arrow_back_ios_new_rounded, size: 21))

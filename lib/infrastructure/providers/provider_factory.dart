@@ -5,14 +5,17 @@ import 'openai_compatible_provider.dart';
 import 'provider_config.dart';
 import 'proxy_provider.dart';
 import 'cost_budget_provider.dart';
+import '../database/app_database.dart';
 
 /// 按 [ProviderConfig.type] 构造对应的厂商适配器。
 ///
 /// 聊天主流程、后台无头执行与「Agent 草稿生成」等一次性调用都从这里取，
 /// 避免每个新调用点各维护一份 switch —— 新增厂商时漏改其中一处，表现为
 /// 「某个入口静默走了错误适配器」，很难从症状定位到原因。
-LlmProvider createLlmProvider(ProviderConfig config) {
-  return CostBudgetProvider(_createRawProvider(config), config);
+LlmProvider createLlmProvider(ProviderConfig config,
+    {Future<AppDatabase> Function()? database}) {
+  return CostBudgetProvider(_createRawProvider(config), config,
+      database: database);
 }
 
 LlmProvider _createRawProvider(ProviderConfig config) {

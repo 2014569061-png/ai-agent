@@ -315,7 +315,7 @@ class MobileCanvas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return ColoredBox(
+    return Material(
       color: dark ? const Color(0xFF111722) : MobileTheme.canvas,
       child: child,
     );

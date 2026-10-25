@@ -99,7 +99,7 @@ flutter analyze --no-pub
 flutter test --no-pub
 ```
 
-平台验证与现有失败见[验证状态](verification.md)。
+平台验证与验收边界见[验证状态](verification.md)。
 
 ## 构建 APK
 日常本地构建推荐使用根目录的 `build-apk.bat`。它默认复用 Flutter、Gradle 和 native-assets 的增量缓存，不会执行 `flutter clean`，也不会修改全局 Flutter 的 JDK 配置：

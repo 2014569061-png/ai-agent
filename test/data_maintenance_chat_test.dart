@@ -35,7 +35,9 @@ class _Config extends ProviderConfigStore {
         name: 'Fake local SSE',
         baseUrl: 'http://127.0.0.1:$port/v1',
         model: 'fake',
-        apiKey: 'FAKE-KEY');
+        apiKey: 'FAKE-KEY',
+        inputPricePerMillionCents: 0,
+        outputPricePerMillionCents: 0);
   }
 
   @override
@@ -97,7 +99,7 @@ void main() {
         await db.close();
       });
       final controller = container.read(chatControllerProvider.notifier);
-      await pumpEventQueue(times: 40);
+      await controller.initialized;
       expect(container.read(chatControllerProvider).loading, isFalse);
       final snapshot = await buildVaultJson(db);
       final sending = controller.send(
@@ -133,6 +135,8 @@ void main() {
       } catch (_) {/* disconnected by cancellation */}
       await pumpEventQueue();
       expect(container.read(chatControllerProvider).messages, isEmpty);
+      // Provider calls must use the injected database, including cost records.
+      expect(File('${root.path}/mobile_agent.sqlite').existsSync(), isFalse);
     });
   }
 }

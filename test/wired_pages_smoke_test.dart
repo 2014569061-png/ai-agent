@@ -80,7 +80,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('知识库'), findsOneWidget);
-      expect(find.text('文档切片检索与 RAG 管理'), findsOneWidget);
+      expect(find.text('在对话中检索你的资料'), findsOneWidget);
       expect(find.text('知识库为空'), findsOneWidget);
     });
 
@@ -178,7 +178,7 @@ void main() {
       // 知识库入口
       await tester.tap(find.text(AppStrings.knowledgeSectionTitle));
       await tester.pumpAndSettle();
-      expect(find.text('文档切片检索与 RAG 管理'), findsOneWidget);
+      expect(find.text('在对话中检索你的资料'), findsOneWidget);
       await tester.tap(find.byTooltip('返回'));
       await tester.pumpAndSettle();
 

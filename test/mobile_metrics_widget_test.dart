@@ -41,9 +41,11 @@ void main() {
       expect(find.text('本地观测，不是发布验收'), findsOneWidget);
       await tester.scrollUntilVisible(find.text('本页参考目标（默认未配置）'), 200,
           scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
       await tester.tap(find.text('本页参考目标（默认未配置）'));
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('应用本页参考目标'));
+      await tester.scrollUntilVisible(find.text('应用本页参考目标'), 100,
+          scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
     });

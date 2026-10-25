@@ -26,7 +26,23 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  setUp(() => db = AppDatabase(NativeDatabase.memory()));
+  setUp(() async {
+    db = AppDatabase(NativeDatabase.memory());
+    final now = DateTime.now();
+    for (final id in ['t-log', 't-sub', 't-del', 't-keep']) {
+      await db.into(db.tasks).insert(Task(
+          id: id,
+          conversationId: '',
+          stateRevision: 0,
+          type: 'test',
+          status: 'pending',
+          requestJson: '{}',
+          progressJson: '{}',
+          resumeCount: 0,
+          createdAt: now,
+          updatedAt: now));
+    }
+  });
   tearDown(() => db.close());
 
   test('a task-bound background run is recorded under task:<id>', () async {

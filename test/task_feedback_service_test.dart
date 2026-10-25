@@ -48,19 +48,23 @@ void main() {
     expect(await db.taskFeedbackCount(), 0);
   });
 
-  test('v18 到 v19 创建 task_feedback 表并保留既有数据', () async {
-    final rawDb = sqlite.sqlite3.openInMemory()
-      ..execute(
-        'CREATE TABLE migration_sentinel (id TEXT NOT NULL PRIMARY KEY, value TEXT NOT NULL)',
-      )
-      ..execute(
-        "INSERT INTO migration_sentinel (id, value) VALUES ('existing', 'kept')",
-      )
-      ..userVersion = 18;
-    final db = AppDatabase(NativeDatabase.opened(rawDb));
+  test('v18 升级链创建 task_feedback 表并保留既有数据', () async {
+    final rawDb = sqlite.sqlite3.openInMemory();
+    addTearDown(rawDb.close);
+    final base = AppDatabase(
+        NativeDatabase.opened(rawDb, closeUnderlyingOnClose: false));
+    // Retain the application tables required by subsequent migrations instead
+    // of labelling a database with only a sentinel table as v18.
+    await base.customStatement('CREATE TABLE migration_sentinel '
+        '(id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    await base.customStatement(
+        "INSERT INTO migration_sentinel VALUES ('existing', 'kept')");
+    await base.customStatement('DROP TABLE task_feedback');
+    await base.close();
+    rawDb.userVersion = 18;
+    final db = AppDatabase(
+        NativeDatabase.opened(rawDb, closeUnderlyingOnClose: false));
     addTearDown(db.close);
-
-    await db.customSelect('SELECT 1').get();
 
     final feedbackTable = await db
         .customSelect(
@@ -77,6 +81,11 @@ void main() {
     // 断言迁移链收敛到当前 schema 版本（AppDatabase.schemaVersion）。
     // 用实例 getter 而非字面量：schema 升级时这里有提示，不会再出现
     // 「版本号已升、测试还断言旧值」的静默漂移。
-    expect(rawDb.userVersion, db.schemaVersion);
+    expect(
+        (await db.customSelect('PRAGMA user_version').getSingle())
+            .data
+            .values
+            .single,
+        db.schemaVersion);
   });
 }

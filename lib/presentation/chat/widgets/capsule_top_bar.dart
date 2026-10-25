@@ -254,6 +254,9 @@ class CapsuleTopBar extends StatelessWidget {
           else
             IconButton(
                 tooltip: '打开会话列表',
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                style: const ButtonStyle(
+                    minimumSize: WidgetStatePropertyAll(Size(48, 48))),
                 onPressed: onMenu,
                 icon: NexusHomeIcon(NexusHomeSymbol.menu, color: iconColor)),
           Expanded(
@@ -292,6 +295,9 @@ class CapsuleTopBar extends StatelessWidget {
           )),
           IconButton(
               tooltip: '新建对话',
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              style: const ButtonStyle(
+                  minimumSize: WidgetStatePropertyAll(Size(48, 48))),
               onPressed: onNewChat,
               icon: NexusHomeIcon(NexusHomeSymbol.compose, color: iconColor)),
         ]),

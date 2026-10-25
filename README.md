@@ -1,5 +1,7 @@
 # NEXUS Agent
 
+[![CI](https://github.com/2014569061-png/ai-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/2014569061-png/ai-agent/actions/workflows/ci.yml?query=branch%3Amain)
+
 面向 **Android 与 Windows** 的多模型 AI Agent 工作台。当前源码版本：**0.9.0+95**。
 
 [下载已发布版本](https://github.com/2014569061-png/ai-agent/releases) · [开发与构建](docs/getting-started.md) · [文档](docs/README.md) · [验证状态](docs/verification.md)
@@ -62,7 +64,7 @@ architecture/  架构决策记录
 
 ## 开发状态
 
-最近一次本机全量测试为 **2,740 通过、69 失败**，另有定向复测 56 项通过；仍有 **64 项已知测试失败**。静态分析及静默异常门禁通过，手写代码覆盖率 **59.55%**。完整复现方法与失败清单见[验证状态](docs/verification.md)，远程结果见 [GitHub Actions](https://github.com/2014569061-png/ai-agent/actions)。
+2026-10-25 本机全量测试 **2,809 项通过、0 项失败**。全部受版本控制的 Dart 代码静态分析及静默异常门禁通过，手写代码覆盖率 **60.12%**。复现方法与验收边界见[验证状态](docs/verification.md)，远程平台检查以 [GitHub Actions](https://github.com/2014569061-png/ai-agent/actions) 对应提交的结果为准。
 
 正式安装包仍需按目标设备完成 ARM64、后台恢复、无障碍与性能验收。当前源码公开不等同于正式发布验收通过。
 

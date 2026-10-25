@@ -8,9 +8,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:mobile_agent/application/desktop_search_service.dart';
+import 'package:mobile_agent/application/chat_controller.dart';
 import 'package:mobile_agent/application/providers.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/presentation/navigation/desktop_command_center.dart';
+
+class _CommandFixtureChat extends ChatController {
+  @override
+  ChatState build() => const ChatState(loading: false);
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +62,7 @@ void main() {
   }) async {
     final container = ProviderContainer(overrides: [
       databaseProvider.overrideWith((ref) async => db),
+      chatControllerProvider.overrideWith(_CommandFixtureChat.new),
     ]);
     addTearDown(container.dispose);
     await tester.pumpWidget(UncontrolledProviderScope(
@@ -125,6 +132,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
 
     expect(ranSettings, isTrue);
     expect(ranNav, isFalse);
@@ -155,6 +163,7 @@ void main() {
     await tester.tap(find.text('登录页改造'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
 
     expect(opened?.kind, DesktopSearchKind.conversation);
     expect(opened?.id, 'c-1');

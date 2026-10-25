@@ -36,7 +36,8 @@ List<UnifiedEvent> _calls(List<ToolCall> calls) => [
       const CompletedEvent(stopReason: StopReason.toolUse),
     ];
 
-const _calc = ToolCall(id: 'c1', name: 'calculator', arguments: {'a': 1, 'b': 2});
+const _calc =
+    ToolCall(id: 'c1', name: 'calculator', arguments: {'a': 1, 'b': 2});
 
 class _InjectTransform implements RequestTransform {
   final seenSteps = <int>[];
@@ -84,8 +85,7 @@ class _ContinueOnce implements TurnStoppingHandler {
     asked++;
     seenText ??= context.finalText;
     if (asked > 1) return null;
-    return TurnContinuation([_user('[提醒] 请先运行验证')],
-        keepAssistantText: keep);
+    return TurnContinuation([_user('[提醒] 请先运行验证')], keepAssistantText: keep);
   }
 }
 
@@ -93,27 +93,28 @@ void main() {
   test('request transforms run before trimming and their events are emitted',
       () async {
     final transform = _InjectTransform();
-    final provider = _ScriptedProvider([_calls([_calc]), _text('done')]);
+    final provider = _ScriptedProvider([
+      _calls([_calc]),
+      _text('done')
+    ]);
     final logged = <List<ChatMessage>>[];
     final events = await AgentExecutor(
       provider: provider,
       tools: ToolRegistry()..register(CalculatorTool()),
       hooks: AgentLoopHooks(requestTransforms: [transform]),
-    )
-        .run(
-          history: [_user('1+2')],
-          model: 'm',
-          onRequest: (_, request) => logged.add(request.messages),
-        )
-        .toList();
+    ).run(
+      history: [_user('1+2')],
+      model: 'm',
+      onRequest: (_, request) => logged.add(request.messages),
+    ).toList();
 
     expect(transform.seenSteps, [1, 2]);
     expect(provider.sent.first.last.text, '[注入] step 1');
     // 注入发生在请求之前，所以会进入请求观察者（会话日志）的快照。
     expect(logged.first.last.text, '[注入] step 1');
     // 第 2 步：上一步注入的内容保留在工作列表中，本步再注入一次。
-    expect(provider.sent[1].where((m) => m.text.startsWith('[注入]')),
-        hasLength(2));
+    expect(
+        provider.sent[1].where((m) => m.text.startsWith('[注入]')), hasLength(2));
     final trace = events.map((e) => e.runtimeType.toString()).toList();
     final inject = trace.indexOf('AgentContextChangeEvent');
     expect(inject, lessThan(trace.indexOf('ContextSnapshotEvent')));
@@ -127,13 +128,11 @@ void main() {
       hooks: AgentLoopHooks(requestObservers: [
         (step, request) => order.add('hook:$step'),
       ]),
-    )
-        .run(
-          history: [_user('hi')],
-          model: 'm',
-          onRequest: (step, request) => order.add('run:$step'),
-        )
-        .drain<void>();
+    ).run(
+      history: [_user('hi')],
+      model: 'm',
+      onRequest: (step, request) => order.add('run:$step'),
+    ).drain<void>();
     expect(order, ['hook:1', 'run:1']);
   });
 
@@ -163,9 +162,10 @@ void main() {
       provider: provider,
       tools: ToolRegistry(),
       hooks: AgentLoopHooks(turnStopping: [handler]),
-    )
-        .run(history: [_user('改一下')], model: 'm', runController: controller)
-        .toList();
+    ).run(
+        history: [_user('改一下')],
+        model: 'm',
+        runController: controller).toList();
 
     expect(handler.asked, 2);
     expect(handler.seenText, '看起来完成了');
@@ -174,8 +174,8 @@ void main() {
         [MessageRole.user, MessageRole.assistant, MessageRole.user]);
     expect(second[1].text, '看起来完成了');
     expect(second[2].text, '[提醒] 请先运行验证');
-    expect(events.whereType<AgentStatusEvent>().last.status,
-        RunStatus.completed);
+    expect(
+        events.whereType<AgentStatusEvent>().last.status, RunStatus.completed);
     expect(controller.isSealed, isTrue, reason: '最终完成时由内置 steering 封存');
   });
 
@@ -189,16 +189,17 @@ void main() {
       provider: provider,
       tools: ToolRegistry(),
       hooks: AgentLoopHooks(turnStopping: [handler]),
-    )
-        .run(history: [_user('写')], model: 'm', runController: controller)
-        .drain<void>();
-    // 第 1 步：外部 handler 先生效（不保留回复），插话仍在队列中；
-    // 第 2 步：外部 handler 放行，内置 steering 消费插话；第 3 步完成。
-    expect(provider.sent, hasLength(3));
+    ).run(
+        history: [_user('写')],
+        model: 'm',
+        runController: controller).drain<void>();
+    // 已排队插话在第一次请求前交付；外部 continuation 仍优先于封存。
+    expect(provider.sent, hasLength(2));
+    expect(provider.sent.first.last.text, contains('用户补充指令：顺便加注释'));
     expect(provider.sent[1].last.text, '[提醒] 请先运行验证');
     expect(provider.sent[1].where((m) => m.role == MessageRole.assistant),
         isEmpty);
-    expect(provider.sent[2].last.text, contains('用户补充指令：顺便加注释'));
+    expect(controller.isSealed, isTrue);
   });
 
   test('merge keeps order with the other set appended', () {
@@ -207,7 +208,7 @@ void main() {
     final merged = AgentLoopHooks(requestObservers: [a])
         .merge(AgentLoopHooks(requestObservers: [b]));
     expect(merged.requestObservers, [a, b]);
-    expect(AgentLoopHooks.empty.merge(AgentLoopHooks.empty).turnStopping,
-        isEmpty);
+    expect(
+        AgentLoopHooks.empty.merge(AgentLoopHooks.empty).turnStopping, isEmpty);
   });
 }

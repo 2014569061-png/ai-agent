@@ -14,7 +14,6 @@ import 'package:mobile_agent/application/task_service.dart';
 import 'package:mobile_agent/infrastructure/database/app_database.dart';
 import 'package:mobile_agent/presentation/tasks/development_tasks_page.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
-import 'package:mobile_agent/presentation/theme/app_palette.dart';
 import 'package:mobile_agent/presentation/theme/desktop_theme.dart';
 import 'package:mobile_agent/presentation/widgets/async_state_view.dart';
 import 'package:mobile_agent/presentation/widgets/desktop_resource_view.dart';
@@ -153,10 +152,18 @@ void main() {
       await tester.scrollUntilVisible(find.text('清除筛选'), 100,
           scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
-      final button = tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, '清除筛选'));
-      expect(button.style!.foregroundColor!.resolve({}),
-          AppPalette.brandTextFor(dark));
+      final label = tester.element(find.text('清除筛选'));
+      final foreground = DefaultTextStyle.of(label).style.color!;
+      final material = tester.widget<Material>(find
+          .descendant(
+              of: find.widgetWithText(FilledButton, '清除筛选'),
+              matching: find.byType(Material))
+          .first);
+      final light = foreground.computeLuminance();
+      final background = material.color!.computeLuminance();
+      final ratio = (light > background ? light + .05 : background + .05) /
+          (light > background ? background + .05 : light + .05);
+      expect(ratio, greaterThanOrEqualTo(4.5));
       await tester.tap(find.text('清除筛选'));
       expect(tester.takeException(), isNull);
     }
@@ -375,12 +382,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(title), findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.scrollUntilVisible(find.text('失败'), 120,
-        scrollable: find.byType(Scrollable).first);
+    expect(find.text('失败'), findsNothing, reason: '零计数筛选不占入口');
+    await tester.tap(find.byTooltip('搜索任务'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('失败'));
+    await tester.enterText(find.byType(TextField), '不存在的任务');
     await tester.pumpAndSettle();
-    expect(find.text('当前筛选下暂无任务'), findsOneWidget);
+    expect(find.text('未搜到相关任务'), findsOneWidget);
     expect(find.text('暂无开发任务记录'), findsNothing);
     await tester.ensureVisible(find.text('清除筛选'));
     await tester.pumpAndSettle();

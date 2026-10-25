@@ -172,26 +172,29 @@ void main() {
 
     testWidgets('empty chat actions expose labels to screen readers',
         (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
-          home: Scaffold(
-            body: ChatEmptyState(
-              providerConfigured: true,
-              hasWorkspace: true,
-              onSuggestionTap: (_) {},
+      final semantics = tester.ensureSemantics();
+      try {
+        String? suggestion;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            home: Scaffold(
+              body: ChatEmptyState(
+                providerConfigured: true,
+                hasWorkspace: true,
+                onSuggestionTap: (action) => suggestion = action.prompt,
+              ),
             ),
           ),
-        ),
-      );
+        );
 
-      expect(find.bySemanticsLabel('今天想构建什么？'), findsOneWidget);
-      expect(
-        find.byWidgetPredicate(
-          (widget) => widget is Semantics && widget.properties.label == '审计变更',
-        ),
-        findsOneWidget,
-      );
+        expect(find.bySemanticsLabel('我是 NEXUS，很高兴见到你'), findsOneWidget);
+        expect(find.bySemanticsLabel('整理一份资料'), findsOneWidget);
+        await tester.tap(find.text('整理一份资料'));
+        expect(suggestion, contains('整理资料'));
+      } finally {
+        semantics.dispose();
+      }
     });
 
     testWidgets('approval sheet makes timeout state visible', (tester) async {
@@ -234,7 +237,8 @@ void main() {
               builder: (context) => ElevatedButton(
                 onPressed: () => showNexusSheet<void>(
                   context: context,
-                  builder: (ctx) => const SizedBox(height: 100, child: Text('Sheet Content')),
+                  builder: (ctx) =>
+                      const SizedBox(height: 100, child: Text('Sheet Content')),
                 ),
                 child: const Text('Open'),
               ),
@@ -255,7 +259,8 @@ void main() {
       expect(find.text('Sheet Content'), findsNothing);
     });
 
-    testWidgets('NexusPageHeader back button satisfies >= 48dp touch constraints',
+    testWidgets(
+        'NexusPageHeader back button satisfies >= 48dp touch constraints',
         (tester) async {
       await tester.pumpWidget(
         MaterialApp(

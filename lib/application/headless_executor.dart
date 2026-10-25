@@ -155,7 +155,7 @@ class HeadlessExecutor {
     /// 本次运行挂载的模块；默认 [defaultModules]（会话日志）。
     ModuleHost? modules,
 
-    /// 模型路由；默认 [ModelRouter.standard]（直连厂商，未配置时演示）。
+    /// 模型路由；默认直连厂商，费用账本使用本次运行的 [db]。
     ModelRouter? modelRouter,
   }) async {
     final activeCancellation = cancellationToken ?? AgentCancellationToken();
@@ -172,7 +172,11 @@ class HeadlessExecutor {
         await const RunRecoverySafety()
             .requireSafe(db, taskId, initialHistory: initialHistory);
       }
-      final route = (modelRouter ?? ModelRouter.standard).resolve(config);
+      final route = (modelRouter ??
+              ModelRouter([
+                DirectModelRoute(database: () async => db),
+              ]))
+          .resolve(config);
       final provider = route.provider;
       final model = route.model;
       final boundTask = taskId == null ? null : await db.findTask(taskId);

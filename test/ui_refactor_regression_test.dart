@@ -13,6 +13,7 @@ import 'package:mobile_agent/presentation/settings/provider_list_page.dart';
 import 'package:mobile_agent/presentation/theme/app_theme.dart';
 import 'package:mobile_agent/presentation/widgets/empty_state_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_agent/presentation/theme/desktop_theme.dart';
 
 class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   final Map<String, String> _store = {};
@@ -142,7 +143,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(tester.takeException(), isNull);
-        expect(find.text('模型提供商'), findsOneWidget);
+        expect(find.text('模型与服务商'), findsOneWidget);
       });
     }
   });
@@ -248,8 +249,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      final drawerFinder = find.bySemanticsLabel('打开会话列表');
-      final newChatFinder = find.bySemanticsLabel('新建对话');
+      final drawerFinder = find.byTooltip('打开会话列表');
+      final newChatFinder = find.byTooltip('新建对话');
 
       expect(drawerFinder, findsOneWidget);
       expect(newChatFinder, findsOneWidget);
@@ -338,9 +339,10 @@ void main() {
         await tester.pumpAndSettle();
 
         final card = tester.getRect(find.byType(FloatingCapsuleInput));
-        final approval = tester.getRect(find.bySemanticsLabel('完全访问'));
+        final approval = tester.getRect(find.byTooltip('更多输入工具'));
         final attach = tester.getRect(find.bySemanticsLabel('添加附件或更多工具'));
-        final send = tester.getRect(find.bySemanticsLabel(RegExp('发送')));
+        final send = tester.getRect(
+            find.byKey(const ValueKey('trailing_action_send_disabled')));
 
         // 左侧仅保留审批策略；模式在输入框上方统一切换。
         expect(attach.left, greaterThan(approval.right),
@@ -355,36 +357,33 @@ void main() {
       tester.view.reset();
     });
 
-    testWidgets('running input exposes stop through a long press on pause',
+    testWidgets('running input preserves desktop pause and direct mobile stop',
         (tester) async {
       final controller = TextEditingController();
       addTearDown(controller.dispose);
-      var paused = 0;
-      var stopped = 0;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.light(),
+      var paused = 0, stopped = 0;
+      for (final desktop in [true, false]) {
+        await tester.pumpWidget(MaterialApp(
+          theme:
+              desktop ? DesktopTheme.apply(AppTheme.light()) : AppTheme.light(),
           home: Scaffold(
-            body: FloatingCapsuleInput(
-              controller: controller,
-              isRunning: true,
-              onSend: () {},
-              onStop: () => stopped++,
-              onPause: () => paused++,
-              onAttachmentMenu: () {},
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      final pause = find.bySemanticsLabel('暂停（长按停止）');
-      expect(pause, findsOneWidget);
-      await tester.tap(pause);
+              body: FloatingCapsuleInput(
+            controller: controller,
+            isRunning: true,
+            onSend: () {},
+            onStop: () => stopped++,
+            onPause: () => paused++,
+            onAttachmentMenu: () {},
+          )),
+        ));
+        await tester.pumpAndSettle();
+        final action = find.byKey(const ValueKey('trailing_action_pause'));
+        expect(action, findsOneWidget);
+        await tester.tap(action);
+        if (desktop) await tester.longPress(action);
+      }
       expect(paused, 1);
-      await tester.longPress(pause);
-      expect(stopped, 1);
+      expect(stopped, 2);
     });
   });
 }

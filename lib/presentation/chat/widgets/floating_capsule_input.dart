@@ -187,7 +187,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                 child: ConstrainedBox(
                   key: _fieldKey,
                   constraints:
-                      const BoxConstraints(minHeight: 36, maxHeight: 128),
+                      const BoxConstraints(minHeight: 48, maxHeight: 128),
                   child: TextField(
                     focusNode: _focusNode,
                     controller: widget.controller,
@@ -236,8 +236,11 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
                                                       .scale(1) <
                                                   1.3
                                           ? 240
-                                          : 200))
-                                  .clamp(60.0, 150.0)),
+                                          : 200) -
+                                      (widget.isRunning && widget.isPaused
+                                          ? 56
+                                          : 0))
+                                  .clamp(48.0, 150.0)),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 6),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -710,9 +713,8 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
         icon: DesktopTheme.maybeOf(context) != null
             ? Icons.pause_rounded
             : Icons.stop_rounded,
-        iconColor: DesktopTheme.maybeOf(context) != null
-            ? Colors.white
-            : stopErr,
+        iconColor:
+            DesktopTheme.maybeOf(context) != null ? Colors.white : stopErr,
         tooltip: DesktopTheme.maybeOf(context) != null ? '暂停（长按停止）' : '停止任务',
         semanticLabel:
             DesktopTheme.maybeOf(context) != null ? '暂停（长按停止）' : '停止任务',

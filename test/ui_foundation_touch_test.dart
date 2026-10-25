@@ -59,7 +59,9 @@ void main() {
             textScaler: TextScaler.linear(scale), disableAnimations: true),
         child: child!,
       ),
-      home: page,
+      home: const Scaffold(),
+      initialRoute: '/detail',
+      routes: {'/detail': (_) => page},
     )));
     await tester.pumpAndSettle();
   }

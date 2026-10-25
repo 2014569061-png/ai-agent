@@ -84,20 +84,22 @@ void main() {
       expect(service.hasPending, isFalse);
     });
 
-    test('只通知已识别入口，消费后可再次接收同一个热链接', () {
+    test('拒绝无效入口并通知原因，消费后可再次接收同一个热链接', () {
       var changes = 0;
       void changed() => changes++;
       service.addListener(changed);
       addTearDown(() => service.removeListener(changed));
       service.handleUri(Uri.parse('https://example.com/new-chat'));
       service.handleUri(Uri.parse('nexus://unsupported'));
-      expect(changes, 0);
+      expect(changes, 2);
+      expect(service.lastEventAccepted, isFalse);
+      expect(service.hasPending, isFalse);
       final uri = Uri.parse('nexus://new-chat?prompt=hello');
       service.handleUri(uri);
       expect(service.drainPrompt(), 'hello');
       service.handleUri(uri);
       expect(service.drainPrompt(), 'hello');
-      expect(changes, 2);
+      expect(changes, 4);
     });
 
     test('非 nexus scheme 一律忽略', () {

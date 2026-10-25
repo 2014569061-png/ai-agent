@@ -148,7 +148,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // 占位符按新规范显示为「发消息」
-    expect(find.text('说说你想做什么…'), findsOneWidget);
+    expect(find.text('给 NEXUS 发送消息'), findsOneWidget);
 
     // 模式由输入区上方的三态切换器控制，输入卡不再重复模式入口。
     // 审批策略仍可直接访问，其可读名称由语义标签提供。

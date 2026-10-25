@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_agent/domain/models.dart';
@@ -18,7 +18,8 @@ void main() {
 
     // 对标 DeepSeek 首页：只有品牌 Logo + 一句问候，
     // 不再渲染起点建议卡（问候语从随机池中抽取，故用正则匹配）。
-    expect(find.byType(BrandMark), findsOneWidget);
+    expect(find.text('N'), findsOneWidget);
+    expect(find.byType(BrandMark), findsNothing);
     expect(find.textContaining(RegExp(r'[？吧]$')), findsOneWidget);
 
     // 起点建议卡已移除

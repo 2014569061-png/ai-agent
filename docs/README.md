@@ -8,7 +8,7 @@
 | [架构概览](architecture.md) | 分层、执行、存储与平台边界 |
 | [安全与数据边界](security.md) | 工具审批、隐私、费用、备份和发布要求 |
 | [Android UI 规范](android-ui-style.md) | 共享组件、导航、动效与页面验收 |
-| [验证状态](verification.md) | 最近完整测试、已知失败与复现方法 |
+| [验证状态](verification.md) | 最近完整测试、覆盖率与复现方法 |
 | [工程工具](../tool/README.md) | 构建、验收、质量门禁和诊断脚本 |
 | [架构决策](../architecture/adr/) | 已采纳的核心架构约定 |
 

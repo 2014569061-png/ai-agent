@@ -8,6 +8,7 @@ import 'package:mobile_agent/presentation/widgets/nexus_background.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_metric_tile.dart';
 import 'package:mobile_agent/presentation/widgets/nexus_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:mobile_agent/presentation/theme/mobile_theme.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -18,7 +19,7 @@ void main() {
   });
 
   group('NexusBackground liquid glass behavior', () {
-    testWidgets('renders gradient when glass intensity is liquid',
+    testWidgets('keeps the solid mobile canvas even when glass is enabled',
         (tester) async {
       await AppAppearanceController.setGlassIntensityMode(
           GlassIntensity.liquid);
@@ -31,14 +32,11 @@ void main() {
         ),
       );
 
-      final decoratedFinder = find.descendant(
-        of: find.byType(NexusBackground),
-        matching: find.byType(DecoratedBox),
-      );
-      expect(decoratedFinder, findsOneWidget);
-      final decoratedBox = tester.widget<DecoratedBox>(decoratedFinder);
-      final decoration = decoratedBox.decoration as BoxDecoration;
-      expect(decoration.gradient, isNotNull);
+      final canvas = find.descendant(
+          of: find.byType(MobileCanvas), matching: find.byType(Material));
+      expect(tester.widget<Material>(canvas.first).color, MobileTheme.canvas);
+      expect(find.byType(LiquidGlass), findsNothing);
+      expect(find.text('Content'), findsOneWidget);
     });
 
     testWidgets('keeps the quiet phone canvas when material effects are flat',
@@ -53,11 +51,9 @@ void main() {
         ),
       );
 
-      final decoratedFinder = find.descendant(
-        of: find.byType(NexusBackground),
-        matching: find.byType(DecoratedBox),
-      );
-      expect(decoratedFinder, findsOneWidget);
+      final canvas = find.descendant(
+          of: find.byType(MobileCanvas), matching: find.byType(Material));
+      expect(tester.widget<Material>(canvas.first).color, MobileTheme.canvas);
       expect(find.byType(LiquidGlass), findsNothing);
       expect(find.text('Content'), findsOneWidget);
     });
@@ -105,7 +101,7 @@ void main() {
   });
 
   group('NexusSheet liquid glass integration', () {
-    testWidgets('opens sheet with LiquidGlass in liquid mode', (tester) async {
+    testWidgets('mobile sheet stays solid in liquid mode', (tester) async {
       await AppAppearanceController.setGlassIntensityMode(
           GlassIntensity.liquid);
 
@@ -133,14 +129,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Sheet Content'), findsOneWidget);
-      expect(find.byType(LiquidGlass), findsOneWidget);
-      expect(
-        find.ancestor(
-          of: find.byType(LiquidGlass),
-          matching: find.byType(FadeTransition),
-        ),
-        findsNothing,
-      );
+      expect(find.byType(LiquidGlass), findsNothing);
+      expect(find.byType(BackdropFilter), findsNothing);
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      expect(find.text('Sheet Content'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
   });
 

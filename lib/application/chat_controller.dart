@@ -203,9 +203,14 @@ class ChatController extends Notifier<ChatState> {
 
   @override
   ChatState build() {
-    Future.microtask(_initialize);
+    _initialization = Future.microtask(_initialize);
     return const ChatState();
   }
+
+  Future<void> _initialization = Future<void>.value();
+
+  /// Completes after startup hydration and its data lease have both settled.
+  Future<void> get initialized => _initialization;
 
   Future<void> _withDataRun(Future<void> Function() action) async {
     final db = await ref.read(databaseProvider.future);
@@ -674,8 +679,8 @@ class ChatController extends Notifier<ChatState> {
           execute: (workspace) async {
             if (cancellation?.isCancelled == true) {
               return {'ok': false, 'code': ToolCodes.cancelled};
-    }
-      try {
+            }
+            try {
               final text = await _runSubAgent(null, prompt, budget,
                   workspaceOverride: workspace, isolatedEdit: true);
               return {
@@ -691,12 +696,12 @@ class ChatController extends Notifier<ChatState> {
                 'inputTokens': error.inputTokens,
                 'outputTokens': error.outputTokens
               };
-      }
+            }
           },
         );
       },
     );
-    }
+  }
 
   Future<ToolSettings> _loadToolSettings() =>
       ToolSettings.load(webBrowsing: state.webSearchEnabled);
@@ -708,7 +713,7 @@ class ChatController extends Notifier<ChatState> {
       required bool planMode}) async {
     if (kIsWeb) return null;
     final settings = await _loadToolSettings();
-      final prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     if (!AutoVerificationPolicy.allows(
       enabled: prefs.getBool(AutoVerificationPolicy.preferenceKey) ?? false,
       workspaceFiles: settings.workspaceFiles,
@@ -718,7 +723,7 @@ class ChatController extends Notifier<ChatState> {
       planMode: planMode,
     )) return null;
     return TerminalCommandService(workspacePath: workspacePath);
-    }
+  }
 
   Future<bool> _automaticRepairEnabled(ProviderConfig config) async {
     final prefs = await SharedPreferences.getInstance();
@@ -922,7 +927,8 @@ class ChatController extends Notifier<ChatState> {
 
   /// Keeps ordinary questions in chat mode while routing explicit project work
   /// through Agent mode, where workspace tools can be registered.
-  static bool requiresAgentModeForRequest(String text, {
+  static bool requiresAgentModeForRequest(
+    String text, {
     String taskType = 'general',
   }) =>
       chatRequiresAgentModeForRequest(text, taskType: taskType);
@@ -1749,16 +1755,16 @@ class ChatController extends Notifier<ChatState> {
       try {
         await completion?.drain();
         await leaseGuard?.close();
-    } finally {
-      _resumingTaskIds.remove(taskId);
-      if (cancellationToken != null) {
-        _runs.clearCancellationTokenIf(cancellationToken);
-      }
-      if (runGeneration != 0) {
-        _runs.forget(runGeneration);
+      } finally {
+        _resumingTaskIds.remove(taskId);
+        if (cancellationToken != null) {
+          _runs.clearCancellationTokenIf(cancellationToken);
+        }
+        if (runGeneration != 0) {
+          _runs.forget(runGeneration);
+        }
       }
     }
-  }
   }
 
   /// 预算暂停后从保存的 Agent 上下文续跑，而不是重新提交原始 prompt。
@@ -2251,7 +2257,7 @@ class ChatController extends Notifier<ChatState> {
   /// - 其他（paused 等）保持不变。
   @visibleForTesting
   static List<PlanStep> normalizePlanStepsForTerminal(
-      List<PlanStep> steps, String terminal) =>
+          List<PlanStep> steps, String terminal) =>
       planNormalizeStepsForTerminal(steps, terminal);
 
   /// 纯函数：依据步骤终态与运行结果，解析计划应进入的顶层状态。
@@ -2391,7 +2397,8 @@ class ChatController extends Notifier<ChatState> {
     return text.length > 90 ? '${text.substring(0, 90)}…' : text;
   }
 
-  ({int? costCents, int? savedCostCents}) _estimateUsageCost(ProviderConfig config, Usage usage) =>
+  ({int? costCents, int? savedCostCents}) _estimateUsageCost(
+          ProviderConfig config, Usage usage) =>
       estimateUsageCostCents(config, usage);
 
   /// 任务真正发起前申请通知权限（任务跑完要通知用户），失败静默降级。
@@ -2420,7 +2427,7 @@ class ChatController extends Notifier<ChatState> {
     if (!controller.isPaused) return false;
     if (_runs.isVisible(state.conversationId))
       state = state.copyWith(
-        paused: true,
+          paused: true,
           activityLog: [...state.activityLog, '暂停请求已保存：当前已派发步骤结束后停下']);
     return true;
   }
@@ -2437,7 +2444,7 @@ class ChatController extends Notifier<ChatState> {
         await controller.synchronize();
       } catch (_) {
         return false;
-    }
+      }
     }
     if (!controller.hasDurableFence) controller.resume();
     if (controller.isPaused || controller.isCancelled) return false;
@@ -2461,7 +2468,7 @@ class ChatController extends Notifier<ChatState> {
         await controller.synchronize();
       } catch (_) {
         return false;
-    }
+      }
       if (controller.isCancelled || controller.isSealed) return false;
     } else if (!controller.steer(value)) {
       return false;

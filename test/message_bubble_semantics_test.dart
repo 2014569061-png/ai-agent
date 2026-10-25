@@ -35,9 +35,10 @@ void main() {
       final regenerateX = tester.getCenter(find.byTooltip('重新生成')).dx;
       expect(regenerateX - shareX,
           desktop ? lessThanOrEqualTo(60) : greaterThan(200));
-      final meta =
-          tester.widget<Text>(find.byKey(const ValueKey('reply-meta'))).data!;
-      expect(find.byTooltip(meta), desktop ? findsOneWidget : findsNothing);
+      const meta = 'long-model-name-for-reply-metadata-verification';
+      expect(find.byKey(const ValueKey('reply-meta')),
+          desktop ? findsOneWidget : findsNothing);
+      expect(find.byTooltip(meta), findsOneWidget);
       await tester.tap(find.byTooltip('重新生成'));
       await tester.pump();
       expect(tester.takeException(), isNull);
