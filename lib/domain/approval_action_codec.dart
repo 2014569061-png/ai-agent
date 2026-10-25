@@ -12,6 +12,13 @@ const String approvalApproveAction = 'approve';
 const String approvalDenyAction = 'deny';
 const String approvalExpiredAction = 'expired';
 
+/// Notifications carry no authenticated foreground identity. Only a denial may
+/// mutate a pending request; old/forged approve actions must also fail closed.
+ApprovalActionRequest? parseBackgroundApprovalActionId(String? actionId) {
+  final request = parseApprovalActionId(actionId);
+  return request != null && !request.approve ? request : null;
+}
+
 /// 从通知动作 id 解析出的裁决意图。
 class ApprovalActionRequest {
   const ApprovalActionRequest({required this.requestId, required this.approve});

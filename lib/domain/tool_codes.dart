@@ -24,6 +24,8 @@ abstract final class ToolCodes {
   static const toolError = 'TOOL_ERROR';
   static const malformedResponse = 'MALFORMED_RESPONSE';
   static const cancelled = 'CANCELLED';
+  /// 累计输入和输出预算不足；保留已有结果，禁止自动重试以重置预算。
+  static const tokenBudgetExhausted = 'TOKEN_BUDGET_EXHAUSTED';
   static const timeout = 'TIMEOUT';
   static const payloadTooLarge = 'PAYLOAD_TOO_LARGE';
 
@@ -88,4 +90,6 @@ abstract final class ToolCodes {
 
   /// 记忆/文档的 revision 与当前内容不一致，存在并发修改。
   static const revisionConflict = 'REVISION_CONFLICT';
+  /// Existing file has not been read by this agent run.
+  static const readRequired = 'READ_REQUIRED';
 }

@@ -35,6 +35,7 @@ class SensitiveToolPolicy {
 
   /// 参数需要在持久化出口脱敏的工具（参数可能携带凭证、令牌或第三方机密）。
   static const Set<String> argumentRedactedTools = <String>{
+    'browser', // URLs and typed fields can include private account data.
     'http_request', // Authorization / X-Api-Key 等请求头，或含密钥的 body
     'terminal', // 命令行参数可能含 token、私有路径
     'write_file', // 写入内容可能含密钥、隐私文本
@@ -45,6 +46,7 @@ class SensitiveToolPolicy {
     'android_app_private_data_preview',
     'android_device', // Root 写入内容、私有路径、文件名和深链参数不应持久化
     'android_automation', // 规则里的 Wi-Fi 名称、应用名与授权目录 URI 属于位置/隐私信息
+    'android_accessibility_observe', // Screen text may contain personal information.
   };
 
   /// 结果需要在持久化出口脱敏的工具（结果可能回带机密或他人数据）。
@@ -52,6 +54,7 @@ class SensitiveToolPolicy {
   /// 注意：**`read_file` 不在此列**——那是用户自己的工作区文件，历史里回看
   /// 需要看到内容；它的参数也只是一个路径，同样不脱敏。
   static const Set<String> resultRedactedTools = <String>{
+    'browser', // Website text/targets stay out of persisted tool payloads.
     'http_request', // 响应头/体可能含令牌
     'terminal', // 命令输出可能含 token、私有路径、环境变量
     'memory_get', // 记忆内容
@@ -62,6 +65,7 @@ class SensitiveToolPolicy {
     'android_app_private_data', // Root 读取结果可能包含应用凭证与个人信息
     'android_app_private_data_preview',
     'android_device', // Logcat、文件搜索与 Root 读取可能含凭证和个人信息
+    'android_accessibility_observe', // Foreground UI text is sensitive user data.
   };
 
   /// MCP 远端工具的命名形态，参数与结果都按敏感处理：

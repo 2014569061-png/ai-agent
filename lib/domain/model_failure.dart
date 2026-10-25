@@ -36,6 +36,14 @@ class ModelFailure {
   }) {
     final text = raw.toLowerCase();
     final source = _normalizeFailureKind(failureKind);
+    if (failureKind == 'COST_BUDGET_EXHAUSTED' ||
+        failureKind == 'COST_PRICING_UNAVAILABLE') {
+      return ModelFailure(
+          retryable: false,
+          kind: failureKind!,
+          serviceStatus: ModelServiceStatus.billing,
+          statusCode: statusCode);
+    }
 
     if (_containsAny(text, const [
       'insufficient_quota',

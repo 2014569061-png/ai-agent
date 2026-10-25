@@ -483,8 +483,14 @@ class UnifiedRequest {
     this.maxTokens = 2048,
     this.topP = 1.0,
     this.reasoningEffort = ReasoningEffort.off,
+    this.costRunId,
+    this.costRequestId,
+    this.costPurpose = 'inference',
   });
 
+  /// Local correlation only; provider adapters must not put these on the wire.
+  final String? costRunId, costRequestId;
+  final String costPurpose;
   final String model;
   final List<ChatMessage> messages;
   final List<UnifiedTool> tools;
