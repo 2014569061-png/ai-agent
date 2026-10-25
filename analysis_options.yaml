@@ -20,6 +20,10 @@ analyzer:
     # 本地产物（截图脚本、动效日志与备份代码），已被 .gitignore 忽略；
     # 其中的旧代码快照不随主工程演进，不应计入静态分析。
     - artifacts/**
+    - local/**
+    - chanpin/**
+    - .vs-cache/**
+    - .vs-shared/**
 
 linter:
   # The lint rules applied to this project can be customized in the

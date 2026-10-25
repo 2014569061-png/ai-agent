@@ -96,6 +96,12 @@ scripts/flutter_hot_daemon.ps1
 # 不要把这些文件移回根目录，也不要提交本目录。
 /local/
 
+# 本机 Visual Studio 安装及缓存，保留在磁盘上，不随应用源码提交。
+/chanpin/
+/.vs-cache/
+/.vs-shared/
+/%SystemDrive%/
+
 # 外部 DSH / 视觉素材工具生成的临时工件，不属于 NEXUS Agent 源码。
 # （保留这些规则：外部工具仍可能直接把产物写在仓库根。）
 /natgeo_landscape_*.jpg

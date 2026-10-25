@@ -7,6 +7,7 @@ environment:
   sdk: ^3.5.0
 
 dependencies:
+  analyzer: ^14.4.0
   flutter:
     sdk: flutter
   flutter_riverpod: ^3.0.0
@@ -36,6 +37,7 @@ dependencies:
 # P1~P3 阶段新增依赖（详见 NEXUS_开发期技术方案_P1-P3.md 第 10 节）。
   flutter_foreground_task: ^11.0.1
   flutter_local_notifications: ^22.0.0
+  timezone: ^0.11.1
   cryptography: ^2.7.0
   # 已移除 super_clipboard：全仓库零代码引用（剪贴板用的是 Flutter 自带
   # Clipboard API）。它固定 0.9.1 会把 device_info_plus 钉在 <12 → win32 <6，
@@ -44,6 +46,7 @@ dependencies:
   workmanager: ^0.10.9
   flutter_math_fork: ^0.7.3
   url_launcher: ^6.3.1
+  webview_windows: ^0.4.0
   app_links: ^7.0.0
   permission_handler: ^13.0.1
   archive: ^4.2.0
