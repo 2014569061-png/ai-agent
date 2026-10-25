@@ -2,7 +2,7 @@
 
 - 状态：已采纳（阶段 0–1 已实现）
 - 日期：2026-09-30
-- 关联：`docs/nexus-harness-final-plan.md`（本地方案文档）
+- 关联：[当前架构概览](../../docs/architecture.md)
 
 ## 背景
 

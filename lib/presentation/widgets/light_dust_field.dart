@@ -38,7 +38,7 @@ class LightDustSystem {
   static const int _x = 0, _y = 1, _vy = 2, _phase = 3;
   static const int _age = 4, _life = 5, _radius = 6, _alpha = 7;
 
-  // 参数见 docs/motion_plan.md「M8 光尘粒子」。
+  // 动效与专用画布规范见 docs/android-ui-style.md。
   static const double minRadius = 0.8, maxRadius = 2.2;
   static const double minAlpha = 0.15, maxAlpha = 0.45;
   static const double minLife = 4, maxLife = 7;

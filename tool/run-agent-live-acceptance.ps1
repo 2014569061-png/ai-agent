@@ -1,5 +1,5 @@
 ﻿param(
-  [string]$Flutter = 'C:\src\flutter\bin\flutter.bat'
+  [string]$Flutter = 'flutter'
 )
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path

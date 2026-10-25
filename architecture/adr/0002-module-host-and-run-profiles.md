@@ -1,7 +1,7 @@
 # ADR 0002: ModuleHost 与 RunProfile
 
 - 状态：已采纳（阶段 3）
-- 相关：ADR 0001（会话日志）、`docs/nexus-harness-final-plan.md`
+- 相关：ADR 0001（会话日志）、[当前架构概览](../../docs/architecture.md)
 
 ## 背景
 

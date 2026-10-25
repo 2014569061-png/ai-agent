@@ -2,7 +2,7 @@
 
 默认从项目根目录运行；Android 预览优先使用根目录 `android-preview.bat`，并先检查已有预览进程和实际设备序列号。
 
-覆盖率摘要：`python tool/coverage_audit.py`，输入为 `coverage/lcov.info`。CI 覆盖率门禁仍由 `tool/check_coverage.dart` 执行。
+覆盖率门禁：`dart run tool/check_coverage.dart coverage/lcov.info 55.0`。真实模型验收会产生网络请求与模型费用，运行前应配置自己的服务商并明确测试范围。
 
 ## 设备、功能验收与执行器
 
@@ -75,7 +75,6 @@
 
 - [check_coverage.dart](check_coverage.dart)
 - [count_silent_catches.dart](count_silent_catches.dart)
-- [coverage_audit.py](coverage_audit.py)
 - [release_evidence_gate.py](release_evidence_gate.py)
 - [score_mobile_agent_eval.py](score_mobile_agent_eval.py)
 - [test_build_apk.py](test_build_apk.py)
@@ -96,9 +95,3 @@
 - [run-desktop-acceptance.ps1](run-desktop-acceptance.ps1)
 - [run-desktop-production-smoke.ps1](run-desktop-production-smoke.ps1)
 - [verify-blue-workspace.ps1](verify-blue-workspace.ps1)
-
-## 历史兼容工具
-
-- [legacy/fix-pwsh.bat](legacy/fix-pwsh.bat)
-
-`legacy/fix-pwsh.bat` 是保留的历史环境修复脚本，会向硬编码的系统 Flutter 路径复制可执行文件；不属于日常构建入口，本次未执行。
