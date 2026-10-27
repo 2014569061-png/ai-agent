@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
+
 /// Shared phone search field, without a fixed height that clips large text.
 class NexusSearchField extends StatelessWidget {
   const NexusSearchField({
@@ -28,7 +30,6 @@ class NexusSearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
     // The controller may also change from a clear action or an external filter.
     // Update the clear affordance without requiring the page to rebuild.
     return ValueListenableBuilder<TextEditingValue>(
@@ -52,11 +53,10 @@ class NexusSearchField extends StatelessWidget {
                   icon: const Icon(Icons.close_rounded, size: 20))
               : null,
           filled: true,
+          // 明暗两套值与 MobileTheme 的 surfaceHover 完全相同，直接取 token。
           fillColor: subdued
               ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: .5)
-              : dark
-                  ? const Color(0xFF202B3D)
-                  : const Color(0xFFF0F4FA),
+              : AppTheme.semanticOf(context).surfaceHover,
           enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(compact ? 12 : 18),
               borderSide: BorderSide.none),
