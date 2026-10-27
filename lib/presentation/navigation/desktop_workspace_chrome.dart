@@ -202,7 +202,7 @@ class _DesktopProjectNavigatorState
                           horizontal: 10, vertical: 7),
                       decoration: BoxDecoration(
                           color: colors.panel,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                           border: Border.all(color: colors.border)),
                       child: Row(children: [
                         Icon(Icons.folder_outlined,
@@ -224,7 +224,7 @@ class _DesktopProjectNavigatorState
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
                       color: colors.hover,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                       border: Border.all(color: colors.border)),
                   child: Row(children: [
                     for (final fileTab in [false, true])
@@ -271,7 +271,7 @@ class _DesktopProjectNavigatorState
                                             const EdgeInsets.only(bottom: 4),
                                         decoration: BoxDecoration(
                                             borderRadius:
-                                                BorderRadius.circular(8),
+                                                BorderRadius.circular(AppTokens.radiusControl),
                                             border: chat.$3 == session.id
                                                 ? Border.all(
                                                     color: colors.accent
@@ -474,7 +474,7 @@ class DesktopWorkspaceHeader extends ConsumerWidget {
                               horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                               color: colors.hover,
-                              borderRadius: BorderRadius.circular(999),
+                              borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                               border: Border.all(color: colors.border)),
                           child: Row(mainAxisSize: MainAxisSize.min, children: [
                             Container(

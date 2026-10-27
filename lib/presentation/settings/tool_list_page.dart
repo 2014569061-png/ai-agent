@@ -473,7 +473,7 @@ class _ToolListPageState extends ConsumerState<ToolListPage> {
                               color: AppTheme.semanticOf(context)
                                   .textPrimary
                                   .withValues(alpha: 0.06),
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                             ),
                             alignment: Alignment.center,
                             child: Icon(

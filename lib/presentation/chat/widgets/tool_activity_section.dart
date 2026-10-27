@@ -469,7 +469,7 @@ class _ToolActivityTimelineState extends State<ToolActivityTimeline> {
             decoration: BoxDecoration(
               color:
                   isDark ? AppPalette.terminalBg : AppPalette.terminalSurface,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
               border: Border.all(
                 color: isDark
                     ? AppPalette.terminalBorder

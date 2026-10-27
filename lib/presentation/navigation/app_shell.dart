@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../theme/app_tokens.dart';
 import 'dart:math' as math;
 import 'dart:ui' show AppExitResponse;
 
@@ -940,7 +941,7 @@ class _DesktopTopBar extends ConsumerWidget {
               height: 28,
               decoration: BoxDecoration(
                   color: colors.selected,
-                  borderRadius: BorderRadius.circular(8)),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusControl)),
               child: Icon(
                   label == null
                       ? Icons.auto_awesome_outlined

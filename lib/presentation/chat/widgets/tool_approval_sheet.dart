@@ -410,7 +410,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                                         horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
                                       color: riskColor.withValues(alpha: 0.11),
-                                      borderRadius: BorderRadius.circular(999),
+                                      borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                                     ),
                                     child: Text(
                                       riskLabel,
@@ -505,7 +505,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                                     color: isDark
                                         ? Colors.black.withValues(alpha: 0.2)
                                         : cs.surface,
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                                     border: Border.all(
                                       color: cs.outlineVariant
                                           .withValues(alpha: 0.5),

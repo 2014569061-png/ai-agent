@@ -85,7 +85,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
                     height: 32,
                     decoration: BoxDecoration(
                       color: badgeColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                     ),
                     child: Icon(
                       isApproval

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../../theme/app_tokens.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -424,7 +425,7 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: dark ? Colors.black54 : const Color(0xFF1E1E28),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           ),
           child: SelectableText(
             command,

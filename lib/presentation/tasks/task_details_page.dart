@@ -1067,7 +1067,7 @@ class _TaskDetailsPageState extends ConsumerState<TaskDetailsPage> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: semantic.brandSoft,
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                 ),
                 child: Text(
                   TaskService.taskTypeLabel(_task.type),
@@ -1611,7 +1611,7 @@ class _CodeDiffCard extends StatelessWidget {
                   ? AppPalette.darkSurfaceHover
                   : AppPalette.lightSurfaceHover,
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(8)),
+                  const BorderRadius.vertical(top: Radius.circular(AppTokens.radiusControl)),
             ),
             child: Row(
               children: [

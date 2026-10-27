@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../theme/app_tokens.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -101,7 +102,7 @@ class DesktopWorkbenchPanel extends StatelessWidget {
                   padding: const EdgeInsets.all(3),
                   decoration: BoxDecoration(
                       color: colors.hover,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppTokens.radiusControl),
                       border: Border.all(color: colors.border)),
                   child: Row(children: [
                     for (var i = 0; i < 4; i++)

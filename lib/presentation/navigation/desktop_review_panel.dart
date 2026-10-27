@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../theme/app_tokens.dart';
 import '../../application/desktop_diff.dart';
 
 import 'package:flutter/material.dart';
@@ -199,7 +200,7 @@ class _DesktopReviewPanelState extends ConsumerState<DesktopReviewPanel> {
                                             decoration: BoxDecoration(
                                                 color: colors.sidebar,
                                                 borderRadius:
-                                                    BorderRadius.circular(8),
+                                                    BorderRadius.circular(AppTokens.radiusControl),
                                                 border: Border.all(
                                                     color: colors.border)),
                                             child: DropdownButtonHideUnderline(

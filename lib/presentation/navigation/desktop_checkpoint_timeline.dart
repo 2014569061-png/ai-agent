@@ -310,7 +310,7 @@ class _DesktopCheckpointTimelineState
                     color: i == checkpoints.length - 1
                         ? emerald.withValues(alpha: 0.14)
                         : (colors?.panel ?? Colors.white),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(AppTokens.radiusPill),
                     border: Border.all(
                         color: i == checkpoints.length - 1 ? emerald : border),
                   ),
