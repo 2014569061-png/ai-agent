@@ -7,6 +7,7 @@ import '../theme/desktop_theme.dart';
 import '../motion/motion_preferences.dart';
 import 'liquid_glass.dart';
 import '../motion/press_squash.dart';
+import '../theme/mobile_theme.dart';
 
 export 'liquid_glass.dart' show GlassIntensity;
 
@@ -143,7 +144,7 @@ class _GlassSurfaceState extends State<GlassSurface> {
     final highContrast = media?.highContrast ?? false;
     final intensity =
         widget.intensity ?? AppAppearanceController.resolvedGlassIntensity;
-    final radius = widget.borderRadius ?? BorderRadius.circular(20);
+    final radius = widget.borderRadius ?? BorderRadius.circular(MobileTheme.insetRadius);
     final useGlass = intensity != GlassIntensity.flat;
     final effectiveTint = widget.tint ??
         _defaultTint(

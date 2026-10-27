@@ -204,6 +204,9 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
         hasProgress: widget.progress != null,
         hasAnswer: widget.hasStartedAnswer);
     final condensedProgress = policy.condensedProgress;
+    final blockRadius = DesktopTheme.maybeOf(context) == null
+        ? MobileTheme.controlRadius(context)
+        : _cardRadius;
 
     return Container(
       // S7：流式正文紧跟进度卡时留 10dp；完成态 6 + 段落上距 6 ≈ 12。
@@ -215,7 +218,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
         color: DesktopTheme.maybeOf(context) == null && !thinking
             ? Colors.transparent
             : cardBg,
-        borderRadius: BorderRadius.circular(_cardRadius),
+        borderRadius: BorderRadius.circular(blockRadius),
         border: Border.all(
             color: DesktopTheme.maybeOf(context) == null && !thinking
                 ? Colors.transparent
@@ -231,7 +234,7 @@ class _ReasoningCompactBlockState extends State<ReasoningCompactBlock> {
             child: InkWell(
               // S6：整行可点展开/收起思考过程，不再单独放「思考过程」按钮。
               onTap: hasReasoning ? _toggleReasoning : null,
-              borderRadius: BorderRadius.circular(_cardRadius),
+              borderRadius: BorderRadius.circular(blockRadius),
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

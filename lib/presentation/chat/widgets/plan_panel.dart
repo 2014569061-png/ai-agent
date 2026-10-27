@@ -190,7 +190,7 @@ class _PlanPanelState extends State<PlanPanel> {
     final total = widget.plan.steps.length;
     return InkWell(
       onTap: () => setState(() => _expanded = true),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(

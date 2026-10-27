@@ -84,7 +84,7 @@ extension _ChatSheets on _ChatPageState {
                     for (final mode in ChatMode.values) ...[
                       Expanded(
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                           onTap: () => Navigator.pop(sheetContext, mode),
                           child: AnimatedContainer(
                             duration: NexusMotion.durationFast(sheetContext),
@@ -95,7 +95,7 @@ extension _ChatSheets on _ChatPageState {
                                   ? activeColor.withValues(
                                       alpha: isDark ? 0.2 : 0.12)
                                   : surface,
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                               border: Border.all(
                                 color:
                                     mode == state.mode ? activeColor : hairline,
@@ -564,7 +564,7 @@ extension _ChatSheets on _ChatPageState {
                     for (final mode in ApprovalMode.values) ...[
                       Expanded(
                         child: InkWell(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                           onTap: () => Navigator.pop(sheetContext, mode),
                           child: AnimatedContainer(
                             duration: NexusMotion.durationFast(sheetContext),
@@ -575,7 +575,7 @@ extension _ChatSheets on _ChatPageState {
                                   ? activeColor.withValues(
                                       alpha: isDark ? 0.2 : 0.12)
                                   : surface,
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                               border: Border.all(
                                 color: mode == currentMode
                                     ? activeColor

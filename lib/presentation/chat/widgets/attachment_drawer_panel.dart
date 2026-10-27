@@ -172,7 +172,7 @@ class _AttachmentThumbnail extends StatelessWidget {
       height: 72,
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
         border: Border.all(
           color: selected ? MobileTheme.brand(context) : border,
           width: selected ? 1.5 : 0.8,
@@ -259,12 +259,12 @@ class _ActionCard extends StatelessWidget {
       child: NexusPressable(
         onTap: onTap,
         pressedScale: 0.96,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
         child: Container(
           height: 76,
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
             border: Border.all(color: border, width: 0.8),
             boxShadow: [
               BoxShadow(

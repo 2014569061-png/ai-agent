@@ -3,6 +3,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_status_colors.dart';
 import '../theme/desktop_theme.dart';
+import '../theme/mobile_theme.dart';
 import 'section_card.dart';
 import '../theme/app_tokens.dart';
 import 'glass_surface.dart';
@@ -70,7 +71,7 @@ class NexusMetricTile extends StatelessWidget {
         : AppStatusColors.resolve(context, tone).foreground;
     final intensity = AppAppearanceController.resolvedGlassIntensity;
     final isGlass = intensity != GlassIntensity.flat;
-    final cardRadius = BorderRadius.circular(AppTokens.radiusCard);
+    final cardRadius = BorderRadius.circular(MobileTheme.cardRadius(context));
 
     final cardBody = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -174,7 +175,7 @@ class NexusMetricTile extends StatelessWidget {
       return SectionCard(
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(MobileTheme.contentRadius),
           child: cardBody,
         ),
       );

@@ -195,7 +195,7 @@ class MessageBubble extends StatelessWidget {
                     ? theme.colorScheme.surfaceContainerHighest
                     : const Color(0xFFF1F2F5)),
             borderRadius: desktop != null
-                ? BorderRadius.circular(12)
+                ? BorderRadius.circular(MobileTheme.insetRadius)
                 : const BorderRadius.only(
                     topLeft: Radius.circular(20),
                     topRight: Radius.circular(20),
@@ -213,7 +213,7 @@ class MessageBubble extends StatelessWidget {
                     desktop != null ? Border.all(color: desktop.border) : null,
                 // DeepSeek 式用户气泡：浅色品牌底、无描边，右下角收成小圆角。
                 borderRadius: desktop != null
-                    ? BorderRadius.circular(12)
+                    ? BorderRadius.circular(MobileTheme.insetRadius)
                     : const BorderRadius.only(
                         topLeft: Radius.circular(20),
                         topRight: Radius.circular(20),
@@ -496,7 +496,7 @@ class MessageBubble extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
             decoration: BoxDecoration(
               color: AppPalette.danger.withValues(alpha: isDark ? 0.11 : 0.045),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
               border: Border.all(
                 color: AppPalette.danger.withValues(alpha: isDark ? 0.28 : 0.18),
               ),
@@ -1271,7 +1271,7 @@ class _ToolResultChip extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
         decoration: BoxDecoration(
           color: chipBg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
           border: chipBorder,
         ),
         child: Row(

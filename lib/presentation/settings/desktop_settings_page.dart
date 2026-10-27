@@ -9,6 +9,7 @@ import 'provider_list_page.dart';
 import 'extensions_page.dart';
 import 'appearance_theme_page.dart';
 import 'data_management_page.dart';
+import '../theme/mobile_theme.dart';
 
 class DesktopSettingsPage extends StatefulWidget {
   const DesktopSettingsPage(
@@ -189,7 +190,7 @@ class _DesktopSettingsPageState extends State<DesktopSettingsPage> {
                     padding: const EdgeInsets.all(11),
                     decoration: BoxDecoration(
                         color: colors.selected,
-                        borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(MobileTheme.insetRadius)),
                     child:
                         Icon(icons[_category], color: colors.accent, size: 23)),
                 const SizedBox(width: 14),

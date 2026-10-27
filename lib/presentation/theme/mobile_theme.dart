@@ -16,6 +16,12 @@ abstract final class MobileTheme {
   static const fieldRadius = 18.0;
   static const sheetRadius = 28.0;
 
+  /// 内嵌小块（提示条、聊天气泡、状态块、预览块）的统一圆角。
+  /// 数值与 [controlRadius] 的手机档一致，但语义独立：调整控件圆角
+  /// 不应连带改变这些块，反之亦然。此前页面里这些块写过 12/14/15/16/18/20
+  /// 六种字面量，统一收敛到这里。
+  static const insetRadius = 16.0;
+
   /// Compatibility for pages which still set an explicit brand foreground.
   static Color brand(BuildContext context) =>
       DesktopTheme.maybeOf(context) != null

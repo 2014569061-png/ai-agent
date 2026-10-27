@@ -6,6 +6,7 @@ import '../../theme/desktop_theme.dart';
 import '../../widgets/glass_surface.dart';
 import '../../widgets/nexus_home_visuals.dart';
 import 'chat_execution_stage.dart';
+import '../../theme/mobile_theme.dart';
 
 /// 顶栏统一高度常量 (56px)
 const double kCapsuleTopBarHeight = AppTokens.kTopBarHeight;
@@ -262,7 +263,7 @@ class CapsuleTopBar extends StatelessWidget {
           Expanded(
               child: InkWell(
             onTap: onTitleTap ?? onModelTap,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
               child: Column(mainAxisSize: MainAxisSize.min, children: [

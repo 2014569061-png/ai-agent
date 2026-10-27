@@ -7,6 +7,7 @@ import '../theme/desktop_theme.dart';
 import 'glass_surface.dart';
 import 'nexus_touch_light.dart';
 import 'nexus_surface.dart';
+import '../theme/mobile_theme.dart';
 
 /// 统一的内容分段卡片 (SectionCard)
 /// 遵循极简表面策略：实色 surface 与 1px hairline 边框。
@@ -57,7 +58,7 @@ class SectionCard extends StatelessWidget {
         ),
       );
     }
-    final radius = borderRadius ?? BorderRadius.circular(24);
+    final radius = borderRadius ?? BorderRadius.circular(MobileTheme.contentRadius);
     final paddedChild =
         padding == null ? child : Padding(padding: padding!, child: child);
     // M4：卡片内所有 InkWell 的水波纹替换为按压光斑（按档位自动降级）。

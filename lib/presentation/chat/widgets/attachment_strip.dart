@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../../../domain/models.dart';
+import '../../theme/mobile_theme.dart';
 
 /// 消息附件条：把 image/audio/video 类型的 MessagePart 渲染成缩略图或播放器。
 /// 文本部分由 MessageBubble 单独渲染，避免 base64 字符串被当作文本显示。
@@ -46,7 +47,7 @@ class _ImageAttachment extends StatelessWidget {
     try {
       final bytes = base64Decode(encoded);
       return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
         child: Image.memory(
           bytes,
           width: 180,

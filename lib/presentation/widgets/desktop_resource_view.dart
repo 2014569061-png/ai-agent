@@ -3,6 +3,7 @@ import '../theme/app_tokens.dart';
 import '../theme/desktop_theme.dart';
 import 'empty_state_view.dart';
 import 'nexus_page_header.dart';
+import '../theme/mobile_theme.dart';
 
 class DesktopResourceFilter<T> {
   const DesktopResourceFilter(this.label, this.matches);
@@ -179,7 +180,7 @@ class _DesktopResourceViewState<T> extends State<DesktopResourceView<T>> {
                                         decoration: BoxDecoration(
                                             color: colors.selected,
                                             borderRadius:
-                                                BorderRadius.circular(12)),
+                                                BorderRadius.circular(MobileTheme.insetRadius)),
                                         child: Icon(widget.icon,
                                             color: colors.accent, size: 24)),
                                     const SizedBox(width: 14),
@@ -338,7 +339,7 @@ class DesktopResourceCard extends StatelessWidget {
     return Material(
       color: colors.panel,
       shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
           side: BorderSide(color: selected ? colors.accent : colors.border)),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

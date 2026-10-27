@@ -16,6 +16,7 @@ import '../../application/log_service.dart';
 import '../../domain/browser_session.dart';
 import '../../domain/models.dart';
 import '../widgets/tool_approval_helper.dart';
+import '../theme/mobile_theme.dart';
 
 class BrowserPage extends ConsumerStatefulWidget {
   const BrowserPage(
@@ -313,7 +314,7 @@ class _BrowserPageState extends ConsumerState<BrowserPage>
                                       .colorScheme
                                       .surfaceContainerHighest
                                       .withValues(alpha: 0.45),
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                                 ),
                                 child: Padding(
                                   padding: const EdgeInsets.all(10),

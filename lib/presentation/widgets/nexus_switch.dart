@@ -4,6 +4,7 @@ import '../theme/desktop_theme.dart';
 
 import '../motion/nexus_haptics.dart';
 import '../motion/nexus_spring.dart';
+import '../theme/mobile_theme.dart';
 
 /// L6：弹簧开关，[Switch] / [Switch.adaptive] 的替身（同名常用参数）。
 ///
@@ -163,7 +164,7 @@ class _NexusSwitchState extends State<NexusSwitch>
             child: DecoratedBox(
               key: const ValueKey('nexus_switch_focus_ring'),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(MobileTheme.contentRadius),
                 border: Border.all(
                     width: 2,
                     color: _showFocusHighlight

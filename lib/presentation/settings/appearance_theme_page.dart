@@ -644,7 +644,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                         color: isDark
                             ? AppPalette.darkSurfaceHover
                             : AppPalette.lightBrandSoft,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                       ),
                       child: Text(
                         '你好，请帮我分析项目进度',
@@ -665,7 +665,7 @@ class _AppearanceThemePageState extends State<AppearanceThemePage> {
                         color: isDark
                             ? AppPalette.darkSurface.withValues(alpha: 0.88)
                             : AppPalette.lightCanvas.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                         border: Border.all(
                           color: (isDark ? Colors.white : Colors.black)
                               .withValues(alpha: 0.08),

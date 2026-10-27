@@ -390,7 +390,7 @@ class _JobTile extends StatelessWidget {
           height: 46,
           decoration: BoxDecoration(
             color: accent.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
           ),
           alignment: Alignment.center,
           child: Icon(icon, size: 24, color: accent),

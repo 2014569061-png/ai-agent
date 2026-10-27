@@ -2092,7 +2092,7 @@ class _RecoverableTaskDialog extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               color: MobileTheme.brand(context).withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
             ),
             child: Icon(
               isPaused

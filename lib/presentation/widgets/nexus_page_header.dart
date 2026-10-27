@@ -6,6 +6,7 @@ import '../theme/app_appearance_controller.dart';
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../theme/desktop_theme.dart';
+import '../theme/mobile_theme.dart';
 import 'glass_surface.dart';
 
 /// 统一的二级页面头部组件 (NexusPageHeader)
@@ -221,7 +222,7 @@ class NexusPageHeader extends StatelessWidget implements PreferredSizeWidget {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         borderRadius:
-                            BorderRadius.circular(AppTokens.radiusControl),
+                            BorderRadius.circular(MobileTheme.controlRadius(context)),
                         color: desktop != null
                             ? desktop.hover
                             : (isDark

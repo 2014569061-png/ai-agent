@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
+import '../theme/mobile_theme.dart';
 
 /// 平面 Surface 容器：用 1px hairline 描边与极轻浮层阴影表达层级。
 ///
@@ -48,7 +49,7 @@ class NexusSurface extends StatelessWidget {
       );
     }
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final radius = borderRadius ?? BorderRadius.circular(24);
+    final radius = borderRadius ?? BorderRadius.circular(MobileTheme.contentRadius);
     final hairline =
         isDark ? AppPalette.darkHairline : AppPalette.lightHairline;
 

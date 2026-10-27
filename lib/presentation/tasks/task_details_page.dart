@@ -1801,7 +1801,7 @@ class _OverviewStat extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: textColor.withValues(alpha: isDark ? 0.06 : 0.04),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

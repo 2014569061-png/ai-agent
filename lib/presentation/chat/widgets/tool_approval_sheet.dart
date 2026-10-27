@@ -373,7 +373,7 @@ class _ToolApprovalSheetState extends State<ToolApprovalSheet>
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: cardBg,
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                       border: Border.all(color: cardBorder),
                     ),
                     child: Column(

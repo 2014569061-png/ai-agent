@@ -488,7 +488,7 @@ class _DevelopmentTasksPageState extends ConsumerState<DevelopmentTasksPage> {
                   padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
                   decoration: BoxDecoration(
                     color: AppPalette.warning.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
                   ),
                   child: Row(
                     children: [

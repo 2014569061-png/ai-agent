@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../application/device_action_runner.dart';
 import '../theme/app_palette.dart';
 import '../widgets/nexus_sheet.dart';
+import '../theme/mobile_theme.dart';
 
 /// 设备动作执行前的确认面板：逐项展示目标、范围、影响、实际执行流程、
 /// 是否可撤销与恢复方案。含 Root 或不可撤销动作时需要二次确认。
@@ -231,7 +232,7 @@ class _ActionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
         border: Border.all(color: color.withValues(alpha: 0.5)),
         color: color.withValues(alpha: 0.06),
       ),
