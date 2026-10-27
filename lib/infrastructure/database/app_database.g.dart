@@ -86,6 +86,12 @@ class $ConversationsTable extends Conversations
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
       'updated_at', aliasedName, false,
       type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _lastReadAtMeta =
+      const VerificationMeta('lastReadAt');
+  @override
+  late final GeneratedColumn<DateTime> lastReadAt = GeneratedColumn<DateTime>(
+      'last_read_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -98,7 +104,8 @@ class $ConversationsTable extends Conversations
         isFavorite,
         tagsJson,
         createdAt,
-        updatedAt
+        updatedAt,
+        lastReadAt
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -163,6 +170,12 @@ class $ConversationsTable extends Conversations
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('last_read_at')) {
+      context.handle(
+          _lastReadAtMeta,
+          lastReadAt.isAcceptableOrUnknown(
+              data['last_read_at']!, _lastReadAtMeta));
+    }
     return context;
   }
 
@@ -194,6 +207,8 @@ class $ConversationsTable extends Conversations
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      lastReadAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}last_read_at']),
     );
   }
 
@@ -215,6 +230,10 @@ class Conversation extends DataClass implements Insertable<Conversation> {
   final String tagsJson;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  /// 用户最后一次打开这条会话的时间；用于派生「未读」。
+  /// 为空表示从未打开过（历史数据一律视为未读）。
+  final DateTime? lastReadAt;
   const Conversation(
       {required this.id,
       required this.title,
@@ -226,7 +245,8 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       required this.isFavorite,
       required this.tagsJson,
       required this.createdAt,
-      required this.updatedAt});
+      required this.updatedAt,
+      this.lastReadAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -247,6 +267,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
     map['tags_json'] = Variable<String>(tagsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || lastReadAt != null) {
+      map['last_read_at'] = Variable<DateTime>(lastReadAt);
+    }
     return map;
   }
 
@@ -269,6 +292,9 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       tagsJson: Value(tagsJson),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      lastReadAt: lastReadAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastReadAt),
     );
   }
 
@@ -288,6 +314,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      lastReadAt: serializer.fromJson<DateTime?>(json['lastReadAt']),
     );
   }
   @override
@@ -305,6 +332,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       'tagsJson': serializer.toJson<String>(tagsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'lastReadAt': serializer.toJson<DateTime?>(lastReadAt),
     };
   }
 
@@ -319,7 +347,8 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           bool? isFavorite,
           String? tagsJson,
           DateTime? createdAt,
-          DateTime? updatedAt}) =>
+          DateTime? updatedAt,
+          Value<DateTime?> lastReadAt = const Value.absent()}) =>
       Conversation(
         id: id ?? this.id,
         title: title ?? this.title,
@@ -334,6 +363,7 @@ class Conversation extends DataClass implements Insertable<Conversation> {
         tagsJson: tagsJson ?? this.tagsJson,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        lastReadAt: lastReadAt.present ? lastReadAt.value : this.lastReadAt,
       );
   Conversation copyWithCompanion(ConversationsCompanion data) {
     return Conversation(
@@ -351,6 +381,8 @@ class Conversation extends DataClass implements Insertable<Conversation> {
       tagsJson: data.tagsJson.present ? data.tagsJson.value : this.tagsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      lastReadAt:
+          data.lastReadAt.present ? data.lastReadAt.value : this.lastReadAt,
     );
   }
 
@@ -367,14 +399,26 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           ..write('isFavorite: $isFavorite, ')
           ..write('tagsJson: $tagsJson, ')
           ..write('createdAt: $createdAt, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('lastReadAt: $lastReadAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, title, agentId, projectId, mode,
-      providerProfileId, isPinned, isFavorite, tagsJson, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+      id,
+      title,
+      agentId,
+      projectId,
+      mode,
+      providerProfileId,
+      isPinned,
+      isFavorite,
+      tagsJson,
+      createdAt,
+      updatedAt,
+      lastReadAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -389,7 +433,8 @@ class Conversation extends DataClass implements Insertable<Conversation> {
           other.isFavorite == this.isFavorite &&
           other.tagsJson == this.tagsJson &&
           other.createdAt == this.createdAt &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.lastReadAt == this.lastReadAt);
 }
 
 class ConversationsCompanion extends UpdateCompanion<Conversation> {
@@ -404,6 +449,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
   final Value<String> tagsJson;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<DateTime?> lastReadAt;
   final Value<int> rowid;
   const ConversationsCompanion({
     this.id = const Value.absent(),
@@ -417,6 +463,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.tagsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastReadAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
@@ -431,6 +478,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     this.tagsJson = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.lastReadAt = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         createdAt = Value(createdAt),
@@ -447,6 +495,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     Expression<String>? tagsJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? lastReadAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -461,6 +510,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       if (tagsJson != null) 'tags_json': tagsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (lastReadAt != null) 'last_read_at': lastReadAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -477,6 +527,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       Value<String>? tagsJson,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
+      Value<DateTime?>? lastReadAt,
       Value<int>? rowid}) {
     return ConversationsCompanion(
       id: id ?? this.id,
@@ -490,6 +541,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
       tagsJson: tagsJson ?? this.tagsJson,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      lastReadAt: lastReadAt ?? this.lastReadAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -530,6 +582,9 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (lastReadAt.present) {
+      map['last_read_at'] = Variable<DateTime>(lastReadAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -550,6 +605,7 @@ class ConversationsCompanion extends UpdateCompanion<Conversation> {
           ..write('tagsJson: $tagsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastReadAt: $lastReadAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -14027,6 +14083,7 @@ typedef $$ConversationsTableCreateCompanionBuilder = ConversationsCompanion
   Value<String> tagsJson,
   required DateTime createdAt,
   required DateTime updatedAt,
+  Value<DateTime?> lastReadAt,
   Value<int> rowid,
 });
 typedef $$ConversationsTableUpdateCompanionBuilder = ConversationsCompanion
@@ -14042,6 +14099,7 @@ typedef $$ConversationsTableUpdateCompanionBuilder = ConversationsCompanion
   Value<String> tagsJson,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
+  Value<DateTime?> lastReadAt,
   Value<int> rowid,
 });
 
@@ -14087,6 +14145,9 @@ class $$ConversationsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lastReadAt => $composableBuilder(
+      column: $table.lastReadAt, builder: (column) => ColumnFilters(column));
 }
 
 class $$ConversationsTableOrderingComposer
@@ -14131,6 +14192,9 @@ class $$ConversationsTableOrderingComposer
 
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lastReadAt => $composableBuilder(
+      column: $table.lastReadAt, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -14174,6 +14238,9 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastReadAt => $composableBuilder(
+      column: $table.lastReadAt, builder: (column) => column);
 }
 
 class $$ConversationsTableTableManager extends RootTableManager<
@@ -14213,6 +14280,7 @@ class $$ConversationsTableTableManager extends RootTableManager<
             Value<String> tagsJson = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> lastReadAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ConversationsCompanion(
@@ -14227,6 +14295,7 @@ class $$ConversationsTableTableManager extends RootTableManager<
             tagsJson: tagsJson,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastReadAt: lastReadAt,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -14241,6 +14310,7 @@ class $$ConversationsTableTableManager extends RootTableManager<
             Value<String> tagsJson = const Value.absent(),
             required DateTime createdAt,
             required DateTime updatedAt,
+            Value<DateTime?> lastReadAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ConversationsCompanion.insert(
@@ -14255,6 +14325,7 @@ class $$ConversationsTableTableManager extends RootTableManager<
             tagsJson: tagsJson,
             createdAt: createdAt,
             updatedAt: updatedAt,
+            lastReadAt: lastReadAt,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

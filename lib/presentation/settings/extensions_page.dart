@@ -40,6 +40,10 @@ class ExtensionsPage extends StatefulWidget {
 class _ExtensionsPageState extends State<ExtensionsPage> {
   final _mcpService = McpService();
   int _mcpCount = 0;
+
+  /// 读取失败时不能显示「未连接」——那会被读成「没有服务器」，
+  /// 与「读取失败」是两件事。
+  bool _mcpLoadFailed = false;
   bool _ignoringBattery = false;
 
   @override
@@ -52,11 +56,16 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
     try {
       final servers = await _mcpService.loadAll();
       if (mounted) {
-        setState(() => _mcpCount = servers.where((s) => s.enabled).length);
+        setState(() {
+          _mcpCount = servers.where((s) => s.enabled).length;
+          _mcpLoadFailed = false;
+        });
       }
     } catch (_) {
-      // 计数为 0 会被读成「没有启用任何 MCP 服务器」，因此失败要明说。
+      // 计数为 0 会被读成「没有启用任何 MCP 服务器」，因此失败要明说：
+      // 既弹提示，也把行尾从「未连接」换成「读取失败」。
       if (mounted) {
+        setState(() => _mcpLoadFailed = true);
         FloatingToast.show(context, 'MCP 服务器列表读取失败', tone: ToastTone.warning);
       }
     }
@@ -116,7 +125,9 @@ class _ExtensionsPageState extends State<ExtensionsPage> {
                   _buildRow(
                     icon: Icons.dns_rounded,
                     title: AppStrings.mcpServersSectionTitle,
-                    trailing: _mcpCount > 0 ? '$_mcpCount 个连接' : '未连接',
+                    trailing: _mcpLoadFailed
+                        ? '读取失败'
+                        : (_mcpCount > 0 ? '$_mcpCount 个连接' : '未连接'),
                     isDark: isDark,
                     onTap: () => _openPage(const McpServersPage()),
                   ),

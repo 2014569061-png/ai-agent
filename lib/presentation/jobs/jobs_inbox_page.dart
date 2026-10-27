@@ -9,12 +9,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/jobs/job_board_providers.dart';
 import '../motion/nexus_page_route_factory.dart';
 import '../tasks/task_details_page.dart';
+import '../theme/app_theme.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
 import '../theme/desktop_theme.dart';
 import '../widgets/desktop_page_summary.dart';
 import '../widgets/section_card.dart';
+import '../widgets/nexus_status_pill.dart';
 
 /// 任务与收件箱（阶段 7b）：后台任务和定时运行的统一视图。
 ///
@@ -355,6 +357,15 @@ class _JobsInboxPageState extends ConsumerState<JobsInboxPage> {
   }
 }
 
+/// 收件箱理由 -> 徽标语义。文案仍用 [inboxReasonLabel]，这里只决定颜色与图标。
+NexusStatusType _statusTypeForLabel(String label) => switch (label) {
+      '等待审批' || '待核实' => NexusStatusType.waitingApproval,
+      '已暂停' || '部分完成' => NexusStatusType.paused,
+      '失败' => NexusStatusType.failed,
+      '已完成' || '定时运行完成' => NexusStatusType.completed,
+      _ => NexusStatusType.draft,
+    };
+
 class _JobTile extends StatelessWidget {
   const _JobTile({
     required this.job,
@@ -373,12 +384,13 @@ class _JobTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final semantic = AppTheme.semanticOf(context);
     final accent = job.phase == JobPhase.failed
         ? scheme.error
         : job.phase == JobPhase.completed
-            ? const Color(0xFF107C41)
+            ? semantic.success
             : emphasize
-                ? const Color(0xFF9A6700)
+                ? semantic.warning
                 : scheme.primary;
     final kind = job.kind == JobKind.scheduledRun ? '定时' : '任务';
     return SectionCard(
@@ -403,17 +415,37 @@ class _JobTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                     fontSize: 17, fontWeight: FontWeight.w500))),
-        subtitle: Text(
-          [
-            '$kind · $label · ${formatJobTime(job.updatedAt)}',
-            if (job.safetyNotice != null) job.safetyNotice!,
-            if (job.detail != null) job.detail!,
-          ].join('\n'),
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontFeatures: [FontFeature.tabularFigures()],
-          ),
+        // 状态从「任务 · 等待审批 · 18:57」里的一串文字，改成右侧一颗徽标：
+        // 扫列表时先看到颜色和短词，不用逐字读到第三段。
+        subtitle: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  '$kind · ${formatJobTime(job.updatedAt)}',
+                  style: const TextStyle(
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+                NexusStatusPill(
+                  status: _statusTypeForLabel(label),
+                  customLabel: label,
+                  isCompact: true,
+                ),
+              ],
+            ),
+            if (job.safetyNotice != null)
+              Text(job.safetyNotice!,
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+            if (job.detail != null)
+              Text(job.detail!,
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
+          ],
         ),
         isThreeLine: job.detail != null || job.safetyNotice != null,
         trailing: const Icon(Icons.chevron_right_rounded, size: 18),

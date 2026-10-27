@@ -332,8 +332,11 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
         title: '提示词',
         subtitle: '分类管理与快速调用常用提示词',
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _edit(),
+      // 空列表时隐藏 FAB：空态里已经有同一个按钮，两个入口并排会让人犹豫。
+      floatingActionButton: filtered.isEmpty
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => _edit(),
         backgroundColor: MobileTheme.brand(context),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -401,7 +404,12 @@ class _PromptLibraryPageState extends State<PromptLibraryPage> {
               isEmpty: filtered.isEmpty,
               emptyIcon: Icons.lightbulb_outline,
               emptyTitle: '暂无提示词',
-              emptySubtitle: '点击右下角按钮新建你的第一个提示词。',
+              emptySubtitle: '常用提示词可以一键插入对话，先建一个试试。',
+              emptyAction: FilledButton.icon(
+                onPressed: () => _edit(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('新建提示词'),
+              ),
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 88),
                 itemCount: filtered.length,

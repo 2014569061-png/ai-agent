@@ -56,7 +56,7 @@ class AppDatabase extends _$AppDatabase {
   void markKnowledgeChanged() => _knowledgeGeneration++;
 
   @override
-  int get schemaVersion => 32;
+  int get schemaVersion => 33;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -396,6 +396,15 @@ class AppDatabase extends _$AppDatabase {
             // 建表语句全部 IF NOT EXISTS，可重复执行。
             await ensurePersonalContextTables(this);
             await ensureResultActionTables(this);
+          }
+          if (from < 33) {
+            // 33：conversations.lastReadAt，用于派生会话未读。
+            // 生成代码由 build_runner 维护，这里仍用 SQL 保证旧库能升上来。
+            if (!await hasColumn('conversations', 'last_read_at')) {
+              await customStatement(
+                'ALTER TABLE conversations ADD COLUMN last_read_at INTEGER',
+              );
+            }
           }
         },
       );
@@ -755,6 +764,14 @@ class AppDatabase extends _$AppDatabase {
 
   Future<void> insertConversation(ConversationsCompanion conversation) =>
       into(conversations).insertOnConflictUpdate(conversation);
+
+  /// 记下用户最后一次打开这条会话的时间，用于派生「未读」。
+  /// 用原生 SQL 而非 Companion：last_read_at 由手写迁移加入，
+  /// 不依赖 build_runner 是否重新生成过。
+  Future<void> markConversationRead(String conversationId) => customStatement(
+        'UPDATE conversations SET last_read_at = ? WHERE id = ?',
+        [DateTime.now().millisecondsSinceEpoch ~/ 1000, conversationId],
+      );
 
   Future<void> saveMessage(Message message) =>
       into(messages).insertOnConflictUpdate(message);

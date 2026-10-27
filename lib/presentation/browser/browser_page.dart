@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import '../widgets/empty_state_view.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -382,7 +383,12 @@ class _BrowserPageState extends ConsumerState<BrowserPage>
                                             },
                                             creationParamsCodec:
                                                 const StandardMessageCodec())
-                                    : const Center(child: Text('独立浏览器会话'))),
+                                    : const EmptyStateView(
+                                        icon: Icons.public_rounded,
+                                        title: '独立浏览器会话',
+                                        message:
+                                            '输入网址后可在此页面内浏览；页面内容与系统浏览器相互独立。',
+                                      )),
                             if (chat.messages.isNotEmpty)
                               ConstrainedBox(
                                   constraints:

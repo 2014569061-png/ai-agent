@@ -32,6 +32,7 @@ import 'package:mobile_agent/presentation/diagnostics/operational_metrics_page.d
 import 'package:mobile_agent/presentation/diagnostics/run_analysis_page.dart';
 import 'package:mobile_agent/presentation/feedback/feedback_page.dart';
 import 'package:mobile_agent/presentation/history/history_page.dart';
+import 'package:mobile_agent/application/jobs/job_board_providers.dart';
 import 'package:mobile_agent/presentation/jobs/jobs_inbox_page.dart';
 import 'package:mobile_agent/presentation/knowledge/knowledge_page.dart';
 import 'package:mobile_agent/presentation/mcp/mcp_servers_page.dart';
@@ -103,6 +104,83 @@ class _InMemorySecureStorage extends FlutterSecureStoragePlatform {
   @override
   Future<void> deleteAll({required Map<String, String> options}) async =>
       _store.clear();
+}
+
+/// 画廊专用任务板：真实数据库是空的，收件箱一行都渲染不出来，截图只能看到空态。
+/// 这里塞四条覆盖四种状态，只为验证徽标的实际观感，不影响任何生产路径。
+class _GalleryJobBoard extends JobBoard {
+  _GalleryJobBoard(super.db);
+
+  static final _now = DateTime(2026, 10, 27, 18, 57);
+
+  static InboxItem _item({
+    required String id,
+    required String title,
+    required JobPhase phase,
+    required InboxReason reason,
+    required String raw,
+    required Duration ago,
+    String? detail,
+  }) =>
+      InboxItem(
+        job: JobSummary(
+          id: id,
+          kind: JobKind.task,
+          title: title,
+          phase: phase,
+          rawStatus: raw,
+          updatedAt: _now.subtract(ago),
+          detail: detail,
+        ),
+        reason: reason,
+      );
+
+  static final _seed = <InboxItem>[
+    _item(
+      id: 'seed-1',
+      title: '同步工作区索引',
+      phase: JobPhase.needsApproval,
+      reason: InboxReason.needsApproval,
+      raw: 'needs_approval',
+      ago: const Duration(minutes: 13),
+    ),
+    _item(
+      id: 'seed-2',
+      title: '跑一遍回归测试',
+      phase: JobPhase.running,
+      reason: InboxReason.partial,
+      raw: 'running',
+      ago: const Duration(hours: 20),
+    ),
+    _item(
+      id: 'seed-3',
+      title: '整理本周变更说明',
+      phase: JobPhase.failed,
+      reason: InboxReason.failed,
+      raw: 'failed',
+      ago: const Duration(days: 3),
+      detail: '任务在等待外部确认时超时退出',
+    ),
+    _item(
+      id: 'seed-4',
+      title: '导出审计日志',
+      phase: JobPhase.completed,
+      reason: InboxReason.completed,
+      raw: 'completed',
+      ago: const Duration(days: 4),
+    ),
+  ];
+
+  @override
+  Future<List<InboxItem>> inbox() async => _seed;
+
+  @override
+  Future<List<JobSummary>> jobs({int limit = 50}) async =>
+      _seed.map((i) => i.job).toList();
+
+  @override
+  Future<List<JobSummary>> attentionJobs({int limit = 50}) async =>
+      _seed.map((i) => i.job).toList();
 }
 
 class _GalleryChat extends ChatController {
@@ -313,6 +391,9 @@ void main() {
         await tester.pumpWidget(ProviderScope(
           overrides: [
             databaseProvider.overrideWith((ref) async => db),
+            if (const bool.fromEnvironment('NEXUS_UI_GALLERY'))
+              jobBoardProvider
+                  .overrideWith((ref) async => _GalleryJobBoard(db)),
             chatControllerProvider.overrideWith(_GalleryChat.new)
           ],
           child: MaterialApp(

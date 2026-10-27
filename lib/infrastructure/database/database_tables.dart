@@ -16,6 +16,10 @@ class Conversations extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
 
+  /// 用户最后一次打开这条会话的时间；用于派生「未读」。
+  /// 为空表示从未打开过（历史数据一律视为未读）。
+  DateTimeColumn get lastReadAt => dateTime().nullable()();
+
   @override
   Set<Column<Object>> get primaryKey => {id};
 }

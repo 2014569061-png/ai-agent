@@ -590,6 +590,19 @@ class _HistoryPageState extends State<HistoryPage> {
       ),
       title: Row(
         children: [
+          // 未读：最后一条消息晚于上次打开时间。历史数据 lastReadAt 为空，
+          // 一律按未读处理，用户点开即清。
+          if (_isUnread(conversation)) ...[
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: MobileTheme.brand(context),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           if (conversation.isFavorite) ...[
             const Icon(Icons.star, size: 16, color: AppPalette.warning),
             const SizedBox(width: 6),
@@ -620,7 +633,16 @@ class _HistoryPageState extends State<HistoryPage> {
         tooltip: '更多操作',
         onPressed: () => _showConversationActions(conversation),
       ),
-      onTap: () {
+      onTap: () async {
+        // 先写回 lastReadAt，未读点在下次刷新时消失。
+        // 写失败不阻塞打开会话：读状态不该挡住主要动作。
+        try {
+          final db = await _db();
+          await db.markConversationRead(conversation.id);
+        } catch (_) {
+          // 忽略：标记已读是次要副作用。
+        }
+        if (!mounted) return;
         final callback = widget.onConversationSelected;
         if (callback != null) {
           callback(conversation.id);
@@ -629,6 +651,12 @@ class _HistoryPageState extends State<HistoryPage> {
         }
       },
     );
+  }
+
+  /// 未读判定：从没打开过（lastReadAt 为空）或之后又有新活动。
+  bool _isUnread(Conversation conversation) {
+    final readAt = conversation.lastReadAt;
+    return readAt == null || conversation.updatedAt.isAfter(readAt);
   }
 
   Widget _groupHeader(_HistoryGroupRow row, bool isDark) {
