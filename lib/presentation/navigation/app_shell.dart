@@ -40,6 +40,7 @@ import '../../application/desktop_search_service.dart';
 import '../../application/desktop_device_service.dart';
 import '../../application/providers.dart';
 import '../../infrastructure/database/app_database.dart' show Project;
+import '../../application/local_error_copy.dart';
 
 enum DesktopShortcutAction { commandPalette, search, navigate }
 
@@ -160,7 +161,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     }
     unawaited(
         DesktopHostService.instance.initialize().catchError((Object error) {
-      debugPrint('桌面宿主初始化失败：$error');
+      debugPrint(LocalErrorCopy.of(error, action: '桌面宿主初始化').headline());
     }));
   }
 
@@ -183,7 +184,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
         _sideTab = settings.sideTab;
       });
     } catch (error) {
-      _error('读取桌面布局失败：$error');
+      _error(LocalErrorCopy.of(error, action: '读取桌面布局').headline());
     }
   }
 
@@ -197,7 +198,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
         sideTab: _sideTab);
     _layoutSave =
         _layoutSave.then((_) => settings.save()).catchError((Object error) {
-      _error('保存桌面布局失败：$error');
+      _error(LocalErrorCopy.of(error, action: '保存桌面布局').headline());
     });
   }
 
@@ -223,7 +224,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
       await ref.read(chatControllerProvider.notifier).openProject(project);
       if (mounted) _select(0);
     } catch (error) {
-      _error('打开项目失败：$error');
+      _error(LocalErrorCopy.of(error, action: '打开项目').headline());
     }
   }
 
@@ -255,7 +256,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             .bindDesktopWorkspace(worktree.path);
       }
     } catch (error) {
-      _error('创建会话失败：$error');
+      _error(LocalErrorCopy.of(error, action: '创建会话').headline());
     }
   }
 
@@ -270,7 +271,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
       }
       if (mounted) _select(0);
     } catch (error) {
-      _error('打开会话失败：$error');
+      _error(LocalErrorCopy.of(error, action: '打开会话').headline());
     }
   }
 
@@ -284,7 +285,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
       }
       await _openConversation(conversation.id);
     } catch (error) {
-      _error('打开会话失败：$error');
+      _error(LocalErrorCopy.of(error, action: '打开会话').headline());
     }
   }
 
@@ -315,7 +316,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
                   : content));
       _select(0);
     } catch (error) {
-      _error('添加文件上下文失败：$error');
+      _error(LocalErrorCopy.of(error, action: '添加文件上下文').headline());
     }
   }
 
@@ -462,7 +463,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
         _error('独立工作区已清理，分支和会话保留');
       }
     } catch (error) {
-      _error('$error');
+      _error(LocalErrorCopy.of(error).headline());
     }
   }
 
@@ -578,7 +579,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
           }
       }
     } catch (error) {
-      _error('打开失败：$error');
+      _error(LocalErrorCopy.of(error, action: '打开').headline());
     }
   }
 

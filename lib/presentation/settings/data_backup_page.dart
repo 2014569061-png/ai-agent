@@ -20,6 +20,7 @@ import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_disclosure.dart';
 import '../theme/desktop_theme.dart';
 import 'settings_components.dart';
+import '../../application/local_error_copy.dart';
 
 class DataBackupPage extends ConsumerStatefulWidget {
   const DataBackupPage({super.key});
@@ -127,7 +128,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
       FloatingToast.show(context, '已生成新的数据快照', tone: ToastTone.success);
     } catch (e) {
       if (mounted) {
-        FloatingToast.show(context, '备份失败: $e', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(e, action: '备份').headline(), tone: ToastTone.danger);
       }
     }
   }
@@ -163,7 +164,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
     } catch (e) {
       if (mounted) {
         FloatingToast.show(context,
-            e is DataMaintenanceRefreshFailure ? e.toString() : '自动备份恢复失败: $e');
+            e is DataMaintenanceRefreshFailure ? e.toString() : LocalErrorCopy.of(e, action: '自动备份恢复').headline());
       }
     }
   }
@@ -198,7 +199,7 @@ class _DataBackupPageState extends ConsumerState<DataBackupPage> {
     } catch (e) {
       if (mounted) {
         FloatingToast.show(context,
-            e is DataMaintenanceRefreshFailure ? e.toString() : '清除数据失败: $e',
+            e is DataMaintenanceRefreshFailure ? e.toString() : LocalErrorCopy.of(e, action: '清除数据').headline(),
             tone: ToastTone.danger);
       }
     }

@@ -9,6 +9,7 @@ import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../../application/local_error_copy.dart';
 
 class ProjectGitPage extends StatefulWidget {
   const ProjectGitPage({super.key, required this.workspacePath});
@@ -49,7 +50,7 @@ class _ProjectGitPageState extends State<ProjectGitPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = LocalErrorCopy.of(error).headline();
         _loading = false;
       });
     }
@@ -75,7 +76,7 @@ class _ProjectGitPageState extends State<ProjectGitPage> {
       }
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '提交失败：$error', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(error, action: '提交').headline(), tone: ToastTone.danger);
       }
     }
   }

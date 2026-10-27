@@ -45,6 +45,7 @@ import '../workspace/terminal_sheet.dart';
 import '../workspace/workspace_sheet_frame.dart';
 import '../workspace/workspace_editor_page.dart';
 import '../widgets/nexus_sheet.dart';
+import '../../application/local_error_copy.dart';
 
 class ProjectHomePage extends ConsumerStatefulWidget {
   const ProjectHomePage(
@@ -149,7 +150,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
     } catch (error) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _error = '$error';
+        _error = LocalErrorCopy.of(error).headline();
         _loading = false;
       });
     }
@@ -233,7 +234,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
       if (_isCurrentLoad(generation)) {
         setState(() {
           _environment = null;
-          _environmentError = '$error';
+          _environmentError = LocalErrorCopy.of(error).headline();
           _environmentLoading = false;
         });
       }
@@ -1000,7 +1001,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
           tone: ToastTone.success);
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '预览失败：$error', tone: ToastTone.warning);
+        FloatingToast.show(context, LocalErrorCopy.of(error, action: '预览').headline(), tone: ToastTone.warning);
       }
     } finally {
       if (mounted) setState(() => _previewBusy = false);
@@ -1124,7 +1125,7 @@ class _ProjectHomePageState extends ConsumerState<ProjectHomePage>
       if (mounted) await _reload();
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '$error', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(error).headline(), tone: ToastTone.danger);
       }
     } finally {
       if (mounted) setState(() => _installing = false);

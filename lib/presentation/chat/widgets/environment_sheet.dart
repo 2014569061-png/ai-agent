@@ -13,6 +13,7 @@ import '../../environment/environment_status_view.dart';
 import '../../widgets/confirm_action.dart';
 import '../../widgets/nexus_disclosure.dart';
 import '../../widgets/nexus_page_header.dart';
+import '../../../application/local_error_copy.dart';
 
 /// Replaces every existing value (including `false` and commented examples)
 /// while preserving unrelated Termux settings.
@@ -126,7 +127,7 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
       } on MissingPluginException {
         _termuxInspectionError = '当前平台没有注册 Termux 桥，请确认使用 Android 版本。';
       } catch (error) {
-        _termuxInspectionError = 'Termux 检测失败：$error';
+        _termuxInspectionError = LocalErrorCopy.of(error, action: 'Termux 检测').headline();
       }
       if (!installed) {
         _set(0, _StepState.action,
@@ -165,7 +166,7 @@ class _EnvironmentSheetState extends ConsumerState<EnvironmentSheet> {
           hint: '请在 Termux 执行下方 allow-external-apps 配置命令后重试。');
       _set(2, _StepState.failed, hint: '等待环境检测完成');
     } catch (error) {
-      _set(0, _StepState.failed, hint: '环境检测失败：$error');
+      _set(0, _StepState.failed, hint: LocalErrorCopy.of(error, action: '环境检测').headline());
       _set(1, _StepState.action, hint: '请先打开 Termux 并检查桥授权后重试。');
       _set(2, _StepState.failed, hint: '等待环境检测完成');
     } finally {

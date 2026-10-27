@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/device_action_runner.dart';
 import '../../application/device_backup_service.dart';
+import '../../application/local_error_copy.dart';
 import '../theme/app_palette.dart';
 import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
@@ -69,7 +70,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = LocalErrorCopy.of(error, action: '读取备份').summary;
         _loading = false;
       });
     }
@@ -118,7 +119,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
           ? '${result.message}${undo != null ? '；恢复前快照：$undo' : ''}'
           : '失败（${result.code}）：${result.message}');
     } catch (error) {
-      _snack('操作失败：$error');
+      _snack(LocalErrorCopy.of(error, action: '备份操作').headline());
     } finally {
       if (mounted) setState(() => _busy = false);
       await _load();
@@ -329,7 +330,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
     try {
       detail = await _bridge.inspectBackup(id);
     } catch (error) {
-      _snack('读取失败：$error');
+      _snack(LocalErrorCopy.of(error, action: '读取备份').headline());
       return;
     }
     if (!mounted) return;
@@ -449,6 +450,7 @@ class _DeviceBackupsPageState extends ConsumerState<DeviceBackupsPage> {
             SettingsTile(
               icon: Icons.info_outline_rounded,
               title: '此页面仅支持 Android',
+              subtitle: '备份与恢复依赖 Android 的文件访问接口。',
               showChevron: false,
             ),
           ]),

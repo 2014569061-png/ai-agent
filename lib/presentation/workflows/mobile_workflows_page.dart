@@ -14,6 +14,7 @@ import '../widgets/nexus_disclosure.dart';
 import '../widgets/nexus_page_layout.dart';
 import '../widgets/section_card.dart';
 import '../widgets/confirm_action.dart';
+import '../../application/local_error_copy.dart';
 
 class MobileWorkflowsPage extends ConsumerStatefulWidget {
   const MobileWorkflowsPage({super.key});
@@ -105,7 +106,7 @@ class _MobileWorkflowsPageState extends ConsumerState<MobileWorkflowsPage> {
       );
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '执行失败：$error');
+        FloatingToast.show(context, LocalErrorCopy.of(error, action: '执行').headline());
       }
     } finally {
       if (mounted) setState(() => _executing = false);

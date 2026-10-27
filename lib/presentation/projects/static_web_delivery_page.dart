@@ -18,6 +18,7 @@ import '../workspace/workspace_editor_page.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_page_layout.dart';
 import '../widgets/section_card.dart';
+import '../../application/local_error_copy.dart';
 
 class StaticWebDeliveryPage extends ConsumerStatefulWidget {
   const StaticWebDeliveryPage(
@@ -67,7 +68,7 @@ class _StaticWebDeliveryPageState extends ConsumerState<StaticWebDeliveryPage> {
       if (mounted) {
         setState(() {
           _review = null;
-          _error = '$error';
+          _error = LocalErrorCopy.of(error).headline();
         });
       }
     } finally {
@@ -84,7 +85,7 @@ class _StaticWebDeliveryPageState extends ConsumerState<StaticWebDeliveryPage> {
     try {
       await action();
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted) setState(() => _error = LocalErrorCopy.of(error).headline());
     } finally {
       if (mounted) setState(() => _busy = false);
     }

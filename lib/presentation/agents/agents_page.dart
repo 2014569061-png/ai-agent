@@ -23,6 +23,7 @@ import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/section_card.dart';
+import '../../application/local_error_copy.dart';
 
 class AgentsPage extends ConsumerStatefulWidget {
   const AgentsPage({super.key, this.autoDescribe = false});
@@ -345,7 +346,7 @@ class _DescribeGoalDialogState extends ConsumerState<_DescribeGoalDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = '生成失败：$error';
+        _error = LocalErrorCopy.of(error, action: '生成').headline();
       });
       return;
     }

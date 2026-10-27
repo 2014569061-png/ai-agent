@@ -28,6 +28,7 @@ import '../widgets/nexus_loading_skeleton.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_undo_toast.dart';
 import '../widgets/section_card.dart';
+import '../../application/local_error_copy.dart';
 
 /// 沉浸式全屏智能体编辑器 (Agent Editor Page)
 /// 彻底替代 85% 模态底栏方案，解决键盘遮挡、误触丢失与工具列表过长等交互缺陷。
@@ -227,7 +228,7 @@ class _AgentEditorPageState extends ConsumerState<AgentEditorPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSaving = false);
-      FloatingToast.show(context, '保存失败: $e', tone: ToastTone.danger);
+      FloatingToast.show(context, LocalErrorCopy.of(e, action: '保存').headline(), tone: ToastTone.danger);
     }
   }
 

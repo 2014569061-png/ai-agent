@@ -14,7 +14,7 @@ extension _ChatAttachments on _ChatPageState {
             readBytes: file.readAsBytes));
       } catch (error) {
         if (mounted) {
-          FloatingToast.error(context, '无法读取拖入文件', rawDetail: '$error');
+          FloatingToast.error(context, '无法读取拖入文件', rawDetail: LocalErrorCopy.of(error).headline());
         }
       }
     }

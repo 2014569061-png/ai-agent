@@ -130,6 +130,7 @@ import '../widgets/glass_scroll_edge.dart';
 import 'widgets/nexus_back_to_latest_button.dart';
 import '../theme/app_appearance_controller.dart';
 import '../widgets/liquid_glass.dart';
+import '../../application/local_error_copy.dart';
 
 part 'chat_message_actions.dart';
 part 'chat_page_attachments.dart';
@@ -743,7 +744,7 @@ class _ChatPageState extends ConsumerState<ChatPage>
           tone: ToastTone.success);
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '引用失败：$error', tone: ToastTone.warning);
+        FloatingToast.show(context, LocalErrorCopy.of(error, action: '引用').headline(), tone: ToastTone.warning);
       }
     }
   }

@@ -14,6 +14,7 @@ import '../theme/app_palette.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/section_card.dart';
 import '../widgets/nexus_switch.dart';
+import '../../application/local_error_copy.dart';
 
 /// 首次启动的 4 步引导：填 Key / 选模型 / 用工具 / 隐私（含崩溃上报授权）。
 class OnboardingPage extends StatefulWidget {
@@ -71,7 +72,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _providerStatus = '读取配置失败：$error');
+      setState(() => _providerStatus = LocalErrorCopy.of(error, action: '读取配置').headline());
     }
   }
 

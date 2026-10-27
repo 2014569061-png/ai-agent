@@ -1,3 +1,5 @@
+import '../../application/local_error_copy.dart';
+
 /// 全局文案集中表。
 ///
 /// 当前默认中文。将零散的硬编码文案收敛到这里，
@@ -149,12 +151,12 @@ abstract final class AppStrings {
   static const testConnection = '测试连接';
   static const testing = '测试中…';
   static const connectionSuccess = '连接成功';
-  static String connectionFailed(String error) => '连接失败：$error';
+  static String connectionFailed(String error) => LocalErrorCopy.of(error, action: '连接').headline();
   static const providerConfigSaved = 'Provider 配置已保存';
   static const fillBaseUrlAndKey = '请先填写 Base URL 和 API Key';
   static const onlyOpenAiCompatible = '仅 OpenAI 兼容协议支持自动获取模型列表，请手动填写模型名称。';
   static const noModelsReturned = '服务未返回可用模型';
-  static String fetchModelsFailed(String error) => '获取模型失败：$error';
+  static String fetchModelsFailed(String error) => LocalErrorCopy.of(error, action: '获取模型').headline();
   static const apiKeySecureStorage = 'API Key 仅保存到系统安全存储。';
   static const dayMode = '日间模式';
   static const dayModeSubtitle = '当前使用蓝白浅色主题';
@@ -168,7 +170,7 @@ abstract final class AppStrings {
       count > 0 ? '$count 个任务' : '未创建';
   static const mcpServersSearchHint = '管理 Model Context Protocol 扩展端点';
   static const mcpServersHint = 'MCP 工具会在 Agent 执行时自动合并进工具集，风险默认需要确认。';
-  static const noMcpServers = '尚未配置 MCP 服务器。';
+  static const noMcpServers = '尚未配置 MCP 服务器';
   static const addMcpServer = '添加 MCP 服务器';
   static const editMcpServer = '编辑 MCP 服务器';
   static const deleteMcpServer = '删除 MCP 服务器';
@@ -320,7 +322,7 @@ abstract final class AppStrings {
   static const pastLabel = '历史';
   static const trendHint = '柱顶为当天输入与输出 Token 总量';
   static const refreshDashboard = '刷新仪表盘';
-  static String dashboardLoadFailed(String error) => '加载仪表盘失败：$error';
+  static String dashboardLoadFailed(String error) => LocalErrorCopy.of(error, action: '加载仪表盘').headline();
   static const retry = '重试';
   static const pendingApproval = '等待审批';
   static const pendingPlanConfirm = '计划待确认';

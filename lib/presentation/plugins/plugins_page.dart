@@ -21,6 +21,7 @@ import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import 'skill_market_page.dart';
 import '../widgets/nexus_switch.dart';
+import '../../application/local_error_copy.dart';
 
 /// 插件页：Tab 1 = 声明式插件（JSON manifest）；Tab 2 = Skill 市场（GitHub）。
 class PluginsPage extends ConsumerStatefulWidget {
@@ -187,7 +188,7 @@ class _DeclarativePluginsViewState
       await _load();
       if (mounted) FloatingToast.show(context, '插件已删除');
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '删除失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '删除').headline());
     }
   }
 

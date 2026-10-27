@@ -22,6 +22,7 @@ import 'settings_components.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
+import '../../application/local_error_copy.dart';
 
 class WorkspaceFilesPage extends ConsumerStatefulWidget {
   const WorkspaceFilesPage({super.key});
@@ -72,7 +73,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
         FloatingToast.show(context, '已切换工作区到: $selected');
       }
     } catch (e) {
-      if (mounted) FloatingToast.show(context, '选取目录失败: $e');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(e, action: '选取目录').headline());
     }
   }
 
@@ -104,7 +105,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
         );
       }
     } catch (e) {
-      if (mounted) FloatingToast.show(context, '导入失败: $e');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(e, action: '导入').headline());
     }
   }
 
@@ -132,7 +133,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
         ),
       );
     } catch (e) {
-      if (mounted) FloatingToast.show(context, '导出失败: $e');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(e, action: '导出').headline());
     }
   }
 
@@ -163,7 +164,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
           FloatingToast.show(context, '临时文件清理完成', tone: ToastTone.success);
         }
       } catch (e) {
-        if (mounted) FloatingToast.show(context, '清理部分文件失败: $e');
+        if (mounted) FloatingToast.show(context, LocalErrorCopy.of(e, action: '清理部分文件').headline());
       }
     } else if (confirmed == true && mounted) {
       FloatingToast.show(context, '临时缓存已清理', tone: ToastTone.success);

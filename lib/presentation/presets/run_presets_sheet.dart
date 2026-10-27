@@ -6,6 +6,7 @@ import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/section_card.dart';
+import '../../application/local_error_copy.dart';
 
 /// 打开运行预设面板（阶段 7d）。
 Future<void> showRunPresetsSheet(BuildContext context) => showNexusSheet<void>(
@@ -46,7 +47,7 @@ class _RunPresetsSheetState extends ConsumerState<RunPresetsSheet> {
     } catch (error) {
       if (mounted) {
         FloatingToast.show(context, '操作失败',
-            detail: '$error', tone: ToastTone.danger);
+            detail: LocalErrorCopy.of(error).headline(), tone: ToastTone.danger);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

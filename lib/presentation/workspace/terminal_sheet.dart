@@ -14,6 +14,7 @@ import '../widgets/nexus_sheet.dart';
 import '../widgets/floating_toast.dart';
 import 'file_tree_sheet.dart';
 import 'terminal_job_panel.dart';
+import '../../application/local_error_copy.dart';
 
 class TerminalSheet extends StatefulWidget {
   const TerminalSheet({
@@ -80,7 +81,7 @@ class _TerminalSheetState extends State<TerminalSheet> {
       final jobs = _service.listJobs();
       if (jobs.isNotEmpty) await _selectJob(jobs.last.jobId);
     } catch (error) {
-      if (mounted) setState(() => _runtimeLabel = '检测失败：$error');
+      if (mounted) setState(() => _runtimeLabel = LocalErrorCopy.of(error, action: '检测').headline());
     }
   }
 

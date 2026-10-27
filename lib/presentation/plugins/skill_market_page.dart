@@ -16,6 +16,7 @@ import '../widgets/empty_state_view.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/section_card.dart';
 import '../widgets/nexus_switch.dart';
+import '../../application/local_error_copy.dart';
 
 /// Skill 市场（v0.6）：通过 GitHub 地址安装纯指令 + 静态资源的 Skill 包。
 class SkillMarketPage extends ConsumerStatefulWidget {
@@ -110,7 +111,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _previewing = false);
-      FloatingToast.show(context, '解析失败：$error');
+      FloatingToast.show(context, LocalErrorCopy.of(error, action: '解析').headline());
     }
   }
 
@@ -149,7 +150,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _previewing = false);
-      FloatingToast.show(context, '压缩包解析失败：$error');
+      FloatingToast.show(context, LocalErrorCopy.of(error, action: '压缩包解析').headline());
     }
   }
 
@@ -185,7 +186,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _installing = false);
-      FloatingToast.show(context, '安装失败：$error');
+      FloatingToast.show(context, LocalErrorCopy.of(error, action: '安装').headline());
     }
   }
 
@@ -198,7 +199,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
       if (mounted) FloatingToast.show(context, 'Skill 已更新');
     } catch (error) {
       if (!mounted) return;
-      FloatingToast.show(context, '更新失败：$error');
+      FloatingToast.show(context, LocalErrorCopy.of(error, action: '更新').headline());
     }
   }
 
@@ -209,7 +210,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
       await _load();
     } catch (error) {
       if (!mounted) return;
-      FloatingToast.show(context, '操作失败：$error');
+      FloatingToast.show(context, LocalErrorCopy.of(error, action: '操作').headline());
     }
   }
 
@@ -234,7 +235,7 @@ class _SkillMarketPageState extends ConsumerState<SkillMarketPage> {
       if (mounted) FloatingToast.show(context, 'Skill 已删除');
     } catch (error) {
       if (!mounted) return;
-      FloatingToast.show(context, '删除失败：$error');
+      FloatingToast.show(context, LocalErrorCopy.of(error, action: '删除').headline());
     }
   }
 

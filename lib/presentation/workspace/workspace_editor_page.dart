@@ -8,6 +8,7 @@ import '../widgets/async_state_view.dart';
 import '../widgets/confirm_action.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_page_header.dart';
+import '../../application/local_error_copy.dart';
 
 class WorkspaceEditorPage extends StatefulWidget {
   const WorkspaceEditorPage({
@@ -78,7 +79,7 @@ class _WorkspaceEditorPageState extends State<WorkspaceEditorPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = LocalErrorCopy.of(error).headline();
         _loading = false;
       });
     }
@@ -109,7 +110,7 @@ class _WorkspaceEditorPageState extends State<WorkspaceEditorPage> {
       }
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '保存失败：$error', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(error, action: '保存').headline(), tone: ToastTone.danger);
       }
     }
   }

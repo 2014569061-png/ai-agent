@@ -11,6 +11,7 @@ import '../widgets/floating_toast.dart';
 import '../widgets/nexus_list_tile.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
+import '../../application/local_error_copy.dart';
 
 class ProjectChangeSetPage extends ConsumerStatefulWidget {
   const ProjectChangeSetPage({
@@ -79,7 +80,7 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = LocalErrorCopy.of(error).headline();
         _loading = false;
       });
     }
@@ -115,7 +116,7 @@ class _ProjectChangeSetPageState extends ConsumerState<ProjectChangeSetPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _error = '$error';
+        _error = LocalErrorCopy.of(error).headline();
         _loading = false;
       });
     }

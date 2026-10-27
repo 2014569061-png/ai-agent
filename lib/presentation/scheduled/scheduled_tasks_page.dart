@@ -23,6 +23,7 @@ import '../l10n/app_strings.dart';
 import '../widgets/floating_toast.dart';
 import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_switch.dart';
+import '../../application/local_error_copy.dart';
 
 /// 定时任务管理页（C5）：新建「每天/每周某时刻」执行指定提示词的 Agent 任务。
 class ScheduledTasksPage extends ConsumerStatefulWidget {
@@ -112,7 +113,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage>
       await _load();
       if (mounted) FloatingToast.show(context, '定时任务已删除');
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '删除失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '删除').headline());
     }
   }
 
@@ -171,7 +172,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage>
         ),
       );
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '读取执行记录失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '读取执行记录').headline());
     }
   }
 
@@ -521,7 +522,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage>
                 : '提醒已创建 · ${item.exactAlarmCapability.label}');
       }
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '创建提醒失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '创建提醒').headline());
     } finally {
       title.dispose();
       notes.dispose();
@@ -534,7 +535,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage>
       await ReminderService(db).cancel(item.id);
       await _load();
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '取消提醒失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '取消提醒').headline());
     }
   }
 
@@ -545,7 +546,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage>
       await _load();
       if (mounted) FloatingToast.show(context, '已延后 10 分钟提醒');
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '延后失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '延后').headline());
     }
   }
 
@@ -556,7 +557,7 @@ class _ScheduledTasksPageState extends ConsumerState<ScheduledTasksPage>
       await _load();
       if (mounted) FloatingToast.show(context, '提醒已标记完成');
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '操作失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '操作').headline());
     }
   }
 

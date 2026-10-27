@@ -10,9 +10,12 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/environment_service.dart';
+import '../../application/local_error_copy.dart';
 import '../../infrastructure/terminal/linux_runtime.dart';
 import '../../infrastructure/tools/android_device_tool.dart';
 import '../theme/app_palette.dart';
+import '../theme/app_status_colors.dart';
+import '../widgets/nexus_status_pill.dart';
 import '../theme/desktop_theme.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
@@ -93,9 +96,9 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
     try {
       message = _actionMessage(label, await action());
     } on PlatformException catch (error) {
-      message = '$label失败：${error.message ?? error.code}';
+      message = LocalErrorCopy.of(error, action: label).headline();
     } catch (error) {
-      message = '$label失败：${_errorText(error)}';
+      message = LocalErrorCopy.of(error, action: label).headline();
     }
     if (!mounted) return;
     setState(() => _actionBusy = false);
@@ -180,7 +183,13 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
         value: await action().timeout(_probeTimeout),
       );
     } catch (error) {
-      return _CapabilityProbe<T>(error: error);
+      // 探针自己记录失败原因，界面不再靠异常类型反推。
+      final copy = LocalErrorCopy.of(error);
+      return _CapabilityProbe<T>(
+        error: error,
+        failureCode: copy.code,
+        failureSummary: copy.summary,
+      );
     }
   }
 
@@ -353,11 +362,61 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
           title: '设备型号',
           status: probe.error != null ? '检测失败' : '已检测',
           available: info != null,
+          error: probe.error,
           subtitle: probe.error == null
               ? [model, version].where((text) => text.isNotEmpty).join(' · ')
-              : _errorText(probe.error!),
+              : _probeSummary(probe),
+          failureCode: _probeCode(probe),
         ),
+        const SettingsDivider(),
+        _probeSummaryStrip(),
       ],
+    );
+  }
+
+  /// 顶部一行说清「这次检测到底查出什么」：可用 / 异常 / 未检测。
+  /// 下面是逐项细节，但第一眼需要的是结论——原来要滚到底才知道有几项挂了。
+  Widget _probeSummaryStrip() {
+    final probes = <_CapabilityProbe<Object?>>[
+      if (_snapshot != null) ...[
+        _snapshot!.deviceInfo,
+        _snapshot!.systemStatus,
+        _snapshot!.authorizedFolders,
+        _snapshot!.environment,
+      ],
+      if (_rootProbe != null) _rootProbe!,
+      if (_privilegeProbe != null) _privilegeProbe!,
+    ];
+    if (probes.isEmpty) return const SizedBox.shrink();
+    final ok = probes.where((p) => p.error == null && p.value != null).length;
+    final failed = probes.where((p) => p.error != null).length;
+    final pending = probes.length - ok - failed;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          if (ok > 0)
+            NexusStatusPillShell(
+              label: '可用 $ok 项',
+              tone: AppStatusTone.success,
+              icon: Icons.check_rounded,
+            ),
+          if (failed > 0)
+            NexusStatusPillShell(
+              label: '异常 $failed 项',
+              tone: AppStatusTone.danger,
+              icon: Icons.error_outline_rounded,
+            ),
+          if (pending > 0)
+            NexusStatusPillShell(
+              label: '未检测 $pending 项',
+              tone: AppStatusTone.neutral,
+              icon: Icons.help_outline_rounded,
+            ),
+        ],
+      ),
     );
   }
 
@@ -1042,19 +1101,23 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
     required String subtitle,
     Object? error,
     int subtitleMaxLines = 2,
+    String? failureCode,
   }) {
     final color = error != null
         ? _sem.danger
         : available == true
             ? _sem.success
             : _sem.warning;
+    // 失败时把失败类别一并显示，用户才能区分「这台设备没有该通道」
+    // 与「有通道但权限被拒」——两者的处理方式完全不同。
+    final code = error == null ? null : (failureCode ?? _errorCode(error));
     return SettingsTile(
       icon: icon,
       iconColor: color,
       title: title,
       subtitle: subtitle,
       subtitleMaxLines: subtitleMaxLines,
-      trailingBadge: _badge(status, color),
+      trailingBadge: _badge(code == null ? status : '$status · $code', color),
       showChevron: false,
     );
   }
@@ -1088,8 +1151,46 @@ class _DeviceCapabilitiesPageState extends ConsumerState<DeviceCapabilitiesPage>
   }
 
   String _errorText(Object error) {
-    final text = error.toString();
-    return text.length <= 180 ? text : '${text.substring(0, 180)}…';
+    // 只展示人话结论；原始异常保留在 LocalErrorCopy.detail 供折叠或日志使用，
+    // 避免 MissingPluginException 之类的技术文本直接出现在设置页。
+    return LocalErrorCopy.of(error).summary;
+  }
+
+  /// 失败类别的短标签，取自 [LocalErrorCopy.code]，便于用户与支持人员分辨原因。
+  String _errorCode(Object error) {
+    return switch (LocalErrorCopy.of(error).code) {
+      'channel_unavailable' => '通道缺失',
+      'permission_denied' => '权限被拒',
+      'platform_error' => '系统拒绝',
+      'timeout' => '超时',
+      'filesystem' => '存储异常',
+      'format' => '数据异常',
+      'network' => '网络异常',
+      _ => '未知原因',
+    };
+  }
+
+  /// 探针自报的失败结论；探针没有记录时退回按异常推断，保证旧调用点仍可用。
+  String _probeSummary(_CapabilityProbe<Object?> probe) {
+    final summary = probe.failureSummary;
+    if (summary != null) return summary;
+    final error = probe.error;
+    return error == null ? '' : _errorText(error);
+  }
+
+  /// 探针自报的失败类别标签。
+  String _probeCode(_CapabilityProbe<Object?> probe) {
+    return switch (probe.failureCode) {
+      'channel_unavailable' => '通道缺失',
+      'permission_denied' => '权限被拒',
+      'platform_error' => '系统拒绝',
+      'timeout' => '超时',
+      'filesystem' => '存储异常',
+      'format' => '数据异常',
+      'network' => '网络异常',
+      null => '',
+      _ => '未知原因',
+    };
   }
 }
 
@@ -1110,8 +1211,19 @@ class _DeviceCapabilitySnapshot {
 }
 
 class _CapabilityProbe<T> {
-  const _CapabilityProbe({this.value, this.error});
+  const _CapabilityProbe({
+    this.value,
+    this.error,
+    this.failureCode,
+    this.failureSummary,
+  });
 
   final T? value;
   final Object? error;
+
+  /// 失败类别，取自捕获时的 [LocalErrorCopy.code]；成功时为 null。
+  final String? failureCode;
+
+  /// 失败结论，取自捕获时的 [LocalErrorCopy.summary]；界面优先使用它。
+  final String? failureSummary;
 }

@@ -20,6 +20,7 @@ import 'model_list_page.dart';
 import 'provider_presets.dart';
 import 'settings_components.dart';
 import '../widgets/nexus_segmented_button.dart';
+import '../../application/local_error_copy.dart';
 
 class ProviderDetailPage extends StatefulWidget {
   const ProviderDetailPage({super.key, this.config, this.preset});
@@ -194,7 +195,7 @@ class _ProviderDetailPageState extends State<ProviderDetailPage> {
         setState(() => _status = result == null ? '连接测试成功' : '连接失败：$result');
       }
     } catch (error) {
-      if (mounted) setState(() => _status = '连接失败：$error');
+      if (mounted) setState(() => _status = LocalErrorCopy.of(error, action: '连接').headline());
     } finally {
       if (mounted) setState(() => _testing = false);
     }

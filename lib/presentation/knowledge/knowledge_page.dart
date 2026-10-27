@@ -25,6 +25,7 @@ import '../widgets/nexus_sheet.dart';
 import '../widgets/nexus_page_header.dart';
 import '../widgets/section_card.dart';
 import '../widgets/nexus_switch.dart';
+import '../../application/local_error_copy.dart';
 
 /// 知识库 / RAG 管理页（C4）：文档列表 + 上传/粘贴 + 删除 + 总开关。
 class KnowledgePage extends ConsumerStatefulWidget {
@@ -332,7 +333,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
       await _load();
       if (mounted) FloatingToast.show(context, '文档已删除');
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '删除失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '删除').headline());
     }
   }
 
@@ -431,7 +432,7 @@ class _KnowledgePageState extends ConsumerState<KnowledgePage> {
         FloatingToast.show(context, '已保存知识分块更正并刷新索引');
       }
     } catch (error) {
-      if (mounted) FloatingToast.show(context, '更正失败：$error');
+      if (mounted) FloatingToast.show(context, LocalErrorCopy.of(error, action: '更正').headline());
     } finally {
       WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
     }

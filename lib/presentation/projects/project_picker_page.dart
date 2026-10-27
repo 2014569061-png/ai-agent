@@ -28,6 +28,7 @@ import '../widgets/nexus_sheet.dart';
 import 'project_home_page.dart';
 import 'storage_access_flow.dart';
 import '../artifacts/artifact_center_page.dart';
+import '../../application/local_error_copy.dart';
 
 class ProjectPickerPage extends ConsumerStatefulWidget {
   const ProjectPickerPage({super.key, this.onProjectSelected});
@@ -66,7 +67,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
-      FloatingToast.show(context, '加载项目失败: $error', tone: ToastTone.danger);
+      FloatingToast.show(context, LocalErrorCopy.of(error, action: '加载项目').headline(), tone: ToastTone.danger);
     }
   }
 
@@ -81,7 +82,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
       }
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '$error', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(error).headline(), tone: ToastTone.danger);
       }
     }
   }
@@ -193,7 +194,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
       if (mounted) await _reload();
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '$error', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(error).headline(), tone: ToastTone.danger);
       }
     }
   }
@@ -236,7 +237,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
       }
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '$error', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(error).headline(), tone: ToastTone.danger);
       }
     }
   }
@@ -318,7 +319,7 @@ class _ProjectPickerPageState extends ConsumerState<ProjectPickerPage> {
       await _open(project);
     } catch (error) {
       if (mounted) {
-        FloatingToast.show(context, '$error', tone: ToastTone.danger);
+        FloatingToast.show(context, LocalErrorCopy.of(error).headline(), tone: ToastTone.danger);
       }
     }
   }

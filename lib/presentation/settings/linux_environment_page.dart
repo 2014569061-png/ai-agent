@@ -24,6 +24,7 @@ import '../widgets/confirm_action.dart';
 import '../widgets/nexus_page_header.dart';
 import 'settings_components.dart';
 import '../widgets/nexus_switch.dart';
+import '../../application/local_error_copy.dart';
 
 class LinuxEnvironmentPage extends ConsumerStatefulWidget {
   const LinuxEnvironmentPage({
@@ -86,7 +87,7 @@ class _LinuxEnvironmentPageState extends ConsumerState<LinuxEnvironmentPage> {
       _finishLoading(
           '偏好设置读取超时（${_formatTimeout(widget.preferencesTimeout)}），请重试。');
     } catch (error) {
-      _finishLoading('偏好设置读取失败：$error');
+      _finishLoading(LocalErrorCopy.of(error, action: '偏好设置读取').headline());
     } finally {
       if (mounted && _loading) setState(() => _loading = false);
     }

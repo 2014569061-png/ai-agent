@@ -19,6 +19,7 @@ import '../../widgets/nexus_pressable.dart';
 import '../../widgets/glass_surface.dart';
 import '../../motion/morph_icon.dart';
 import '../../motion/send_flight.dart';
+import '../../../application/local_error_copy.dart';
 
 /// Two-row phone composer: multiline input above attachments, model, settings
 /// and the primary action. Every icon retains a 48dp accessible hit target.
@@ -361,7 +362,7 @@ class _FloatingCapsuleInputState extends State<FloatingCapsuleInput> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('粘贴失败：$error')));
+            .showSnackBar(SnackBar(content: Text(LocalErrorCopy.of(error, action: '粘贴').headline())));
       }
     }
   }

@@ -17,6 +17,7 @@ import '../../widgets/nexus_section.dart';
 import '../../widgets/section_card.dart';
 import '../../widgets/tool_approval_helper.dart';
 import '../dashboard_provider.dart';
+import '../../../application/local_error_copy.dart';
 
 /// 待我处理聚合区：工具审批、计划确认和可恢复任务。
 ///
@@ -215,7 +216,7 @@ class _TodoSectionState extends ConsumerState<TodoSection> {
       }
     } catch (err) {
       if (context.mounted) {
-        FloatingToast.error(context, '$err');
+        FloatingToast.error(context, LocalErrorCopy.of(err).headline());
       }
     } finally {
       if (mounted) {

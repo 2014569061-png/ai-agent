@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../application/device_automation_service.dart';
+import '../../application/local_error_copy.dart';
 import '../../domain/device_automation.dart';
 import '../theme/app_palette.dart';
 import '../widgets/nexus_loading_skeleton.dart';
@@ -78,7 +79,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
     try {
       status = await service.bridge.triggerStatus();
     } catch (error) {
-      statusError = '$error';
+      statusError = LocalErrorCopy.of(error, action: '读取状态').summary;
     }
     if (!mounted) return;
     setState(() {
@@ -144,7 +145,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
         _snack(fire == null ? '已取消运行' : '已放弃本次触发');
       }
     } catch (error) {
-      _snack('执行失败：$error');
+      _snack(LocalErrorCopy.of(error, action: '执行').headline());
     } finally {
       if (mounted) setState(() => _busy = false);
       await _load();
@@ -169,7 +170,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
       final outcome = await _service.executeUndo(run.id, index, prepared);
       _snack(outcome.result.ok ? '已撤销' : '撤销失败：${outcome.result.message}');
     } catch (error) {
-      _snack('无法撤销：$error');
+      _snack(LocalErrorCopy.of(error, action: '撤销').headline());
     }
     await _load();
   }
@@ -282,7 +283,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
     try {
       await _service.setEnabled(rule.id, enabled, userRequest: '在设置页切换规则');
     } catch (error) {
-      _snack('$error');
+      _snack(LocalErrorCopy.of(error, action: '切换规则').headline());
     }
     await _load();
   }
@@ -434,7 +435,7 @@ class _DeviceAutomationPageState extends ConsumerState<DeviceAutomationPage> {
       }
       await Permission.notification.request();
     } catch (error) {
-      _snack('创建失败：$error');
+      _snack(LocalErrorCopy.of(error, action: '创建任务').headline());
     }
     await _load();
   }
