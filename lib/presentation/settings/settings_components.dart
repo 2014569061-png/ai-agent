@@ -7,6 +7,7 @@ import '../theme/desktop_theme.dart';
 import '../widgets/section_card.dart';
 import '../motion/press_squash.dart';
 import '../widgets/nexus_switch.dart';
+import '../theme/mobile_theme.dart';
 
 /// 设置模块统一色彩入口。
 /// 全部委托给 AppPalette / AppSemanticColors，不再自带一套 iOS 色板。
@@ -165,30 +166,16 @@ class SettingsGroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardMargin = margin ?? const EdgeInsets.symmetric(horizontal: 20);
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
-    );
-
-    final desktop = DesktopTheme.maybeOf(context);
-    if (desktop != null) {
-      return Container(
-        margin: cardMargin,
-        padding: padding,
-        decoration: BoxDecoration(
-            color: desktop.panel,
-            borderRadius: BorderRadius.circular(DesktopTheme.panelRadius),
-            border: Border.all(color: desktop.border)),
-        clipBehavior: Clip.antiAlias,
-        child: Material(type: MaterialType.transparency, child: content),
-      );
-    }
+    // 桌面与手机都交给 SectionCard：桌面分支此前把同一套 panel 底色、
+    // panelRadius 圆角与 border 描边又抄了一遍，两处一旦改动就会分叉。
     return SectionCard(
-      margin: cardMargin,
+      margin: margin ?? const EdgeInsets.symmetric(horizontal: 20),
       padding: padding,
-      child: content,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 }
@@ -285,7 +272,7 @@ class SettingsTile extends StatelessWidget {
           height: 38,
           decoration: BoxDecoration(
             color: resolvedTint.withValues(alpha: isDark ? 0.14 : 0.08),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(MobileTheme.insetRadius),
           ),
           alignment: Alignment.center,
           child: Icon(

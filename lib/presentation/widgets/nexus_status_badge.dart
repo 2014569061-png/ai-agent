@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_status_colors.dart';
-import '../theme/app_tokens.dart';
 import '../motion/micro_interactions.dart';
+import '../theme/mobile_theme.dart';
+import 'nexus_status_pill.dart';
 
 /// 状态徽章语义色调
 enum NexusBadgeTone {
@@ -31,57 +32,20 @@ class NexusStatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AppStatusColors.resolve(
-        context,
-        switch (tone) {
-          NexusBadgeTone.neutral => AppStatusTone.neutral,
-          NexusBadgeTone.brand => AppStatusTone.brand,
-          NexusBadgeTone.success => AppStatusTone.success,
-          NexusBadgeTone.warning => AppStatusTone.warning,
-          NexusBadgeTone.danger => AppStatusTone.danger,
-        });
-    final bg = colors.background;
-    final fg = colors.foreground;
-    final highContrast = MediaQuery.maybeHighContrastOf(context) ?? false;
-
-    Widget content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        border: highContrast ? Border.all(color: fg) : null,
-        borderRadius: BorderRadius.circular(AppTokens.radiusPill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (showDot) ...[
-            Container(
-              width: 6,
-              height: 6,
-              margin: const EdgeInsets.only(right: 5),
-              decoration: BoxDecoration(
-                color: fg,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ] else if (icon != null) ...[
-            Icon(icon, size: 12, color: fg),
-            const SizedBox(width: 4),
-          ],
-          Flexible(
-              child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
-              color: fg,
-              height: 1.2,
-            ),
-          )),
-        ],
-      ),
+    // 外观全部来自 NexusStatusPillShell：徽标外壳、圆角、描边与文字规格
+    // 只在一个文件里定义，这里只保留动画、提示与点击区域。
+    Widget content = NexusStatusPillShell(
+      label: label,
+      tone: switch (tone) {
+        NexusBadgeTone.neutral => AppStatusTone.neutral,
+        NexusBadgeTone.brand => AppStatusTone.brand,
+        NexusBadgeTone.success => AppStatusTone.success,
+        NexusBadgeTone.warning => AppStatusTone.warning,
+        NexusBadgeTone.danger => AppStatusTone.danger,
+      },
+      icon: icon,
+      showDot: showDot,
+      isCompact: true,
     );
 
     content = PopOnChange(trigger: (label, tone), child: content);
@@ -92,7 +56,7 @@ class NexusStatusBadge extends StatelessWidget {
           button: true,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(AppTokens.radiusPill),
+            borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
               child: Center(widthFactor: 1, heightFactor: 1, child: content),

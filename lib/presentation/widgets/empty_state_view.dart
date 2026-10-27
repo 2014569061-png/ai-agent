@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/desktop_theme.dart';
+import '../theme/mobile_theme.dart';
 
 class EmptyStateView extends StatelessWidget {
   final IconData icon;
@@ -63,7 +64,7 @@ class EmptyStateView extends StatelessWidget {
                     padding: EdgeInsets.all(compact ? 12 : 18),
                     decoration: BoxDecoration(
                         color: desktop.selected,
-                        borderRadius: BorderRadius.circular(18)),
+                        borderRadius: BorderRadius.circular(MobileTheme.insetRadius)),
                     child: Icon(icon,
                         size: iconSize, color: iconColor ?? desktop.accent)),
                 SizedBox(height: compact ? 12 : 20),
@@ -99,9 +100,11 @@ class EmptyStateView extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final textColor = scheme.onSurface;
     final textMuted = scheme.onSurfaceVariant;
+    // 空态只留一个主行动：手机与桌面统一用 FilledButton，
+    // 此前手机走 tonal、桌面走 filled，同一页面在两种窗口宽度下按钮权重不同。
     final resolvedAction = action ??
         (actionLabel != null && onAction != null
-            ? FilledButton.tonal(onPressed: onAction, child: Text(actionLabel!))
+            ? FilledButton(onPressed: onAction, child: Text(actionLabel!))
             : null);
 
     final discSize = compact ? 40.0 : 48.0;

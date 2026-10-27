@@ -1,6 +1,7 @@
 import '../widgets/nexus_page_header.dart';
 import '../widgets/nexus_page_layout.dart';
 import '../widgets/nexus_disclosure.dart';
+import '../widgets/nexus_status_pill.dart';
 import '../theme/desktop_theme.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -78,6 +79,21 @@ class _DefaultAssistantPageState extends State<DefaultAssistantPage>
     }
   }
 
+  /// 一行「标签 + 状态徽标」，替代原来「标签：值」的纯文字。
+  Widget _statusRow(String label, String value, {required bool ok}) {
+    return Row(
+      children: [
+        Text(label, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(width: 10),
+        NexusStatusPill.fromString(
+          ok ? 'completed' : 'draft',
+          customLabel: value,
+          isCompact: true,
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = _status;
@@ -107,8 +123,18 @@ class _DefaultAssistantPageState extends State<DefaultAssistantPage>
         const Text('选择 NEXUS 后，可用系统助手手势唤起入口面板，再进入原有助手对话。不同手机的手势和按键设置可能不同。'),
         const SizedBox(height: 16),
         if (status != null && status.supported) ...[
-          Text('默认选择：${status.selected || status.roleHeld ? "已选择" : "未选择"}'),
-          Text('系统服务：${status.active && status.ready ? "已激活" : "未激活"}'),
+          // 状态用徽标而不是「文字：值」：一眼能看出是/否，不用读完整句。
+          _statusRow(
+            '默认选择',
+            status.selected || status.roleHeld ? '已选择' : '未选择',
+            ok: status.selected || status.roleHeld,
+          ),
+          const SizedBox(height: 8),
+          _statusRow(
+            '系统服务',
+            status.active && status.ready ? '已激活' : '未激活',
+            ok: status.active && status.ready,
+          ),
           const SizedBox(height: 12),
           FilledButton(
               key: const ValueKey('assistant-role-request'),

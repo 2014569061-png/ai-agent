@@ -67,8 +67,6 @@ class NexusStatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     final (label, icon, tone) = switch (status) {
       NexusStatusType.draft => (
           '待确认',
@@ -117,35 +115,20 @@ class NexusStatusPill extends StatelessWidget {
         ),
     };
 
-    final colors = AppStatusColors.resolve(context, tone);
-    final color = colors.foreground;
-    final highContrast = MediaQuery.maybeHighContrastOf(context) ?? false;
+    final color = AppStatusColors.resolve(context, tone).foreground;
     final displayText = customLabel ?? label;
-    final pillFontSize =
-        isCompact ? AppTokens.fontSizeBadge : AppTokens.fontSizeFootnote;
     final iconSize = isCompact ? 12.0 : 13.5;
-    final hPadding = isCompact ? 7.0 : 9.0;
-    final vPadding = isCompact ? 2.0 : 3.5;
+    final reduceMotion = MotionPreferences.shouldReduceMotion(context);
 
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: hPadding, vertical: vPadding),
-      decoration: BoxDecoration(
-        color: colors.background,
-        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
-        border: Border.all(
-          color: highContrast
-              ? color
-              : color.withValues(alpha: isDark ? 0.34 : 0.22),
-          width: 1.0,
-        ),
-      ),
+    return NexusStatusPillChrome(
+      tone: tone,
+      isCompact: isCompact,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (showIcon) ...[
-            if (status == NexusStatusType.running &&
-                !MotionPreferences.shouldReduceMotion(context))
+            if (status == NexusStatusType.running && !reduceMotion)
               SizedBox(
                 width: iconSize,
                 height: iconSize,
@@ -158,22 +141,144 @@ class NexusStatusPill extends StatelessWidget {
               Icon(icon, size: iconSize, color: color),
             const SizedBox(width: 4.0),
           ],
-          ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: isCompact ? 96 : 156),
-            child: Text(
-              displayText,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: TextStyle(
-                fontSize: pillFontSize,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: color,
-                height: 1.2,
-              ),
+          NexusStatusPillLabel(
+            text: displayText,
+            color: color,
+            isCompact: isCompact,
+            maxWidth: isCompact ? 96 : 156,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 徽标外壳：唯一一处决定内边距、圆角、描边与高对比度规则的实现。
+/// 状态枚举形态（[NexusStatusPill]）与自由标签形态（[NexusStatusPillShell]）
+/// 都走这里，避免两套徽标各自漂移。
+class NexusStatusPillChrome extends StatelessWidget {
+  const NexusStatusPillChrome({
+    super.key,
+    required this.tone,
+    required this.isCompact,
+    required this.child,
+  });
+
+  final AppStatusTone tone;
+  final bool isCompact;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = AppStatusColors.resolve(context, tone);
+    final color = colors.foreground;
+    final highContrast = MediaQuery.maybeHighContrastOf(context) ?? false;
+
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: isCompact ? 7.0 : 9.0,
+        vertical: isCompact ? 2.0 : 3.5,
+      ),
+      decoration: BoxDecoration(
+        color: colors.background,
+        borderRadius: BorderRadius.circular(MobileTheme.controlRadius(context)),
+        border: Border.all(
+          color: highContrast
+              ? color
+              : color.withValues(alpha: isDark ? 0.34 : 0.22),
+          width: 1.0,
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// 徽标文字：统一字号、字重与等宽数字，避免各处自行写 TextStyle。
+class NexusStatusPillLabel extends StatelessWidget {
+  const NexusStatusPillLabel({
+    super.key,
+    required this.text,
+    required this.color,
+    required this.isCompact,
+    this.maxWidth = 156,
+  });
+
+  final String text;
+  final Color color;
+  final bool isCompact;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        softWrap: false,
+        style: TextStyle(
+          fontSize:
+              isCompact ? AppTokens.fontSizeBadge : AppTokens.fontSizeFootnote,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.2,
+          fontFeatures: const [FontFeature.tabularFigures()],
+          color: color,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
+}
+
+/// 只有标签与语义色调、没有状态枚举的徽标形态（服务连接、来源标记等）。
+/// 与 [NexusStatusPill] 共用同一套外壳与文字规格。
+class NexusStatusPillShell extends StatelessWidget {
+  const NexusStatusPillShell({
+    super.key,
+    required this.label,
+    this.tone = AppStatusTone.neutral,
+    this.icon,
+    this.showDot = false,
+    this.isCompact = true,
+  });
+
+  final String label;
+  final AppStatusTone tone;
+  final IconData? icon;
+  final bool showDot;
+  final bool isCompact;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppStatusColors.resolve(context, tone).foreground;
+    final iconSize = isCompact ? 12.0 : 13.5;
+
+    return NexusStatusPillChrome(
+      tone: tone,
+      isCompact: isCompact,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (showDot) ...[
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
             ),
+            const SizedBox(width: 5.0),
+          ] else if (icon != null) ...[
+            Icon(icon, size: iconSize, color: color),
+            const SizedBox(width: 4.0),
+          ],
+          NexusStatusPillLabel(
+            text: label,
+            color: color,
+            isCompact: isCompact,
+            maxWidth: isCompact ? 140 : 200,
           ),
         ],
       ),
