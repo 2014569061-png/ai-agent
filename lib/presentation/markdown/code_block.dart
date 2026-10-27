@@ -289,9 +289,9 @@ class _CodeBlockWidgetState extends State<CodeBlockWidget> {
     final desktop = DesktopTheme.maybeOf(context);
     // S1：使用不透明实色浅底（AppTheme.light 的 scaffoldBackgroundColor 为透明），避免浅底代码块出现深色边缘。
     final background = desktop?.sidebar ??
-        (dark ? AppPalette.darkSurface : const Color(0xFFF6F8FB));
+        (dark ? AppPalette.darkSurface : AppPalette.lightSurface);
     final headerBackground = desktop?.hover ??
-        (dark ? AppPalette.darkSurfaceHover : const Color(0xFFEEF2F7));
+        (dark ? AppPalette.darkSurfaceHover : AppPalette.lightSurfaceHover);
     final headerText = desktop?.muted ??
         (dark ? AppPalette.darkTextFaint : AppPalette.lightTextMuted);
     final codeColor =
