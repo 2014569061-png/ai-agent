@@ -1,97 +1,17 @@
-# 工具分类索引
+# 构建与质量工具
 
-默认从项目根目录运行；Android 预览优先使用根目录 `android-preview.bat`，并先检查已有预览进程和实际设备序列号。
+公开仓库只保留构建、CI 门禁及自动化测试直接依赖的工具。从仓库根目录运行。
 
-覆盖率门禁：`dart run tool/check_coverage.dart coverage/lcov.info 55.0`。真实模型验收会产生网络请求与模型费用，运行前应配置自己的服务商并明确测试范围。
+| 用途 | 文件 |
+|---|---|
+| Android 打包 | [build-apk-tools.ps1](build-apk-tools.ps1)，由根目录 build-apk.bat 调用 |
+| Windows 打包与安装器 | [build-windows.ps1](build-windows.ps1)、[build-windows-installer.ps1](build-windows-installer.ps1) |
+| 静默异常与覆盖率门禁 | [count_silent_catches.dart](count_silent_catches.dart)、[check_coverage.dart](check_coverage.dart) |
+| 发布证据与 Agent 评分 | [release_evidence_gate.py](release_evidence_gate.py)、[score_mobile_agent_eval.py](score_mobile_agent_eval.py) |
+| 源码一致性校验 | [verify_source_tokens.dart](verify_source_tokens.dart) |
+| 工具回归 | [test_build_apk.py](test_build_apk.py)、[test_release_evidence_gate.py](test_release_evidence_gate.py)、[test_score_mobile_agent_eval.py](test_score_mobile_agent_eval.py)、[test_source_tokens.py](test_source_tokens.py) |
+| 应用测试直接依赖 | [agent_live_acceptance.dart](agent_live_acceptance.dart)、[desktop_cpu_profile.dart](desktop_cpu_profile.dart)、[desktop_frame_pump.dart](desktop_frame_pump.dart)、[frame_timing_window.dart](frame_timing_window.dart) |
 
-## 设备、功能验收与执行器
+最后一组由 test/ 中的回归直接导入，保留以便干净克隆后运行完整测试。个人模拟器预览、截图、界面驱动、远程执行器和专项诊断脚本不纳入公开仓库。
 
-- [agent_live_acceptance.dart](agent_live_acceptance.dart)
-- [browser_dom_budget_checks.html](browser_dom_budget_checks.html)
-- [emulator_contract_support.py](emulator_contract_support.py)
-- [emulator_driver_support.py](emulator_driver_support.py)
-- [launch_emulator_debug.py](launch_emulator_debug.py)
-- [mobile_ui_probe.py](mobile_ui_probe.py)
-- [mobile_vm_probe.py](mobile_vm_probe.py)
-- [run-agent-live-acceptance.ps1](run-agent-live-acceptance.ps1)
-- [verify_approval_scope_ui_emulator.py](verify_approval_scope_ui_emulator.py)
-- [verify_artifact_actions_emulator.py](verify_artifact_actions_emulator.py)
-- [verify_artifact_actions_ui_emulator.py](verify_artifact_actions_ui_emulator.py)
-- [verify_artifact_emulator.py](verify_artifact_emulator.py)
-- [verify_artifact_ui_emulator.py](verify_artifact_ui_emulator.py)
-- [verify_assistant_context_ui_emulator.py](verify_assistant_context_ui_emulator.py)
-- [verify_assistant_entry_ui_emulator.py](verify_assistant_entry_ui_emulator.py)
-- [verify_assistant_role_ui_emulator.py](verify_assistant_role_ui_emulator.py)
-- [verify_browser_native.py](verify_browser_native.py)
-- [verify_conversation_results_emulator.py](verify_conversation_results_emulator.py)
-- [verify_conversation_results_regressions.py](verify_conversation_results_regressions.py)
-- [verify_conversation_results_ui_emulator.py](verify_conversation_results_ui_emulator.py)
-- [verify_global_search_emulator.py](verify_global_search_emulator.py)
-- [verify_global_search_ui_emulator.py](verify_global_search_ui_emulator.py)
-- [verify_job_board_emulator.py](verify_job_board_emulator.py)
-- [verify_job_board_ui_emulator.py](verify_job_board_ui_emulator.py)
-- [verify_knowledge_scope_emulator.py](verify_knowledge_scope_emulator.py)
-- [verify_knowledge_scope_ui_emulator.py](verify_knowledge_scope_ui_emulator.py)
-- [verify_major_large_text_emulator.py](verify_major_large_text_emulator.py)
-- [verify_memory_knowledge_emulator.py](verify_memory_knowledge_emulator.py)
-- [verify_memory_knowledge_ui_emulator.py](verify_memory_knowledge_ui_emulator.py)
-- [verify_memory_scope_emulator.py](verify_memory_scope_emulator.py)
-- [verify_memory_scope_ui_emulator.py](verify_memory_scope_ui_emulator.py)
-- [verify_mobile_handoff.dart](verify_mobile_handoff.dart)
-- [verify_mobile_review.py](verify_mobile_review.py)
-- [verify_mobile_review_contracts.py](verify_mobile_review_contracts.py)
-- [verify_page_coverage_ui_emulator.py](verify_page_coverage_ui_emulator.py)
-- [verify_personal_context_sql_emulator.py](verify_personal_context_sql_emulator.py)
-- [verify_personal_context_sql_ui_emulator.py](verify_personal_context_sql_ui_emulator.py)
-- [verify_plan_protocol_emulator.py](verify_plan_protocol_emulator.py)
-- [verify_reminder_notifications_emulator.py](verify_reminder_notifications_emulator.py)
-- [verify_result_action_approval_emulator.py](verify_result_action_approval_emulator.py)
-- [verify_result_action_approval_regressions.py](verify_result_action_approval_regressions.py)
-- [verify_result_action_approval_ui_emulator.py](verify_result_action_approval_ui_emulator.py)
-- [verify_result_approval_plan_ui_regression.py](verify_result_approval_plan_ui_regression.py)
-- [verify_sheets_dialogs_ui_emulator.py](verify_sheets_dialogs_ui_emulator.py)
-- [verify_speech_capture_ui_emulator.py](verify_speech_capture_ui_emulator.py)
-- [verify_static_web_delivery.py](verify_static_web_delivery.py)
-- [verify_steering_guard_emulator.py](verify_steering_guard_emulator.py)
-- [verify_system_connector_emulator.py](verify_system_connector_emulator.py)
-- [verify_task_runtime_emulator.py](verify_task_runtime_emulator.py)
-- [windows_remote_executor.py](windows_remote_executor.py)
-
-## 构建与 Android 预览
-
-- [android_preview.dart](android_preview.dart)
-- [build-apk-tools.ps1](build-apk-tools.ps1)
-- [build-windows-installer.ps1](build-windows-installer.ps1)
-- [build-windows.ps1](build-windows.ps1)
-- [run-android-preview.ps1](run-android-preview.ps1)
-
-## 性能与基线
-
-- [benchmark_streaming_markdown.dart](benchmark_streaming_markdown.dart)
-- [frame_timing_window.dart](frame_timing_window.dart)
-- [streaming_markdown_baseline_2026-09-22.json](streaming_markdown_baseline_2026-09-22.json)
-
-## 质量门禁与工具测试
-
-- [check_coverage.dart](check_coverage.dart)
-- [count_silent_catches.dart](count_silent_catches.dart)
-- [release_evidence_gate.py](release_evidence_gate.py)
-- [score_mobile_agent_eval.py](score_mobile_agent_eval.py)
-- [test_build_apk.py](test_build_apk.py)
-- [test_emulator_contract_support.py](test_emulator_contract_support.py)
-- [test_release_evidence_gate.py](test_release_evidence_gate.py)
-- [test_score_mobile_agent_eval.py](test_score_mobile_agent_eval.py)
-- [test_source_tokens.py](test_source_tokens.py)
-- [test_windows_remote_executor.py](test_windows_remote_executor.py)
-- [verify_source_tokens.dart](verify_source_tokens.dart)
-
-## Windows 验收与诊断
-
-- [desktop_acceptance.dart](desktop_acceptance.dart)
-- [desktop_blue_smoke.dart](desktop_blue_smoke.dart)
-- [desktop_cpu_profile.dart](desktop_cpu_profile.dart)
-- [desktop_frame_pump.dart](desktop_frame_pump.dart)
-- [diagnostics/windows_slider_ax_repro.dart](diagnostics/windows_slider_ax_repro.dart)
-- [run-desktop-acceptance.ps1](run-desktop-acceptance.ps1)
-- [run-desktop-production-smoke.ps1](run-desktop-production-smoke.ps1)
-- [verify-blue-workspace.ps1](verify-blue-workspace.ps1)
+运行与构建说明见 [开发文档](../docs/getting-started.md)。新增工具默认忽略；只有构建、CI 或公开测试确实依赖时，才更新 .gitignore 的 tool 白名单。

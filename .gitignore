@@ -141,3 +141,27 @@ start.bat
 
 # Local cleanup archives, logs, screenshots and manifests
 /artifacts/
+
+# Personal tools stay local. Public tools are an explicit build/CI dependency list.
+/tool/*
+!/tool/README.md
+!/tool/build-apk-tools.ps1
+!/tool/build-windows.ps1
+!/tool/build-windows-installer.ps1
+!/tool/test_build_apk.py
+!/tool/count_silent_catches.dart
+!/tool/check_coverage.dart
+!/tool/release_evidence_gate.py
+!/tool/score_mobile_agent_eval.py
+!/tool/test_release_evidence_gate.py
+!/tool/test_score_mobile_agent_eval.py
+!/tool/test_source_tokens.py
+!/tool/verify_source_tokens.dart
+!/tool/agent_live_acceptance.dart
+!/tool/desktop_cpu_profile.dart
+!/tool/desktop_frame_pump.dart
+!/tool/frame_timing_window.dart
+/android-preview.bat
+/.vscode/
+/*.html
+__pycache__/

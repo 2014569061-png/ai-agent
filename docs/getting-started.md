@@ -24,25 +24,14 @@ flutter run
 
 ### 在电脑上调试手机版（无需 USB）
 
-Windows 双击项目根目录的 `android-preview.bat`，或执行：
+通过 Android Studio 的 Device Manager 创建并启动 Android 模拟器，再从项目根目录执行：
 
-```powershell
-./tool/run-android-preview.ps1
+```bash
+flutter devices
+flutter run -d <设备 ID>
 ```
 
-启动入口使用名为 `Nexus_Preview_API_36` 的 Android 模拟器（Android 16 / Google APIs / x86_64），等待系统就绪后运行 debug 应用。也可以用 `-Avd <名称>` 指定已有模拟器。
-
-本机预览环境保存在当前工作区：`local/android-sdk/` 放模拟器和系统镜像，`local/android-avd/` 放虚拟手机数据，`local/android-user/` 放 Android 工具状态，`local/gradle-cache/`、`local/pub-cache/` 放后续依赖缓存。下载归档在 `local/preview-downloads/`，临时文件在 `local/temp/`。SDK 中的已有构建工具通过目录链接复用本机安装。上述目录均被 Git 忽略。预览运行复用已恢复的依赖；修改 `pubspec.yaml` 后需设置工作区 `PUB_CACHE` 并重新执行 `flutter pub get`。
-
-在新机器上需先准备 SDK 与系统镜像，并在项目目录设置 `$env:ANDROID_AVD_HOME = "$PWD/local/android-avd"` 后创建对应虚拟设备，例如：
-
-```powershell
-$env:ANDROID_AVD_HOME = "$PWD/local/android-avd"
-$env:ANDROID_USER_HOME = "$PWD/local/android-user"
-./local/android-sdk/cmdline-tools/latest/bin/avdmanager.bat create avd -n Nexus_Preview_API_36 -k 'system-images;android-36;google_apis;x86_64' -d pixel_7
-```
-
-保持预览终端打开，修改并保存 `lib/`、`assets/` 或 `shaders/` 下的文件会自动触发 Flutter 热重载，包括外部编辑器和 Codex 写入的改动。在终端输入 `r` 后回车可手动热重载，`R` 后回车可重启 Dart 应用，`q` 后回车退出调试。修改启动初始化逻辑时使用 `R`；修改 Android 原生代码、权限或依赖后重新运行启动入口。
+保持 Flutter 终端打开，输入 `r` 热重载、`R` 热重启、`q` 退出。修改原生代码、权限或依赖后重新构建。SDK、模拟器、依赖缓存与签名文件由开发者自行准备；本机专用预览和验收脚本不随公开仓库提供。
 
 调试包支持 x64 模拟器，正式发布包仍只包含 ARM64。模拟器适合检查手机 UI、交互与通用功能；内置 Alpine/PRoot 运行时只支持 ARM64，需要在手机上验证。
 
@@ -144,6 +133,6 @@ build/app/outputs/flutter-apk/app-release.apk
 
 ## 提交约定
 
-产品源码放 lib/，回归放 test/，可复用脚本放 tool/，当前工程文档放 docs/。SDK、依赖缓存、构建产物、设备数据、签名文件与内部过程记录不提交。依赖锁文件、Gradle wrapper、运行资源和第三方声明保留。新增加载的资源须同步登记 pubspec.yaml。
+产品源码放 lib/，回归放 test/，构建和 CI 必需脚本放 tool/，当前工程文档放 docs/。SDK、依赖缓存、构建产物、设备数据、签名文件与内部过程记录不提交。依赖锁文件、Gradle wrapper、运行资源和第三方声明保留。新增加载的资源须同步登记 pubspec.yaml。个人预览、截图、诊断及一次性验收脚本仅保留在本地；tool/ 使用 Git 白名单，新增公开工具时必须说明构建或 CI 依赖并同步更新 .gitignore。
 
 参考[架构概览](architecture.md)、[安全与数据边界](security.md)和[Android UI 规范](android-ui-style.md)。

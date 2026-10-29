@@ -38,7 +38,7 @@ flutter run
 
 | 目标 | 入口 |
 |---|---|
-| Windows 上预览 Android | android-preview.bat 或 tool/run-android-preview.ps1 |
+| Android 运行与调试 | `flutter devices` → `flutter run -d <设备 ID>` |
 | Android ARM64 构建 | build-apk.bat |
 | Windows 打包 | tool/build-windows.ps1 |
 | 自动化检查 | flutter analyze、flutter test 与 .github/workflows/ |
@@ -54,7 +54,7 @@ assets/        字体、图片、内置技能与 ARM64 Linux 运行资源
 shaders/       Flutter 着色器
 android/       Android 原生工程
 windows/       Windows 宿主与安装器
-tool/          构建、预览、验收和质量门禁
+tool/          构建、CI 门禁与测试依赖
 docs/          当前使用与开发文档
 architecture/  架构决策记录
 .github/       CI 与发布工作流
